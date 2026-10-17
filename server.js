@@ -45,7 +45,7 @@ app.post('/api/video/:videoId/play', async (req, res) => {
   }
 });
 
-// 🎥 سيرفر البث المباشر (اللي هيشغل الفيديو)
+// 🎥 السيرفر بيعمل طلب بالتوكن ويبث الفيديو
 app.get('/api/stream', async (req, res) => {
   const { url, token } = req.query;
   if (!url || !token) return res.status(400).send('Missing URL or Token');
@@ -61,10 +61,11 @@ app.get('/api/stream', async (req, res) => {
         'Origin': 'https://coursatk.online',
         'Accept': '*/*'
       },
-      responseType: url.includes('.m3u8') ? 'text' : 'stream'
+      responseType: url.includes('.m3u8') ? 'text' : 'stream',
+      timeout: 20000
     });
 
-    // لو الملف m3u8، بنعدل الروابط اللي جواه تروح للـ Proxy بتاعنا
+    // إذا كان الملف m3u8، نعدل الروابط بداخله لتشير إلى سيرفرنا
     if (url.includes('.m3u8')) {
       const basePath = url.substring(0, url.lastIndexOf('/') + 1);
       let content = response.data;
@@ -79,11 +80,14 @@ app.get('/api/stream', async (req, res) => {
       }).join('\n');
 
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.setHeader('Access-Control-Allow-Origin', '*'); // السماح للمتصفح بالوصول
       return res.send(content);
     }
 
-    // لو الملف ts (جزء من الفيديو)، بنبعته للمتصفح مباشرة
+    // إذا كان الملف ts (جزء من الفيديو)، نرسله مباشرة
     res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp2t');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
     if (response.headers['content-range']) res.setHeader('Content-Range', response.headers['content-range']);
     if (response.headers['accept-ranges']) res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
     if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
