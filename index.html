@@ -7,126 +7,30 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
   <style>
     * { box-sizing: border-box; }
-    body {
-      font-family: Tahoma, Arial, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      margin: 0;
-      padding: 20px;
-    }
+    body { font-family: Tahoma, Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
     .container { max-width: 900px; margin: 0 auto; }
     h1 { text-align: center; margin-bottom: 30px; }
-    .card {
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-    }
-    input, button {
-      padding: 12px 16px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: none;
-    }
-    input {
-      width: 180px;
-      background: #334155;
-      color: white;
-      text-align: center;
-    }
-    button {
-      background: #ef4444;
-      color: white;
-      cursor: pointer;
-      margin-right: 8px;
-      margin-bottom: 6px;
-    }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    input, button { padding: 12px 16px; font-size: 16px; border-radius: 8px; border: none; }
+    input { width: 180px; background: #334155; color: white; text-align: center; }
+    button { background: #ef4444; color: white; cursor: pointer; margin-right: 8px; margin-bottom: 6px; }
     button:hover { background: #dc2626; }
-    button.blue { background: #2563eb; }
-    button.blue:hover { background: #1d4ed8; }
-    button.green { background: #16a34a; }
-    button.green:hover { background: #15803d; }
-    button.purple { background: #7c3aed; }
-    button.purple:hover { background: #6d28d9; }
-    #status { margin: 12px 0; color: #94a3b8; }
-    video {
-      width: 100%;
-      background: #000;
-      border-radius: 12px;
-      margin-top: 15px;
-    }
+    button.blue { background: #2563eb; } button.blue:hover { background: #1d4ed8; }
+    #status { margin: 12px 0; color: #94a3b8; font-weight: bold; }
+    video { width: 100%; background: #000; border-radius: 12px; margin-top: 15px; }
     .video-list { margin-top: 15px; }
-    .video-item {
-      background: #334155;
-      padding: 12px 16px;
-      border-radius: 8px;
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .video-item:hover { background: #475569; }
-    .video-item span { flex: 1; min-width: 150px; }
-    .sub-item {
-      background: #1e293b;
-      padding: 10px 14px;
-      border-radius: 6px;
-      margin: 6px 0 6px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      border-right: 3px solid #2563eb;
-    }
-    .badge {
-      display: inline-block;
-      background: #334155;
-      padding: 3px 8px;
-      border-radius: 6px;
-      font-size: 12px;
-      color: #94a3b8;
-      margin-right: 6px;
-    }
-    .debug-item {
-      padding: 10px 14px;
-      border-radius: 6px;
-      margin-bottom: 6px;
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-      font-size: 13px;
-    }
+    .video-item { background: #334155; padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .video-item span { flex: 1; }
+    .debug-item { padding: 10px 14px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
     .debug-ok { background: #14532d; border-right: 3px solid #22c55e; }
     .debug-fail { background: #3f1d1d; border-right: 3px solid #ef4444; }
-    pre {
-      background: #0f172a;
-      padding: 10px;
-      border-radius: 6px;
-      overflow: auto;
-      font-size: 12px;
-      max-height: 400px;
-      direction: ltr;
-      text-align: left;
-    }
+    pre { background: #0f172a; padding: 10px; border-radius: 6px; overflow: auto; font-size: 12px; max-height: 300px; direction: ltr; text-align: left; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>دروسك بلس - مشغل</h1>
 
-    <!-- ===== كل الكورسات ===== -->
-    <div class="card">
-      <h3>📚 كل الكورسات والمحاضرات</h3>
-      <button class="blue" onclick="loadAllCourses()">جلب كل الكورسات</button>
-      <button class="purple" onclick="debugAll()">🔍 فحص شامل لكل الـ endpoints</button>
-      <div id="coursesList" class="video-list"></div>
-    </div>
-
-    <!-- ===== جلب محاضرة مباشرة ===== -->
     <div class="card">
       <h3>🎯 جلب محتوى محاضرة مباشرة</h3>
       <input type="text" id="lectureId" value="5548" placeholder="رقم المحاضرة">
@@ -135,153 +39,14 @@
       <div id="videoList" class="video-list"></div>
     </div>
 
-    <!-- ===== المشغل ===== -->
     <div class="card">
       <h3>▶️ المشغل</h3>
-      <video id="video" controls></video>
+      <video id="video" controls playsinline></video>
     </div>
   </div>
 
   <script>
     let hls = null;
-
-    // ============ جلب كل الكورسات ============
-    async function loadAllCourses() {
-      const list = document.getElementById('coursesList');
-      list.innerHTML = '<div>⏳ جاري جلب الكورسات...</div>';
-
-      try {
-        const res = await fetch('/api/courses');
-        const data = await res.json();
-
-        console.log('رد /api/courses:', data);
-
-        if (!data.success) {
-          list.innerHTML = `
-            <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
-            <div class="badge">جرّب زر "فحص شامل" لمعرفة المسارات الشغالة</div>
-            <pre>${JSON.stringify(data, null, 2)}</pre>
-          `;
-          return;
-        }
-
-        const courses = data.courses || [];
-        if (courses.length === 0) {
-          list.innerHTML = `
-            <div>⚠️ الرد ناجح لكن مفيش كورسات متعرف عليها.</div>
-            <div class="badge">endpoint: ${data.endpoint}</div>
-            <pre>${JSON.stringify(data.raw, null, 2)}</pre>
-          `;
-          return;
-        }
-
-        list.innerHTML = `<div class="badge">تم الجلب من: ${data.endpoint} — عدد: ${courses.length}</div>`;
-        courses.forEach(course => {
-          const id = course.id || course.course_id || course.uuid;
-          const name = course.name || course.title || course.course_name || ('كورس #' + id);
-          const div = document.createElement('div');
-          div.className = 'video-item';
-          div.innerHTML = `
-            <span>📘 ${name}</span>
-            <button onclick='loadCourseLectures(${JSON.stringify(id)})'>عرض المحاضرات</button>
-          `;
-          list.appendChild(div);
-        });
-      } catch (err) {
-        console.error(err);
-        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الاتصال</div>';
-      }
-    }
-
-    // ============ جلب محاضرات كورس ============
-    async function loadCourseLectures(courseId) {
-      const list = document.getElementById('coursesList');
-      list.innerHTML = `<div>⏳ جاري جلب محاضرات الكورس ${courseId}...</div>`;
-
-      try {
-        const res = await fetch(`/api/courses/${encodeURIComponent(courseId)}/lectures`);
-        const data = await res.json();
-        console.log('رد المحاضرات:', data);
-
-        if (!data.success) {
-          list.innerHTML = `
-            <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
-            <button onclick="loadAllCourses()">↩️ رجوع للكورسات</button>
-            <pre>${JSON.stringify(data, null, 2)}</pre>
-          `;
-          return;
-        }
-
-        const lectures = data.lectures || [];
-        list.innerHTML = `
-          <button onclick="loadAllCourses()">↩️ رجوع للكورسات</button>
-          <div class="badge">endpoint: ${data.endpoint} — عدد: ${lectures.length}</div>
-        `;
-
-        if (lectures.length === 0) {
-          const pre = document.createElement('pre');
-          pre.textContent = JSON.stringify(data.raw, null, 2);
-          list.appendChild(pre);
-          return;
-        }
-
-        lectures.forEach(lec => {
-          const id = lec.id || lec.lecture_id;
-          const name = lec.lecture_name || lec.title || lec.name || ('محاضرة #' + id);
-          const sub = document.createElement('div');
-          sub.className = 'sub-item';
-          sub.innerHTML = `
-            <span>🎬 ${name}</span>
-            <button onclick='loadLectureById(${JSON.stringify(id)})'>تشغيل</button>
-          `;
-          list.appendChild(sub);
-        });
-      } catch (err) {
-        console.error(err);
-        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الاتصال</div>';
-      }
-    }
-
-    // ============ فحص شامل لكل الـ endpoints ============
-    async function debugAll() {
-      const list = document.getElementById('coursesList');
-      list.innerHTML = '<div>⏳ جاري فحص كل الـ endpoints... قد يأخذ 30 ثانية</div>';
-
-      try {
-        const res = await fetch('/api/debug/endpoints');
-        const data = await res.json();
-
-        let html = `<h4>✅ مسارات شغالة (${data.workingEndpoints.length}):</h4>`;
-        if (data.workingEndpoints.length === 0) {
-          html += '<div style="color:#f87171">مفيش أي مسار شغال — يمكن التوكن منتهي أو محتاج header إضافي</div>';
-        } else {
-          html += data.workingEndpoints.map(ep => `<div class="debug-item debug-ok"><span>${ep}</span><span>✓</span></div>`).join('');
-        }
-
-        html += `<h4 style="margin-top:20px">📋 كل التفاصيل:</h4>`;
-        data.results.forEach(r => {
-          html += `
-            <div class="debug-item ${r.ok ? 'debug-ok' : 'debug-fail'}">
-              <span><b>${r.endpoint}</b></span>
-              <span>${r.status}</span>
-            </div>
-            ${r.ok ? `<pre style="margin:0 0 10px">${r.preview.replace(/</g, '&lt;')}</pre>` : `<div style="font-size:12px;color:#fca5a5;margin:0 0 10px 20px">${r.message || ''}</div>`}
-          `;
-        });
-
-        list.innerHTML = html;
-        console.log('نتائج الفحص:', data);
-      } catch (err) {
-        console.error(err);
-        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الفحص</div>';
-      }
-    }
-
-    // ============ جلب محاضرة مباشرة ============
-    function loadLectureById(id) {
-      document.getElementById('lectureId').value = id;
-      loadLecture();
-    }
 
     async function loadLecture() {
       const lectureId = document.getElementById('lectureId').value.trim();
@@ -289,7 +54,6 @@
       const videoList = document.getElementById('videoList');
 
       if (!lectureId) return alert('اكتب رقم المحاضرة');
-
       status.innerText = 'جاري جلب المحاضرة...';
       videoList.innerHTML = '';
 
@@ -298,7 +62,8 @@
         const data = await res.json();
 
         if (!data.success) {
-          status.innerText = 'فشل: ' + (data.message || 'خطأ');
+          status.innerText = 'فشل: ' + (data.message || 'خطأ في السيرفر');
+          console.error('API Error:', data);
           return;
         }
 
@@ -306,27 +71,23 @@
         status.innerText = `المحاضرة: ${lecture.lecture_name || lectureId}`;
 
         if (!lecture.videos || lecture.videos.length === 0) {
-          videoList.innerHTML = '<div>مفيش فيديوهات</div>';
+          videoList.innerHTML = '<div style="color:#ef4444">مفيش فيديوهات في المحاضرة دي.</div>';
           return;
         }
 
         lecture.videos.forEach(video => {
           const div = document.createElement('div');
           div.className = 'video-item';
-          div.innerHTML = `
-            <span>${video.title}</span>
-            <button onclick="playVideo(${video.id})">تشغيل</button>
-          `;
+          div.innerHTML = `<span>${video.title}</span><button onclick="playVideo(${video.id})">تشغيل</button>`;
           videoList.appendChild(div);
         });
 
       } catch (err) {
         console.error(err);
-        status.innerText = 'حصل خطأ في الاتصال';
+        status.innerText = 'حصل خطأ في الاتصال بالسيرفر';
       }
     }
 
-    // ============ تشغيل الفيديو ============
     async function playVideo(videoId) {
       const video = document.getElementById('video');
       const status = document.getElementById('status');
@@ -338,14 +99,20 @@
         const data = await res.json();
 
         if (!data.success) {
-          status.innerText = 'فشل: ' + (data.message || 'خطأ');
+          status.innerText = 'فشل من السيرفر: ' + (data.message || 'خطأ');
+          console.error('Video API Error:', data);
           return;
         }
 
+        // هنا بناخد الرابط والتوكن
         const streamUrl = data.data.stream_url;
         const token = data.data.token;
+        
+        console.log('Stream URL:', streamUrl);
+        console.log('Token:', token);
 
-        status.innerText = 'جاري التشغيل...';
+        status.innerText = 'جاري تجهيز المشغل...';
+        video.src = ""; 
 
         if (hls) {
           hls.destroy();
@@ -354,31 +121,43 @@
 
         if (Hls.isSupported()) {
           hls = new Hls({
+            // إضافة الهيدر عشان الـ API يقبل الفيديو
             xhrSetup: function (xhr) {
               xhr.setRequestHeader('Authorization', 'Bearer ' + token);
             }
           });
+          
           hls.loadSource(streamUrl);
           hls.attachMedia(video);
+          
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            status.innerText = 'الفيديو شغال';
+            status.innerText = '✅ الفيديو شغال';
             video.play();
           });
+          
           hls.on(Hls.Events.ERROR, function (event, data) {
-            console.error(data);
-            status.innerText = 'حصل خطأ في تشغيل الفيديو';
+            console.error('HLS Error:', data);
+            // لو الخطأ بسبب الـ Token
+            if (data.response && data.response.code === 401) {
+               status.innerText = '❌ خطأ 401: التوكن مرفوض أو منتهي الصلاحية.';
+            } else {
+               status.innerText = '❌ خطأ في تشغيل الفيديو من المصدر. (شوف الـ Console)';
+            }
           });
         } else {
+          // لو المتصفح مش بيدعم Hls.js (مثل iPhone)
           video.src = streamUrl;
-          status.innerText = 'الفيديو شغال';
-          video.play();
+          video.play().catch(e => {
+            console.error(e);
+            status.innerText = '❌ المتصفح لا يدعم التشغيل المباشر للفيديو ده.';
+          });
         }
 
       } catch (err) {
         console.error(err);
-        status.innerText = 'حصل خطأ أثناء التشغيل';
+        status.innerText = '❌ حصل خطأ في الاتصال أثناء التشغيل';
       }
     }
   </script>
 </body>
-  </html>
+</html>
