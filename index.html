@@ -149,7 +149,7 @@
         const streamUrl = data.data.stream_url;
         const token = data.data.token;
         
-        // بنخلي الفيديو يعدي من السيرفر بتاعنا عشان نتجنب حظر المتصفح
+        // بنبعتهم للسيرفر بتاعنا عشان يتعامل معاهم ويتغلب على الحظر
         const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(streamUrl)}&token=${token}`;
 
         status.innerText = 'جاري تجهيز المشغل...';
@@ -172,7 +172,9 @@
           
           hls.on(Hls.Events.ERROR, function (event, data) {
             console.error('HLS Error:', data);
-            status.innerText = '❌ خطأ في تشغيل الفيديو.';
+            if (data.fatal) {
+              status.innerText = '❌ خطأ في التشغيل (شوف الـ Console)';
+            }
           });
         } else {
           video.src = proxyUrl;
