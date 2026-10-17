@@ -6,7 +6,9 @@ const path = require('path');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+// تعديل مسار الملفات الثابتة ليكون من المجلد الرئيسي مباشرة
+app.use(express.static(__dirname));
 
 const COURSATK_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDczNjMsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjYwYTU0MzZiMDY2MzU4NmI1MDQwOTBhZTM3ZThmOWM5In0.Jz2LWCWeYW6O6Y3h_MntJJi8mcauFhRjcInC37Ns5wI";
 
@@ -23,7 +25,7 @@ const coursatk = axios.create({
 // جلب قائمة المحاضرات تلقائياً من السيرفر
 app.get('/api/all-lectures', async (req, res) => {
   try {
-    const lectureIds = [5548, 5549, 5550, 5551]; // يمكنك تعديل أرقام المحاضرات هنا
+    const lectureIds = [5548, 5549, 5550, 5551];
     let allLectures = [];
 
     for (let id of lectureIds) {
@@ -65,8 +67,9 @@ app.post('/api/video/:videoId/play', async (req, res) => {
   }
 });
 
+// توجيه الصفحة الرئيسية إلى ملف index.html في المجلد الرئيسي
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
