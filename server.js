@@ -9,7 +9,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// التوكن بتاع كورساتك
 const COURSATK_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDczNjMsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjYwYTU0MzZiMDY2MzU4NmI1MDQwOTBhZTM3ZThmOWM5In0.Jz2LWCWeYW6O6Y3h_MntJJi8mcauFhRjcInC37Ns5wI";
 
 const coursatk = axios.create({
@@ -45,7 +44,7 @@ app.post('/api/video/:videoId/play', async (req, res) => {
   }
 });
 
-// 🎥 السيرفر بيعمل طلب بالتوكن ويبث الفيديو
+// 🎥 سيرفر البث المباشر المعدل
 app.get('/api/stream', async (req, res) => {
   const { url, token } = req.query;
   if (!url || !token) return res.status(400).send('Missing URL or Token');
@@ -61,30 +60,40 @@ app.get('/api/stream', async (req, res) => {
         'Origin': 'https://coursatk.online',
         'Accept': '*/*'
       },
-      responseType: url.includes('.m3u8') ? 'text' : 'stream',
-      timeout: 20000
+      responseType: url.includes('.m3u8') ? 'text' : 'stream'
     });
 
-    // إذا كان الملف m3u8، نعدل الروابط بداخله لتشير إلى سيرفرنا
     if (url.includes('.m3u8')) {
       const basePath = url.substring(0, url.lastIndexOf('/') + 1);
       let content = response.data;
+      let modifiedLines = [];
 
-      content = content.split('\n').map(line => {
+      for (let line of content.split('\n')) {
         line = line.trim();
-        if (line && !line.startsWith('#')) {
-          let fullUrl = line.startsWith('http') ? line : basePath + line;
-          return `/api/stream?url=${encodeURIComponent(fullUrl)}&token=${token}`;
+        if (line) {
+          if (line.startsWith('#')) {
+            // لو السطر ده فيه رابط مفتاح تشفير، بنمرره برضه
+            if (line.includes('URI="')) {
+              line = line.replace(/URI="([^"]+)"/g, (match, p1) => {
+                let fullUrl = p1.startsWith('http') ? p1 : basePath + p1;
+                // بنمرر التوكن هنا كمان عشان يفك التشفير
+                return `URI="/api/stream?url=${encodeURIComponent(fullUrl)}&token=${token}"`;
+              });
+            }
+            modifiedLines.push(line);
+          } else {
+            let fullUrl = line.startsWith('http') ? line : basePath + line;
+            // تعديل مهم: بنبعت الـ token مع كل جزء من الفيديو عشان السيرفر ميرفضوش
+            modifiedLines.push(`/api/stream?url=${encodeURIComponent(fullUrl)}&token=${token}`);
+          }
         }
-        return line;
-      }).join('\n');
+      }
 
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      res.setHeader('Access-Control-Allow-Origin', '*'); // السماح للمتصفح بالوصول
-      return res.send(content);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.send(modifiedLines.join('\n'));
     }
 
-    // إذا كان الملف ts (جزء من الفيديو)، نرسله مباشرة
     res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp2t');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
