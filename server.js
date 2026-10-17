@@ -1,128 +1,59 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
+
+import express from "express";
+import cors from "cors";
+import "dotenv/config";
 
 const app = express();
-app.use(cors());
+const PORT = process.env.PORT || 3000;
+
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:8080"
+}));
+
 app.use(express.json());
-app.use(express.static(__dirname));
 
-const COURSATK_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDczNjMsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjYwYTU0MzZiMDY2MzU4NmI1MDQwOTBhZTM3ZThmOWM5In0.Jz2LWCWeYW6O6Y3h_MntJJi8mcauFhRjcInC37Ns5wI";
-
-const coursatk = axios.create({
-  baseURL: 'https://api.coursatk.online/api/v1',
-  headers: {
-    'Authorization': `Bearer ${COURSATK_TOKEN}`,
-    'Origin': 'https://coursatk.online',
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36',
-    'Referer': 'https://coursatk.online/',
-    'X-Requested-With': 'XMLHttpRequest'
-  },
-  timeout: 15000
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "Course platform server is running"
+  });
 });
 
-// 📖 جلب محتوى محاضرة
-app.get('/api/lectures/:lectureId/content', async (req, res) => {
-  try {
-    const response = await coursatk.get(`/user/lectures/${req.params.lectureId}/content`);
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.response?.data?.message || 'فشل في جلب المحاضرة' });
+// قائمة الكورسات من واجهة API المصرح باستخدامها
+app.get("/api/courses", async (req, res) => {
+  const apiUrl = process.env.COURSES_API_URL;
+  const apiToken = process.env.COURSES_API_TOKEN;
+
+  if (!apiUrl || !apiToken) {
+    return res.status(503).json({
+      error: "Server API configuration is missing"
+    });
   }
-});
-
-// ▶️ جلب رابط الفيديو والتوكن
-app.post('/api/video/:videoId/play', async (req, res) => {
-  try {
-    const response = await coursatk.post(`/video/${req.params.videoId}/stream-weave/play`);
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.response?.data?.message || 'فشل في جلب رابط الفيديو' });
-  }
-});
-
-// 🎥 سيرفر البث المباشر المعدل
-app.get('/api/stream', async (req, res) => {
-  const { url, token } = req.query;
-  if (!url || !token) return res.status(400).send('Missing URL or Token');
 
   try {
-    const response = await axios({
-      method: 'get',
-      url: url,
+    const response = await fetch(apiUrl, {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36',
-        'Referer': 'https://coursatk.online/',
-        'Origin': 'https://coursatk.online',
-        'Accept': '*/*'
+        Authorization: `Bearer ${apiToken}`,
+        Accept: "application/json"
       },
-      responseType: url.includes('.m3u8') ? 'text' : 'stream'
+      signal: AbortSignal.timeout(15000)
     });
 
-    if (url.includes('.m3u8')) {
-      const basePath = url.substring(0, url.lastIndexOf('/') + 1);
-      let content = response.data;
-      let modifiedLines = [];
-
-      for (let line of content.split('\n')) {
-        line = line.trim();
-        if (line) {
-          if (line.startsWith('#')) {
-            // لو السطر ده فيه رابط مفتاح تشفير، بنمرره برضه
-            if (line.includes('URI="')) {
-              line = line.replace(/URI="([^"]+)"/g, (match, p1) => {
-                let fullUrl = p1.startsWith('http') ? p1 : basePath + p1;
-                // بنمرر التوكن هنا كمان عشان يفك التشفير
-                return `URI="/api/stream?url=${encodeURIComponent(fullUrl)}&token=${token}"`;
-              });
-            }
-            modifiedLines.push(line);
-          } else {
-            let fullUrl = line.startsWith('http') ? line : basePath + line;
-            // تعديل مهم: بنبعت الـ token مع كل جزء من الفيديو عشان السيرفر ميرفضوش
-            modifiedLines.push(`/api/stream?url=${encodeURIComponent(fullUrl)}&token=${token}`);
-          }
-        }
-      }
-
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      return res.send(modifiedLines.join('\n'));
+    if (!response.ok) {
+      return res.status(502).json({
+        error: "Upstream API request failed"
+      });
     }
 
-    res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp2t');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    
-    if (response.headers['content-range']) res.setHeader('Content-Range', response.headers['content-range']);
-    if (response.headers['accept-ranges']) res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
-    if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
-
-    response.data.pipe(res);
-
-  } catch (err) {
-    console.error('Stream Error:', err.message);
-    res.status(500).send('Error streaming video');
+    const data = await response.json();
+    res.json(data);
+  } catch {
+    res.status(502).json({
+      error: "Could not connect to courses API"
+    });
   }
 });
 
-// 🏠 توجيه الصفحة الرئيسية
-app.get('/', (req, res) => {
-  const possiblePaths = [
-    path.join(__dirname, 'index.html'),
-    path.join(__dirname, 'public', 'index.html')
-  ];
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) return res.sendFile(p);
-  }
-  res.status(404).send("ملف index.html غير موجود");
-});
-
-// 🚀 تشغيل السيرفر
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
