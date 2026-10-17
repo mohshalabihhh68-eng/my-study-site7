@@ -103,8 +103,8 @@
         const streamUrl = data.data.stream_url;
         const token = data.data.token;
         
-        // بنخلي المتصفح يطلب الفيديو من السيرفر بتاعنا مش من المنصة
-        const proxyUrl = `/api/stream?url=${encodeURIComponent(streamUrl)}&token=${token}`;
+        // هنا بنخلي المتصفح يطلب الفيديو من السيرفر بتاعنا مباشرة
+        const serverStreamUrl = `/api/stream?url=${encodeURIComponent(streamUrl)}&token=${token}`;
 
         status.innerText = 'جاري تجهيز المشغل...';
         video.src = ""; 
@@ -116,7 +116,7 @@
 
         if (Hls.isSupported()) {
           hls = new Hls();
-          hls.loadSource(proxyUrl); 
+          hls.loadSource(serverStreamUrl); 
           hls.attachMedia(video);
           
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -131,7 +131,7 @@
             }
           });
         } else {
-          video.src = proxyUrl;
+          video.src = serverStreamUrl;
           status.innerText = '✅ الفيديو شغال';
           video.play();
         }
