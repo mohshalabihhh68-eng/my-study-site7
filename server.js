@@ -17,20 +17,103 @@ const coursatk = axios.create({
     'Authorization': `Bearer ${COURSATK_TOKEN}`,
     'Origin': 'https://coursatk.online',
     'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36',
+    'Referer': 'https://coursatk.online/',
+    'X-Requested-With': 'XMLHttpRequest'
   },
   timeout: 15000
 });
 
-// ============ جلب كل الكورسات ============
+// ==================================================
+// 🔍 endpoint تشخيصي: بيجرب مسارات كتير ويوريك الرد
+// ==================================================
+app.get('/api/debug/endpoints', async (req, res) => {
+  const endpoints = [
+    // المستخدم
+    '/user',
+    '/user/profile',
+    '/user/dashboard',
+    '/user/courses',
+    '/user/my-courses',
+    '/user/enrollments',
+    '/user/subscriptions',
+    '/user/lectures',
+    '/user/library',
+    '/user/content',
+    '/user/me',
+    '/me',
+    '/profile',
+    '/dashboard',
+    '/home',
+    // الكورسات
+    '/courses',
+    '/courses/my',
+    '/courses/enrolled',
+    '/courses/list',
+    '/my-courses',
+    '/enrollments',
+    '/subscriptions',
+    // الطالب
+    '/student',
+    '/student/courses',
+    '/student/dashboard',
+    '/student/enrollments',
+    '/student/my-courses',
+    // المحاضرات
+    '/lectures',
+    '/user/lectures/all',
+    '/videos',
+    '/user/videos',
+    // مسارات بديلة
+    '/student/lectures',
+    '/courses/enrolled/list',
+  ];
+
+  const results = [];
+
+  for (const ep of endpoints) {
+    try {
+      const response = await coursatk.get(ep);
+      results.push({
+        endpoint: ep,
+        status: response.status,
+        ok: true,
+        preview: JSON.stringify(response.data).slice(0, 400)
+      });
+    } catch (err) {
+      results.push({
+        endpoint: ep,
+        status: err.response?.status || 'ERR',
+        ok: false,
+        message: (err.response?.data?.message || err.message || '').slice(0, 150)
+      });
+    }
+  }
+
+  // ملخص سريع
+  const working = results.filter(r => r.ok).map(r => r.endpoint);
+
+  res.json({
+    total: endpoints.length,
+    workingEndpoints: working,
+    results
+  });
+});
+
+// ==================================================
+// 📚 جلب كل الكورسات
+// ==================================================
 app.get('/api/courses', async (req, res) => {
   const endpoints = [
     '/user/courses',
+    '/courses',
+    '/my-courses',
     '/user/enrollments',
-    '/courses/my',
+    '/enrollments',
+    '/student/courses',
     '/user/dashboard',
-    '/user/my-courses',
-    '/student/courses'
+    '/user/subscriptions',
+    '/subscriptions',
   ];
 
   const tried = [];
@@ -38,20 +121,21 @@ app.get('/api/courses', async (req, res) => {
   for (const ep of endpoints) {
     try {
       const response = await coursatk.get(ep);
-      tried.push({ endpoint: ep, status: response.status });
-
       const body = response.data;
-      // نحاول نلاقي مصفوفة كورسات في أي مكان في الرد
-      const possibleArrays = [
+
+      const candidates = [
         body?.data,
         body?.data?.courses,
         body?.courses,
         body?.data?.enrollments,
         body?.enrollments,
-        body?.data?.data
+        body?.data?.data,
+        body?.results,
+        body?.data?.subscriptions,
+        body?.subscriptions,
       ];
 
-      for (const arr of possibleArrays) {
+      for (const arr of candidates) {
         if (Array.isArray(arr) && arr.length > 0) {
           return res.json({
             success: true,
@@ -63,16 +147,12 @@ app.get('/api/courses', async (req, res) => {
         }
       }
 
-      // لو الرد ناجح بس مش لاقيين مصفوفة، نرجع الرد الخام للفحص
-      if (body) {
-        return res.json({
-          success: true,
-          endpoint: ep,
-          courses: [],
-          raw: body,
-          note: 'الرد ناجح لكن شكل البيانات غير متوقع، راجع raw'
-        });
-      }
+      tried.push({
+        endpoint: ep,
+        status: response.status,
+        note: 'نجح لكن مفيش مصفوفة كورسات معروفة',
+        raw: body
+      });
     } catch (err) {
       tried.push({
         endpoint: ep,
@@ -84,20 +164,24 @@ app.get('/api/courses', async (req, res) => {
 
   res.status(404).json({
     success: false,
-    message: 'كل الـ endpoints فشلت، جرب تشوف الـ endpoint الصح من Network Tab في المتصفح',
+    message: 'مفيش endpoint رجع كورسات. افتح /api/debug/endpoints وشوف المسارات الشغالة.',
     tried
   });
 });
 
-// ============ جلب محاضرات كورس معين ============
+// ==================================================
+// 🎬 جلب محاضرات كورس معين
+// ==================================================
 app.get('/api/courses/:courseId/lectures', async (req, res) => {
   const { courseId } = req.params;
   const endpoints = [
     `/user/courses/${courseId}/lectures`,
     `/user/courses/${courseId}`,
     `/courses/${courseId}/lectures`,
+    `/courses/${courseId}`,
     `/user/courses/${courseId}/content`,
-    `/user/enrollments/${courseId}`
+    `/user/enrollments/${courseId}`,
+    `/enrollments/${courseId}`,
   ];
 
   const tried = [];
@@ -105,20 +189,21 @@ app.get('/api/courses/:courseId/lectures', async (req, res) => {
   for (const ep of endpoints) {
     try {
       const response = await coursatk.get(ep);
-      tried.push({ endpoint: ep, status: response.status });
-
       const body = response.data;
-      const possibleArrays = [
+
+      const candidates = [
         body?.data,
         body?.data?.lectures,
         body?.lectures,
         body?.data?.course?.lectures,
         body?.course?.lectures,
         body?.data?.sections,
-        body?.sections
+        body?.sections,
+        body?.data?.content,
+        body?.content,
       ];
 
-      for (const arr of possibleArrays) {
+      for (const arr of candidates) {
         if (Array.isArray(arr) && arr.length > 0) {
           return res.json({
             success: true,
@@ -130,15 +215,12 @@ app.get('/api/courses/:courseId/lectures', async (req, res) => {
         }
       }
 
-      if (body) {
-        return res.json({
-          success: true,
-          endpoint: ep,
-          lectures: [],
-          raw: body,
-          note: 'الرد ناجح لكن شكل البيانات غير متوقع، راجع raw'
-        });
-      }
+      tried.push({
+        endpoint: ep,
+        status: response.status,
+        note: 'نجح لكن مفيش مصفوفة محاضرات معروفة',
+        raw: body
+      });
     } catch (err) {
       tried.push({
         endpoint: ep,
@@ -155,7 +237,9 @@ app.get('/api/courses/:courseId/lectures', async (req, res) => {
   });
 });
 
-// ============ جلب محتوى محاضرة (الأصلي) ============
+// ==================================================
+// 📖 جلب محتوى محاضرة (الأصلي)
+// ==================================================
 app.get('/api/lectures/:lectureId/content', async (req, res) => {
   try {
     const { lectureId } = req.params;
@@ -170,7 +254,9 @@ app.get('/api/lectures/:lectureId/content', async (req, res) => {
   }
 });
 
-// ============ تشغيل فيديو (الأصلي) ============
+// ==================================================
+// ▶️ تشغيل فيديو (الأصلي)
+// ==================================================
 app.post('/api/video/:videoId/play', async (req, res) => {
   try {
     const { videoId } = req.params;
@@ -185,7 +271,9 @@ app.post('/api/video/:videoId/play', async (req, res) => {
   }
 });
 
-// ============ الصفحة الرئيسية ============
+// ==================================================
+// 🏠 الصفحة الرئيسية
+// ==================================================
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -193,4 +281,5 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`السيرفر شغال: http://localhost:${PORT}`);
+  console.log(`فحص الـ endpoints: http://localhost:${PORT}/api/debug/endpoints`);
 });
