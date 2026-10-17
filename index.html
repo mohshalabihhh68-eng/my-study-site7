@@ -130,7 +130,7 @@
       }
     }
 
-    // تشغيل الفيديو باستخدام البروكسي
+    // تشغيل الفيديو مباشرة من المصدر
     async function playVideo(videoId) {
       const video = document.getElementById('video');
       const status = document.getElementById('status');
@@ -146,14 +146,12 @@
           return;
         }
 
+        // الرابط المباشر والتوكن
         const streamUrl = data.data.stream_url;
         const token = data.data.token;
-        
-        // بنبعتهم للسيرفر بتاعنا عشان يتعامل معاهم ويتغلب على الحظر
-        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(streamUrl)}&token=${token}`;
 
         status.innerText = 'جاري تجهيز المشغل...';
-        video.src = ""; 
+        video.src = "";
 
         if (hls) {
           hls.destroy();
@@ -161,8 +159,18 @@
         }
 
         if (Hls.isSupported()) {
-          hls = new Hls();
-          hls.loadSource(proxyUrl); 
+          hls = new Hls({
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            enableWorker: true,
+            lowLatencyMode: false,
+            // إرسال التوكن مع كل طلب للمنصة عشان يسمح بالتشغيل
+            xhrSetup: function (xhr) {
+              xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+            }
+          });
+          
+          hls.loadSource(streamUrl);
           hls.attachMedia(video);
           
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -177,7 +185,7 @@
             }
           });
         } else {
-          video.src = proxyUrl;
+          video.src = streamUrl;
           status.innerText = '✅ الفيديو شغال';
           video.play();
         }
