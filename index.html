@@ -1,174 +1,384 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-const path = require('path');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// ✅ تعديل: تقديم الملفات من المسار الرئيسي بدلاً من مجلد public
-app.use(express.static(__dirname));
-
-// التوكن بتاع كورساتك
-const COURSATK_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDczNjMsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjYwYTU0MzZiMDY2MzU4NmI1MDQwOTBhZTM3ZThmOWM5In0.Jz2LWCWeYW6O6Y3h_MntJJi8mcauFhRjcInC37Ns5wI";
-
-const coursatk = axios.create({
-  baseURL: 'https://api.coursatk.online/api/v1',
-  headers: {
-    'Authorization': `Bearer ${COURSATK_TOKEN}`,
-    'Origin': 'https://coursatk.online',
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36',
-    'Referer': 'https://coursatk.online/',
-    'X-Requested-With': 'XMLHttpRequest'
-  },
-  timeout: 15000
-});
-
-// ==================================================
-// 🔍 endpoint تشخيصي
-// ==================================================
-app.get('/api/debug/endpoints', async (req, res) => {
-  const endpoints = [
-    '/user', '/user/profile', '/user/dashboard', '/user/courses',
-    '/user/my-courses', '/user/enrollments', '/user/subscriptions',
-    '/user/lectures', '/user/library', '/user/content', '/user/me',
-    '/me', '/profile', '/dashboard', '/home', '/courses', '/courses/my',
-    '/courses/enrolled', '/courses/list', '/my-courses', '/enrollments',
-    '/subscriptions', '/student', '/student/courses', '/student/dashboard',
-    '/student/enrollments', '/student/my-courses', '/lectures',
-    '/user/lectures/all', '/videos', '/user/videos', '/student/lectures',
-    '/courses/enrolled/list',
-  ];
-
-  const results = [];
-  for (const ep of endpoints) {
-    try {
-      const response = await coursatk.get(ep);
-      results.push({
-        endpoint: ep,
-        status: response.status,
-        ok: true,
-        preview: JSON.stringify(response.data).slice(0, 400)
-      });
-    } catch (err) {
-      results.push({
-        endpoint: ep,
-        status: err.response?.status || 'ERR',
-        ok: false,
-        message: (err.response?.data?.message || err.message || '').slice(0, 150)
-      });
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>دروسك بلس - مشغل</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Tahoma, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 20px;
     }
-  }
-  const working = results.filter(r => r.ok).map(r => r.endpoint);
-  res.json({ total: endpoints.length, workingEndpoints: working, results });
-});
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 30px; }
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    input, button {
+      padding: 12px 16px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+    }
+    input {
+      width: 180px;
+      background: #334155;
+      color: white;
+      text-align: center;
+    }
+    button {
+      background: #ef4444;
+      color: white;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 6px;
+    }
+    button:hover { background: #dc2626; }
+    button.blue { background: #2563eb; }
+    button.blue:hover { background: #1d4ed8; }
+    button.green { background: #16a34a; }
+    button.green:hover { background: #15803d; }
+    button.purple { background: #7c3aed; }
+    button.purple:hover { background: #6d28d9; }
+    #status { margin: 12px 0; color: #94a3b8; }
+    video {
+      width: 100%;
+      background: #000;
+      border-radius: 12px;
+      margin-top: 15px;
+    }
+    .video-list { margin-top: 15px; }
+    .video-item {
+      background: #334155;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .video-item:hover { background: #475569; }
+    .video-item span { flex: 1; min-width: 150px; }
+    .sub-item {
+      background: #1e293b;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin: 6px 0 6px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      border-right: 3px solid #2563eb;
+    }
+    .badge {
+      display: inline-block;
+      background: #334155;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #94a3b8;
+      margin-right: 6px;
+    }
+    .debug-item {
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .debug-ok { background: #14532d; border-right: 3px solid #22c55e; }
+    .debug-fail { background: #3f1d1d; border-right: 3px solid #ef4444; }
+    pre {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 6px;
+      overflow: auto;
+      font-size: 12px;
+      max-height: 400px;
+      direction: ltr;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>دروسك بلس - مشغل</h1>
 
-// ==================================================
-// 📚 جلب كل الكورسات
-// ==================================================
-app.get('/api/courses', async (req, res) => {
-  const endpoints = [
-    '/user/courses', '/courses', '/my-courses', '/user/enrollments',
-    '/enrollments', '/student/courses', '/user/dashboard',
-    '/user/subscriptions', '/subscriptions',
-  ];
+    <!-- ===== كل الكورسات ===== -->
+    <div class="card">
+      <h3>📚 كل الكورسات والمحاضرات</h3>
+      <button class="blue" onclick="loadAllCourses()">جلب كل الكورسات</button>
+      <button class="purple" onclick="debugAll()">🔍 فحص شامل لكل الـ endpoints</button>
+      <div id="coursesList" class="video-list"></div>
+    </div>
 
-  const tried = [];
-  for (const ep of endpoints) {
-    try {
-      const response = await coursatk.get(ep);
-      const body = response.data;
-      const candidates = [
-        body?.data, body?.data?.courses, body?.courses,
-        body?.data?.enrollments, body?.enrollments, body?.data?.data,
-        body?.results, body?.data?.subscriptions, body?.subscriptions,
-      ];
-      for (const arr of candidates) {
-        if (Array.isArray(arr) && arr.length > 0) {
-          return res.json({ success: true, endpoint: ep, count: arr.length, courses: arr, raw: body });
+    <!-- ===== جلب محاضرة مباشرة ===== -->
+    <div class="card">
+      <h3>🎯 جلب محتوى محاضرة مباشرة</h3>
+      <input type="text" id="lectureId" value="5548" placeholder="رقم المحاضرة">
+      <button onclick="loadLecture()">جلب المحاضرة</button>
+      <div id="status">جاهز</div>
+      <div id="videoList" class="video-list"></div>
+    </div>
+
+    <!-- ===== المشغل ===== -->
+    <div class="card">
+      <h3>▶️ المشغل</h3>
+      <video id="video" controls></video>
+    </div>
+  </div>
+
+  <script>
+    let hls = null;
+
+    // ============ جلب كل الكورسات ============
+    async function loadAllCourses() {
+      const list = document.getElementById('coursesList');
+      list.innerHTML = '<div>⏳ جاري جلب الكورسات...</div>';
+
+      try {
+        const res = await fetch('/api/courses');
+        const data = await res.json();
+
+        console.log('رد /api/courses:', data);
+
+        if (!data.success) {
+          list.innerHTML = `
+            <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
+            <div class="badge">جرّب زر "فحص شامل" لمعرفة المسارات الشغالة</div>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+          return;
         }
-      }
-      tried.push({ endpoint: ep, status: response.status, note: 'نجح لكن مفيش كورسات', raw: body });
-    } catch (err) {
-      tried.push({ endpoint: ep, status: err.response?.status || 'ERR', message: err.response?.data?.message || err.message });
-    }
-  }
-  res.status(404).json({ success: false, message: 'مفيش endpoint رجع كورسات.', tried });
-});
 
-// ==================================================
-// 🎬 جلب محاضرات كورس معين
-// ==================================================
-app.get('/api/courses/:courseId/lectures', async (req, res) => {
-  const { courseId } = req.params;
-  const endpoints = [
-    `/user/courses/${courseId}/lectures`, `/user/courses/${courseId}`,
-    `/courses/${courseId}/lectures`, `/courses/${courseId}`,
-    `/user/courses/${courseId}/content`, `/user/enrollments/${courseId}`,
-    `/enrollments/${courseId}`,
-  ];
-
-  const tried = [];
-  for (const ep of endpoints) {
-    try {
-      const response = await coursatk.get(ep);
-      const body = response.data;
-      const candidates = [
-        body?.data, body?.data?.lectures, body?.lectures,
-        body?.data?.course?.lectures, body?.course?.lectures,
-        body?.data?.sections, body?.sections, body?.data?.content, body?.content,
-      ];
-      for (const arr of candidates) {
-        if (Array.isArray(arr) && arr.length > 0) {
-          return res.json({ success: true, endpoint: ep, count: arr.length, lectures: arr, raw: body });
+        const courses = data.courses || [];
+        if (courses.length === 0) {
+          list.innerHTML = `
+            <div>⚠️ الرد ناجح لكن مفيش كورسات متعرف عليها.</div>
+            <div class="badge">endpoint: ${data.endpoint}</div>
+            <pre>${JSON.stringify(data.raw, null, 2)}</pre>
+          `;
+          return;
         }
+
+        list.innerHTML = `<div class="badge">تم الجلب من: ${data.endpoint} — عدد: ${courses.length}</div>`;
+        courses.forEach(course => {
+          const id = course.id || course.course_id || course.uuid;
+          const name = course.name || course.title || course.course_name || ('كورس #' + id);
+          const div = document.createElement('div');
+          div.className = 'video-item';
+          div.innerHTML = `
+            <span>📘 ${name}</span>
+            <button onclick='loadCourseLectures(${JSON.stringify(id)})'>عرض المحاضرات</button>
+          `;
+          list.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الاتصال</div>';
       }
-      tried.push({ endpoint: ep, status: response.status, note: 'نجح لكن مفيش محاضرات', raw: body });
-    } catch (err) {
-      tried.push({ endpoint: ep, status: err.response?.status || 'ERR', message: err.response?.data?.message || err.message });
     }
-  }
-  res.status(404).json({ success: false, message: 'تعذر جلب محاضرات الكورس', tried });
-});
 
-// ==================================================
-// 📖 جلب محتوى محاضرة
-// ==================================================
-app.get('/api/lectures/:lectureId/content', async (req, res) => {
-  try {
-    const response = await coursatk.get(`/user/lectures/${req.params.lectureId}/content`);
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.response?.data?.message || 'فشل في جلب المحاضرة' });
-  }
-});
+    // ============ جلب محاضرات كورس ============
+    async function loadCourseLectures(courseId) {
+      const list = document.getElementById('coursesList');
+      list.innerHTML = `<div>⏳ جاري جلب محاضرات الكورس ${courseId}...</div>`;
 
-// ==================================================
-// ▶️ تشغيل فيديو
-// ==================================================
-app.post('/api/video/:videoId/play', async (req, res) => {
-  try {
-    const response = await coursatk.post(`/video/${req.params.videoId}/stream-weave/play`);
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.response?.data?.message || 'فشل في جلب رابط الفيديو' });
-  }
-});
+      try {
+        const res = await fetch(`/api/courses/${encodeURIComponent(courseId)}/lectures`);
+        const data = await res.json();
+        console.log('رد المحاضرات:', data);
 
-// ==================================================
-// 🏠 توجيه الصفحة الرئيسية (من المسار الرئيسي مباشرة)
-// ==================================================
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+        if (!data.success) {
+          list.innerHTML = `
+            <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
+            <button onclick="loadAllCourses()">↩️ رجوع للكورسات</button>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+          return;
+        }
 
-// ==================================================
-// 🚀 تشغيل السيرفر (متوافق مع Railway)
-// ==================================================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`السيرفر شغال على البورت: ${PORT}`);
-  console.log(`فحص الـ endpoints: /api/debug/endpoints`);
-});
+        const lectures = data.lectures || [];
+        list.innerHTML = `
+          <button onclick="loadAllCourses()">↩️ رجوع للكورسات</button>
+          <div class="badge">endpoint: ${data.endpoint} — عدد: ${lectures.length}</div>
+        `;
+
+        if (lectures.length === 0) {
+          const pre = document.createElement('pre');
+          pre.textContent = JSON.stringify(data.raw, null, 2);
+          list.appendChild(pre);
+          return;
+        }
+
+        lectures.forEach(lec => {
+          const id = lec.id || lec.lecture_id;
+          const name = lec.lecture_name || lec.title || lec.name || ('محاضرة #' + id);
+          const sub = document.createElement('div');
+          sub.className = 'sub-item';
+          sub.innerHTML = `
+            <span>🎬 ${name}</span>
+            <button onclick='loadLectureById(${JSON.stringify(id)})'>تشغيل</button>
+          `;
+          list.appendChild(sub);
+        });
+      } catch (err) {
+        console.error(err);
+        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الاتصال</div>';
+      }
+    }
+
+    // ============ فحص شامل لكل الـ endpoints ============
+    async function debugAll() {
+      const list = document.getElementById('coursesList');
+      list.innerHTML = '<div>⏳ جاري فحص كل الـ endpoints... قد يأخذ 30 ثانية</div>';
+
+      try {
+        const res = await fetch('/api/debug/endpoints');
+        const data = await res.json();
+
+        let html = `<h4>✅ مسارات شغالة (${data.workingEndpoints.length}):</h4>`;
+        if (data.workingEndpoints.length === 0) {
+          html += '<div style="color:#f87171">مفيش أي مسار شغال — يمكن التوكن منتهي أو محتاج header إضافي</div>';
+        } else {
+          html += data.workingEndpoints.map(ep => `<div class="debug-item debug-ok"><span>${ep}</span><span>✓</span></div>`).join('');
+        }
+
+        html += `<h4 style="margin-top:20px">📋 كل التفاصيل:</h4>`;
+        data.results.forEach(r => {
+          html += `
+            <div class="debug-item ${r.ok ? 'debug-ok' : 'debug-fail'}">
+              <span><b>${r.endpoint}</b></span>
+              <span>${r.status}</span>
+            </div>
+            ${r.ok ? `<pre style="margin:0 0 10px">${r.preview.replace(/</g, '&lt;')}</pre>` : `<div style="font-size:12px;color:#fca5a5;margin:0 0 10px 20px">${r.message || ''}</div>`}
+          `;
+        });
+
+        list.innerHTML = html;
+        console.log('نتائج الفحص:', data);
+      } catch (err) {
+        console.error(err);
+        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الفحص</div>';
+      }
+    }
+
+    // ============ جلب محاضرة مباشرة ============
+    function loadLectureById(id) {
+      document.getElementById('lectureId').value = id;
+      loadLecture();
+    }
+
+    async function loadLecture() {
+      const lectureId = document.getElementById('lectureId').value.trim();
+      const status = document.getElementById('status');
+      const videoList = document.getElementById('videoList');
+
+      if (!lectureId) return alert('اكتب رقم المحاضرة');
+
+      status.innerText = 'جاري جلب المحاضرة...';
+      videoList.innerHTML = '';
+
+      try {
+        const res = await fetch(`/api/lectures/${lectureId}/content`);
+        const data = await res.json();
+
+        if (!data.success) {
+          status.innerText = 'فشل: ' + (data.message || 'خطأ');
+          return;
+        }
+
+        const lecture = data.data;
+        status.innerText = `المحاضرة: ${lecture.lecture_name || lectureId}`;
+
+        if (!lecture.videos || lecture.videos.length === 0) {
+          videoList.innerHTML = '<div>مفيش فيديوهات</div>';
+          return;
+        }
+
+        lecture.videos.forEach(video => {
+          const div = document.createElement('div');
+          div.className = 'video-item';
+          div.innerHTML = `
+            <span>${video.title}</span>
+            <button onclick="playVideo(${video.id})">تشغيل</button>
+          `;
+          videoList.appendChild(div);
+        });
+
+      } catch (err) {
+        console.error(err);
+        status.innerText = 'حصل خطأ في الاتصال';
+      }
+    }
+
+    // ============ تشغيل الفيديو ============
+    async function playVideo(videoId) {
+      const video = document.getElementById('video');
+      const status = document.getElementById('status');
+
+      status.innerText = 'جاري جلب رابط الفيديو...';
+
+      try {
+        const res = await fetch(`/api/video/${videoId}/play`, { method: 'POST' });
+        const data = await res.json();
+
+        if (!data.success) {
+          status.innerText = 'فشل: ' + (data.message || 'خطأ');
+          return;
+        }
+
+        const streamUrl = data.data.stream_url;
+        const token = data.data.token;
+
+        status.innerText = 'جاري التشغيل...';
+
+        if (hls) {
+          hls.destroy();
+          hls = null;
+        }
+
+        if (Hls.isSupported()) {
+          hls = new Hls({
+            xhrSetup: function (xhr) {
+              xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+            }
+          });
+          hls.loadSource(streamUrl);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            status.innerText = 'الفيديو شغال';
+            video.play();
+          });
+          hls.on(Hls.Events.ERROR, function (event, data) {
+            console.error(data);
+            status.innerText = 'حصل خطأ في تشغيل الفيديو';
+          });
+        } else {
+          video.src = streamUrl;
+          status.innerText = 'الفيديو شغال';
+          video.play();
+        }
+
+      } catch (err) {
+        console.error(err);
+        status.innerText = 'حصل خطأ أثناء التشغيل';
+      }
+    }
+  </script>
+</body>
+  </html>
