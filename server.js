@@ -9,7 +9,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// التوكن بتاع كورساتك
 const COURSATK_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDczNjMsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjYwYTU0MzZiMDY2MzU4NmI1MDQwOTBhZTM3ZThmOWM5In0.Jz2LWCWeYW6O6Y3h_MntJJi8mcauFhRjcInC37Ns5wI";
 
 const coursatk = axios.create({
@@ -25,9 +24,7 @@ const coursatk = axios.create({
   timeout: 15000
 });
 
-// ==================================================
 // 📖 جلب محتوى محاضرة
-// ==================================================
 app.get('/api/lectures/:lectureId/content', async (req, res) => {
   try {
     const response = await coursatk.get(`/user/lectures/${req.params.lectureId}/content`);
@@ -37,9 +34,7 @@ app.get('/api/lectures/:lectureId/content', async (req, res) => {
   }
 });
 
-// ==================================================
 // ▶️ تشغيل فيديو (جلب الرابط)
-// ==================================================
 app.post('/api/video/:videoId/play', async (req, res) => {
   try {
     const response = await coursatk.post(`/video/${req.params.videoId}/stream-weave/play`);
@@ -49,9 +44,7 @@ app.post('/api/video/:videoId/play', async (req, res) => {
   }
 });
 
-// ==================================================
-// 🎥 بروكسي ذكي لتشغيل الفيديو (بيعدل ملفات m3u8 عشان نتغلب على الحظر)
-// ==================================================
+// 🎥 بروكسي مباشر للفيديو (بيعمل بث للفيديو مباشرة)
 app.get('/api/proxy-video', async (req, res) => {
   const { url, token } = req.query;
   if (!url) return res.status(400).send('Missing URL');
@@ -64,31 +57,33 @@ app.get('/api/proxy-video', async (req, res) => {
         'Authorization': `Bearer ${token}`,
         'User-Agent': 'Mozilla/5.0'
       },
-      responseType: 'text' // بنستقبل الملف كنص عشان نعدل الروابط اللي جواه لو كان m3u8
+      responseType: 'stream' // بث مباشر
     });
 
-    let content = response.data;
-
-    // لو الملف m3u8، بنعدل الروابط اللي جواه تروح للسيرفر بتاعنا بدل السيرفر الأصلي
+    // نقل الهيدرز المهمة
+    res.setHeader('Content-Type', response.headers['content-type'] || 'application/vnd.apple.mpegurl');
+    
     if (url.includes('.m3u8')) {
-      const basePath = url.substring(0, url.lastIndexOf('/') + 1);
-      
-      content = content.split('\n').map(line => {
-        line = line.trim();
-        if (line && !line.startsWith('#')) {
-          // لو الرابط نسبي، نحوله لرابط كامل
-          let fullUrl = line.startsWith('http') ? line : basePath + line;
-          
-          // بنرجع الرابط بس من خلال السيرفر بتاعنا
-          return `/api/proxy-video?url=${encodeURIComponent(fullUrl)}&token=${token}`;
-        }
-        return line;
-      }).join('\n');
+        let content = '';
+        response.data.on('data', chunk => content += chunk.toString());
+        response.data.on('end', () => {
+            const basePath = url.substring(0, url.lastIndexOf('/') + 1);
+            const modifiedContent = content.split('\n').map(line => {
+                line = line.trim();
+                if (line && !line.startsWith('#')) {
+                    let fullUrl = line.startsWith('http') ? line : basePath + line;
+                    return `/api/proxy-video?url=${encodeURIComponent(fullUrl)}&token=${token}`;
+                }
+                return line;
+            }).join('\n');
+            res.send(modifiedContent);
+        });
+    } else {
+        if (response.headers['content-range']) res.setHeader('Content-Range', response.headers['content-range']);
+        if (response.headers['accept-ranges']) res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
+        if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
+        response.data.pipe(res);
     }
-
-    // تحديد نوع الملف عشان المتصفح يفهمه
-    res.setHeader('Content-Type', url.includes('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t');
-    res.send(content);
     
   } catch (err) {
     console.error('Proxy Error:', err.message);
@@ -96,9 +91,7 @@ app.get('/api/proxy-video', async (req, res) => {
   }
 });
 
-// ==================================================
 // 🏠 توجيه الصفحة الرئيسية
-// ==================================================
 app.get('/', (req, res) => {
   const possiblePaths = [
     path.join(__dirname, 'index.html'),
@@ -111,9 +104,6 @@ app.get('/', (req, res) => {
   res.status(404).send("ملف index.html غير موجود");
 });
 
-// ==================================================
-// 🚀 تشغيل السيرفر
-// ==================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
