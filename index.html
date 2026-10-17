@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>دروسك بلس - المشغل الشامل</title>
+  <title>دروسك بلس - مشغل</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
   <style>
     * { box-sizing: border-box; }
@@ -22,47 +22,98 @@
       padding: 20px;
       margin-bottom: 20px;
     }
-    button {
-      padding: 10px 16px;
-      font-size: 14px;
+    input, button {
+      padding: 12px 16px;
+      font-size: 16px;
       border-radius: 8px;
       border: none;
+    }
+    input {
+      width: 180px;
+      background: #334155;
+      color: white;
+      text-align: center;
+    }
+    button {
       background: #ef4444;
       color: white;
       cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 6px;
     }
     button:hover { background: #dc2626; }
-    #status { margin: 12px 0; color: #94a3b8; font-weight: bold; }
+    button.blue { background: #2563eb; }
+    button.blue:hover { background: #1d4ed8; }
+    button.green { background: #16a34a; }
+    button.green:hover { background: #15803d; }
+    #status { margin: 12px 0; color: #94a3b8; }
     video {
       width: 100%;
       background: #000;
       border-radius: 12px;
       margin-top: 15px;
     }
-    .lecture-section { margin-bottom: 20px; background: #334155; padding: 15px; border-radius: 8px; }
+    .video-list { margin-top: 15px; }
     .video-item {
-      background: #1e293b;
-      padding: 10px 14px;
-      border-radius: 6px;
-      margin-top: 8px;
+      background: #334155;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 8px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .video-item:hover { background: #475569; }
+    .video-item span { flex: 1; min-width: 150px; }
+    .sub-item {
+      background: #1e293b;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin: 6px 0 6px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      border-right: 3px solid #2563eb;
+    }
+    .badge {
+      display: inline-block;
+      background: #334155;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #94a3b8;
+      margin-right: 6px;
     }
   </style>
 </head>
-<body onload="loadAllLectures()">
+<body>
   <div class="container">
-    <h1>دروسك بلس - جميع المحاضرات</h1>
+    <h1>دروسك بلس - مشغل</h1>
 
+    <!-- ===== كل الكورسات ===== -->
     <div class="card">
-      <h3>قائمة المحاضرات والفيديوهات</h3>
-      <div id="status">جاري جلب المحاضرات من السيرفر...</div>
-      <div id="lecturesContainer"></div>
+      <h3>📚 كل الكورسات والمحاضرات</h3>
+      <button class="blue" onclick="loadAllCourses()">جلب كل الكورسات</button>
+      <button class="green" onclick="debugEndpoints()">فحص الـ Endpoints (تشخيص)</button>
+      <div id="coursesList" class="video-list"></div>
     </div>
 
+    <!-- ===== جلب محاضرة مباشرة ===== -->
     <div class="card">
-      <h3>المشغل</h3>
+      <h3>🎯 جلب محتوى محاضرة مباشرة</h3>
+      <input type="text" id="lectureId" value="5548" placeholder="رقم المحاضرة">
+      <button onclick="loadLecture()">جلب المحاضرة</button>
+      <div id="status">جاهز</div>
+      <div id="videoList" class="video-list"></div>
+    </div>
+
+    <!-- ===== المشغل ===== -->
+    <div class="card">
+      <h3>▶️ المشغل</h3>
       <video id="video" controls></video>
     </div>
   </div>
@@ -70,55 +121,171 @@
   <script>
     let hls = null;
 
-    async function loadAllLectures() {
-      const status = document.getElementById('status');
-      const container = document.getElementById('lecturesContainer');
+    // ============ جلب كل الكورسات ============
+    async function loadAllCourses() {
+      const list = document.getElementById('coursesList');
+      list.innerHTML = '<div>⏳ جاري جلب الكورسات...</div>';
 
       try {
-        const res = await fetch('/api/all-lectures');
+        const res = await fetch('/api/courses');
         const data = await res.json();
 
-        if (!data.success || data.data.length === 0) {
-          status.innerText = 'لم يتم العثور على محاضرات.';
+        console.log('رد /api/courses:', data);
+
+        if (!data.success) {
+          list.innerHTML = `
+            <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
+            <pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px">${JSON.stringify(data, null, 2)}</pre>
+          `;
           return;
         }
 
-        status.innerText = 'تم جلب جميع المحاضرات بنجاح!';
-        container.innerHTML = '';
+        const courses = data.courses || [];
+        if (courses.length === 0) {
+          list.innerHTML = `
+            <div>⚠️ الرد ناجح لكن مفيش كورسات متعرف عليها.</div>
+            <div class="badge">endpoint: ${data.endpoint}</div>
+            <pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px">${JSON.stringify(data.raw, null, 2)}</pre>
+          `;
+          return;
+        }
 
-        data.data.forEach(lecture => {
-          const lecDiv = document.createElement('div');
-          lecDiv.className = 'lecture-section';
-          
-          let videosHtml = '';
-          if (lecture.videos && lecture.videos.length > 0) {
-            lecture.videos.forEach(video => {
-              videosHtml += `
-                <div class="video-item">
-                  <span>${video.title}</span>
-                  <button onclick="playVideo(${video.id})">تشغيل</button>
-                </div>
-              `;
-            });
-          } else {
-            videosHtml = '<div style="color: #94a3b8; margin-top: 5px;">لا توجد فيديوهات في هذه المحاضرة</div>';
-          }
+        list.innerHTML = `<div class="badge">تم الجلب من: ${data.endpoint} — عدد: ${courses.length}</div>`;
+        courses.forEach(course => {
+          const id = course.id || course.course_id || course.uuid;
+          const name = course.name || course.title || course.course_name || ('كورس #' + id);
+          const div = document.createElement('div');
+          div.className = 'video-item';
+          div.innerHTML = `
+            <span>📘 ${name}</span>
+            <button onclick="loadCourseLectures(${JSON.stringify(id)})">عرض المحاضرات</button>
+          `;
+          list.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الاتصال</div>';
+      }
+    }
 
-          lecDiv.innerHTML = `<strong>محاضرة: ${lecture.lecture_name || 'بدون اسم'}</strong>` + videosHtml;
-          container.appendChild(lecDiv);
+    // ============ جلب محاضرات كورس ============
+    async function loadCourseLectures(courseId) {
+      const list = document.getElementById('coursesList');
+      list.innerHTML = `<div>⏳ جاري جلب محاضرات الكورس ${courseId}...</div>`;
+
+      try {
+        const res = await fetch(`/api/courses/${encodeURIComponent(courseId)}/lectures`);
+        const data = await res.json();
+        console.log('رد /api/courses/' + courseId + '/lectures:', data);
+
+        if (!data.success) {
+          list.innerHTML = `
+            <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
+            <button onclick="loadAllCourses()">↩️ رجوع للكورسات</button>
+            <pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px">${JSON.stringify(data, null, 2)}</pre>
+          `;
+          return;
+        }
+
+        const lectures = data.lectures || [];
+        list.innerHTML = `
+          <button onclick="loadAllCourses()">↩️ رجوع للكورسات</button>
+          <div class="badge">endpoint: ${data.endpoint} — عدد: ${lectures.length}</div>
+        `;
+
+        if (lectures.length === 0) {
+          const pre = document.createElement('pre');
+          pre.style.cssText = 'background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px';
+          pre.textContent = JSON.stringify(data.raw, null, 2);
+          list.appendChild(pre);
+          return;
+        }
+
+        lectures.forEach(lec => {
+          const id = lec.id || lec.lecture_id;
+          const name = lec.lecture_name || lec.title || lec.name || ('محاضرة #' + id);
+          const sub = document.createElement('div');
+          sub.className = 'sub-item';
+          sub.innerHTML = `
+            <span>🎬 ${name}</span>
+            <button onclick="loadLectureById(${JSON.stringify(id)})">تشغيل</button>
+          `;
+          list.appendChild(sub);
+        });
+      } catch (err) {
+        console.error(err);
+        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الاتصال</div>';
+      }
+    }
+
+    // ============ فحص الـ endpoints (تشخيص) ============
+    async function debugEndpoints() {
+      const list = document.getElementById('coursesList');
+      list.innerHTML = '<div>⏳ جاري فحص الـ endpoints...</div>';
+      try {
+        const res = await fetch('/api/courses');
+        const data = await res.json();
+        list.innerHTML = `<pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:500px">${JSON.stringify(data, null, 2)}</pre>`;
+      } catch (err) {
+        list.innerHTML = '<div style="color:#f87171">❌ خطأ</div>';
+      }
+    }
+
+    // ============ جلب محاضرة مباشرة ============
+    function loadLectureById(id) {
+      document.getElementById('lectureId').value = id;
+      loadLecture();
+    }
+
+    async function loadLecture() {
+      const lectureId = document.getElementById('lectureId').value.trim();
+      const status = document.getElementById('status');
+      const videoList = document.getElementById('videoList');
+
+      if (!lectureId) return alert('اكتب رقم المحاضرة');
+
+      status.innerText = 'جاري جلب المحاضرة...';
+      videoList.innerHTML = '';
+
+      try {
+        const res = await fetch(`/api/lectures/${lectureId}/content`);
+        const data = await res.json();
+
+        if (!data.success) {
+          status.innerText = 'فشل: ' + (data.message || 'خطأ');
+          return;
+        }
+
+        const lecture = data.data;
+        status.innerText = `المحاضرة: ${lecture.lecture_name || lectureId}`;
+
+        if (!lecture.videos || lecture.videos.length === 0) {
+          videoList.innerHTML = '<div>مفيش فيديوهات</div>';
+          return;
+        }
+
+        lecture.videos.forEach(video => {
+          const div = document.createElement('div');
+          div.className = 'video-item';
+          div.innerHTML = `
+            <span>${video.title}</span>
+            <button onclick="playVideo(${video.id})">تشغيل</button>
+          `;
+          videoList.appendChild(div);
         });
 
       } catch (err) {
         console.error(err);
-        status.innerText = 'حدث خطأ أثناء الاتصال بالسيرفر';
+        status.innerText = 'حصل خطأ في الاتصال';
       }
     }
 
+    // ============ تشغيل الفيديو ============
     async function playVideo(videoId) {
       const video = document.getElementById('video');
       const status = document.getElementById('status');
 
-      status.innerText = 'جاري جلب رابط تشغيل الفيديو...';
+      status.innerText = 'جاري جلب رابط الفيديو...';
 
       try {
         const res = await fetch(`/api/video/${videoId}/play`, { method: 'POST' });
@@ -132,7 +299,7 @@
         const streamUrl = data.data.stream_url;
         const token = data.data.token;
 
-        status.innerText = 'جاري تشغيل الفيديو...';
+        status.innerText = 'جاري التشغيل...';
 
         if (hls) {
           hls.destroy();
@@ -148,22 +315,22 @@
           hls.loadSource(streamUrl);
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            status.innerText = 'الفيديو يعمل الآن';
+            status.innerText = 'الفيديو شغال';
             video.play();
           });
           hls.on(Hls.Events.ERROR, function (event, data) {
             console.error(data);
-            status.innerText = 'حدث خطأ أثناء التشغيل';
+            status.innerText = 'حصل خطأ في تشغيل الفيديو';
           });
         } else {
           video.src = streamUrl;
-          status.innerText = 'الفيديو يعمل الآن';
+          status.innerText = 'الفيديو شغال';
           video.play();
         }
 
       } catch (err) {
         console.error(err);
-        status.innerText = 'حدث خطأ في الاتصال';
+        status.innerText = 'حصل خطأ أثناء التشغيل';
       }
     }
   </script>
