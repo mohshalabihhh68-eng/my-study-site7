@@ -46,6 +46,8 @@
     button.blue:hover { background: #1d4ed8; }
     button.green { background: #16a34a; }
     button.green:hover { background: #15803d; }
+    button.purple { background: #7c3aed; }
+    button.purple:hover { background: #6d28d9; }
     #status { margin: 12px 0; color: #94a3b8; }
     video {
       width: 100%;
@@ -88,6 +90,28 @@
       color: #94a3b8;
       margin-right: 6px;
     }
+    .debug-item {
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .debug-ok { background: #14532d; border-right: 3px solid #22c55e; }
+    .debug-fail { background: #3f1d1d; border-right: 3px solid #ef4444; }
+    pre {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 6px;
+      overflow: auto;
+      font-size: 12px;
+      max-height: 400px;
+      direction: ltr;
+      text-align: left;
+    }
   </style>
 </head>
 <body>
@@ -98,7 +122,7 @@
     <div class="card">
       <h3>📚 كل الكورسات والمحاضرات</h3>
       <button class="blue" onclick="loadAllCourses()">جلب كل الكورسات</button>
-      <button class="green" onclick="debugEndpoints()">فحص الـ Endpoints (تشخيص)</button>
+      <button class="purple" onclick="debugAll()">🔍 فحص شامل لكل الـ endpoints</button>
       <div id="coursesList" class="video-list"></div>
     </div>
 
@@ -135,7 +159,8 @@
         if (!data.success) {
           list.innerHTML = `
             <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
-            <pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px">${JSON.stringify(data, null, 2)}</pre>
+            <div class="badge">جرّب زر "فحص شامل" لمعرفة المسارات الشغالة</div>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
           `;
           return;
         }
@@ -145,7 +170,7 @@
           list.innerHTML = `
             <div>⚠️ الرد ناجح لكن مفيش كورسات متعرف عليها.</div>
             <div class="badge">endpoint: ${data.endpoint}</div>
-            <pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px">${JSON.stringify(data.raw, null, 2)}</pre>
+            <pre>${JSON.stringify(data.raw, null, 2)}</pre>
           `;
           return;
         }
@@ -158,7 +183,7 @@
           div.className = 'video-item';
           div.innerHTML = `
             <span>📘 ${name}</span>
-            <button onclick="loadCourseLectures(${JSON.stringify(id)})">عرض المحاضرات</button>
+            <button onclick='loadCourseLectures(${JSON.stringify(id)})'>عرض المحاضرات</button>
           `;
           list.appendChild(div);
         });
@@ -176,13 +201,13 @@
       try {
         const res = await fetch(`/api/courses/${encodeURIComponent(courseId)}/lectures`);
         const data = await res.json();
-        console.log('رد /api/courses/' + courseId + '/lectures:', data);
+        console.log('رد المحاضرات:', data);
 
         if (!data.success) {
           list.innerHTML = `
             <div style="color:#f87171">❌ ${data.message || 'فشل'}</div>
             <button onclick="loadAllCourses()">↩️ رجوع للكورسات</button>
-            <pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px">${JSON.stringify(data, null, 2)}</pre>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
           `;
           return;
         }
@@ -195,7 +220,6 @@
 
         if (lectures.length === 0) {
           const pre = document.createElement('pre');
-          pre.style.cssText = 'background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:300px';
           pre.textContent = JSON.stringify(data.raw, null, 2);
           list.appendChild(pre);
           return;
@@ -208,7 +232,7 @@
           sub.className = 'sub-item';
           sub.innerHTML = `
             <span>🎬 ${name}</span>
-            <button onclick="loadLectureById(${JSON.stringify(id)})">تشغيل</button>
+            <button onclick='loadLectureById(${JSON.stringify(id)})'>تشغيل</button>
           `;
           list.appendChild(sub);
         });
@@ -218,16 +242,38 @@
       }
     }
 
-    // ============ فحص الـ endpoints (تشخيص) ============
-    async function debugEndpoints() {
+    // ============ فحص شامل لكل الـ endpoints ============
+    async function debugAll() {
       const list = document.getElementById('coursesList');
-      list.innerHTML = '<div>⏳ جاري فحص الـ endpoints...</div>';
+      list.innerHTML = '<div>⏳ جاري فحص كل الـ endpoints... قد يأخذ 30 ثانية</div>';
+
       try {
-        const res = await fetch('/api/courses');
+        const res = await fetch('/api/debug/endpoints');
         const data = await res.json();
-        list.innerHTML = `<pre style="background:#0f172a;padding:10px;border-radius:6px;overflow:auto;font-size:12px;max-height:500px">${JSON.stringify(data, null, 2)}</pre>`;
+
+        let html = `<h4>✅ مسارات شغالة (${data.workingEndpoints.length}):</h4>`;
+        if (data.workingEndpoints.length === 0) {
+          html += '<div style="color:#f87171">مفيش أي مسار شغال — يمكن التوكن منتهي أو محتاج header إضافي</div>';
+        } else {
+          html += data.workingEndpoints.map(ep => `<div class="debug-item debug-ok"><span>${ep}</span><span>✓</span></div>`).join('');
+        }
+
+        html += `<h4 style="margin-top:20px">📋 كل التفاصيل:</h4>`;
+        data.results.forEach(r => {
+          html += `
+            <div class="debug-item ${r.ok ? 'debug-ok' : 'debug-fail'}">
+              <span><b>${r.endpoint}</b></span>
+              <span>${r.status}</span>
+            </div>
+            ${r.ok ? `<pre style="margin:0 0 10px">${r.preview.replace(/</g, '&lt;')}</pre>` : `<div style="font-size:12px;color:#fca5a5;margin:0 0 10px 20px">${r.message || ''}</div>`}
+          `;
+        });
+
+        list.innerHTML = html;
+        console.log('نتائج الفحص:', data);
       } catch (err) {
-        list.innerHTML = '<div style="color:#f87171">❌ خطأ</div>';
+        console.error(err);
+        list.innerHTML = '<div style="color:#f87171">❌ خطأ في الفحص</div>';
       }
     }
 
