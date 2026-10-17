@@ -50,7 +50,7 @@ app.post('/api/video/:videoId/play', async (req, res) => {
 });
 
 // ==================================================
-// 🎥 بروكسي لتشغيل الفيديو وتجاوز الحظر
+// 🎥 بروكسي ذكي لتشغيل الفيديو (بيعدل ملفات m3u8 عشان نتغلب على الحظر)
 // ==================================================
 app.get('/api/proxy-video', async (req, res) => {
   const { url, token } = req.query;
@@ -64,16 +64,32 @@ app.get('/api/proxy-video', async (req, res) => {
         'Authorization': `Bearer ${token}`,
         'User-Agent': 'Mozilla/5.0'
       },
-      responseType: 'stream'
+      responseType: 'text' // بنستقبل الملف كنص عشان نعدل الروابط اللي جواه لو كان m3u8
     });
 
-    // نقل الهيدرز المهمة للمتصفح عشان المشغل يشتغل
-    res.setHeader('Content-Type', response.headers['content-type'] || 'application/vnd.apple.mpegurl');
-    if (response.headers['content-range']) res.setHeader('Content-Range', response.headers['content-range']);
-    if (response.headers['accept-ranges']) res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
-    if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
+    let content = response.data;
 
-    response.data.pipe(res);
+    // لو الملف m3u8، بنعدل الروابط اللي جواه تروح للسيرفر بتاعنا بدل السيرفر الأصلي
+    if (url.includes('.m3u8')) {
+      const basePath = url.substring(0, url.lastIndexOf('/') + 1);
+      
+      content = content.split('\n').map(line => {
+        line = line.trim();
+        if (line && !line.startsWith('#')) {
+          // لو الرابط نسبي، نحوله لرابط كامل
+          let fullUrl = line.startsWith('http') ? line : basePath + line;
+          
+          // بنرجع الرابط بس من خلال السيرفر بتاعنا
+          return `/api/proxy-video?url=${encodeURIComponent(fullUrl)}&token=${token}`;
+        }
+        return line;
+      }).join('\n');
+    }
+
+    // تحديد نوع الملف عشان المتصفح يفهمه
+    res.setHeader('Content-Type', url.includes('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t');
+    res.send(content);
+    
   } catch (err) {
     console.error('Proxy Error:', err.message);
     res.status(500).send('Error proxying video');
@@ -81,7 +97,7 @@ app.get('/api/proxy-video', async (req, res) => {
 });
 
 // ==================================================
-// 🏠 توجيه الصفحة الرئيسية (لضمان عدم ظهور خطأ ENOENT)
+// 🏠 توجيه الصفحة الرئيسية
 // ==================================================
 app.get('/', (req, res) => {
   const possiblePaths = [
@@ -89,13 +105,10 @@ app.get('/', (req, res) => {
     path.join(__dirname, 'public', 'index.html'),
     path.join(process.cwd(), 'index.html')
   ];
-  
   for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      return res.sendFile(p);
-    }
+    if (fs.existsSync(p)) return res.sendFile(p);
   }
-  res.status(404).send("ملف index.html غير موجود في السيرفر.");
+  res.status(404).send("ملف index.html غير موجود");
 });
 
 // ==================================================
