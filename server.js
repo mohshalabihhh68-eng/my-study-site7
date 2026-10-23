@@ -14,6 +14,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
+const APP_VERSION = "v3";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set("trust proxy", 1);
@@ -47,8 +48,13 @@ const CONFIG = {
   STREAM_ORIGIN: "https://coursatk.online",
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
+  // Exact headers from real Soul Browser capture
   STREAM_UA:
-    "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 15; CPH2591 Build/AP3A.240617.008) AppleWebKit/537.36 (KHTML, like Gecko) Jrryilw/4.0 Chrome/155.0.8059.43 Mobile Safari/537.36",
+  STREAM_SEC_CH_UA: '"Android WebView";v="155", "Chromium";v="155", "Not(A:Brand";v="24"',
+  STREAM_SEC_CH_UA_MOBILE: "?1",
+  STREAM_SEC_CH_UA_PLATFORM: '"Android"',
+  STREAM_ACCEPT_LANGUAGE: "ar-EG,ar;q=0.9,en-EG;q=0.8,en-US;q=0.7,en;q=0.6",
   PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
   STREAM_SESSION_MS: 30 * 60 * 1000, // 30 min for testing
   MAX_PROXY_BYTES: 20 * 1024 * 1024
@@ -288,45 +294,42 @@ function isMediaCdnHost(url) {
   }
 }
 
-/** Build headers for upstream stream requests. mode: "full" | "media" | "minimal" */
+/**
+ * Build headers matching the real Soul Browser capture:
+ *   Accept: */*
+ *   User-Agent: ... Jrryilw/4.0 Chrome/155 ...
+ *   Origin / Referer: https://coursatk.online
+ *   X-Requested-With: com.mycompany.app.soulbrowser
+ *   sec-ch-ua / sec-fetch-* / accept-language
+ * Media segments: NO Authorization (only query token on URL)
+ */
 function buildStreamHeaders(session, url, clientHeaders, extra, mode) {
-  const ch = clientHeaders || {};
-  const ua = ch["user-agent"] || ch["User-Agent"] || CONFIG.STREAM_UA;
   const headers = {
     Accept: "*/*",
-    "User-Agent": ua
+    "User-Agent": CONFIG.STREAM_UA,
+    "sec-ch-ua": CONFIG.STREAM_SEC_CH_UA,
+    "sec-ch-ua-mobile": CONFIG.STREAM_SEC_CH_UA_MOBILE,
+    "sec-ch-ua-platform": CONFIG.STREAM_SEC_CH_UA_PLATFORM,
+    "accept-language": CONFIG.STREAM_ACCEPT_LANGUAGE
   };
 
-  if (mode === "full") {
-    // master playlist / key on stream-weave
-    headers["Cache-Control"] = "no-cache";
-    headers.Origin = CONFIG.STREAM_ORIGIN;
-    headers.Referer = CONFIG.STREAM_REFERER;
-    headers["X-Requested-With"] = CONFIG.STREAM_X_REQUESTED_WITH;
-    if (session?.token) headers.Authorization = `Bearer ${session.token}`;
-  } else if (mode === "media") {
-    // CDN segments: query token only — no Authorization (browser doesn't send it)
-    headers.Referer = CONFIG.STREAM_REFERER;
-    headers.Origin = CONFIG.STREAM_ORIGIN;
-    // do NOT set Authorization / X-Requested-With
-  } else {
-    // minimal: UA + Accept only (last resort on 403)
+  if (mode === "minimal") {
+    // last resort: bare UA + Accept
+    return Object.assign(headers, extra || {});
   }
 
-  for (const name of [
-    "sec-ch-ua-platform",
-    "sec-ch-ua",
-    "sec-ch-ua-mobile",
-    "accept-language"
-  ]) {
-    const v = ch[name] || ch[name.toLowerCase()];
-    if (v) headers[name] = v;
-  }
-  // media-like fetch metadata when client sent them
-  if (mode !== "minimal") {
-    if (ch["sec-fetch-site"]) headers["sec-fetch-site"] = ch["sec-fetch-site"];
-    if (ch["sec-fetch-mode"]) headers["sec-fetch-mode"] = ch["sec-fetch-mode"];
-    if (ch["sec-fetch-dest"]) headers["sec-fetch-dest"] = ch["sec-fetch-dest"];
+  // Match capture for both master and media
+  headers.Origin = CONFIG.STREAM_ORIGIN;
+  headers.Referer = CONFIG.STREAM_REFERER;
+  headers["X-Requested-With"] = CONFIG.STREAM_X_REQUESTED_WITH;
+  headers["sec-fetch-site"] = "cross-site";
+  headers["sec-fetch-mode"] = "cors";
+  headers["sec-fetch-dest"] = "empty";
+  headers["Cache-Control"] = "no-cache";
+
+  // Master / key on stream-weave need Authorization; media CDN does NOT
+  if (mode === "full" && session?.token && !isMediaCdnHost(url)) {
+    headers.Authorization = `Bearer ${session.token}`;
   }
 
   for (const [k, v] of Object.entries(extra || {})) {
@@ -343,19 +346,30 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   const media = isMediaCdnHost(url);
   const modes = media ? ["media", "minimal", "full"] : ["full", "media", "minimal"];
 
+  // Optional outbound proxy (residential) — set HTTPS_PROXY or SEGMENT_PROXY
+  const proxyUrl = process.env.SEGMENT_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "";
+  let dispatcher = undefined;
+  if (proxyUrl && media) {
+    try {
+      const { ProxyAgent } = await import("undici");
+      dispatcher = new ProxyAgent(proxyUrl);
+    } catch (e) {
+      console.warn("[streamFetch] proxy agent unavailable:", e.message);
+    }
+  }
+
   let lastRes = null;
   let lastErr = null;
 
   for (const mode of modes) {
     const headers = buildStreamHeaders(session, url, clientHeaders, extra, mode);
     try {
-      const r = await fetch(url, { headers, cache: "no-store", redirect: "follow" });
+      const opts = { headers, cache: "no-store", redirect: "follow" };
+      if (dispatcher) opts.dispatcher = dispatcher;
+      const r = await fetch(url, opts);
       lastRes = r;
-      // success or non-403 error → return (caller handles status)
       if (r.ok || r.status === 206 || r.status !== 403) return r;
-      // 403 → try next mode
       console.warn(`[streamFetch] ${r.status} mode=${mode} host=${new URL(url).hostname}`);
-      // consume body so connection can close before retry
       try {
         await r.arrayBuffer();
       } catch {}
@@ -377,7 +391,7 @@ const HTML_PLAYER = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Coursatk Open Catalog</title>
+  <title>Coursatk Open Catalog v3</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
   <style>
     * { box-sizing: border-box; }
@@ -472,7 +486,7 @@ const HTML_PLAYER = `<!DOCTYPE html>
 </head>
 <body>
   <header>
-    <h1>Coursatk Open Catalog</h1>
+    <h1>Coursatk Open Catalog v3</h1>
     <div class="toolbar" style="margin:0">
       <select id="yearId">
         <option value="4">سنة 4 (افتراضي)</option>
@@ -911,6 +925,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "coursatk-open-proxy",
+    version: APP_VERSION,
     cryptoReady: Boolean(decryptPlaybackKeyFn),
     decryptSegments: true,
     mode: "open-no-auth",
@@ -1125,8 +1140,9 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
   let mediaSeq = 0;
   let currentIv = null;
   let keyFetched = false;
-  // Default DIRECT — browser loads segments from CDN
-  const proxyMode = false;
+  // PROXY: server fetches segments (needs non-cloud IP — Railway CF-blocks c-cdn)
+  // Set DIRECT_SEGMENTS=1 to let browser fetch CDN URLs (often 403 due to Referer)
+  const proxyMode = process.env.DIRECT_SEGMENTS !== "1";
 
   for (const raw of lines) {
     const t = raw.trim();
@@ -1313,7 +1329,7 @@ setInterval(() => {
 await loadDecryptionUtils();
 
 app.listen(CONFIG.PORT, () => {
-  console.log(`[OPEN] http://localhost:${CONFIG.PORT}`);
-  console.log(`[OPEN] HTML player at /  |  health at /health`);
-  console.log(`[OPEN] token hardcoded · no Firebase · no auth`);
+  console.log(`[OPEN ${APP_VERSION}] http://localhost:${CONFIG.PORT}`);
+  console.log(`[OPEN ${APP_VERSION}] HTML player at /  |  health at /health`);
+  console.log(`[OPEN ${APP_VERSION}] token hardcoded · no Firebase · no auth`);
 });
