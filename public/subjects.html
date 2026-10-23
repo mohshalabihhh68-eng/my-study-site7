@@ -1,1 +1,360 @@
+<!DOCTYPE html>
+<html lang="ar-EG" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="theme-color" content="#070b14">
+<title>المواد الدراسية | ثانوية club</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563eb'/%3E%3Cpath d='M32 14 8 26l24 12 24-12z' fill='%23fff'/%3E%3Cpath d='M18 33v10c0 4 7 8 14 8s14-4 14-8V33l-14 7z' fill='%23bfdbfe'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
+<style>
+:root{--bg:#070b14;--bg2:#0c1220;--card:#121a2b;--card2:#182234;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--red:#ff3b30;--green:#34d399;--shadow:0 24px 60px rgba(0,0,0,.45);}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:Cairo,system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
+#app{display:block;min-height:100vh;animation:fadeIn .35s ease}
+.app-nav{position:sticky;top:0;z-index:40;background:rgba(7,11,20,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer}
+.brand img{width:36px;height:36px;border-radius:11px}
+.brand small{display:block;font-size:10px;font-weight:600;color:var(--muted)}
+.profile-wrap{position:relative;margin-right:auto}
+.profile-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px 5px 5px;cursor:pointer;font-weight:800;font-size:12px;transition:.2s;}
+.profile-btn:hover{border-color:rgba(59,130,246,.4)}
+.profile-btn .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue3));color:#fff;display:grid;place-items:center;font-weight:900;font-size:13px}
+
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
+.page-head{margin-bottom:22px;animation:fadeUp .4s ease}
+.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);color:var(--blue2);border:1px solid rgba(59,130,246,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
+.page-head h1{margin:0;font-size:26px;font-weight:900}
+.page-head p{margin:8px 0 0;color:var(--muted);font-size:13px;line-height:1.6}
+.back-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:9px 14px;font-weight:800;font-size:12px;cursor:pointer;margin-bottom:14px;color:var(--ink);transition:.2s}
+.back-btn:hover{border-color:rgba(59,130,246,.35);background:var(--card2)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:20px;align-items:stretch}
+.card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;cursor:pointer;transition:transform .3s,box-shadow .3s,border-color .3s;animation:fadeUp .45s ease both;box-shadow:0 10px 30px rgba(0,0,0,.25);}
+.card:hover{transform:translateY(-8px) scale(1.01);border-color:rgba(59,130,246,.4);box-shadow:0 24px 50px rgba(37,99,235,.18)}
+.card-img{position:relative;aspect-ratio:16/9;background:radial-gradient(circle at 20% 20%,rgba(96,165,250,.22),transparent 36%),linear-gradient(135deg,#101b31,#0b1220);overflow:hidden}
+.card-img img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s ease}
+.card:hover .card-img img{transform:scale(1.08)}
+.card-img .ph{width:100%;height:100%;display:grid;place-items:center;color:var(--muted)}
+.badge-live{position:absolute;top:10px;right:10px;background:rgba(16,185,129,.18);color:var(--green);border:1px solid rgba(52,211,153,.25);border-radius:999px;padding:4px 10px;font-size:10px;font-weight:800;}
+.card-body{padding:16px 16px 17px;display:flex;flex-direction:column;min-height:145px}
+.card-body h3{margin:0;font-size:clamp(14px,1.3vw,17px);font-weight:900;line-height:1.5;min-height:2.8em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card-meta{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--muted);font-weight:700;min-height:20px}
+.card-btn{width:100%;margin-top:auto;border:0;border-radius:12px;padding:11px;font-weight:900;font-size:12px;background:linear-gradient(135deg,var(--blue),var(--blue3));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:.2s}
+.card:hover .card-btn{box-shadow:0 8px 22px rgba(37,99,235,.35)}
+
+.list{display:flex;flex-direction:column;gap:10px}
+.list-item{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;transition:all 0.25s;}
+.list-item:hover{background:var(--card2);border-color:rgba(91,140,255,0.4);transform:translateX(-4px);}
+.list-item img{width:60px;height:60px;border-radius:10px;object-fit:cover;background:#0a1220;}
+.list-item .title{font-size:15px;font-weight:800;color:#fff;}
+.list-item .meta{font-size:12px;color:var(--muted);margin-top:4px;}
+
+.btn{display:flex;align-items:center;gap:12px;width:100%;background:var(--card);border:1px solid var(--line);color:#fff;padding:14px 18px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.25s;text-decoration:none;margin-bottom:10px;}
+.btn:hover{background:var(--card2);border-color:var(--blue);transform:translateX(-4px);}
+.btn span:first-child{color:var(--blue);}
+
+.state{text-align:center;padding:48px 16px;color:var(--muted)}
+.state h3{margin:10px 0 6px;color:var(--ink);font-weight:900}
+.skel{border-radius:22px;height:250px;background:linear-gradient(90deg,var(--card),var(--card2),var(--card));background-size:200% 100%;animation:shimmer 1.2s infinite}
+
+/* PLAYER MODAL */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+.modal.hidden{display:none}
+.player-container{width:100%;max-width:900px;background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:0 30px 100px rgba(0,0,0,0.8);}
+.player-header{display:flex;align-items:center;gap:16px;padding:16px 20px;background:var(--card2);border-bottom:1px solid var(--line);}
+.player-header h3{flex:1;margin:0;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.close-btn{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.1);font-size:16px;display:flex;align-items:center;justify-content:center;transition:all 0.25s;}
+.close-btn:hover{background:#ef4444;transform:rotate(90deg);}
+.video-wrapper{position:relative;background:#000;aspect-ratio:16/9;}
+#video{width:100%;height:100%;display:block;}
+.status{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:var(--blue2);padding:8px 16px;border-radius:99px;font-size:13px;font-weight:700;pointer-events:none;}
+
+@media(max-width:600px){
+  .grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+  .card-img{aspect-ratio:1.16/1}
+  .card-body{padding:12px 11px 13px;min-height:139px}
+  .card-body h3{font-size:13px;min-height:2.9em}
+  .card-btn{font-size:11px;padding:10px 7px;}
+  .list-item img{width:50px;height:50px;}
+  .player-container{border-radius:16px}
+  .player-header{padding:12px 14px}
+  .player-header h3{font-size:14px}
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="app-nav"><div class="app-nav-in">
+    <div class="brand" id="brand-home">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563eb'/%3E%3Cpath d='M32 14 8 26l24 12 24-12z' fill='%23fff'/%3E%3Cpath d='M18 33v10c0 4 7 8 14 8s14-4 14-8V33l-14 7z' fill='%23bfdbfe'/%3E%3C/svg%3E" alt="">
+      <div>ثانوية <span class="club">club</span><small>منصة الثانوية العامة</small></div>
+    </div>
+    <div class="profile-wrap">
+      <button type="button" class="profile-btn" id="profile-btn">
+        <span class="av" id="nav-av">ط</span>
+        <span id="nav-name">طالب</span>
+      </button>
+    </div>
+  </div></header>
+  <main class="wrap" id="main">
+    <div class="state"><h3>جاري التحميل...</h3></div>
+  </main>
+</div>
+
+<div id="player-modal" class="modal hidden">
+  <div class="player-container">
+    <div class="player-header">
+      <h3 id="player-title">جاري التحميل...</h3>
+      <button class="close-btn" onclick="closePlayer()">✕</button>
+    </div>
+    <div class="video-wrapper">
+      <video id="video" controls playsinline crossorigin="anonymous"></video>
+      <div id="player-status" class="status"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = ""; 
+const state = { view: "years", year: null, subject: null, teacher: null, chapter: null, lecture: null };
+let hls = null, hbTimer = null, cryptoUtils = null, currentKeyBlobUrl = null, currentPlaylistBlobUrl = null;
+
+async function api(path, opts) {
+  opts = opts || {};
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json();
+  if (!res.ok || data.success === false) throw new Error(data.error || data.message || "HTTP " + res.status);
+  return data.data !== undefined ? data.data : data;
+}
+function goHome() { state.view = "years"; render(); }
+function setView(view, extra) { if (extra) Object.assign(state, extra); state.view = view; render(); }
+const appEl = document.getElementById("app");
+
+function findCrypto() {
+  if (window.DecryptionUtils && typeof window.DecryptionUtils.decryptPlaybackKey === "function") return window.DecryptionUtils;
+  var names = Object.getOwnPropertyNames(window);
+  for (var i = 0; i < names.length; i++) {
+    try {
+      var obj = window[names[i]];
+      if (obj && typeof obj === "object" && typeof obj.decryptPlaybackKey === "function") return obj;
+    } catch (e) {}
+  }
+  return null;
+}
+function loadPlayerScript() {
+  return new Promise(function (resolve, reject) {
+    if (findCrypto()) return resolve(findCrypto());
+    var existing = document.querySelector('script[src*="player.stream-weave.com"]');
+    if (existing) {
+      var tries = 0; var t = setInterval(function () {
+        var c = findCrypto(); if (c) { clearInterval(t); resolve(c); }
+        else if (++tries > 40) { clearInterval(t); reject(new Error("timeout crypto")); }
+      }, 150);
+      return;
+    }
+    var s = document.createElement("script");
+    s.src = "https://player.stream-weave.com/assets/player.js?v=1.1.1";
+    s.onload = function () {
+      var tries = 0; var t = setInterval(function () {
+        var c = findCrypto(); if (c) { clearInterval(t); resolve(c); }
+        else if (++tries > 40) { clearInterval(t); reject(new Error("crypto not found")); }
+      }, 150);
+    };
+    s.onerror = function () { reject(new Error("failed to load player.js")); };
+    document.head.appendChild(s);
+  });
+}
+function toB64url(str) { return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""); }
+function fromB64url(value) { var s = String(value).replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return decodeURIComponent(escape(atob(s))); }
+function joinRel(base, rel) {
+  var q = "", relPath = String(rel), qi = relPath.indexOf("?");
+  if (qi !== -1) { q = relPath.slice(qi); relPath = relPath.slice(0, qi); }
+  var stack = String(base || "").split("/");
+  if (stack.length && stack[stack.length - 1] !== "" && /\.[a-z0-9]+$/i.test(stack[stack.length - 1])) stack.pop();
+  if (stack.length && stack[stack.length - 1] === "") stack.pop();
+  relPath.split("/").forEach(function (part) { if (!part || part === ".") return; if (part === "..") stack.pop(); else stack.push(part); });
+  return stack.join("/") + q;
+}
+function resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) {
+  if (/^(blob:|data:)/i.test(uri)) return uri;
+  if (uri.indexOf("/api/stream") === 0 || uri.indexOf("/api/cdn") === 0) return location.origin + uri;
+  if (/^https?:\/\//i.test(uri)) return location.origin + "/api/cdn?u=" + toB64url(uri);
+  if (variantFileUrl) { try { return location.origin + "/api/cdn?u=" + toB64url(new URL(uri, variantFileUrl).href); } catch (e) {} }
+  return location.origin + "/api/stream?path=" + encodeURIComponent(joinRel(variantBasePath || "", uri)) + "&t=" + encodeURIComponent(streamToken);
+}
+function rewritePlaylist(text, streamToken, keyBlobUrl, variantBasePath, variantFileUrl) {
+  return text.split("\n").map(function (line) {
+    var s = line.trim(); if (!s) return line;
+    if (s.charAt(0) === "#") {
+      if (s.indexOf("#EXT-X-KEY:") === 0 && keyBlobUrl) return s.replace(/URI="[^"]+"/, 'URI="' + keyBlobUrl + '"');
+      return s.replace(/URI="([^"]+)"/g, function (_m, uri) { return 'URI="' + resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) + '"'; });
+    }
+    return resolveMedia(s, variantBasePath, streamToken, variantFileUrl);
+  }).join("\n");
+}
+
+async function playVideo(videoId, title) {
+  var modal = document.getElementById("player-modal"), video = document.getElementById("video"), status = document.getElementById("player-status");
+  document.getElementById("player-title").textContent = title;
+  status.textContent = "جاري فتح الجلسة...";
+  modal.classList.remove("hidden");
+  stopPlayback();
+
+  try {
+    var session = await api("/api/video/" + videoId + "/play", { method: "POST" });
+    var streamToken = session.token, swVideoId = session.video_id, hbUrl = session.heartbeat_url;
+    if (!streamToken || !swVideoId) throw new Error("الجلسة ناقصة");
+
+    status.textContent = "تحميل أدوات فك التشفير...";
+    if (!cryptoUtils) cryptoUtils = await loadPlayerScript();
+
+    status.textContent = "جلب قائمة التشغيل...";
+    var masterUrl = "/api/stream?path=" + encodeURIComponent("videos/" + swVideoId + "/stream/master.m3u8") + "&t=" + encodeURIComponent(streamToken);
+    var masterRes = await fetch(masterUrl);
+    var masterText = await masterRes.text();
+    var variantRel = masterText.split("\n").map(l => l.trim()).find(l => l && l.charAt(0) !== "#");
+    
+    var variantUrl, variantBasePath = "videos/" + swVideoId + "/stream/", variantFileUrl = null;
+    if (variantRel.indexOf("/api/stream") === 0 || variantRel.indexOf("/api/cdn") === 0) {
+      variantUrl = variantRel;
+    } else if (variantRel.indexOf("http") === 0) {
+      variantFileUrl = variantRel; variantUrl = "/api/cdn?u=" + toB64url(variantRel);
+    } else {
+      variantBasePath = "videos/" + swVideoId + "/stream/" + variantRel;
+      variantUrl = "/api/stream?path=" + encodeURIComponent(variantBasePath) + "&t=" + encodeURIComponent(streamToken);
+    }
+
+    var variantRes = await fetch(variantUrl);
+    var variantText = await variantRes.text();
+    status.textContent = "فك المفتاح...";
+    
+    var keyPath = "videos/" + swVideoId + "/key", ivHex = null;
+    var keyLine = variantText.split("\n").find(l => l.indexOf("EXT-X-KEY") !== -1);
+    if (keyLine) {
+      var uriM = keyLine.match(/URI="([^"]+)"/), ivM = keyLine.match(/IV=0x([0-9a-fA-F]+)/i);
+      if (ivM) ivHex = ivM[1];
+      if (uriM && uriM[1].indexOf("http") !== 0 && uriM[1].indexOf("/api/cdn") !== 0) {
+        keyPath = uriM[1].replace(/^\//, "").replace(/^api\/v1\//, "");
+      }
+    }
+    var keyUrl = "/api/stream?path=" + encodeURIComponent(keyPath) + "&t=" + encodeURIComponent(streamToken);
+    var keyRes = await fetch(keyUrl);
+    var wrappedKey = new Uint8Array(await keyRes.arrayBuffer());
+    var keyResult = await cryptoUtils.decryptPlaybackKey(wrappedKey, swVideoId);
+    var aesKey = keyResult && keyResult.key;
+    if (!aesKey || aesKey.byteLength !== 16) throw new Error("المفتاح غير صالح");
+
+    var keyBytes = aesKey instanceof ArrayBuffer ? aesKey : aesKey.buffer.slice(aesKey.byteOffset, aesKey.byteOffset + aesKey.byteLength);
+    currentKeyBlobUrl = URL.createObjectURL(new Blob([keyBytes], { type: "application/octet-stream" }));
+
+    var fixedVariant = rewritePlaylist(variantText, streamToken, currentKeyBlobUrl, variantBasePath, variantFileUrl);
+    if (fixedVariant.indexOf("#EXTM3U") !== 0) fixedVariant = "#EXTM3U\n" + fixedVariant;
+    if (fixedVariant.indexOf("EXT-X-KEY") === -1) {
+      fixedVariant = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="' + currentKeyBlobUrl + '"' + (ivHex ? ",IV=0x" + ivHex : "") + "\n" + fixedVariant.replace(/^#EXTM3U\s*/m, "");
+    }
+
+    currentPlaylistBlobUrl = URL.createObjectURL(new Blob([fixedVariant], { type: "application/vnd.apple.mpegurl" }));
+    status.textContent = "جاري التشغيل...";
+
+    if (hbUrl) hbTimer = setInterval(() => { fetch("/api/heartbeat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: hbUrl, token: streamToken }) }).catch(() => {}); }, 25000);
+
+    if (window.Hls && Hls.isSupported()) {
+      hls = new Hls({ enableWorker: false });
+      hls.loadSource(currentPlaylistBlobUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { status.textContent = ""; video.play().catch(() => { status.textContent = "اضغط Play"; }); });
+      hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) status.textContent = "خطأ: " + data.details; });
+    } else { status.textContent = "متصفحك لا يدعم HLS"; }
+  } catch (e) { status.textContent = "فشل: " + e.message; }
+}
+function stopPlayback() {
+  if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+  if (hls) { hls.destroy(); hls = null; }
+  if (currentKeyBlobUrl) { URL.revokeObjectURL(currentKeyBlobUrl); currentKeyBlobUrl = null; }
+  if (currentPlaylistBlobUrl) { URL.revokeObjectURL(currentPlaylistBlobUrl); currentPlaylistBlobUrl = null; }
+  var video = document.getElementById("video"); if (video) { video.removeAttribute("src"); video.load(); }
+}
+function closePlayer() { stopPlayback(); document.getElementById("player-modal").classList.add("hidden"); }
+
+async function render() {
+  appEl.innerHTML = '<div class="state"><h3>جاري التحميل...</h3></div>';
+  try {
+    if (state.view === "years") await renderYears();
+    else if (state.view === "subjects") await renderSubjects();
+    else if (state.view === "teachers") await renderTeachers();
+    else if (state.view === "chapters") await renderChapters();
+    else if (state.view === "lectures") await renderLectures();
+    else if (state.view === "content") await renderContent();
+  } catch (e) { appEl.innerHTML = '<div class="error">خطأ: ' + e.message + "</div>"; }
+}
+async function renderYears() {
+  var years = await api("/api/years");
+  var html = "<h1>السنوات الدراسية</h1><div class='grid'>";
+  years.forEach(y => {
+    html += `<div class='card' onclick='setView("subjects", {year: ${JSON.stringify(y).replace(/'/g, "&#39;")}})'><img src='${y.image_url || ""}' onerror="this.style.display='none'"/><div class='card-body'><h3>${y.name}</h3></div></div>`;
+  });
+  appEl.innerHTML = html + "</div>";
+}
+async function renderSubjects() {
+  var subjects = await api("/api/subjects/" + state.year.id);
+  var html = `<div class='page-head'><div class='badge'>المواد الدراسية</div><h1>المواد</h1></div><div class='grid'>`;
+  subjects.forEach(s => {
+    html += `<div class='card' onclick='setView("teachers", {subject: ${JSON.stringify(s).replace(/'/g, "&#39;")}})'><img src='${s.image_url || ""}' onerror="this.style.display='none'"/><div class='card-body'><h3>${s.name}</h3></div></div>`;
+  });
+  appEl.innerHTML = html + "</div>";
+}
+async function renderTeachers() {
+  var data = await api("/api/subjects/" + state.subject.id + "/teachers");
+  var teachers = data.teachers || data || [];
+  var html = `<div class='page-head'><div class='badge'>المدرسين</div><h1>${state.subject.name}</h1></div><div class='grid'>`;
+  teachers.forEach(t => {
+    html += `<div class='card' onclick='setView("chapters", {teacher: ${JSON.stringify(t).replace(/'/g, "&#39;")}})'><img src='${t.image_url || ""}' onerror="this.style.display='none'"/><div class='card-body'><h3>${t.name}</h3><div class='card-meta'>${t.chapter_count || 0} فصل</div></div></div>`;
+  });
+  appEl.innerHTML = html + "</div>";
+}
+async function renderChapters() {
+  var chapters = await api("/api/teachers/" + state.teacher.id + "/chapters");
+  var html = `<div class='page-head'><div class='badge'>الفصول</div><h1>${state.teacher.name}</h1></div><div class='list'>`;
+  chapters.forEach(c => {
+    html += `<div class='list-item' onclick='setView("lectures", {chapter: ${JSON.stringify(c).replace(/'/g, "&#39;")}})'><img src='${c.image_url || ""}' onerror="this.style.opacity=0.3"/><div><div class='title'>${c.name}</div><div class='meta'>${c.lecture_count || 0} محاضرة</div></div></div>`;
+  });
+  appEl.innerHTML = html + "</div>";
+}
+async function renderLectures() {
+  var lectures = await api("/api/chapters/" + state.chapter.id + "/lectures");
+  var html = `<div class='page-head'><div class='badge'>المحاضرات</div><h1>${state.chapter.name}</h1></div><div class='list'>`;
+  lectures.forEach(l => {
+    html += `<div class='list-item' onclick='setView("content", {lecture: ${JSON.stringify(l).replace(/'/g, "&#39;")}})'><img src='${l.image_url || ""}' onerror="this.style.opacity=0.3"/><div><div class='title'>${l.name}</div><div class='meta'>${l.video_count || 0} فيديو</div></div></div>`;
+  });
+  appEl.innerHTML = html + "</div>";
+}
+async function renderContent() {
+  var content = await api("/api/lectures/" + state.lecture.id + "/content");
+  var videos = content.videos || [], pdfs = content.pdfs || [];
+  var html = `<div class='page-head'><div class='badge'>المحتوى</div><h1>${state.lecture.name}</h1></div><h3>الفيديوهات</h3>`;
+  videos.forEach(v => {
+    html += `<button class='btn' onclick="playVideo(${v.id}, '${v.title.replace(/'/g, "\\'")}')"><span>▶</span><span>${v.title}</span></button>`;
+  });
+  html += "<h3>الملفات</h3>";
+  pdfs.forEach(p => {
+    html += `<a class='btn' href='${p.url}' target='_blank' rel='noopener'><span>📄</span><span>${p.title}</span></a>`;
+  });
+  appEl.innerHTML = html;
+}
+
+loadPlayerScript().then(c => { cryptoUtils = c; }).catch(() => {});
+render();
+</script>
+</body>
+</html>
