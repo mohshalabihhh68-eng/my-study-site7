@@ -296,7 +296,7 @@ function isMediaCdnHost(url) {
 
 /**
  * Build headers matching the real Soul Browser capture:
- *   Accept: */*
+ *   Accept: any (wildcard)
  *   User-Agent: ... Jrryilw/4.0 Chrome/155 ...
  *   Origin / Referer: https://coursatk.online
  *   X-Requested-With: com.mycompany.app.soulbrowser
