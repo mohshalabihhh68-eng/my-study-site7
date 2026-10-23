@@ -34,6 +34,7 @@ import {
   decodeThId,
   getThanawicaSessionInfo
 } from "./thanawica.js";
+import { cfFetch, isCfBlockedResponse, getCfStatus } from "./cf_bypass.js";
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1483,6 +1484,15 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
     if (v != null && v !== "") headers[k] = v;
   }
   const hasRange = Boolean(headers.Range || headers.range);
+
+  // floravon ورا Cloudflare — استخدم cfFetch (حل التحدي + cookies)
+  if (isFloravon) {
+    return upstreamSlot(async () => {
+      const res = await cfFetch(url, { headers }, { timeout: 30_000 });
+      return res;
+    });
+  }
+
   return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 25_000, retries: hasRange ? 0 : 1 }));
 }
 
@@ -1526,6 +1536,7 @@ app.get("/health", (_req, res) => {
     cryptoReady: Boolean(decryptPlaybackKeyFn),
     decryptSegments: true,
     version: APP_VERSION,
+    cf: getCfStatus(),
     cache: {
       segments: segCache.size,
       segmentMB: Math.round(segCacheBytes / 1048576),
@@ -2018,8 +2029,14 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   }
 
   let segIndex = 0;
+  let lastExtInf = 6;
+  let sawFloravon = false;
   for (const raw of lines) {
     const line = raw.trim();
+    if (line.startsWith("#EXTINF:")) {
+      const m = line.match(/#EXTINF:([\d.]+)/);
+      if (m) lastExtInf = Number(m[1]) || lastExtInf;
+    }
     if (line.startsWith("#EXT-X-KEY:")) {
       const uri = line.match(/URI="([^"]+)"/)?.[1];
       const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
@@ -2046,17 +2063,19 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         keyFetched = true;
         console.log(`[key] ${src.mode || "weave"} for ${src.videoId}`);
       }
-      continue; // strip KEY — segments are plain
+      // هنتكتب سطر KEY لاحقًا حسب وضع التشغيل (proxy vs direct)
+      continue;
     }
     if (line && !line.startsWith("#")) {
       const segmentUrl = new URL(line, baseUrl).href;
       try { src.allowedHosts.add(new URL(segmentUrl).hostname); } catch {}
+      if (/floravon\.(shop|online)/i.test(segmentUrl)) sawFloravon = true;
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
       const ivHex = iv.toString("hex");
-      // مسار معتم: رقم المقطع فقط — مفيش روابط أبلستريم ولا base64 ظاهر للعميل
-      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
-      segs.push({ u: segmentUrl, iv: ivHex, s: seq, i: segIndex });
+      segs.push({ u: segmentUrl, iv: ivHex, s: seq, i: segIndex, dur: lastExtInf });
+      // placeholder — هيتظبط بعد ما نعرف directSegs
+      out.push(`__SEG__${segIndex}__`);
       segIndex++;
       continue;
     }
@@ -2064,9 +2083,39 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   }
   if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
 
+  // افتراضي: السيرفر يبروكسي المقاطع بعد حل CF (playwright)
+  // CF_DIRECT=1 → المتصفح يجيب من floravon مباشرة (من غير chromium)
+  src.directSegs = process.env.CF_DIRECT === "1" && (sawFloravon || src.mode === "weave");
+  const ivForKey = src.defaultIv || (segs[0] && parseIvHex(segs[0].iv)) || ivFromMediaSequence(mediaSeq);
+  const ivHexOut = "0x" + Buffer.from(ivForKey).toString("hex");
+
+  const finalLines = [];
+  let keyLineWritten = false;
+  for (const raw of out) {
+    if (typeof raw === "string" && raw.startsWith("__SEG__")) {
+      const idx = Number(raw.replace(/__SEG__(\d+)__/, "$1"));
+      const sg = segs[idx];
+      if (!keyLineWritten && src.directSegs) {
+        finalLines.push(
+          `#EXT-X-KEY:METHOD=AES-128,URI="/api/hls/${SID_TOKEN}/key",IV=${ivHexOut}`
+        );
+        keyLineWritten = true;
+      }
+      if (src.directSegs) {
+        finalLines.push(sg.u); // رابط floravon موقّع — المتصفح يجيبه (يعدّي CF)
+      } else {
+        finalLines.push(`/api/hls/${SID_TOKEN}/seg/${idx}`);
+      }
+      continue;
+    }
+    finalLines.push(raw);
+  }
+
   src.mediaSeq = mediaSeq;
   src.segs = segs;
-  src.playlist = out.join("\n");
+  src.targetDuration = Math.max(1, Math.ceil(lastExtInf || 6));
+  src.playlist = finalLines.join("\n");
+  console.log(`[playlist] mode=${src.mode} directSegs=${src.directSegs} segs=${segs.length}`);
 }
 
 
@@ -2628,10 +2677,16 @@ function playlistBodyFromSession(session) {
       "#EXT-X-PLAYLIST-TYPE:VOD",
       `#EXT-X-MEDIA-SEQUENCE:${Number(src.mediaSeq) || 0}`
     ];
+    if (src.directSegs && src.plainKey) {
+      const iv = src.defaultIv || parseIvHex(src.segs[0].iv) || ivFromMediaSequence(src.mediaSeq || 0);
+      const ivHex = "0x" + Buffer.from(iv).toString("hex");
+      lines.push(`#EXT-X-KEY:METHOD=AES-128,URI="/api/hls/${session.id}/key",IV=${ivHex}`);
+    }
     for (let i = 0; i < src.segs.length; i++) {
       const dur = Number(src.segs[i].dur) || td;
       lines.push(`#EXTINF:${Number(dur).toFixed(5)},`);
-      lines.push(`/api/hls/${session.id}/seg/${i}`);
+      if (src.directSegs && src.segs[i].u) lines.push(src.segs[i].u);
+      else lines.push(`/api/hls/${session.id}/seg/${i}`);
     }
     lines.push("#EXT-X-ENDLIST");
     body = lines.join("\n");
@@ -2642,6 +2697,13 @@ function playlistBodyFromSession(session) {
       .split("\n")
       .map((line) => {
         const t = line.trim();
+        // أضف sk على مسارات السيرفر فقط (مقاطع proxy أو مفتاح) — مش روابط floravon
+        if (t.startsWith("#EXT-X-KEY:") && t.includes("/api/hls/")) {
+          return t.replace(/URI="([^"]+)"/, (_, u) => {
+            const nu = u.includes("?") ? `${u}&sk=${session.streamKey}` : `${u}?sk=${session.streamKey}`;
+            return `URI="${nu}"`;
+          });
+        }
         if (t && !t.startsWith("#") && t.includes("/api/hls/")) {
           return t.includes("?") ? `${t}&sk=${session.streamKey}` : `${t}?sk=${session.streamKey}`;
         }
@@ -2684,6 +2746,33 @@ app.get("/api/hls/:pid/master.m3u8", requireStudent, async (req, res) => {
     res.send(body);
   } catch (e) {
     console.warn("[hls master]", e.message);
+    return jsonError(res, e.status || 403, e.message || "غير مصرح");
+  }
+});
+
+/**
+ * مفتاح AES-128 الخام — للمتصفح لما المقاطع على floravon (CF)
+ * السيرفر فك الـ wrap؛ hls.js بيفك المقاطع عند العميل
+ */
+app.get("/api/hls/:pid/key", requireStudent, async (req, res) => {
+  try {
+    const session = await getStreamSession(req.params.pid);
+    assertStreamOwner(session, req);
+    const key = session?.src?.plainKey;
+    if (!key || !Buffer.isBuffer(key) && !(key instanceof Uint8Array)) {
+      return jsonError(res, 404, "المفتاح غير متاح");
+    }
+    const buf = Buffer.isBuffer(key) ? key : Buffer.from(key);
+    // HLS keys are 16 bytes
+    const out = buf.length === 16 ? buf : buf.subarray(0, 16);
+    res.set({
+      "Content-Type": "application/octet-stream",
+      "Cache-Control": "private, no-store",
+      "Access-Control-Allow-Origin": req.headers.origin || "*",
+      "Access-Control-Allow-Credentials": "true"
+    });
+    res.send(out);
+  } catch (e) {
     return jsonError(res, e.status || 403, e.message || "غير مصرح");
   }
 });
