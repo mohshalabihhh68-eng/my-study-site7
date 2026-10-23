@@ -377,8 +377,11 @@ const CONFIG = {
     "coursatk.online",
     "files.coursatk.online",
     "stream-weave.com",
+    "api.stream-weave.com",
     "player.stream-weave.com",
     "floravon.online",
+    "floravon.shop",
+    "suo4.floravon.shop",
     "c-cdn.online",
     "cdn.coursatk.online",
     "thanawica.com",
@@ -1430,6 +1433,10 @@ function allowedStreamUrl(raw, session = null) {
   try {
     const u = new URL(raw);
     if (u.protocol !== "https:") return false;
+    // hosts ديناميكية من المنصة الحالية
+    if (/\.floravon\.(shop|online)$/i.test(u.hostname) || u.hostname === "floravon.shop" || u.hostname === "floravon.online") return true;
+    if (/\.stream-weave\.com$/i.test(u.hostname) || u.hostname === "stream-weave.com" || u.hostname === "api.stream-weave.com") return true;
+    if (/\.coursatk\.online$/i.test(u.hostname) || u.hostname.endsWith("coursatk.online")) return true;
     const hosts = new Set(CONFIG.STREAM_HOSTS);
     if (session?.allowedHosts) for (const h of session.allowedHosts) hosts.add(h);
     if (session?.streamUrl) {
@@ -1444,16 +1451,31 @@ function allowedStreamUrl(raw, session = null) {
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
   // مهم: متبعتش هيدرز المتصفح (sec-fetch-*) للـ CDN — بتعمل 403
+  let host = "";
+  try { host = new URL(url).hostname; } catch {}
+  const isFloravon = /floravon\.(shop|online)$/i.test(host);
+  const isWeaveApi = /stream-weave\.com$/i.test(host);
   const headers = {
     Accept: "*/*",
     "Cache-Control": "no-cache",
-    Origin: CONFIG.STREAM_ORIGIN,
-    Referer: CONFIG.STREAM_REFERER,
-    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
     "User-Agent": CONFIG.STREAM_UA
   };
-  // توكن الجلسة (JWT كورساتك أو توكن weave)
-  if (session?.token && extra?.skipAuth !== true) {
+  // Origin/Referer حسب المضيف
+  if (isFloravon) {
+    headers.Origin = "https://api.stream-weave.com";
+    headers.Referer = "https://api.stream-weave.com/";
+  } else if (isWeaveApi) {
+    headers.Origin = "https://coursatk.online";
+    headers.Referer = "https://coursatk.online/";
+  } else {
+    headers.Origin = CONFIG.STREAM_ORIGIN;
+    headers.Referer = CONFIG.STREAM_REFERER;
+    headers["X-Requested-With"] = CONFIG.STREAM_X_REQUESTED_WITH;
+  }
+  // floravon المقاطع موقّعة بـ query token — متبعتش Bearer (أحيانًا بيخلّيها 403)
+  // stream-weave API (playlist/key) محتاجة توكن الـ weave
+  const skipAuth = extra?.skipAuth === true || isFloravon;
+  if (session?.token && !skipAuth) {
     headers.Authorization = `Bearer ${session.token}`;
   }
   for (const [k, v] of Object.entries(extra || {})) {
@@ -2003,7 +2025,14 @@ async function buildPlaylist(src, masterText, clientHeaders) {
       const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
       if (ivHex) currentIv = parseIvHex(ivHex);
       if (uri && !keyFetched) {
-        const keyUrl = new URL(uri, baseUrl).href;
+        // Weave بيرجع URI مطلق مسار زي /api/v1/videos/.../key — لازم على api.stream-weave.com
+        let keyUrl;
+        if (/^https?:\/\//i.test(uri)) keyUrl = uri;
+        else if (uri.startsWith("/") && (src.mode === "weave" || /stream-weave/i.test(baseUrl))) {
+          keyUrl = "https://api.stream-weave.com" + uri;
+        } else {
+          keyUrl = new URL(uri, baseUrl).href;
+        }
         try { src.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
@@ -2146,49 +2175,50 @@ async function buildVideoSource(videoId, clientHeaders) {
   let probeText = null;
   const errors = [];
 
-  // CDN أولاً (2026) — لو فشل → Weave (2027 زي ما هو)
+  // 2026-10: CDN الرسمي (/video/stream/.../playlist.m3u8) بيرجع 500
+  // المسار الشغّال: stream-weave أولاً → CDN احتياطي
   try {
-    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-    const probe = await upstreamSlot(() =>
-      fetchT(
-        masterUrl,
-        {
-          headers: {
-            Authorization: `Bearer ${upstreamTok}`,
-            Accept: "*/*",
-            Origin: CONFIG.STREAM_ORIGIN,
-            Referer: CONFIG.STREAM_REFERER,
-            "User-Agent": CONFIG.STREAM_UA
-          },
-          cache: "no-store"
-        },
-        { timeout: 15_000, retries: 1 }
-      )
-    );
-    if (!probe.ok) throw new Error(`CDN ${probe.status}`);
-    const masterText = await probe.text();
-    if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
-    mode = "cdn";
-    streamUrl = masterUrl;
-    sessionToken = upstreamTok;
-    probeText = masterText; // نفس الـ master اللي هنحتاجه — مفيش داعي نجيبه تاني
+    const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, {
+      method: "POST",
+      headers: { Accept: "application/json" }
+    });
+    if (!data?.success || !data?.data?.token || !data?.data?.stream_url) {
+      throw new Error("Weave response ناقص");
+    }
+    mode = "weave";
+    sessionToken = data.data.token;
+    streamUrl = data.data.stream_url;
+    resolvedVideoId = String(data.data.video_id || videoId);
   } catch (e) {
     errors.push(e.message);
   }
 
   if (!mode) {
     try {
-      const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, {
-        method: "POST",
-        headers: { Accept: "application/json" }
-      });
-      if (!data?.success || !data?.data?.token || !data?.data?.stream_url) {
-        throw new Error("Weave response ناقص");
-      }
-      mode = "weave";
-      sessionToken = data.data.token;
-      streamUrl = data.data.stream_url;
-      resolvedVideoId = String(data.data.video_id || videoId);
+      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+      const probe = await upstreamSlot(() =>
+        fetchT(
+          masterUrl,
+          {
+            headers: {
+              Authorization: `Bearer ${upstreamTok}`,
+              Accept: "*/*",
+              Origin: CONFIG.STREAM_ORIGIN,
+              Referer: CONFIG.STREAM_REFERER,
+              "User-Agent": CONFIG.STREAM_UA
+            },
+            cache: "no-store"
+          },
+          { timeout: 15_000, retries: 1 }
+        )
+      );
+      if (!probe.ok) throw new Error(`CDN ${probe.status}`);
+      const masterText = await probe.text();
+      if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
+      mode = "cdn";
+      streamUrl = masterUrl;
+      sessionToken = upstreamTok;
+      probeText = masterText;
     } catch (e) {
       errors.push(e.message);
     }
