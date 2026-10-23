@@ -2083,9 +2083,10 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   }
   if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
 
-  // افتراضي: السيرفر يبروكسي المقاطع بعد حل CF (playwright)
-  // CF_DIRECT=1 → المتصفح يجيب من floravon مباشرة (من غير chromium)
-  src.directSegs = process.env.CF_DIRECT === "1" && (sawFloravon || src.mode === "weave");
+  // CORS على floravon من دومين Railway → بروكسي same-origin افتراضيًا
+  // CF_DIRECT=1 فقط للتجربة (هيفشل CORS على Chrome)
+  const wantDirect = process.env.CF_DIRECT === "1";
+  src.directSegs = wantDirect && (sawFloravon || src.mode === "weave");
   const ivForKey = src.defaultIv || (segs[0] && parseIvHex(segs[0].iv)) || ivFromMediaSequence(mediaSeq);
   const ivHexOut = "0x" + Buffer.from(ivForKey).toString("hex");
 
@@ -4845,12 +4846,22 @@ async function play(id,name,lectureId){
     }
     const url=d.play_url||d.url||d.playlist;
     if(!url) throw new Error('مفيش رابط تشغيل');
-    player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3><video id="v" controls autoplay></video>\`;
+    player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3><video id="v" controls autoplay playsinline></video><div id="playerr" class="empty" style="display:none"></div>\`;
     const video=$('v');
     if(window.Hls&&Hls.isSupported()&&String(url).includes('m3u8')){
-      const hls=new Hls({enableWorker:true});
+      const hls=new Hls({
+        enableWorker:true,
+        xhrSetup:function(xhr){ try{ xhr.withCredentials=false; }catch(e){} }
+      });
+      hls.on(Hls.Events.ERROR,function(_,data){
+        if(!data||!data.fatal) return;
+        const box=$('playerr');
+        if(box){ box.style.display='block'; box.className='err'; box.textContent='خطأ تشغيل: '+(data.type||'')+' / '+(data.details||''); }
+      });
       hls.loadSource(url);
       hls.attachMedia(video);
+    }else if(video.canPlayType('application/vnd.apple.mpegurl')){
+      video.src=url;
     }else{
       video.src=url;
     }
