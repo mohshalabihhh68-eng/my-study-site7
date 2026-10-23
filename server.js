@@ -2634,11 +2634,34 @@ app.post("/api/play/:videoId", requireStudent, async (req, res) => {
     streamSessions.set(id, sessionRow);
     persistStreamSession(sessionRow).catch(() => {});
 
+    // وضع الجهاز: المفتاح + روابط المقاطع للعميل (الطلب من جهاز المستخدم عبر الوكيل المحلي)
+    let clientPack = null;
+    try {
+      if (src.plainKey && Array.isArray(src.segs) && src.segs.length) {
+        const keyBuf = Buffer.isBuffer(src.plainKey) ? src.plainKey : Buffer.from(src.plainKey);
+        const ivBuf = src.defaultIv || (src.segs[0] && parseIvHex(src.segs[0].iv)) || ivFromMediaSequence(src.mediaSeq || 0);
+        clientPack = {
+          keyB64: keyBuf.subarray(0, 16).toString("base64"),
+          iv: "0x" + Buffer.from(ivBuf).toString("hex"),
+          mediaSeq: Number(src.mediaSeq) || 0,
+          targetDuration: Number(src.targetDuration) || 10,
+          segments: src.segs.map((s) => ({
+            url: s.u,
+            dur: Number(s.dur) || Number(src.targetDuration) || 10
+          }))
+        };
+      }
+    } catch (e) {
+      console.warn("[play] clientPack:", e.message);
+    }
+
     res.json({
       success: true,
       data: {
         // المفتاح جزء من الرابط — من غيره المقاطع ومش هتشتغل
-        play_url: `/api/hls/${id}/master.m3u8?sk=${streamKey}`
+        play_url: `/api/hls/${id}/master.m3u8?sk=${streamKey}`,
+        // تشغيل من جهاز المستخدم (يتجنب CF على Railway + CORS عبر وكيل محلي)
+        client: clientPack
       }
     });
   } catch (e) {
@@ -4833,20 +4856,73 @@ async function play(id,name,lectureId){
     const d=j.data||j;
     if(d.type==='youtube'||d.youtube_url){
       const u=d.youtube_url||d.url||'';
-      const m=u.match(/[?&]v=([\\w-]{6,})/)||u.match(/youtu\\.be\\/([\\w-]{6,})/)||u.match(/embed\\/([\\w-]{6,})/);
+      const m=u.match(/[?&]v=([\w-]{6,})/)||u.match(/youtu\.be\/([\w-]{6,})/)||u.match(/embed\/([\w-]{6,})/);
       const yid=m?m[1]:(d.youtubeId||'');
-      player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3>
-        <iframe src="https://www.youtube.com/embed/\${yid}" allowfullscreen allow="autoplay; encrypted-media"></iframe>\`;
+      player.innerHTML=`<h3 style="margin-bottom:10px">${esc(name)}</h3>
+        <iframe src="https://www.youtube.com/embed/${yid}" allowfullscreen allow="autoplay; encrypted-media"></iframe>`;
       return;
     }
-    if(d.type==='mp4'||d.mp4_url||d.play_url&&String(d.play_url).includes('.mp4')){
+    if(d.type==='mp4'||d.mp4_url||(d.play_url&&String(d.play_url).includes('.mp4'))){
       const url=d.mp4_url||d.play_url||d.url;
-      player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3><video controls autoplay src="\${url}"></video>\`;
+      player.innerHTML=`<h3 style="margin-bottom:10px">${esc(name)}</h3><video controls autoplay src="${url}"></video>`;
       return;
     }
+
+    // وضع الجهاز: وكيل محلي على 127.0.0.1 يطلب floravon من جهازك
+    const agentBase='http://127.0.0.1:3921';
+    let agentOk=false;
+    try{
+      const hr=await fetch(agentBase+'/health',{signal:AbortSignal.timeout(800)});
+      const hj=await hr.json();
+      agentOk=!!(hj&&hj.ok);
+    }catch(_){ agentOk=false; }
+
+    if(d.client&&d.client.segments&&d.client.segments.length&&agentOk){
+      const c=d.client;
+      const keyUri='data:application/octet-stream;base64,'+c.keyB64;
+      const lines=[
+        '#EXTM3U',
+        '#EXT-X-VERSION:3',
+        '#EXT-X-TARGETDURATION:'+Math.max(1,Math.ceil(c.targetDuration||10)),
+        '#EXT-X-PLAYLIST-TYPE:VOD',
+        '#EXT-X-MEDIA-SEQUENCE:'+(c.mediaSeq||0),
+        '#EXT-X-KEY:METHOD=AES-128,URI="'+keyUri+'",IV='+(c.iv||'0x00000000000000000000000000000000')
+      ];
+      for(const s of c.segments){
+        lines.push('#EXTINF:'+(Number(s.dur)||10).toFixed(5)+',');
+        lines.push(agentBase+'/proxy?url='+encodeURIComponent(s.url));
+      }
+      lines.push('#EXT-X-ENDLIST');
+      const blob=new Blob([lines.join('\\n')],{type:'application/vnd.apple.mpegurl'});
+      const blobUrl=URL.createObjectURL(blob);
+      player.innerHTML=`<h3 style="margin-bottom:10px">${esc(name)}</h3>
+        <div class="chip" style="margin-bottom:8px">وضع الجهاز ✓ الوكيل المحلي شغال</div>
+        <video id="v" controls autoplay playsinline></video>`;
+      const video=$('v');
+      if(window.Hls&&Hls.isSupported()){
+        const hls=new Hls({enableWorker:true});
+        hls.loadSource(blobUrl);
+        hls.attachMedia(video);
+      }else if(video.canPlayType('application/vnd.apple.mpegurl')){
+        video.src=blobUrl;
+      }else{
+        video.src=blobUrl;
+      }
+      return;
+    }
+
+    // بدون وكيل: جرّب سيرفر / أو نبه المستخدم
     const url=d.play_url||d.url||d.playlist;
     if(!url) throw new Error('مفيش رابط تشغيل');
-    player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3><video id="v" controls autoplay playsinline></video><div id="playerr" class="empty" style="display:none"></div>\`;
+    let hint='';
+    if(d.client&&d.client.segments&&d.client.segments.length&&!agentOk){
+      hint=`<div class="err" style="margin-bottom:10px">
+        عشان التشغيل يعدّي Cloudflare من <b>جهازك</b> شغّل الوكيل المحلي:<br>
+        <code style="color:#fff">node device-agent.js</code><br>
+        واترك النافذة مفتوحة، بعدين اضغط الفيديو تاني.
+      </div>`;
+    }
+    player.innerHTML=`<h3 style="margin-bottom:10px">${esc(name)}</h3>${hint}<video id="v" controls autoplay playsinline></video><div id="playerr" class="empty" style="display:none"></div>`;
     const video=$('v');
     if(window.Hls&&Hls.isSupported()&&String(url).includes('m3u8')){
       const hls=new Hls({
@@ -4856,7 +4932,11 @@ async function play(id,name,lectureId){
       hls.on(Hls.Events.ERROR,function(_,data){
         if(!data||!data.fatal) return;
         const box=$('playerr');
-        if(box){ box.style.display='block'; box.className='err'; box.textContent='خطأ تشغيل: '+(data.type||'')+' / '+(data.details||''); }
+        if(box){
+          box.style.display='block';
+          box.className='err';
+          box.innerHTML='خطأ تشغيل من السيرفر. الأفضل: شغّل <code>node device-agent.js</code> على جهازك وجرب تاني.';
+        }
       });
       hls.loadSource(url);
       hls.attachMedia(video);
