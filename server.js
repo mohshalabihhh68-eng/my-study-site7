@@ -374,11 +374,16 @@ const CONFIG = {
   DEFAULT_YEAR_ID: 4,
   STREAM_HOSTS: [
     "api.coursatk.online",
+    "coursatk.online",
+    "files.coursatk.online",
     "stream-weave.com",
+    "player.stream-weave.com",
     "floravon.online",
     "c-cdn.online",
+    "cdn.coursatk.online",
     "thanawica.com",
-    "www.thanawica.com"
+    "www.thanawica.com",
+    "video.thanawica.com"
   ],
   STREAM_ORIGIN: "https://coursatk.online",
   STREAM_REFERER: "https://coursatk.online/",
@@ -1438,23 +1443,21 @@ function allowedStreamUrl(raw, session = null) {
 
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
-  const ch = clientHeaders || {};
+  // مهم: متبعتش هيدرز المتصفح (sec-fetch-*) للـ CDN — بتعمل 403
   const headers = {
-    Authorization: `Bearer ${session.token}`,
     Accept: "*/*",
     "Cache-Control": "no-cache",
     Origin: CONFIG.STREAM_ORIGIN,
     Referer: CONFIG.STREAM_REFERER,
     "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
-    "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
+    "User-Agent": CONFIG.STREAM_UA
   };
-  for (const name of [
-    "sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile",
-    "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"
-  ]) {
-    if (ch[name]) headers[name] = ch[name];
+  // توكن الجلسة (JWT كورساتك أو توكن weave)
+  if (session?.token && extra?.skipAuth !== true) {
+    headers.Authorization = `Bearer ${session.token}`;
   }
   for (const [k, v] of Object.entries(extra || {})) {
+    if (k === "skipAuth") continue;
     if (v != null && v !== "") headers[k] = v;
   }
   const hasRange = Boolean(headers.Range || headers.range);
@@ -2682,11 +2685,28 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
       return plain;
     }
 
-    let up = await streamFetch(session.src, url, {}, headers);
+    // متبعتش هيدرز المتصفح — headers هنا كانت req.headers وبتعمل 403
+    let up = await streamFetch(session.src, url, {}, null);
+    if (up.status === 401 || up.status === 403) {
+      // جرّب من غير Authorization (بعض الـ CDN موقّع بالـ query بس)
+      try {
+        const up2 = await streamFetch(session.src, url, { skipAuth: true }, null);
+        if (up2.ok) up = up2;
+      } catch {}
+    }
     if ((up.status === 401 || up.status === 403) && Number.isFinite(meta.s)) {
+      // امسح كاش المصدر وجيب روابط جديدة
+      try { sourceCache.delete(session.src.reqVideoId || session.src.videoId); } catch {}
       const fresh = await refreshSource(session);
-      const fu = fresh && fresh.segs[meta.s - fresh.mediaSeq];
-      if (fu) up = await streamFetch(fresh, fu.u, {}, headers);
+      const idx = meta.s - (fresh ? fresh.mediaSeq : session.src.mediaSeq);
+      const fu = fresh && fresh.segs && (fresh.segs[idx] || fresh.segs[meta.i]);
+      if (fu) {
+        up = await streamFetch(fresh, fu.u, {}, null);
+        if (!up.ok && (up.status === 401 || up.status === 403)) {
+          const up3 = await streamFetch(fresh, fu.u, { skipAuth: true }, null);
+          if (up3.ok) up = up3;
+        }
+      }
     }
     if (!up.ok) throw new Error(`Segment HTTP ${up.status}`);
 
@@ -2759,7 +2779,10 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   try {
     let plain;
     if (req.headers.range && !isTh) {
-      const upstream = await streamFetch(session.src, url, { Range: req.headers.range }, req.headers);
+      let upstream = await streamFetch(session.src, url, { Range: req.headers.range }, null);
+      if ((!upstream.ok && upstream.status !== 206) && (upstream.status === 401 || upstream.status === 403)) {
+        upstream = await streamFetch(session.src, url, { Range: req.headers.range, skipAuth: true }, null);
+      }
       if (!upstream.ok && upstream.status !== 206) throw new Error(`Segment HTTP ${upstream.status}`);
       const encrypted = Buffer.from(await upstream.arrayBuffer());
       if (encrypted.length > CONFIG.MAX_PROXY_BYTES) return jsonError(res, 413, "المقطع كبير");
@@ -2769,7 +2792,7 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
         plain = encrypted;
       }
     } else {
-      plain = await getSegmentPlain(session, meta, url, iv, req.headers);
+      plain = await getSegmentPlain(session, meta, url, iv, null);
     }
     res.status(200);
     res.set({
