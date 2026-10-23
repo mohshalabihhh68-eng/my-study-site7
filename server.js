@@ -272,50 +272,101 @@ function allowedStreamUrl(raw, session = null) {
   }
 }
 
-async function streamFetch(session, url, extra = {}, clientHeaders = null) {
-  if (!allowedStreamUrl(url, session)) {
-    throw new Error(`URL غير مسموح: ${url}`);
+function isMediaCdnHost(url) {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return (
+      /c-cdn\.online$/i.test(h) ||
+      /floravon\.(online|shop)$/i.test(h) ||
+      /(^|\.)cdn\./i.test(h) ||
+      /(^|\.)media\./i.test(h) ||
+      /\.woff2(\?|$)/i.test(url) ||
+      /\/seg-\d+/i.test(url)
+    );
+  } catch {
+    return false;
   }
+}
+
+/** Build headers for upstream stream requests. mode: "full" | "media" | "minimal" */
+function buildStreamHeaders(session, url, clientHeaders, extra, mode) {
   const ch = clientHeaders || {};
+  const ua = ch["user-agent"] || ch["User-Agent"] || CONFIG.STREAM_UA;
   const headers = {
     Accept: "*/*",
-    "Cache-Control": "no-cache",
-    Origin: CONFIG.STREAM_ORIGIN,
-    Referer: CONFIG.STREAM_REFERER,
-    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
-    "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
+    "User-Agent": ua
   };
 
-  // Master / key on stream-weave need Authorization.
-  // Media segments on floravon / c-cdn usually do not.
-  const isMediaSegmentHost =
-    /floravon\.(online|shop)|c-cdn\.online|cdn\.|media\./i.test(url);
-  if (!isMediaSegmentHost && session?.token) {
-    headers.Authorization = `Bearer ${session.token}`;
+  if (mode === "full") {
+    // master playlist / key on stream-weave
+    headers["Cache-Control"] = "no-cache";
+    headers.Origin = CONFIG.STREAM_ORIGIN;
+    headers.Referer = CONFIG.STREAM_REFERER;
+    headers["X-Requested-With"] = CONFIG.STREAM_X_REQUESTED_WITH;
+    if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+  } else if (mode === "media") {
+    // CDN segments: query token only — no Authorization (browser doesn't send it)
+    headers.Referer = CONFIG.STREAM_REFERER;
+    headers.Origin = CONFIG.STREAM_ORIGIN;
+    // do NOT set Authorization / X-Requested-With
+  } else {
+    // minimal: UA + Accept only (last resort on 403)
   }
 
   for (const name of [
     "sec-ch-ua-platform",
     "sec-ch-ua",
     "sec-ch-ua-mobile",
-    "sec-fetch-site",
-    "sec-fetch-mode",
-    "sec-fetch-dest",
     "accept-language"
   ]) {
-    if (ch[name]) headers[name] = ch[name];
+    const v = ch[name] || ch[name.toLowerCase()];
+    if (v) headers[name] = v;
   }
+  // media-like fetch metadata when client sent them
+  if (mode !== "minimal") {
+    if (ch["sec-fetch-site"]) headers["sec-fetch-site"] = ch["sec-fetch-site"];
+    if (ch["sec-fetch-mode"]) headers["sec-fetch-mode"] = ch["sec-fetch-mode"];
+    if (ch["sec-fetch-dest"]) headers["sec-fetch-dest"] = ch["sec-fetch-dest"];
+  }
+
   for (const [k, v] of Object.entries(extra || {})) {
     if (v != null && v !== "") headers[k] = v;
   }
+  return headers;
+}
 
-  let r;
-  try {
-    r = await fetch(url, { headers, cache: "no-store" });
-  } catch (e) {
-    throw new Error(`streamFetch network: ${e.message} | ${url}`);
+async function streamFetch(session, url, extra = {}, clientHeaders = null) {
+  if (!allowedStreamUrl(url, session)) {
+    throw new Error(`URL غير مسموح: ${url}`);
   }
-  return r;
+
+  const media = isMediaCdnHost(url);
+  const modes = media ? ["media", "minimal", "full"] : ["full", "media", "minimal"];
+
+  let lastRes = null;
+  let lastErr = null;
+
+  for (const mode of modes) {
+    const headers = buildStreamHeaders(session, url, clientHeaders, extra, mode);
+    try {
+      const r = await fetch(url, { headers, cache: "no-store", redirect: "follow" });
+      lastRes = r;
+      // success or non-403 error → return (caller handles status)
+      if (r.ok || r.status === 206 || r.status !== 403) return r;
+      // 403 → try next mode
+      console.warn(`[streamFetch] ${r.status} mode=${mode} host=${new URL(url).hostname}`);
+      // consume body so connection can close before retry
+      try {
+        await r.arrayBuffer();
+      } catch {}
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[streamFetch] network mode=${mode}: ${e.message}`);
+    }
+  }
+
+  if (lastRes) return lastRes;
+  throw new Error(`streamFetch network: ${lastErr?.message || "unknown"} | ${url}`);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1151,20 +1202,22 @@ app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
 
   const iv = parseIvHex(meta.iv) || session.defaultIv || ivFromMediaSequence(meta.s || 0);
   try {
-    const upstream = await streamFetch(
-      session,
-      url,
-      { Range: req.headers.range || undefined },
-      req.headers
-    );
+    // Prefer no Range on first segment fetch — some CDNs 403 ranged requests from datacenter IPs
+    const upstream = await streamFetch(session, url, {}, req.headers);
     if (!upstream.ok && upstream.status !== 206) {
-      const body = (await upstream.text().catch(() => "")).slice(0, 300);
-      console.error("[segment-fail]", {
+      const body = (await upstream.text().catch(() => "")).slice(0, 400);
+      const info = {
         status: upstream.status,
         host: new URL(url).hostname,
-        body
-      });
-      throw new Error(`Segment HTTP ${upstream.status} body=${body}`);
+        server: upstream.headers.get("server"),
+        cfRay: upstream.headers.get("cf-ray"),
+        cfMitigated: upstream.headers.get("cf-mitigated"),
+        body: body.slice(0, 200)
+      };
+      console.error("[segment-fail]", info);
+      throw new Error(
+        `Segment HTTP ${upstream.status} host=${info.host} cf=${info.cfRay || "-"} body=${info.body}`
+      );
     }
     const encrypted = Buffer.from(await upstream.arrayBuffer());
     if (encrypted.length > CONFIG.MAX_PROXY_BYTES) {
