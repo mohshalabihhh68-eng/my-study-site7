@@ -221,6 +221,10 @@ async function upstreamHeaders(extra = {}) {
   return {
     Authorization: `Bearer ${tok}`,
     Accept: "application/json",
+    "User-Agent": CONFIG.STREAM_UA,
+    Origin: CONFIG.STREAM_ORIGIN,
+    Referer: CONFIG.STREAM_REFERER,
+    "Accept-Language": "ar-EG,ar;q=0.9,en-US;q=0.7,en;q=0.6",
     ...extra
   };
 }
@@ -228,14 +232,26 @@ async function upstreamHeaders(extra = {}) {
 async function upstreamJson(apiPath, options = {}) {
   const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, {
     ...options,
-    headers: await upstreamHeaders(options.headers || {})
+    headers: await upstreamHeaders(options.headers || {}),
+    signal: AbortSignal.timeout(15_000)
   });
   const text = await r.text();
   let data;
   try { data = JSON.parse(text); } catch {
+    console.error("[upstream-fail]", {
+      path: apiPath, status: r.status, server: r.headers.get("server"),
+      cfRay: r.headers.get("cf-ray"), body: text.slice(0, 200)
+    });
     throw new Error(`Upstream non-JSON (${r.status})`);
   }
-  if (!r.ok) throw new Error(data?.message || `Upstream HTTP ${r.status}`);
+  if (!r.ok) {
+    console.error("[upstream-fail]", {
+      path: apiPath, status: r.status, server: r.headers.get("server"),
+      cfRay: r.headers.get("cf-ray"), body: text.slice(0, 200)
+    });
+    // include the real HTTP status so it is visible in the browser response
+    throw new Error(`${data?.message || "Upstream error"} (HTTP ${r.status})`);
+  }
   return data;
 }
 
@@ -372,6 +388,33 @@ const globalLimiter = rateLimit({ max: 50, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) =>
   req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next)
 );
+
+// Debug (open build): /api/debug/upstream?path=/user/lectures/5548/content
+app.get("/api/debug/upstream", async (req, res) => {
+  const apiPath = String(req.query.path || `/user/subjects/${CONFIG.DEFAULT_YEAR_ID}`);
+  const out = {};
+  const timed = async (name, fn) => {
+    const t0 = Date.now();
+    try { out[name] = { ...(await fn()), ms: Date.now() - t0 }; }
+    catch (e) { out[name] = { error: e.message, ms: Date.now() - t0 }; }
+  };
+  const probe = async (headers) => {
+    const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, { headers, signal: AbortSignal.timeout(15_000) });
+    return {
+      status: r.status,
+      server: r.headers.get("server"),
+      cfRay: r.headers.get("cf-ray"),
+      body: (await r.text()).slice(0, 200)
+    };
+  };
+  const tok = await getCoursatkToken();
+  await timed("outbound_ip", async () => ({
+    ip: await (await fetch("https://api.ipify.org", { signal: AbortSignal.timeout(8000) })).text()
+  }));
+  await timed("plain_headers", () => probe({ Authorization: `Bearer ${tok}`, Accept: "application/json" }));
+  await timed("browser_headers", async () => probe(await upstreamHeaders()));
+  res.json({ path: apiPath, ...out });
+});
 
 app.get("/health", (_req, res) => {
   res.json({
