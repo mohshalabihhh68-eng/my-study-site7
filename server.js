@@ -4418,15 +4418,34 @@ app.get("/api/ui/subjects", async (req, res) => {
   }
 });
 
+/** يطلع array من رد كورساتك مهما كان الشكل (data[] | data.teachers | data.chapters | ...) */
+function unwrapList(payload, keys = []) {
+  if (Array.isArray(payload)) return payload;
+  const d = payload && payload.data !== undefined ? payload.data : payload;
+  if (Array.isArray(d)) return d;
+  if (d && typeof d === "object") {
+    for (const k of keys) {
+      if (Array.isArray(d[k])) return d[k];
+    }
+    // أي مفتاح فيه array
+    for (const k of Object.keys(d)) {
+      if (Array.isArray(d[k]) && d[k].length && typeof d[k][0] === "object") return d[k];
+    }
+  }
+  return [];
+}
+
 app.get("/api/ui/teachers", async (req, res) => {
   try {
     const sid = req.query.subject_id;
     if (isThId(sid)) {
       const data = await thTeachers(Number(sid));
-      return res.json({ success: true, data });
+      return res.json({ success: true, data: Array.isArray(data) ? data : [] });
     }
-    const data = await upstreamJson(`/user/subjects/${encodeURIComponent(sid)}/teachers`);
-    res.json({ success: true, data: data.data !== undefined ? data.data : data });
+    const raw = await upstreamJson(`/user/subjects/${encodeURIComponent(sid)}/teachers`);
+    // شكل كورساتك: { data: { id, name, teachers: [...] } }
+    const list = unwrapList(raw, ["teachers", "data"]);
+    res.json({ success: true, data: list });
   } catch (e) {
     jsonError(res, 502, e.message);
   }
@@ -4437,10 +4456,11 @@ app.get("/api/ui/chapters", async (req, res) => {
     const tid = req.query.teacher_id;
     if (isThId(tid)) {
       const data = await thChapters(Number(tid));
-      return res.json({ success: true, data });
+      return res.json({ success: true, data: Array.isArray(data) ? data : [] });
     }
-    const data = await upstreamJson(`/user/teachers/${encodeURIComponent(tid)}/chapters`);
-    res.json({ success: true, data: data.data !== undefined ? data.data : data });
+    const raw = await upstreamJson(`/user/teachers/${encodeURIComponent(tid)}/chapters`);
+    const list = unwrapList(raw, ["chapters", "data"]);
+    res.json({ success: true, data: list });
   } catch (e) {
     jsonError(res, 502, e.message);
   }
@@ -4451,10 +4471,11 @@ app.get("/api/ui/lectures", async (req, res) => {
     const cid = req.query.chapter_id;
     if (isThId(cid)) {
       const data = await thLectures(Number(cid));
-      return res.json({ success: true, data });
+      return res.json({ success: true, data: Array.isArray(data) ? data : [] });
     }
-    const data = await upstreamJson(`/user/chapters/${encodeURIComponent(cid)}/lectures`);
-    res.json({ success: true, data: data.data !== undefined ? data.data : data });
+    const raw = await upstreamJson(`/user/chapters/${encodeURIComponent(cid)}/lectures`);
+    const list = unwrapList(raw, ["lectures", "data"]);
+    res.json({ success: true, data: list });
   } catch (e) {
     jsonError(res, 502, e.message);
   }
@@ -4467,8 +4488,21 @@ app.get("/api/ui/lecture/:id", async (req, res) => {
       const data = await thLectureContent(Number(id));
       return res.json(data.success !== undefined ? data : { success: true, data });
     }
-    const data = await upstreamJson(`/user/lectures/${encodeURIComponent(id)}/content`);
-    res.json(data.success !== undefined ? data : { success: true, data });
+    const raw = await upstreamJson(`/user/lectures/${encodeURIComponent(id)}/content`);
+    // وحّد الشكل: { success, data: { videos, files, ... } }
+    const d = raw && raw.data !== undefined ? raw.data : raw;
+    let videos = [];
+    if (Array.isArray(d)) videos = d;
+    else if (d && Array.isArray(d.videos)) videos = d.videos;
+    else if (d && Array.isArray(d.contents)) videos = d.contents;
+    else if (d && Array.isArray(d.items)) videos = d.items;
+    res.json({
+      success: true,
+      data: {
+        ...(d && typeof d === "object" && !Array.isArray(d) ? d : {}),
+        videos
+      }
+    });
   } catch (e) {
     jsonError(res, 502, e.message);
   }
@@ -4560,6 +4594,22 @@ function crumb(){
 function go(i){stack=stack.slice(0,i+1);load();}
 function push(n){stack.push(n);load();}
 function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function asList(x){
+  if(Array.isArray(x)) return x;
+  if(!x||typeof x!=='object') return [];
+  if(Array.isArray(x.data)) return x.data;
+  if(Array.isArray(x.teachers)) return x.teachers;
+  if(Array.isArray(x.chapters)) return x.chapters;
+  if(Array.isArray(x.lectures)) return x.lectures;
+  if(Array.isArray(x.videos)) return x.videos;
+  if(x.data&&typeof x.data==='object'){
+    if(Array.isArray(x.data.teachers)) return x.data.teachers;
+    if(Array.isArray(x.data.chapters)) return x.data.chapters;
+    if(Array.isArray(x.data.lectures)) return x.data.lectures;
+    if(Array.isArray(x.data.videos)) return x.data.videos;
+  }
+  return [];
+}
 
 async function load(){
   crumb();
@@ -4574,7 +4624,7 @@ async function load(){
         <div class="item \${year===3?'active':''}" onclick="year=3;load()"><b>2026</b><small>year_id=3</small></div>
         <div class="item \${year===5?'active':''}" onclick="year=5;load()"><b>مراجعات</b><small>year_id=5</small></div>\`;
       const subjects=await api('/api/ui/subjects?src='+src+'&year='+year);
-      const arr=Array.isArray(subjects)?subjects:(subjects.data||[]);
+      const arr=asList(subjects);
       list.className='grid';
       list.innerHTML=arr.map(s=>\`
         <div class="card" onclick="push({type:'subject',id:'\${s.id}',name:'\${esc(s.name||('مادة '+s.id))}'})">
@@ -4583,35 +4633,35 @@ async function load(){
         </div>\`).join('')||'<div class="empty">لا توجد مواد</div>';
     } else if(cur.type==='subject'){
       const teachers=await api('/api/ui/teachers?subject_id='+encodeURIComponent(cur.id));
-      const arr=Array.isArray(teachers)?teachers:(teachers.data||[]);
+      const arr=asList(teachers);
       list.className='grid';
       list.innerHTML=arr.map(t=>\`
         <div class="card" onclick="push({type:'teacher',id:'\${t.id}',name:'\${esc(t.name||('مدرس '+t.id))}'})">
           <h3>\${esc(t.name||t.id)}</h3>
-          <p>\${t.chapters_count||t.count||''} فصل</p>
+          <p>\${t.chapter_count||t.chapters_count||t.count||''} فصل</p>
         </div>\`).join('')||'<div class="empty">لا يوجد مدرسين</div>';
     } else if(cur.type==='teacher'){
       const chapters=await api('/api/ui/chapters?teacher_id='+encodeURIComponent(cur.id));
-      const arr=Array.isArray(chapters)?chapters:(chapters.data||[]);
+      const arr=asList(chapters);
       list.className='grid';
       list.innerHTML=arr.map(c=>\`
         <div class="card" onclick="push({type:'chapter',id:'\${c.id}',name:'\${esc(c.name||('فصل '+c.id))}'})">
           <h3>\${esc(c.name||c.id)}</h3>
-          <p>\${c.lectures_count||c.count||''} محاضرة</p>
+          <p>\${c.lecture_count||c.lectures_count||c.count||''} محاضرة</p>
         </div>\`).join('')||'<div class="empty">لا توجد فصول</div>';
     } else if(cur.type==='chapter'){
       const lectures=await api('/api/ui/lectures?chapter_id='+encodeURIComponent(cur.id));
-      const arr=Array.isArray(lectures)?lectures:(lectures.data||[]);
+      const arr=asList(lectures);
       list.className='grid';
       list.innerHTML=arr.map(l=>\`
         <div class="card" onclick="push({type:'lecture',id:'\${l.id}',name:'\${esc(l.name||('محاضرة '+l.id))}'})">
           <h3>\${esc(l.name||l.id)}</h3>
-          <p>\${l.videos_count||l.count||''} فيديو</p>
+          <p>\${l.video_count||l.videos_count||l.count||''} فيديو</p>
         </div>\`).join('')||'<div class="empty">لا توجد محاضرات</div>';
     } else if(cur.type==='lecture'){
       const content=await api('/api/ui/lecture/'+encodeURIComponent(cur.id));
-      const data=content.data||content;
-      const videos=data.videos||[];
+      const data=(content&&content.videos)?content:(content&&content.data)||content||{};
+      const videos=asList(data.videos||data);
       list.className='';
       list.innerHTML=videos.map(v=>\`
         <div class="item" onclick="play('\${String(v.id).replace(/'/g,\"&#39;\")}', '\${esc(v.name||v.title||'فيديو')}', '\${cur.id}')">
