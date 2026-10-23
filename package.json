@@ -1,0 +1,19 @@
+{
+  "name": "coursatk-open-proxy",
+  "version": "1.0.0",
+  "description": "Open Coursatk proxy — catalog + Stream-Weave decrypt, no auth",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server-open.js",
+    "dev": "node server-open.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}
