@@ -1,9 +1,11 @@
 /**
- * Coursatk Open Proxy v6
- * No Firebase / no student auth
- * Hardcoded COURSATK token
- * Catalog + HLS via server-side Stream-Weave decrypt
- * Segment fetch matches userscript: Authorization Bearer stream token
+ * Coursatk API — protected backend
+ * VERSION v1.1 — scaling & stability (shared video sources, segment cache, request coalescing,
+ *                upstream/Firebase timeouts, auth cache, crash guards, sliding stream sessions)
+ * - Student codes (7-digit) + devices + sessions in Firebase RTDB
+ * - Admin panel API (users, permissions, sections, subject IDs)
+ * - Stream-Weave key unwrap + AES-128 segment decrypt (upstream token NEVER leaves server)
+ * - All student/catalog/stream routes require valid session token
  */
 import express from "express";
 import cors from "cors";
@@ -13,53 +15,1258 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import {
+  thanawicaLogin,
+  thSubjectsForYear,
+  thTeachers,
+  thChapters,
+  thLectures,
+  thLectureContent,
+  thGetVideoSource,
+  thResolveMp4Url,
+  thMintAndFetchSegment,
+  thResolvePlaylistHash,
+  thResolveVideo,
+  isChemOrMathName,
+  chemMathKind,
+  isThId,
+  encodeThId,
+  decodeThId,
+  getThanawicaSessionInfo
+} from "./thanawica.js";
 
-const APP_VERSION = "v6";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.join(__dirname, "data");
+const MEDIA_DIR = path.join(DATA_DIR, "media");
+try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); } catch {}
+const APP_VERSION = "v1.1-open";
 
-const CONFIG = {
-  PORT: Number(process.env.PORT || 3000),
-  COURSATK_API: "https://api.coursatk.online/api/v1",
-  COURSATK_TOKEN:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
-  DEFAULT_YEAR_ID: 4,
-  STREAM_UA:
-    "Mozilla/5.0 (Linux; Android 15; CPH2591 Build/AP3A.240617.008) AppleWebKit/537.36 (KHTML, like Gecko) Jrryilw/4.0 Chrome/155.0.8059.43 Mobile Safari/537.36",
-  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
-  STREAM_SESSION_MS: 30 * 60 * 1000,
-  MAX_PROXY_BYTES: 20 * 1024 * 1024
-};
+// ═══════════════════════════════════════════════════════════
+// OPEN MODE — hardcoded credentials, auth/Firebase disabled
+// ═══════════════════════════════════════════════════════════
+const HARDCODED_COURSATK_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs";
+const HARDCODED_THANAWICA_COOKIES =
+  "student_code=97372372; student_session=c61daf6f2131e7002a561c81f0fcf32d21448b535b2d3f766ed119ade6f83695; student_device=ddf43a068409f40aac795589dbb83afe48294cafa622d7d726b2be0d6acd45e8";
+
+process.env.COURSATK_TOKEN = HARDCODED_COURSATK_TOKEN;
+process.env.THANAWICA_COOKIES = HARDCODED_THANAWICA_COOKIES;
+process.env.THANAWICA_ENABLED = "1";
+// Firebase optional — don't crash if missing
+if (!process.env.FIREBASE_URL) process.env.FIREBASE_URL = "";
+
+// ═══════════════════════════════════════════════════════════
+// Crash guards — أي خطأ غير متوقع يتسجل بدل ما السيرفر يقع (ويضيّع كل جلسات التشغيل)
+// ═══════════════════════════════════════════════════════════
+process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
+process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
+
+function wrapAsync(fn) {
+  return function (req, res, next) {
+    try {
+      const r = fn(req, res, next);
+      if (r && typeof r.catch === "function") r.catch(next);
+    } catch (e) {
+      next(e);
+    }
+  };
+}
 
 const app = express();
+// Express 4 مبيمسكش أخطاء الـ async handlers → كانت بتعمل unhandledRejection وتقفّل السيرفر. نلفّهم كلهم.
+for (const m of ["get", "post", "put", "patch", "delete", "use"]) {
+  const orig = app[m].bind(app);
+  app[m] = (...args) => {
+    if (m === "get" && args.length === 1) return orig(...args); // app.get('setting')
+    return orig(...args.map((a) => (typeof a === "function" && a.length < 4 ? wrapAsync(a) : a)));
+  };
+}
 app.set("trust proxy", 1);
-app.use(cors({ origin: true }));
-app.use(express.json({ limit: "512kb" }));
-app.use(compression());
+app.use(cors({
+  origin: true, // يعكس الـ Origin عشان credentials تشتغل
+  credentials: true
+}));
+app.use(express.json({ limit: "20mb" }));
+app.use(
+  compression({
+    // مقاطع الفيديو مش بتتضغط — بلاش نصرف CPU عليها
+    filter: (req, res) => {
+      const p = req.path || "";
+      if (p.startsWith("/api/hls/") || p.startsWith("/api/stream/segment/")) return false;
+      if (p.includes("/messages/stream") || p.endsWith("/stream")) return false;
+      return compression.filter(req, res);
+    }
+  })
+);
 
-const streamSessions = new Map();
-let decryptPlaybackKeyFn = null;
+// ═══════════════════════════════════════════════════════════
+// Scaling helpers: fetch مع timeout/retry، دمج الطلبات المتطابقة، حد للاتصالات المتوازية
+// ═══════════════════════════════════════════════════════════
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchT(url, opts = {}, { timeout = 15_000, retries = 0, retryOn = [429, 502, 503, 504] } = {}) {
+  let lastErr;
+  for (let a = 0; a <= retries; a++) {
+    try {
+      const r = await fetch(url, { ...opts, signal: AbortSignal.timeout(timeout) });
+      if (a < retries && retryOn.includes(r.status)) {
+        try { await r.arrayBuffer(); } catch {}
+        lastErr = new Error("HTTP " + r.status);
+        await delay(200 * (a + 1) + Math.random() * 150);
+        continue;
+      }
+      return r;
+    } catch (e) {
+      lastErr = e && e.name === "TimeoutError" ? new Error(`timeout ${timeout}ms`) : e;
+      if (a < retries) {
+        await delay(200 * (a + 1) + Math.random() * 150);
+        continue;
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// 100 طالب بيطلبوا نفس الحاجة في نفس اللحظة → طلب واحد بس بيروح، والباقي بيستنى نفس النتيجة
+const inflight = new Map();
+function coalesce(key, fn) {
+  const hit = inflight.get(key);
+  if (hit) return hit;
+  const p = Promise.resolve()
+    .then(fn)
+    .finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+// حد أقصى لعدد الاتصالات المتوازية على السيرفر الأصلي (الباقي بيستنى في طابور بدل ما يضغط عليه)
+function makeLimiter(max, maxQueue = 3000) {
+  let active = 0;
+  const q = [];
+  const pump = () => {
+    while (active < max && q.length) {
+      const { fn, res, rej } = q.shift();
+      active++;
+      Promise.resolve()
+        .then(fn)
+        .then(res, rej)
+        .finally(() => {
+          active--;
+          pump();
+        });
+    }
+  };
+  const run = (fn) =>
+    new Promise((res, rej) => {
+      if (q.length >= maxQueue) {
+        const e = new Error("السيرفر مشغول جدًا — جرّب بعد لحظات");
+        e.status = 503;
+        return rej(e);
+      }
+      q.push({ fn, res, rej });
+      pump();
+    });
+  run.stats = () => ({ active, queued: q.length });
+  return run;
+}
+const upstreamSlot = makeLimiter(Number(process.env.UPSTREAM_CONCURRENCY || 96));
+
+// كاش المقاطع المفكوكة في الذاكرة (LRU بحد أقصى للحجم) — أول طالب بيجيبها والباقي بياخدها من الرامات
+const SEG_CACHE_MAX = Number(process.env.SEGMENT_CACHE_MB || 256) * 1024 * 1024;
+const SEG_CACHE_TTL = 10 * 60_000;
+const PREFETCH_AHEAD = Number(process.env.PREFETCH_AHEAD || 3);
+const segCache = new Map(); // key -> { buf, exp } (ترتيب الإدخال = ترتيب الاستخدام)
+let segCacheBytes = 0;
+function segDel(k) {
+  const e = segCache.get(k);
+  if (e) {
+    segCacheBytes -= e.buf.length;
+    segCache.delete(k);
+  }
+}
+function segGet(k) {
+  const e = segCache.get(k);
+  if (!e) return null;
+  if (Date.now() > e.exp) {
+    segDel(k);
+    return null;
+  }
+  segCache.delete(k);
+  segCache.set(k, e);
+  return e.buf;
+}
+function segSet(k, buf) {
+  if (buf.length > SEG_CACHE_MAX / 4) return;
+  segDel(k);
+  segCache.set(k, { buf, exp: Date.now() + SEG_CACHE_TTL });
+  segCacheBytes += buf.length;
+  for (const kk of segCache.keys()) {
+    if (segCacheBytes <= SEG_CACHE_MAX) break;
+    segDel(kk);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// Rate limit — strict, no bypass via X-Forwarded-For spoof alone
+// ═══════════════════════════════════════════════════════════
+const rateBuckets = new Map();
+const banBuckets = new Map(); // temporary IP bans
+
+function clientIp(req) {
+  // trust proxy is on — Express already resolves req.ip from X-Forwarded-For safely when set
+  const ip = req.ip || req.socket?.remoteAddress || "unknown";
+  return String(ip).replace(/^::ffff:/, "");
+}
+
+function rateLimit(options = {}) {
+  const windowMs = options.windowMs || 60_000;
+  const max = options.max || 40;
+  const scope = options.scope || "global";
+  const banAfter = options.banAfter || 0; // consecutive 429s before short ban
+  const banMs = options.banMs || 5 * 60_000;
+  const skip = options.skip;
+  const keyFn = options.keyFn;
+  return (req, res, next) => {
+    if (skip && skip(req)) return next();
+    const ip = keyFn ? keyFn(req) : clientIp(req);
+    const banKey = ip + ":ban:" + scope;
+    const bannedUntil = banBuckets.get(banKey) || 0;
+    if (bannedUntil > Date.now()) {
+      const sec = Math.ceil((bannedUntil - Date.now()) / 1000);
+      res.setHeader("Retry-After", String(sec));
+      return res.status(429).json({
+        success: false,
+        message: `محظور مؤقتًا — حاول بعد ${sec} ثانية`
+      });
+    }
+    const key = ip + ":" + scope;
+    const t = Date.now();
+    let b = rateBuckets.get(key);
+    if (!b || t > b.resetAt) {
+      b = { count: 0, resetAt: t + windowMs, hits429: 0 };
+      rateBuckets.set(key, b);
+    }
+    b.count += 1;
+    res.setHeader("X-RateLimit-Limit", String(max));
+    res.setHeader("X-RateLimit-Remaining", String(Math.max(0, max - b.count)));
+    res.setHeader("X-RateLimit-Reset", String(Math.ceil(b.resetAt / 1000)));
+    if (b.count > max) {
+      b.hits429 = (b.hits429 || 0) + 1;
+      if (banAfter > 0 && b.hits429 >= banAfter) {
+        banBuckets.set(banKey, Date.now() + banMs);
+      }
+      const sec = Math.ceil((b.resetAt - t) / 1000);
+      res.setHeader("Retry-After", String(Math.max(1, sec)));
+      return res.status(429).json({
+        success: false,
+        message: "طلبات كثيرة — حاول بعد قليل"
+      });
+    }
+    next();
+  };
+}
+
+setInterval(() => {
+  const t = Date.now();
+  for (const [k, b] of rateBuckets) {
+    if (t > b.resetAt) rateBuckets.delete(k);
+  }
+  for (const [k, until] of banBuckets) {
+    if (t > until) banBuckets.delete(k);
+  }
+}, 30_000).unref();
+
+
+// ═══════════════════════════════════════════════════════════
+// Login fail lock — 5 محاولات غلط → قفل ربع ساعة (حسب الموبايل/الجهاز)
+// ═══════════════════════════════════════════════════════════
+const LOGIN_MAX_FAILS = 5;
+const LOGIN_LOCK_MS = 15 * 60_000; // ربع ساعة
+const loginFails = new Map(); // key -> { count, lockedUntil }
+
+/** مفتاح القفل: للجهاز (deviceId) أولوية — مع IP كطبقة تانية */
+function loginFailKey(kind, deviceOrIp, id) {
+  return kind + ":" + String(deviceOrIp || "unknown") + ":" + String(id || "").toLowerCase();
+}
+
+function _lockStatus(key) {
+  const row = loginFails.get(key);
+  if (!row) return null;
+  if (row.lockedUntil && Date.now() < row.lockedUntil) {
+    const sec = Math.ceil((row.lockedUntil - Date.now()) / 1000);
+    return { locked: true, sec, remaining: 0 };
+  }
+  if (row.lockedUntil && Date.now() >= row.lockedUntil) {
+    loginFails.delete(key);
+    return null;
+  }
+  return { locked: false, remaining: Math.max(0, LOGIN_MAX_FAILS - (row.count || 0)) };
+}
+
+function checkLoginLock(kind, deviceOrIp, id) {
+  return _lockStatus(loginFailKey(kind, deviceOrIp, id));
+}
+
+/** يفحص قفل الجهاز + قفل الـ IP (لو أي واحد مقفول → ممنوع) */
+function checkLoginLockAny(kind, deviceId, ip, id) {
+  const a = deviceId ? checkLoginLock(kind, "dev:" + deviceId, id) : null;
+  const b = checkLoginLock(kind, "ip:" + ip, id);
+  if (a && a.locked) return a;
+  if (b && b.locked) return b;
+  return a || b;
+}
+
+function recordLoginFail(kind, deviceOrIp, id) {
+  const key = loginFailKey(kind, deviceOrIp, id);
+  const row = loginFails.get(key) || { count: 0, lockedUntil: 0 };
+  row.count = (row.count || 0) + 1;
+  if (row.count >= LOGIN_MAX_FAILS) {
+    row.lockedUntil = Date.now() + LOGIN_LOCK_MS;
+    row.count = 0;
+  }
+  loginFails.set(key, row);
+  if (row.lockedUntil && Date.now() < row.lockedUntil) {
+    const sec = Math.ceil((row.lockedUntil - Date.now()) / 1000);
+    return { locked: true, sec };
+  }
+  return { locked: false, remaining: Math.max(0, LOGIN_MAX_FAILS - row.count) };
+}
+
+/** يسجّل فشل على الجهاز والـ IP معًا */
+function recordLoginFailBoth(kind, deviceId, ip, id) {
+  let worst = { locked: false, remaining: LOGIN_MAX_FAILS };
+  if (deviceId) {
+    const r = recordLoginFail(kind, "dev:" + deviceId, id);
+    if (r.locked || (r.remaining != null && r.remaining < (worst.remaining ?? 99))) worst = r;
+  }
+  const r2 = recordLoginFail(kind, "ip:" + ip, id);
+  if (r2.locked) worst = r2;
+  else if (!worst.locked && r2.remaining != null && r2.remaining < (worst.remaining ?? 99)) worst = r2;
+  return worst;
+}
+
+function clearLoginFail(kind, deviceOrIp, id) {
+  loginFails.delete(loginFailKey(kind, deviceOrIp, id));
+}
+
+function clearLoginFailBoth(kind, deviceId, ip, id) {
+  if (deviceId) clearLoginFail(kind, "dev:" + deviceId, id);
+  clearLoginFail(kind, "ip:" + ip, id);
+}
+
+setInterval(() => {
+  const t = Date.now();
+  for (const [k, row] of loginFails) {
+    if (row.lockedUntil && t > row.lockedUntil + 60_000) loginFails.delete(k);
+  }
+}, 60_000).unref();
+
+
+// ═══════════════════════════════════════════════════════════
+// CONFIG (in-code — no Railway vars required for core secrets)
+// ═══════════════════════════════════════════════════════════
+const CONFIG = {
+  PORT: Number(process.env.PORT || 3000),
+  // Upstream Coursatk — token loaded from runtime/Firebase/env (never exposed to client)
+  COURSATK_API: "https://api.coursatk.online/api/v1",
+  COURSATK_TOKEN: HARDCODED_COURSATK_TOKEN, // OPEN MODE — hardcoded
+  DEFAULT_YEAR_ID: 4,
+  STREAM_HOSTS: [
+    "api.coursatk.online",
+    "stream-weave.com",
+    "floravon.online",
+    "c-cdn.online",
+    "thanawica.com",
+    "www.thanawica.com"
+  ],
+  STREAM_ORIGIN: "https://coursatk.online",
+  STREAM_REFERER: "https://coursatk.online/",
+  STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
+  STREAM_UA:
+    "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
+  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
+  // Firebase Realtime Database (NOT Firestore)
+  FIREBASE: "https://dr-gamal-357a2-default-rtdb.firebaseio.com",
+  // Bootstrap admin (always valid even if Firebase empty)
+  BOOTSTRAP_ADMIN: {
+    username: "Hema",
+    passwordHash: "", // OPEN MODE — no admin password
+    passwordPlain: "", // removed
+    permissions: {
+      students_create: true,
+      students_edit: true,
+      students_delete: true,
+      students_view: true,
+      devices_kick: true,
+      sections_manage: true,
+      admins_manage: true
+    }
+  },
+  // Session TTL
+  STUDENT_SESSION_MS: 7 * 24 * 3600 * 1000, // 7 days max (also capped by code expiry)
+  ADMIN_SESSION_MS: 12 * 3600 * 1000, // 12h
+  STREAM_SESSION_MS: 15 * 60 * 1000, // (قديم) — بقى فيه STREAM_IDLE_MS / STREAM_MAX_MS
+  STREAM_IDLE_MS: 45 * 60 * 1000, // الجلسة بتنتهي بعد 45 دقيقة من آخر مقطع اتطلب (كانت 15 دقيقة ثابتة وبتقطع المحاضرات الطويلة)
+  STREAM_MAX_MS: 12 * 3600 * 1000,
+  MAX_PROXY_BYTES: 12 * 1024 * 1024,
+  THANAWICA_CODE: process.env.THANAWICA_CODE || "", // أو من thanawica_code.txt
+  THANAWICA_ENABLED: process.env.THANAWICA_ENABLED !== "0",
+  CODE_TYPES: {
+    trial: { label: "تجربة", ms: 1 * 3600 * 1000 },
+    month: { label: "شهر", ms: 30 * 24 * 3600 * 1000 },
+    term: { label: "ترم (6 شهور)", ms: 180 * 24 * 3600 * 1000 },
+    year: { label: "سنة (12 شهر)", ms: 365 * 24 * 3600 * 1000 }
+  }
+};
+
+
+
+// ═══════════════════════════════════════════════════════════
+// Runtime config (file on disk + Firebase site settings)
+// Firebase URL / token NOT hardcoded — admin sets them in panel
+// ═══════════════════════════════════════════════════════════
+const RUNTIME_PATH = path.join(__dirname, "data", "runtime.json");
+
+const runtime = {
+  firebaseUrl: (process.env.FIREBASE_URL || "").replace(/\/$/, ""),
+  coursatkToken: HARDCODED_COURSATK_TOKEN,
+  siteName: "كورساتك",
+  packages: [
+    { id: "month", name: "باقة الشهر — 30 يوم", price: 200, days: 30, hours: 0, active: true },
+    { id: "term", name: "باقة الترم — لحد شهر 1", price: 500, days: 90, hours: 0, active: true },
+    { id: "year", name: "باقة السنة — السنة كلها بالمراجعات النهائية", price: 900, days: 365, hours: 0, active: true }
+  ],
+  agents: [] // { id, name, telegram, active }
+};
+
+function ensureDataDir() {
+  const dir = path.dirname(RUNTIME_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function loadRuntimeFile() {
+  try {
+    if (!fs.existsSync(RUNTIME_PATH)) return;
+    const raw = JSON.parse(fs.readFileSync(RUNTIME_PATH, "utf8"));
+    if (raw.firebaseUrl) runtime.firebaseUrl = String(raw.firebaseUrl).replace(/\/$/, "");
+    if (raw.coursatkToken) runtime.coursatkToken = String(raw.coursatkToken);
+    if (raw.siteName) runtime.siteName = String(raw.siteName);
+    if (Array.isArray(raw.packages)) runtime.packages = raw.packages;
+    if (Array.isArray(raw.agents)) runtime.agents = raw.agents;
+    if (raw.storageBucket) runtime.storageBucket = String(raw.storageBucket);
+    if (raw.notify && typeof raw.notify === "object") runtime.notify = raw.notify;
+    console.log("[API] runtime.json loaded");
+  } catch (e) {
+    console.warn("[API] runtime load:", e.message);
+  }
+}
+
+function saveRuntimeFile() {
+  ensureDataDir();
+  const out = {
+    firebaseUrl: runtime.firebaseUrl,
+    coursatkToken: runtime.coursatkToken,
+    siteName: runtime.siteName,
+    packages: runtime.packages,
+    agents: runtime.agents,
+    notify: runtime.notify || null,
+    updatedAt: Date.now()
+  };
+  fs.writeFileSync(RUNTIME_PATH, JSON.stringify(out, null, 2), "utf8");
+}
+
+function getFirebaseUrl() {
+  // OPEN MODE — Firebase disabled (return empty so all fb* soft-fail)
+  return "";
+}
+
+function getCoursatkTokenSync() {
+  return HARDCODED_COURSATK_TOKEN || runtime.coursatkToken || process.env.COURSATK_TOKEN || CONFIG.COURSATK_TOKEN || "";
+}
+
+loadRuntimeFile();
+
+// ── وضع الصيانة / إيقاف البث (أدمن فقط) ─────────────────
+// mode: "off" | "stream" | "full"
+// stream = إيقاف التشغيل فقط (play/hls/mp4)
+// full   = إيقاف كل API الطلاب (ما عدا health + دخول الأدمن)
+const maintenance = {
+  mode: "off", // off | stream | full
+  message: "السيرفر في وضع الصيانة حاليًا. حاول لاحقًا.",
+  updatedAt: 0,
+  updatedBy: null
+};
+
+function loadMaintenanceFromRuntime(raw) {
+  if (!raw || !raw.maintenance) return;
+  const m = raw.maintenance;
+  if (m.mode === "off" || m.mode === "stream" || m.mode === "full") maintenance.mode = m.mode;
+  if (m.message) maintenance.message = String(m.message).slice(0, 300);
+  if (m.updatedAt) maintenance.updatedAt = Number(m.updatedAt) || 0;
+  if (m.updatedBy) maintenance.updatedBy = String(m.updatedBy);
+}
+
+async function loadMaintenanceFromFirebase() {
+  try {
+    if (!getFirebaseUrl()) return;
+    const remote = await fbGet("config/maintenance");
+    if (remote && (remote.mode === "off" || remote.mode === "stream" || remote.mode === "full")) {
+      maintenance.mode = remote.mode;
+      if (remote.message) maintenance.message = String(remote.message).slice(0, 300);
+      maintenance.updatedAt = Number(remote.updatedAt) || Date.now();
+      maintenance.updatedBy = remote.updatedBy || null;
+      console.log("[API] maintenance from Firebase:", maintenance.mode);
+    }
+  } catch (e) {
+    console.warn("[maintenance] firebase load:", e.message);
+  }
+}
+
+async function saveMaintenance(mode, message, by) {
+  maintenance.mode = mode;
+  if (message) maintenance.message = String(message).slice(0, 300);
+  maintenance.updatedAt = Date.now();
+  maintenance.updatedBy = by || null;
+  // persist runtime file
+  try {
+    ensureDataDir();
+    let raw = {};
+    if (fs.existsSync(RUNTIME_PATH)) {
+      try { raw = JSON.parse(fs.readFileSync(RUNTIME_PATH, "utf8")); } catch {}
+    }
+    raw.maintenance = {
+      mode: maintenance.mode,
+      message: maintenance.message,
+      updatedAt: maintenance.updatedAt,
+      updatedBy: maintenance.updatedBy
+    };
+    // keep other fields via saveRuntimeFile merge
+    saveRuntimeFile();
+    // also write maintenance into file explicitly
+    try {
+      const cur = JSON.parse(fs.readFileSync(RUNTIME_PATH, "utf8"));
+      cur.maintenance = raw.maintenance;
+      fs.writeFileSync(RUNTIME_PATH, JSON.stringify(cur, null, 2), "utf8");
+    } catch {}
+  } catch (e) {
+    console.warn("[maintenance] file save:", e.message);
+  }
+  try {
+    if (getFirebaseUrl()) {
+      await fbSet("config/maintenance", {
+        mode: maintenance.mode,
+        message: maintenance.message,
+        updatedAt: maintenance.updatedAt,
+        updatedBy: maintenance.updatedBy
+      });
+    }
+  } catch (e) {
+    console.warn("[maintenance] firebase save:", e.message);
+  }
+  // لو إيقاف بث أو كامل — امسح جلسات التشغيل النشطة
+  if (mode === "stream" || mode === "full") {
+    const n = streamSessions.size;
+    streamSessions.clear();
+    console.log("[maintenance] cleared stream sessions:", n);
+  }
+}
+
+function maintenanceBlocksStream() {
+  return false; // OPEN MODE
+}
+function maintenanceBlocksApi() {
+  return false; // OPEN MODE
+}
+
+function maintenanceMiddleware(_req, _res, next) {
+  next(); // OPEN MODE — never block
+}
+
+// حمّل حالة الصيانة من الملف بعد تعريف الدوال
+try {
+  if (fs.existsSync(RUNTIME_PATH)) {
+    const raw = JSON.parse(fs.readFileSync(RUNTIME_PATH, "utf8"));
+    loadMaintenanceFromRuntime(raw);
+  }
+} catch {}
+app.use(maintenanceMiddleware);
+
+
+
+// apply token into CONFIG for existing helpers
+CONFIG.COURSATK_TOKEN = HARDCODED_COURSATK_TOKEN;
+CONFIG.FIREBASE = "";
+console.log("[API] OPEN MODE — auth disabled, Firebase off");
+console.log("[API] Token: HARDCODED");
+console.log("[API] Thanawica cookies: HARDCODED");
+
+function packageDurationMs(pkg) {
+  if (!pkg) return 0;
+  const days = Number(pkg.days || 0);
+  const hours = Number(pkg.hours || 0);
+  return (days * 24 + hours) * 3600 * 1000;
+}
+
+
+/**
+ * 2027 (yearId 4) — مطابق لوحة الأدمن، Firebase المصدر الأساسي
+ * متتلمّسش بيانات الأدمن
+ */
+const SECTION_CATALOG = {
+  scientific_sciences: {
+    name: "علمي علوم",
+    yearId: 4,
+    subjectIds: [57, 58, 59, 60, 61]
+  },
+  scientific_math: {
+    name: "علمي رياضة",
+    yearId: 4,
+    subjectIds: [57, 58, 59, 60, 65]
+  },
+  literary: {
+    name: "أدبي",
+    yearId: 4,
+    subjectIds: [57, 58, 62, 63, 64]
+  },
+  "بكالوريا": {
+    name: "بكالوريا",
+    yearId: 5,
+    subjectIds: [66, 67, 68, 69, 70, 71, 72, 75, 76, 77]
+  },
+  azhari: {
+    name: "ازهر",
+    yearId: 4,
+    subjectIds: [73, 58, 59, 60, 61, 65, 74]
+  }
+};
+
+/** 2026 فقط (yearId 3) — CDN — منفصل عن 2027 */
+const YEAR_2026_SUBJECTS = {
+  scientific_sciences: [40, 41, 42, 43, 44],
+  scientific_math: [40, 41, 42, 43],
+  literary: [40, 41, 52, 56],
+  "بكالوريا": [40, 41, 52, 56],
+  azhari: [40, 41, 42, 43, 44]
+};
+
+function resolveYearId(raw) {
+  if (raw == null || raw === "") return CONFIG.DEFAULT_YEAR_ID;
+  // أرقام عربية (٢٠٢٦) → إنجليزي
+  const s = String(raw).trim().replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+  const n = Number(s);
+  if (n === 3 || n === 4 || n === 5) return n;
+  if (n === 26 || n === 2026) return 3; // 26 → yearId 3 (2026)
+  if (n === 27 || n === 2027) return 4; // 27 → yearId 4 (2027)
+  if (s.includes("2026")) return 3;
+  if (s.includes("2027")) return 4;
+  return CONFIG.DEFAULT_YEAR_ID;
+}
+
+/** Normalize section key from admin/UI variants */
+function normalizeSection(raw) {
+  if (raw == null || raw === "") return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const lower = s.toLowerCase().replace(/\s+/g, "_");
+  const map = {
+    scientific_sciences: "scientific_sciences",
+    scientific_math: "scientific_math",
+    literary: "literary",
+    "علمي_علوم": "scientific_sciences",
+    "علمي_رياضة": "scientific_math",
+    "علمي_رياضه": "scientific_math",
+    "ادبي": "literary",
+    "أدبي": "literary",
+    "باكلوريا": "بكالوريا",
+    "بكالوريا": "بكالوريا",
+    bakaloria: "بكالوريا",
+    baccalaureate: "بكالوريا",
+    "أزهري": "azhari",
+    azhari: "azhari",
+    sciences: "scientific_sciences",
+    math: "scientific_math",
+    science: "scientific_sciences"
+  };
+  if (map[s]) return map[s];
+  if (map[lower]) return map[lower];
+  if (s.includes("علوم") && !s.includes("رياض")) return "scientific_sciences";
+  if (s.includes("رياض")) return "scientific_math";
+  if (s.includes("أدب") || s.includes("ادب")) return "literary";
+  return s;
+}
+
+/**
+ * yearOverride=3 → 2026 materials
+ * otherwise → Firebase admin config (2027) untouched
+ */
+async function resolveSection(sectionRaw, yearOverride = null) {
+  const id = normalizeSection(sectionRaw);
+  if (!id) return null;
+
+  const wantYear = yearOverride != null ? resolveYearId(yearOverride) : null;
+
+  if (wantYear === 3) {
+    const ids = YEAR_2026_SUBJECTS[id] || [];
+    const name = (SECTION_CATALOG[id] && SECTION_CATALOG[id].name) || id;
+    return { id, name, yearId: 3, subjectIds: [...ids] };
+  }
+
+  try {
+    if (getFirebaseUrl()) {
+      const sec = await fbGetCached(`sections/${id}`, 10 * 60_000);
+      if (sec && Array.isArray(sec.subjectIds) && sec.subjectIds.length) {
+        return {
+          id,
+          name: sec.name || (SECTION_CATALOG[id] && SECTION_CATALOG[id].name) || id,
+          yearId: Number(sec.yearId) || (SECTION_CATALOG[id] && SECTION_CATALOG[id].yearId) || CONFIG.DEFAULT_YEAR_ID,
+          subjectIds: sec.subjectIds.map(Number).filter((n) => !Number.isNaN(n))
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("[section]", e.message);
+  }
+
+  const def = SECTION_CATALOG[id];
+  if (def) {
+    return { id, name: def.name, yearId: def.yearId, subjectIds: [...def.subjectIds] };
+  }
+  return { id, name: id, yearId: CONFIG.DEFAULT_YEAR_ID, subjectIds: [] };
+}
+
+
+function resolveDurationMs(body) {
+  // custom days takes priority
+  if (body?.days != null && body.days !== "") {
+    const d = Number(body.days);
+    if (!Number.isNaN(d) && d > 0 && d <= 3650) return Math.round(d * 24 * 3600 * 1000);
+  }
+  if (body?.hours != null && Number(body.hours) > 0) {
+    return Math.round(Number(body.hours) * 3600 * 1000);
+  }
+  const type = String(body?.type || "month");
+  // from runtime packages
+  const pkg = (runtime.packages || []).find((p) => p.id === type);
+  if (pkg) {
+    const ms = packageDurationMs(pkg);
+    if (ms > 0) return ms;
+  }
+  if (CONFIG.CODE_TYPES[type]) return CONFIG.CODE_TYPES[type].ms;
+  return CONFIG.CODE_TYPES.month.ms;
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// In-memory TTL cache — يقلل ضغط Firebase والـ upstream مع زيادة المستخدمين
+// ═══════════════════════════════════════════════════════════
+const memCache = new Map();
+
+function cacheGet(key) {
+  const e = memCache.get(key);
+  if (!e) return null;
+  if (Date.now() > e.exp) {
+    memCache.delete(key);
+    return null;
+  }
+  return e.val;
+}
+function cacheSet(key, val, ttlMs = 30_000) {
+  memCache.set(key, { val, exp: Date.now() + ttlMs });
+  return val;
+}
+function cacheDel(prefix) {
+  for (const k of memCache.keys()) {
+    if (k === prefix || k.startsWith(prefix)) memCache.delete(k);
+  }
+}
+setInterval(() => {
+  const t = Date.now();
+  for (const [k, e] of memCache) {
+    if (t > e.exp) memCache.delete(k);
+  }
+}, 60_000).unref();
+
+// ═══════════════════════════════════════════════════════════
+// Crypto helpers
+// ═══════════════════════════════════════════════════════════
+function scryptHash(password, saltHex) {
+  const salt = saltHex ? Buffer.from(saltHex, "hex") : crypto.randomBytes(16);
+  const hash = crypto.scryptSync(password, salt, 32, {
+    N: 16384,
+    r: 8,
+    p: 1
+  });
+  return `scrypt$16384$8$1$${salt.toString("hex")}$${hash.toString("hex")}`;
+}
+
+function scryptVerify(password, stored) {
+  try {
+    if (stored.startsWith("scrypt$")) {
+      const parts = stored.split("$");
+      const salt = parts[4];
+      const expect = parts[5];
+      const hash = crypto.scryptSync(password, Buffer.from(salt, "hex"), 32, {
+        N: 16384,
+        r: 8,
+        p: 1
+      });
+      return crypto.timingSafeEqual(Buffer.from(expect, "hex"), hash);
+    }
+    // plain fallback (bootstrap migration)
+    return password === stored;
+  } catch {
+    return false;
+  }
+}
+
+function randomToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("base64url");
+}
+
+function randomCode9() {
+  // 1000000 – 9999999
+  return String(Math.floor(1000000 + Math.random() * 9000000));
+}
 
 function now() {
   return Date.now();
 }
 
-function jsonError(res, status, message, detail) {
-  const body = { success: false, message, status };
-  if (detail !== undefined) body.detail = detail;
-  return res.status(status).json(body);
+// ═══════════════════════════════════════════════════════════
+// Firebase RTDB REST
+// ═══════════════════════════════════════════════════════════
+async function fbGetCached(p, ttlMs = 20_000) {
+  const key = "fb:" + p;
+  const hit = cacheGet(key);
+  if (hit !== null) return hit;
+  return coalesce(key, async () => {
+    const val = await fbGet(p);
+    cacheSet(key, val, ttlMs);
+    return val;
+  });
 }
 
-function getStreamSession(id) {
-  const s = streamSessions.get(id);
-  if (!s) return null;
-  const last = s.lastUsed || s.createdAt;
-  if (now() - last > CONFIG.STREAM_SESSION_MS) {
-    streamSessions.delete(id);
-    return null;
+// أي كتابة على Firebase بتمسح الكاش المرتبط بالمسار ده (عشان طرد جهاز/إيقاف طالب يتطبق بسرعة)
+const authCache = new Map(); // studentCode -> { student, exp }
+function fbInvalidate(p) {
+  const parts = String(p).split("/").filter(Boolean);
+  let acc = "";
+  for (const part of parts) {
+    acc += (acc ? "/" : "") + part;
+    memCache.delete("fb:" + acc);
   }
-  s.lastUsed = now();
-  return s;
+  cacheDel("fb:" + parts.join("/"));
+  if (parts[0] === "students") {
+    if (parts[1]) authCache.delete(parts[1]);
+    else authCache.clear();
+  }
 }
+
+/** سر قاعدة البيانات — يعدّي قواعد الأمان (Database secret من Firebase Console) */
+function getFirebaseSecret() {
+  return (
+    process.env.FIREBASE_SECRET ||
+    process.env.FIREBASE_DATABASE_SECRET ||
+    process.env.FB_SECRET ||
+    runtime.firebaseSecret ||
+    ""
+  ).trim();
+}
+
+/** يبني رابط المسار + ?auth=SECRET لو موجود */
+function fbUrl(p) {
+  const base = getFirebaseUrl();
+  if (!base) return null; // OPEN MODE — no Firebase
+  const path = String(p || "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  let url = `${base}/${path}.json`;
+  const secret = getFirebaseSecret();
+  if (secret) {
+    url += (url.includes("?") ? "&" : "?") + "auth=" + encodeURIComponent(secret);
+  }
+  return url;
+}
+
+function fbAuthHint(status, msg) {
+  return "";
+}
+
+// OPEN MODE — Firebase soft-fail (never throw, never block)
+async function fbGet(_p) {
+  return null;
+}
+
+async function fbSet(_p, _data) {
+  return null;
+}
+
+async function fbPatch(_p, _data) {
+  return null;
+}
+
+async function fbDelete(_p) {
+  return true;
+}
+
+// Runtime config from Firebase (overrides in-code defaults)
+let cachedCoursatkToken = null;
+let cachedTokenAt = 0;
+async function getStorageBucket() {
+  if (runtime.storageBucket) return String(runtime.storageBucket).trim();
+  if (process.env.FIREBASE_STORAGE_BUCKET) return process.env.FIREBASE_STORAGE_BUCKET.trim();
+  const u = getFirebaseUrl() || "";
+  const m = u.match(/https?:\/\/([^.]+)-default-rtdb/i);
+  if (m) return m[1] + ".appspot.com";
+  return "dr-gamal-357a2.appspot.com";
+}
+
+function getCoursatkToken() {
+  return HARDCODED_COURSATK_TOKEN;
+}
+
+async function refreshCoursatkTokenFromFb() {
+  try {
+    const remote = await fbGet("config/coursatkToken");
+    if (typeof remote === "string" && remote.length > 20) {
+      runtime.coursatkToken = remote;
+      CONFIG.COURSATK_TOKEN = remote;
+      return remote;
+    }
+  } catch {}
+  return getCoursatkToken();
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// In-memory session caches (source of truth also in Firebase)
+// ═══════════════════════════════════════════════════════════
+const studentSessions = new Map(); // token -> session
+const adminSessions = new Map();
+const streamSessions = new Map();
+
+// ── رسائل لحظية (SSE) — اتصال دائم زي واتساب ─────────────
+const msgSubs = new Map(); // key: studentCode|admin:code|admin:inbox -> Set<{res, role}>
+
+function msgSubKey(kind, code) {
+  if (kind === "admin-inbox") return "admin:inbox";
+  if (kind === "admin") return "admin:" + String(code);
+  return "student:" + String(code);
+}
+
+const SSE_MAX_PER_KEY = 3; // أقصى 3 اتصالات لنفس الطالب/محادثة
+const SSE_MAX_ADMIN_INBOX = 5;
+const SSE_MAX_TOTAL = 400;
+let sseTotal = 0;
+
+function subscribeMessages(key, res, meta = {}) {
+  if (sseTotal >= SSE_MAX_TOTAL) {
+    const e = new Error("السيرفر مشغول — حاول بعد شوية");
+    e.status = 503;
+    throw e;
+  }
+  if (!msgSubs.has(key)) msgSubs.set(key, new Set());
+  const set = msgSubs.get(key);
+  const max = key === "admin:inbox" ? SSE_MAX_ADMIN_INBOX : SSE_MAX_PER_KEY;
+  // اقفل أقدم اتصال لو تعدّى الحد
+  while (set.size >= max) {
+    const oldest = set.values().next().value;
+    if (!oldest) break;
+    try { oldest.res.end(); } catch {}
+    set.delete(oldest);
+    sseTotal = Math.max(0, sseTotal - 1);
+  }
+  const entry = { res, ...meta, at: Date.now() };
+  set.add(entry);
+  sseTotal += 1;
+  const onClose = () => {
+    const s = msgSubs.get(key);
+    if (!s) return;
+    if (s.has(entry)) {
+      s.delete(entry);
+      sseTotal = Math.max(0, sseTotal - 1);
+    }
+    if (!s.size) msgSubs.delete(key);
+  };
+  res.on("close", onClose);
+  res.on("error", onClose);
+  return entry;
+}
+
+function pushMessageEvent(keys, event, data) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const list = Array.isArray(keys) ? keys : [keys];
+  for (const key of list) {
+    const set = msgSubs.get(key);
+    if (!set || !set.size) continue;
+    for (const entry of [...set]) {
+      try {
+        entry.res.write(payload);
+      } catch {
+        set.delete(entry);
+      }
+    }
+    if (!set.size) msgSubs.delete(key);
+  }
+}
+
+/** بعد إرسال/حذف رسالة — بلّغ المشتركين */
+function notifyThread(code, event, data) {
+  const c = String(code);
+  pushMessageEvent(
+    [msgSubKey("student", c), msgSubKey("admin", c), msgSubKey("admin-inbox")],
+    event,
+    { code: c, ...data }
+  );
+}
+
+function openSse(req, res) {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // nginx/railway
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+  res.write(`event: connected\ndata: ${JSON.stringify({ ok: true, t: Date.now() })}\n\n`);
+  // heartbeat كل 25ث عشان البروكسي ميقفلش الخط
+  const hb = setInterval(() => {
+    try { res.write(`: ping ${Date.now()}\n\n`); } catch { clearInterval(hb); }
+  }, 25_000);
+  res.on("close", () => clearInterval(hb));
+  res.on("error", () => clearInterval(hb));
+}
+
+
+
+function jsonError(res, status, message) {
+  return res.status(status).json({ success: false, message });
+}
+
+function getBearer(req) {
+  const h = req.headers.authorization || "";
+  if (h.startsWith("Bearer ")) return h.slice(7).trim();
+  const xt = req.headers["x-session-token"];
+  if (xt) return String(xt).trim();
+  if (req.query && req.query.token) return String(req.query.token).trim();
+  // كوكي HttpOnly — Safari native HLS يبعتها أوتوماتيك من غير ما تظهر في الـ URL
+  const cookie = String(req.headers.cookie || "");
+  const m = cookie.match(/(?:^|;\s*)ds_session=([^;]+)/);
+  if (m) {
+    try { return decodeURIComponent(m[1].trim()); } catch { return m[1].trim(); }
+  }
+  return "";
+}
+
+// ── Student auth middleware ──
+// كان بيعمل 1-2 طلب Firebase مع كل request (حتى كل مقطع فيديو!) — دلوقتي كاش 15 ثانية + دمج الطلبات المتطابقة
+const AUTH_TTL_MS = 120_000;
+const badTokens = new Map(); // token -> exp (توكنات مش موجودة — بلاش نسأل Firebase عنها كل مرة)
+
+async function getStudentCached(code) {
+  const c = authCache.get(code);
+  const t = Date.now();
+  if (c && t < c.exp) return c.student;
+  const student = await coalesce("stu:" + code, () => fbGet(`students/${code}`));
+  authCache.set(code, { student, exp: Date.now() + AUTH_TTL_MS });
+  return student;
+}
+
+// OPEN MODE — no login / no session / no Firebase student check
+async function requireStudent(req, res, next) {
+  req.student = {
+    code: "97372372",
+    name: "Open Student",
+    active: true,
+    section: "scientific_sciences",
+    expiresAt: Date.now() + 365 * 24 * 3600 * 1000,
+    maxDevices: 99,
+    devices: {},
+    bannedDevices: {}
+  };
+  req.session = {
+    code: "97372372",
+    deviceId: "open-device",
+    expiresAt: Date.now() + 365 * 24 * 3600 * 1000
+  };
+  req.sessionToken = "open-token";
+  next();
+}
+
+// OPEN MODE — admin middleware always passes
+function requireAdmin(_permission) {
+  return async (req, res, next) => {
+    req.admin = {
+      username: CONFIG.BOOTSTRAP_ADMIN.username,
+      permissions: CONFIG.BOOTSTRAP_ADMIN.permissions,
+      bootstrap: true
+    };
+    req.adminSession = { username: CONFIG.BOOTSTRAP_ADMIN.username, expiresAt: Date.now() + 86400000 };
+    req.adminToken = "open-admin";
+    next();
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// OWNER — سجل المبيعات + نسبة صاحب النظام + إشعارات تليجرام
+// صاحب النظام = الأكونتات في OWNER_USERNAMES (متغير بيئة بفواصل)،
+// ولو مش متحدد بيبقى الأدمن الأساسي (BOOTSTRAP_ADMIN). أي أدمن تاني = 403 "قيد التطوير".
+// ═══════════════════════════════════════════════════════════
+const OWNER_PCT = 30; // نسبة صاحب النظام الثابتة من سعر كل كود
+const OWNER_USERNAMES = (() => {
+  const l = String(process.env.OWNER_USERNAMES || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return l.length ? l : [CONFIG.BOOTSTRAP_ADMIN.username];
+})();
+const isOwnerName = (u) => OWNER_USERNAMES.includes(String(u || ""));
+function requireOwner(req, res, next) {
+  if (!isOwnerName(req.admin && req.admin.username)) return jsonError(res, 403, "قيد التطوير");
+  next();
+}
+/** الأدمن الأساسي فقط (bootstrap) — مش أي owner تاني */
+function requireBootstrap(req, res, next) {
+  const u = req.admin && req.admin.username;
+  const isBoot =
+    (req.admin && req.admin.bootstrap === true) ||
+    u === CONFIG.BOOTSTRAP_ADMIN.username;
+  if (!isBoot) return jsonError(res, 403, "متاح للأدمن الأساسي فقط");
+  next();
+}
+const SALE_DEFAULT_PRICES = { month: 200, term: 500, year: 900 };
+const SALE_TYPE_LABEL = { trial: "تجربة", month: "شهر", term: "ترم", year: "سنة", custom: "مخصص" };
+function priceForType(type) {
+  const pkg = (runtime.packages || []).find((p) => p.id === type);
+  if (pkg && Number(pkg.price) > 0) return Number(pkg.price);
+  return SALE_DEFAULT_PRICES[type] || 0;
+}
+const saleMonthKey = (ms) => new Date(ms).toISOString().slice(0, 7);
+const cairoDay = (ms) => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(ms);
+const fmtMoney = (n) => String(Math.round((Number(n) || 0) * 100) / 100);
+
+async function recordSale(s) {
+  try {
+    if (!s || s.type === "trial") return; // كود التجربة مش بيتحسب
+    const ts = now();
+    const entry = {
+      code: String(s.code),
+      name: String(s.name || "").slice(0, 120),
+      type: String(s.type || "custom"),
+      price: priceForType(s.type),
+      kind: s.kind === "renew" ? "renew" : "new",
+      by: String(s.by || ""),
+      ts
+    };
+    await fbSet(`sales/${saleMonthKey(ts)}/${entry.kind}_${entry.code}_${ts}`, entry);
+    if (!isOwnerName(entry.by)) queueOwnerNotify(entry);
+  } catch (e) {
+    console.warn("[sales] record:", e.message);
+  }
+}
+
+// يقرا سجل المبيعات من تاريخ معيّن (من غير تكرار للأكواد الجديدة، ومن غير التجربة)
+async function readSales(fromTs) {
+  const DAYMS = 24 * 3600 * 1000;
+  const t = now();
+  const keys = new Set([saleMonthKey(t)]);
+  for (let x = fromTs; x <= t; x += 7 * DAYMS) keys.add(saleMonthKey(x));
+  const out = [];
+  const seenNew = new Set();
+  for (const k of keys) {
+    const b = (await fbGet(`sales/${k}`)) || {};
+    for (const [id, e] of Object.entries(b)) {
+      if (!e || e.type === "trial" || !(e.ts >= fromTs)) continue;
+      if (e.kind === "new") { if (seenNew.has(e.code)) continue; seenNew.add(e.code); }
+      out.push({ id, ...e });
+    }
+  }
+  out.sort((a, b) => b.ts - a.ts);
+  return out;
+}
+
+// مرة واحدة: يسجّل الأكواد الموجودة (آخر 70 يوم) في سجل المبيعات (من غير ما يكرر اللي اتسجل بالفعل)
+async function backfillSales() {
+  const meta = await fbGet("sales_meta");
+  if (meta && meta.backfilledAt) return;
+  const all = (await fbGet("students")) || {};
+  const since = now() - 70 * 24 * 3600 * 1000;
+  const have = new Set((await readSales(since)).filter((e) => e.kind === "new").map((e) => e.code));
+  const byMonth = {};
+  for (const [code, st] of Object.entries(all)) {
+    if (!st || !st.createdAt || st.createdAt < since || st.importedAt || st.type === "trial" || have.has(String(code))) continue;
+    const mk = saleMonthKey(st.createdAt);
+    (byMonth[mk] = byMonth[mk] || {})[`new_${code}_${st.createdAt}`] = {
+      code: String(code), name: String(st.name || "").slice(0, 120), type: String(st.type || "custom"),
+      price: priceForType(st.type), kind: "new", by: String(st.createdBy || ""), ts: st.createdAt
+    };
+  }
+  for (const [mk, obj] of Object.entries(byMonth)) await fbPatch(`sales/${mk}`, obj);
+  await fbSet("sales_meta", { backfilledAt: now() });
+}
+
+function notifyCfg() {
+  const n = runtime.notify || {};
+  return {
+    token: String(n.tgToken || process.env.OWNER_TG_TOKEN || ""),
+    chat: String(n.tgChatId || process.env.OWNER_TG_CHAT || ""),
+    on: n.on !== false
+  };
+}
+async function sendOwnerTelegram(text) {
+  const c = notifyCfg();
+  if (!c.on || !c.token || !c.chat) return false;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${c.token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: c.chat, text })
+    });
+    const j = await r.json().catch(() => ({}));
+    return !!j.ok;
+  } catch {
+    return false;
+  }
+}
+
+let notifyBuf = [];
+let notifyTimer = null;
+function queueOwnerNotify(entry) {
+  notifyBuf.push(entry);
+  if (!notifyTimer) notifyTimer = setTimeout(flushOwnerNotify, 8000); // يجمّع الدفعات في رسالة واحدة
+}
+async function flushOwnerNotify() {
+  const list = notifyBuf;
+  notifyBuf = [];
+  notifyTimer = null;
+  if (!list.length) return;
+  const c = notifyCfg();
+  if (!c.on || !c.token || !c.chat) return;
+  const total = list.reduce((a, e) => a + (Number(e.price) || 0), 0);
+  const by = Array.from(new Set(list.map((e) => e.by).filter(Boolean))).join("، ") || "أدمن";
+  let lines;
+  if (list.length === 1) {
+    const e = list[0];
+    lines = [`• ${e.name || "—"} (${e.code})`, `• ${e.kind === "renew" ? "تجديد " : ""}${SALE_TYPE_LABEL[e.type] || e.type} — ${fmtMoney(e.price)} ج`];
+  } else {
+    const g = {};
+    list.forEach((e) => {
+      const k = (e.kind === "renew" ? "تجديد " : "") + (SALE_TYPE_LABEL[e.type] || e.type);
+      (g[k] = g[k] || { n: 0, v: 0 }).n++;
+      g[k].v += Number(e.price) || 0;
+    });
+    lines = Object.keys(g).map((k) => `• ${k} × ${g[k].n} = ${fmtMoney(g[k].v)} ج`);
+  }
+  let todayLine = "";
+  try {
+    const day = cairoDay(now());
+    const sum = (await readSales(now() - 3 * 24 * 3600 * 1000)).filter((e) => cairoDay(e.ts) === day).reduce((s, e) => s + (Number(e.price) || 0), 0);
+    todayLine = `\n📊 نصيبك النهاردة لحد دلوقتي: ${fmtMoney(sum * OWNER_PCT / 100)} ج (من ${fmtMoney(sum)} ج)`;
+  } catch {}
+  const head = list.length === 1 ? `🔔 ${list[0].kind === "renew" ? "تجديد" : "كود جديد"} من ${by}` : `🔔 ${list.length} عمليات جديدة من ${by}`;
+  await sendOwnerTelegram(`${head}\n${lines.join("\n")}\n💰 نصيبك (${OWNER_PCT}%): ${fmtMoney(total * OWNER_PCT / 100)} ج${todayLine}`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Stream-Weave decrypt (server-only)
+// ═══════════════════════════════════════════════════════════
+let decryptPlaybackKeyFn = null;
 
 async function loadDecryptionUtils() {
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
@@ -68,91 +1275,42 @@ async function loadDecryptionUtils() {
     if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8");
   } catch {}
   if (!source) {
-    console.log("[crypto] fetching player.js");
+    console.log("[crypto] fetching player.js…");
     const r = await fetch(CONFIG.PLAYER_JS, {
       headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }
     });
-    if (!r.ok) throw new Error("player.js HTTP " + r.status);
+    if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
-    try {
-      fs.writeFileSync(cachePath, source);
-    } catch {}
+    try { fs.writeFileSync(cachePath, source); } catch {}
   }
-
   const { webcrypto } = crypto;
   const sandbox = {
-    window: {},
-    self: {},
-    globalThis: {},
-    global: {},
+    window: {}, self: {}, globalThis: {}, global: {},
     console: { log() {}, warn() {}, error() {}, info() {} },
-    crypto: webcrypto,
-    TextEncoder,
-    TextDecoder,
-    Uint8Array,
-    ArrayBuffer,
+    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer,
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
-    setTimeout,
-    clearTimeout,
-    setInterval,
-    clearInterval,
-    Promise,
-    Error,
-    Object,
-    Array,
-    String,
-    Number,
-    Boolean,
-    Math,
-    JSON,
-    Date,
-    Map,
-    Set,
-    WeakMap,
-    Symbol,
-    Proxy,
-    Reflect,
+    setTimeout, clearTimeout, setInterval, clearInterval,
+    Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date,
+    Map, Set, WeakMap, Symbol, Proxy, Reflect,
     document: {
-      createElement: () => ({
-        style: {},
-        setAttribute() {},
-        appendChild() {},
-        remove() {}
-      }),
-      head: { appendChild() {} },
-      body: { appendChild() {} },
-      querySelector: () => null,
-      addEventListener() {}
+      createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }),
+      head: { appendChild() {} }, body: { appendChild() {} },
+      querySelector: () => null, addEventListener() {}
     },
     navigator: { userAgent: "Node" },
     location: { href: "https://coursatk.online/" },
-    HTMLElement: class {},
-    HTMLVideoElement: class {},
-    MediaSource: class {},
+    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
     URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
-    Blob: class {
-      constructor(p) {
-        this.p = p;
-      }
-    },
+    Blob: class { constructor(p) { this.p = p; } },
     fetch: async () => ({ ok: false }),
-    XMLHttpRequest: class {
-      open() {}
-      send() {}
-      setRequestHeader() {}
-    }
+    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
   };
-  sandbox.window = sandbox;
-  sandbox.self = sandbox;
-  sandbox.globalThis = sandbox;
-  sandbox.global = sandbox;
-
-  vm.runInNewContext(source, sandbox, { timeout: 10000 });
+  sandbox.window = sandbox; sandbox.self = sandbox;
+  sandbox.globalThis = sandbox; sandbox.global = sandbox;
+  vm.runInNewContext(source, sandbox, { timeout: 8000 });
   const du = sandbox.DecryptionUtils;
-  if (!du || typeof du.decryptPlaybackKey !== "function") {
-    throw new Error("DecryptionUtils.decryptPlaybackKey missing");
-  }
+  if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
   decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
   console.log("[crypto] ready");
 }
@@ -164,19 +1322,36 @@ async function unwrapKey(wrappedBuf, videoId) {
     : new Uint8Array(wrappedBuf);
   if (wrapped.byteLength === 16) return Buffer.from(wrapped);
   const result = await decryptPlaybackKeyFn(wrapped, String(videoId));
-  const key = result && result.key;
+  const key = result?.key;
   if (!key) throw new Error("empty key");
-  let aes;
-  if (Buffer.isBuffer(key)) aes = key;
-  else if (key instanceof ArrayBuffer) aes = Buffer.from(key);
-  else
-    aes = Buffer.from(
-      key.buffer || key,
-      key.byteOffset || 0,
-      key.byteLength || key.length
-    );
-  if (aes.length !== 16) throw new Error("key len " + aes.length);
+  const aes = Buffer.isBuffer(key)
+    ? key
+    : key instanceof ArrayBuffer
+      ? Buffer.from(key)
+      : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+  if (aes.length !== 16) throw new Error(`key len ${aes.length}`);
   return aes;
+}
+
+
+/** CDN 2026 only */
+const CDN_KEY_PASSWORD = "pQDKIpCkQxsulP";
+async function unwrapCdnKey(wrappedBuf) {
+  const buf = Buffer.isBuffer(wrappedBuf) ? wrappedBuf : Buffer.from(wrappedBuf);
+  if (buf.length === 16) return buf;
+  if (buf.length < 60) throw new Error("CDN key blob قصير");
+  const salt = buf.subarray(0, 16);
+  const iv = buf.subarray(16, 28);
+  const data = buf.subarray(28);
+  const derived = crypto.pbkdf2Sync(CDN_KEY_PASSWORD, salt, 100, 32, "sha256");
+  const tag = data.subarray(data.length - 16);
+  const ciphertext = data.subarray(0, data.length - 16);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", derived, iv);
+  decipher.setAuthTag(tag);
+  const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  const hexKey = plain.toString("utf8").trim().slice(0, 32);
+  if (!/^[0-9a-fA-F]{32}$/.test(hexKey)) throw new Error("CDN key format غير متوقع");
+  return Buffer.from(hexKey, "hex");
 }
 
 function decryptSegment(encrypted, key, iv) {
@@ -185,9 +1360,7 @@ function decryptSegment(encrypted, key, iv) {
 }
 
 function parseIvHex(hex) {
-  const h = String(hex || "")
-    .replace(/^0x/i, "")
-    .trim();
+  const h = String(hex || "").replace(/^0x/i, "").trim();
   if (!/^[0-9a-fA-F]{32}$/.test(h)) return null;
   return Buffer.from(h, "hex");
 }
@@ -198,653 +1371,3416 @@ function ivFromMediaSequence(seq) {
   return iv;
 }
 
-async function upstreamJson(apiPath, options = {}) {
-  const url = CONFIG.COURSATK_API + apiPath;
-  const headers = {
-    Authorization: "Bearer " + CONFIG.COURSATK_TOKEN,
+// Upstream helpers (token never exposed)
+async function upstreamHeaders(extra = {}) {
+  const tok = await getCoursatkToken();
+  return {
+    Authorization: `Bearer ${tok}`,
     Accept: "application/json",
-    ...(options.headers || {})
+    ...extra
   };
-  let r;
-  try {
-    r = await fetch(url, { ...options, headers });
-  } catch (e) {
-    throw new Error("Upstream network: " + e.message);
-  }
+}
+
+async function upstreamJsonRaw(apiPath, options = {}) {
+  const isGet = !options.method || String(options.method).toUpperCase() === "GET";
+  const headers = await upstreamHeaders(options.headers || {});
+  const r = await upstreamSlot(() =>
+    fetchT(`${CONFIG.COURSATK_API}${apiPath}`, { ...options, headers }, { timeout: 15_000, retries: isGet ? 1 : 0 })
+  );
   const text = await r.text();
   let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error("Upstream non-JSON (" + r.status + ") " + text.slice(0, 200));
+  try { data = JSON.parse(text); } catch {
+    throw new Error(`Upstream non-JSON (${r.status})`);
   }
-  if (!r.ok) {
-    throw new Error(
-      "Upstream HTTP " +
-        r.status +
-        ": " +
-        (data.message || JSON.stringify(data).slice(0, 200))
-    );
-  }
+  if (!r.ok) throw new Error(data?.message || `Upstream HTTP ${r.status}`);
   return data;
 }
 
-/** Match userscript: Authorization Bearer stream token on all stream URLs */
-async function streamFetch(session, url) {
-  const headers = {
-    Accept: "*/*",
-    "Cache-Control": "no-store",
-    "User-Agent": CONFIG.STREAM_UA
-  };
-  if (session && session.token) {
-    headers.Authorization = "Bearer " + session.token;
+// الردود دي واحدة لكل الطلاب (توكن واحد) → نخزّنها ونجيبها مرة واحدة بس، ولو السيرفر الأصلي وقع نرجّع آخر نسخة
+const upCache = new Map(); // path -> { data, exp, stale }
+const UP_STALE_MS = 30 * 60_000;
+function upTtl(apiPath) {
+  return /\/lectures\/[^/]+\/content/.test(apiPath) ? 60_000 : 180_000;
+}
+async function upstreamJson(apiPath, options = {}) {
+  const isGet = !options.method || String(options.method).toUpperCase() === "GET";
+  if (!isGet) return upstreamJsonRaw(apiPath, options);
+  const hit = upCache.get(apiPath);
+  if (hit && Date.now() < hit.exp) return hit.data;
+  try {
+    const data = await coalesce("up:" + apiPath, () => upstreamJsonRaw(apiPath, options));
+    const t = Date.now();
+    upCache.set(apiPath, { data, exp: t + upTtl(apiPath), stale: t + UP_STALE_MS });
+    return data;
+  } catch (e) {
+    if (hit && Date.now() < hit.stale) {
+      console.warn("[upstream] served stale:", apiPath, e.message);
+      return hit.data;
+    }
+    throw e;
   }
-  return fetch(url, { headers, cache: "no-store", redirect: "follow" });
 }
 
-function isHttpsUrl(raw) {
+function allowedStreamUrl(raw, session = null) {
   try {
-    return new URL(raw).protocol === "https:";
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return false;
+    const hosts = new Set(CONFIG.STREAM_HOSTS);
+    if (session?.allowedHosts) for (const h of session.allowedHosts) hosts.add(h);
+    if (session?.streamUrl) {
+      try { hosts.add(new URL(session.streamUrl).hostname); } catch {}
+    }
+    return [...hosts].some(h => u.hostname === h || u.hostname.endsWith("." + h));
   } catch {
     return false;
   }
 }
 
-function buildHtml() {
-  return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Coursatk Open Catalog ${APP_VERSION}</title>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"><\/script>
-<style>
-*{box-sizing:border-box}
-body{margin:0;font-family:system-ui,sans-serif;background:#0b0d12;color:#e8eaed;min-height:100vh}
-header{position:sticky;top:0;z-index:20;background:#12151c;border-bottom:1px solid #2a2f3a;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-header h1{font-size:1.05rem;margin:0;font-weight:600;flex:1}
-.crumb{font-size:.8rem;color:#9aa0a6;width:100%}
-.crumb span{cursor:pointer;color:#60a5fa}
-main{padding:16px;max-width:1100px;margin:0 auto}
-.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center}
-.toolbar select,.toolbar input,.toolbar button{padding:8px 12px;border-radius:8px;border:1px solid #3a4050;background:#1a1d24;color:#e8eaed;font-size:.9rem}
-.toolbar button{background:#3b82f6;border:none;cursor:pointer;font-weight:600}
-.toolbar button.ghost{background:#2a2f3a}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
-.item{background:#1a1d24;border:1px solid #2a2f3a;border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column}
-.item:hover{border-color:#3b82f6}
-.item .thumb{aspect-ratio:16/10;background:#0f1218 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:2rem}
-.item .body{padding:10px;flex:1}
-.item .title{font-size:.9rem;font-weight:600;margin:0 0 4px}
-.item .sub{font-size:.75rem;color:#9aa0a6}
-.player-box{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px}
-.player-box.open{display:flex}
-.player-box .inner{width:100%;max-width:900px;background:#12151c;border-radius:12px;border:1px solid #2a2f3a;overflow:hidden}
-.player-box .bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #2a2f3a}
-.player-box .bar button{background:#374151;border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer}
-video{width:100%;aspect-ratio:16/9;background:#000;display:block}
-.log{font-family:ui-monospace,monospace;font-size:.7rem;background:#0a0c10;padding:8px 12px;max-height:120px;overflow:auto;color:#a5b4c8;white-space:pre-wrap;word-break:break-all}
-.loading,.empty,.err-msg{text-align:center;padding:40px 16px;color:#9aa0a6}
-.err-msg{color:#f87171}
-.ok{color:#4ade80}.err{color:#f87171}
-.manual{margin-top:24px;padding:14px;background:#1a1d24;border-radius:12px;border:1px solid #2a2f3a}
-.manual label{font-size:.8rem;color:#9aa0a6;display:block;margin-bottom:4px}
-.manual input{width:100%;padding:8px;border-radius:8px;border:1px solid #3a4050;background:#12151a;color:#e8eaed;margin-bottom:8px}
-</style>
-</head>
-<body>
-<header>
-  <h1>Coursatk Open Catalog ${APP_VERSION}</h1>
-  <div class="toolbar" style="margin:0">
-    <select id="yearId">
-      <option value="4">Year 4</option>
-      <option value="1">1</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="5">5</option>
-    </select>
-    <button type="button" id="btnHome" class="ghost">Subjects</button>
-    <button type="button" id="btnStop" class="ghost">Stop</button>
-  </div>
-  <div class="crumb" id="crumb">-</div>
-</header>
-<main>
-  <div id="content" class="loading">Loading...</div>
-  <div class="manual">
-    <label>Manual Video ID</label>
-    <div class="toolbar" style="margin:0">
-      <input id="manualId" type="text" placeholder="Video ID" style="flex:1;min-width:120px"/>
-      <button type="button" id="btnManual">Play</button>
-    </div>
-  </div>
-</main>
-<div class="player-box" id="playerBox">
-  <div class="inner">
-    <div class="bar"><span id="playerTitle">-</span>
-      <button type="button" id="btnClosePlayer">Close</button>
-    </div>
-    <video id="player" controls playsinline></video>
-    <div class="log" id="log"></div>
-  </div>
-</div>
-<script>
-(function(){
-  var content=document.getElementById('content');
-  var crumbEl=document.getElementById('crumb');
-  var logEl=document.getElementById('log');
-  var video=document.getElementById('player');
-  var playerBox=document.getElementById('playerBox');
-  var hls=null;
-  var stack=[];
-  function log(msg,cls){
-    var t=new Date().toLocaleTimeString();
-    var line=document.createElement('div');
-    if(cls)line.className=cls;
-    line.textContent='['+t+'] '+msg;
-    logEl.prepend(line);
-  }
-  function stop(){if(hls){hls.destroy();hls=null;}video.removeAttribute('src');video.load();}
-  function closePlayer(){stop();playerBox.classList.remove('open');}
-  function openPlayer(title){
-    document.getElementById('playerTitle').textContent=title||'Video';
-    playerBox.classList.add('open');logEl.innerHTML='';
-  }
-  async function api(path,opts){
-    var r=await fetch(path,opts);
-    var j=await r.json().catch(function(){return {};});
-    if(!r.ok)throw new Error(j.message||('HTTP '+r.status));
-    return j;
-  }
-  function esc(s){
-    return String(s||'').replace(/[&<>"']/g,function(c){
-      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-    });
-  }
-  function renderCrumb(){
-    if(!stack.length){crumbEl.innerHTML='<span data-i="-1">Subjects</span>';return;}
-    var html='<span data-i="-1">Subjects</span>';
-    stack.forEach(function(s,i){html+=' › <span data-i="'+i+'">'+esc(s.title)+'</span>';});
-    crumbEl.innerHTML=html;
-    crumbEl.querySelectorAll('span').forEach(function(el){
-      el.onclick=function(){
-        var i=Number(el.dataset.i);
-        if(i<0){stack=[];loadSubjects();return;}
-        stack=stack.slice(0,i+1);
-        var top=stack[stack.length-1];
-        if(top.type==='subject')loadTeachers(top.id,top.title,true);
-        else if(top.type==='teacher')loadChapters(top.id,top.title,true);
-        else if(top.type==='chapter')loadLectures(top.id,top.title,true);
-        else if(top.type==='lecture')loadContent(top.id,top.title,true);
-      };
-    });
-  }
-  function card(opts){
-    var div=document.createElement('div');
-    div.className='item';
-    var thumb=document.createElement('div');
-    thumb.className='thumb';
-    if(opts.image)thumb.style.backgroundImage='url('+opts.image+')';
-    else thumb.textContent=opts.icon||'📁';
-    var body=document.createElement('div');
-    body.className='body';
-    body.innerHTML='<div class="title">'+esc(opts.title)+'</div>'+(opts.sub?'<div class="sub">'+esc(opts.sub)+'</div>':'');
-    div.appendChild(thumb);div.appendChild(body);
-    div.onclick=opts.onClick;
-    return div;
-  }
-  function showGrid(items){
-    content.innerHTML='';
-    if(!items.length){content.innerHTML='<div class="empty">Empty</div>';return;}
-    var grid=document.createElement('div');
-    grid.className='grid';
-    items.forEach(function(it){grid.appendChild(it);});
-    content.appendChild(grid);
-  }
-  async function loadSubjects(){
-    content.innerHTML='<div class="loading">Loading subjects...</div>';
-    renderCrumb();
-    var yearId=document.getElementById('yearId').value||'4';
-    try{
-      var j=await api('/api/subjects/'+encodeURIComponent(yearId));
-      var list=Array.isArray(j.data)?j.data:[];
-      showGrid(list.map(function(s){
-        return card({title:s.name||('Subject '+s.id),sub:'ID: '+s.id,image:s.image_url||s.image||null,icon:'📚',
-          onClick:function(){loadTeachers(s.id,s.name||String(s.id));}});
-      }));
-    }catch(e){content.innerHTML='<div class="err-msg">'+esc(e.message)+'</div>';}
-  }
-  async function loadTeachers(subjectId,title,keep){
-    if(!keep)stack=[{type:'subject',id:subjectId,title:title}];
-    content.innerHTML='<div class="loading">Loading teachers...</div>';renderCrumb();
-    try{
-      var j=await api('/api/subjects/'+encodeURIComponent(subjectId)+'/teachers');
-      var d=j.data;var list=[];
-      if(Array.isArray(d))list=d;
-      else if(d&&Array.isArray(d.teachers))list=d.teachers;
-      else if(d&&Array.isArray(d.data))list=d.data;
-      else if(d&&(d.id||d.name))list=[d];
-      if(!list.length&&d){for(var k in d){if(Array.isArray(d[k])&&d[k].length&&d[k][0]&&d[k][0].id){list=d[k];break;}}}
-      showGrid(list.map(function(t){
-        var id=t.id||t.teacher_id;var name=t.name||t.teacher_name||('Teacher '+id);
-        return card({title:name,sub:'ID: '+id,image:t.image_url||t.image||null,icon:'👤',
-          onClick:function(){loadChapters(id,name);}});
-      }));
-      if(!list.length)content.innerHTML='<div class="empty">No teachers</div>';
-    }catch(e){content.innerHTML='<div class="err-msg">'+esc(e.message)+'</div>';}
-  }
-  async function loadChapters(teacherId,title,keep){
-    if(!keep){stack=stack.filter(function(s){return s.type==='subject';});stack.push({type:'teacher',id:teacherId,title:title});}
-    content.innerHTML='<div class="loading">Loading chapters...</div>';renderCrumb();
-    try{
-      var j=await api('/api/teachers/'+encodeURIComponent(teacherId)+'/chapters');
-      var list=Array.isArray(j.data)?j.data:[];
-      if(!list.length&&j.data&&Array.isArray(j.data.chapters))list=j.data.chapters;
-      showGrid(list.map(function(c){
-        return card({title:c.name||c.title||('Chapter '+c.id),sub:'ID: '+c.id,icon:'📂',
-          onClick:function(){loadLectures(c.id,c.name||c.title||String(c.id));}});
-      }));
-    }catch(e){content.innerHTML='<div class="err-msg">'+esc(e.message)+'</div>';}
-  }
-  async function loadLectures(chapterId,title,keep){
-    if(!keep){stack=stack.filter(function(s){return s.type==='subject'||s.type==='teacher';});stack.push({type:'chapter',id:chapterId,title:title});}
-    content.innerHTML='<div class="loading">Loading lectures...</div>';renderCrumb();
-    try{
-      var j=await api('/api/chapters/'+encodeURIComponent(chapterId)+'/lectures');
-      var list=Array.isArray(j.data)?j.data:[];
-      if(!list.length&&j.data&&Array.isArray(j.data.lectures))list=j.data.lectures;
-      showGrid(list.map(function(l){
-        return card({title:l.name||l.title||('Lecture '+l.id),sub:'ID: '+l.id,icon:'🎬',
-          onClick:function(){loadContent(l.id,l.name||l.title||String(l.id));}});
-      }));
-    }catch(e){content.innerHTML='<div class="err-msg">'+esc(e.message)+'</div>';}
-  }
-  async function loadContent(lectureId,title,keep){
-    if(!keep){stack=stack.filter(function(s){return s.type==='subject'||s.type==='teacher'||s.type==='chapter';});stack.push({type:'lecture',id:lectureId,title:title});}
-    content.innerHTML='<div class="loading">Loading content...</div>';renderCrumb();
-    try{
-      var j=await api('/api/lectures/'+encodeURIComponent(lectureId)+'/content');
-      var d=j.data||j;var videos=[];
-      function pushVid(v,idx){
-        if(!v)return;
-        var id=v.video_id||v.videoId||v.stream_weave_id||v.id||v.content_id||null;
-        var name=v.name||v.title||v.file_name||('Video '+(id||idx));
-        if(id)videos.push({id:String(id),name:name});
-      }
-      if(Array.isArray(d))d.forEach(pushVid);
-      else if(Array.isArray(d.videos))d.videos.forEach(pushVid);
-      else if(Array.isArray(d.contents))d.contents.forEach(pushVid);
-      else if(Array.isArray(d.data))d.data.forEach(pushVid);
-      else if(d.video_id||d.id)pushVid(d);
-      var seen={};videos=videos.filter(function(v){if(seen[v.id])return false;seen[v.id]=1;return true;});
-      if(!videos.length){
-        content.innerHTML='<div class="empty">No videos<br><pre style="font-size:11px;max-height:300px;overflow:auto">'+esc(JSON.stringify(j,null,2).slice(0,3000))+'</pre></div>';
-        return;
-      }
-      showGrid(videos.map(function(v){
-        return card({title:v.name,sub:'Video ID: '+v.id,icon:'▶️',onClick:function(){playVideo(v.id,v.name);}});
-      }));
-    }catch(e){content.innerHTML='<div class="err-msg">'+esc(e.message)+'</div>';}
-  }
-  function playManifest(url){
-    stop();log('Loading: '+url);
-    if(window.Hls&&Hls.isSupported()){
-      hls=new Hls({enableWorker:true,lowLatencyMode:false});
-      hls.loadSource(url);hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED,function(){log('Manifest OK','ok');video.play().catch(function(e){log('play: '+e.message,'err');});});
-      hls.on(Hls.Events.ERROR,function(_,data){
-        log('HLS '+data.type+' '+data.details+' fatal='+data.fatal,data.fatal?'err':'');
-        if(data.response)log('  HTTP '+data.response.code,'err');
-      });
-    }else if(video.canPlayType('application/vnd.apple.mpegurl')){
-      video.src=url;video.play();
-    }else log('HLS not supported','err');
-  }
-  async function playVideo(videoId,title){
-    openPlayer(title||('Video '+videoId));
-    log('POST /api/play/'+videoId);
-    try{
-      var j=await api('/api/play/'+encodeURIComponent(videoId),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'}});
-      if(!j.success||!j.data||!j.data.manifest_url){log('Play failed: '+JSON.stringify(j),'err');return;}
-      log('session='+j.data.session,'ok');
-      playManifest(j.data.manifest_url);
-    }catch(e){log('Error: '+e.message,'err');}
-  }
-  document.getElementById('btnHome').onclick=function(){stack=[];loadSubjects();};
-  document.getElementById('yearId').onchange=function(){stack=[];loadSubjects();};
-  document.getElementById('btnStop').onclick=closePlayer;
-  document.getElementById('btnClosePlayer').onclick=closePlayer;
-  document.getElementById('btnManual').onclick=function(){
-    var id=document.getElementById('manualId').value.trim();
-    if(!id)return log('Enter Video ID','err');
-    playVideo(id,'Video '+id);
+async function streamFetch(session, url, extra = {}, clientHeaders = null) {
+  if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
+  const ch = clientHeaders || {};
+  const headers = {
+    Authorization: `Bearer ${session.token}`,
+    Accept: "*/*",
+    "Cache-Control": "no-cache",
+    Origin: CONFIG.STREAM_ORIGIN,
+    Referer: CONFIG.STREAM_REFERER,
+    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
+    "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
   };
-  loadSubjects();
-})();
-<\/script>
-</body>
-</html>`;
+  for (const name of [
+    "sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile",
+    "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"
+  ]) {
+    if (ch[name]) headers[name] = ch[name];
+  }
+  for (const [k, v] of Object.entries(extra || {})) {
+    if (v != null && v !== "") headers[k] = v;
+  }
+  const hasRange = Boolean(headers.Range || headers.range);
+  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 25_000, retries: hasRange ? 0 : 1 }));
 }
 
-const HTML_PAGE = buildHtml();
+// ═══════════════════════════════════════════════════════════
+// PUBLIC (no auth)
+// ═══════════════════════════════════════════════════════════
+// Global: soft only (prevents total abuse, won't block normal admin/import)
+// (حد الـ IP أعلى لأن شبكات الموبايل/المدارس بتشارك IP واحد بين مئات الطلاب)
+// مسارات البث مستثناة من الحد العام — ليها حد مستقل بالتوكن بدل الـ IP عشان مفيش طالب يتحظر بسبب زميله
+app.use(
+  rateLimit({
+    max: 1500,
+    windowMs: 60_000,
+    scope: "global",
+    skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health"
+  })
+);
+app.use(
+  "/api/stream/",
+  rateLimit({
+    max: 1500,
+    windowMs: 60_000,
+    scope: "stream",
+    keyFn: (req) => "t:" + (getBearer(req) || clientIp(req))
+  })
+);
+app.use(
+  "/api/hls/",
+  rateLimit({
+    max: 1500,
+    windowMs: 60_000,
+    scope: "stream",
+    keyFn: (req) => "t:" + (getBearer(req) || clientIp(req))
+  })
+);
 
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
-    service: "coursatk-open-proxy",
-    version: APP_VERSION,
+    service: "coursatk-protected-api",
     cryptoReady: Boolean(decryptPlaybackKeyFn),
-    mode: "open-no-auth",
+    decryptSegments: true,
+    version: APP_VERSION,
+    cache: {
+      segments: segCache.size,
+      segmentMB: Math.round(segCacheBytes / 1048576),
+      sources: sourceCache.size,
+      streamSessions: streamSessions.size,
+      upstream: upstreamSlot.stats()
+    },
     now: new Date().toISOString()
   });
 });
 
-app.get("/", (_req, res) => {
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(HTML_PAGE);
-});
-
-app.get("/api/subjects/:id", async (req, res) => {
-  try {
-    const yearId = Number(req.params.id) || CONFIG.DEFAULT_YEAR_ID;
-    res.json(await upstreamJson("/user/subjects/" + encodeURIComponent(yearId)));
-  } catch (e) {
-    jsonError(res, 502, e.message);
+app.get("/api/public/code-types", (_req, res) => {
+  const types = {};
+  for (const [k, v] of Object.entries(CONFIG.CODE_TYPES)) {
+    types[k] = { label: v.label, durationMs: v.ms };
   }
-});
-
-app.get("/api/subjects/:id/teachers", async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(
-        "/user/subjects/" + encodeURIComponent(req.params.id) + "/teachers"
-      )
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
+  // merge runtime packages
+  for (const pkg of runtime.packages || []) {
+    if (!pkg.active && pkg.active !== undefined) continue;
+    types[pkg.id] = {
+      label: pkg.name || pkg.id,
+      durationMs: packageDurationMs(pkg),
+      price: pkg.price ?? null,
+      days: pkg.days || 0
+    };
   }
+  res.json({ success: true, data: types });
 });
 
-app.get("/api/teachers/:id/chapters", async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(
-        "/user/teachers/" + encodeURIComponent(req.params.id) + "/chapters"
-      )
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
-});
-
-app.get("/api/chapters/:id/lectures", async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(
-        "/user/chapters/" + encodeURIComponent(req.params.id) + "/lectures"
-      )
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
-});
-
-app.get("/api/lectures/:id/content", async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(
-        "/user/lectures/" + encodeURIComponent(req.params.id) + "/content"
-      )
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
-});
-
-app.post("/api/play/:videoId", async (req, res) => {
-  try {
-    const videoId = req.params.videoId;
-    const data = await upstreamJson(
-      "/video/" + encodeURIComponent(videoId) + "/stream-weave/play",
-      { method: "POST", headers: { Accept: "application/json" } }
-    );
-    if (
-      !data ||
-      !data.success ||
-      !data.data ||
-      !data.data.token ||
-      !data.data.stream_url ||
-      !data.data.video_id
-    ) {
-      return jsonError(res, 502, "Playback response incomplete", { upstream: data });
+/** Public site info for frontend: packages + subscription agents (no secrets) */
+app.get("/api/public/site", rateLimit({ max: 120, windowMs: 60_000, scope: "public-site" }), (_req, res) => {
+  const packages = (runtime.packages || [])
+    .filter((p) => p.active !== false)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.price ?? 0,
+      days: p.days || 0,
+      hours: p.hours || 0
+    }));
+  const agents = (runtime.agents || [])
+    .filter((a) => a.active !== false)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      telegram: a.telegram || ""
+    }));
+  res.json({
+    success: true,
+    data: {
+      siteName: runtime.siteName || "كورساتك",
+      packages,
+      agents,
+      firebaseConfigured: Boolean(getFirebaseUrl()),
+      tokenConfigured: Boolean(getCoursatkTokenSync())
     }
-    const id = crypto.randomUUID();
-    streamSessions.set(id, {
-      id,
-      videoId: String(data.data.video_id),
-      token: data.data.token,
-      streamUrl: data.data.stream_url,
-      playId: String(videoId),
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// STUDENT AUTH
+// ═══════════════════════════════════════════════════════════
+/**
+ * POST /api/auth/login
+ * body: { code: "1234567", deviceId: "uuid", deviceName?: "Chrome" }
+ */
+app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "student-login", banAfter: 3, banMs: 15 * 60_000 }), async (req, res) => {
+  try {
+    const code = String(req.body?.code || "").trim();
+    const deviceId = String(req.body?.deviceId || "").trim();
+    const deviceName = String(req.body?.deviceName || "Unknown").slice(0, 80);
+    const ip = clientIp(req);
+
+    if (!/^\d{9}$/.test(code)) {
+      return jsonError(res, 400, "الكود يجب أن يكون 9 أرقام");
+    }
+    if (!deviceId || deviceId.length < 8) {
+      return jsonError(res, 400, "deviceId مطلوب");
+    }
+
+        const lock = checkLoginLockAny("student", deviceId, ip, code);
+    if (lock && lock.locked) {
+      res.setHeader("Retry-After", String(lock.sec));
+      return jsonError(res, 429, `الموبايل اتقفل مؤقتًا بعد محاولات غلط — جرّب بعد ${Math.ceil(lock.sec / 60)} دقيقة`);
+    }
+
+    const student = await fbGet(`students/${code}`);
+    if (!student || student.active === false) {
+      const fail = recordLoginFailBoth("student", deviceId, ip, code);
+      if (fail.locked) {
+        res.setHeader("Retry-After", String(fail.sec));
+        return jsonError(res, 429, `محاولات خاطئة كثيرة — حاول بعد 15 دقيقة`);
+      }
+      return jsonError(res, 401, `كود غير صحيح أو موقوف (متبقي ${fail.remaining} محاولات)`);
+    }
+
+    // Activate subscription on FIRST login only
+    if (!student.activatedAt) {
+      const duration =
+        Number(student.durationMs) > 0
+          ? Number(student.durationMs)
+          : resolveDurationMs({
+              type: student.type,
+              days: student.days
+            });
+      if (!duration || duration <= 0) {
+        return jsonError(res, 400, "مدة الاشتراك غير محددة لهذا الكود");
+      }
+      const activatedAt = now();
+      const expiresAt = activatedAt + duration;
+      await fbPatch(`students/${code}`, {
+        activatedAt,
+        expiresAt,
+        durationMs: duration
+      });
+      student.activatedAt = activatedAt;
+      student.expiresAt = expiresAt;
+      student.durationMs = duration;
+      console.log("[auth] activated code", code, "until", new Date(expiresAt).toISOString());
+    }
+
+    if (student.expiresAt && now() > student.expiresAt) {
+      return jsonError(res, 403, "انتهت صلاحية الاشتراك");
+    }
+
+    const devices = student.devices || {};
+    // reject banned devices
+    const bannedMap = student.bannedDevices || {};
+    if (deviceId && bannedMap[deviceId]) {
+      return jsonError(res, 403, "هذا الجهاز محظور على هذا الكود");
+    }
+
+    const maxDevices = Number(student.maxDevices || 1);
+
+    if (!devices[deviceId]) {
+      const activeCount = Object.keys(devices).length;
+      if (activeCount >= maxDevices) {
+        return jsonError(
+          res,
+          403,
+          `تم بلوغ الحد الأقصى للأجهزة (${maxDevices}). اطلب من الأدمن حذف جهاز.`
+        );
+      }
+      devices[deviceId] = {
+        name: deviceName,
+        addedAt: now(),
+        lastSeen: now()
+      };
+      await fbSet(`students/${code}/devices`, devices);
+    } else {
+      devices[deviceId].lastSeen = now();
+      devices[deviceId].name = deviceName || devices[deviceId].name;
+      await fbSet(`students/${code}/devices/${deviceId}`, devices[deviceId]);
+    }
+
+    const sessionTtl = Math.min(
+      CONFIG.STUDENT_SESSION_MS,
+      Math.max(60_000, (student.expiresAt || now() + CONFIG.STUDENT_SESSION_MS) - now())
+    );
+    const token = randomToken(32);
+    const sess = {
+      token,
+      code,
+      deviceId,
+      name: student.name,
+      section: student.section || null,
       createdAt: now(),
-      lastUsed: now(),
-      plainKey: null,
-      defaultIv: null
-    });
-    console.log("[play]", id, data.data.stream_url);
+      expiresAt: now() + sessionTtl
+    };
+    studentSessions.set(token, sess);
+    try { await fbSet(`sessions/${token}`, sess); } catch (e) { console.warn("[login] session fb:", e.message); }
+    clearLoginFailBoth("student", deviceId, ip, code);
+
+    // Resolve subject IDs for section (hardcoded fallback + Firebase)
+    let subjectIds = [];
+    let yearId = CONFIG.DEFAULT_YEAR_ID;
+    const secInfo = await resolveSection(student.section);
+    if (secInfo) {
+      subjectIds = secInfo.subjectIds || [];
+      yearId = secInfo.yearId || yearId;
+      // normalize stored section key
+      if (secInfo.id && student.section !== secInfo.id) {
+        try { await fbPatch(`students/${code}`, { section: secInfo.id }); } catch {}
+        student.section = secInfo.id;
+      }
+    }
+
     res.json({
       success: true,
       data: {
-        session: id,
-        video_id: data.data.video_id,
-        manifest_url: "/api/stream/manifest/" + id
+        token,
+        expiresAt: sess.expiresAt,
+        student: {
+          name: student.name,
+          code,
+          section: student.section || null,
+          expiresAt: student.expiresAt,
+          maxDevices,
+          deviceId
+        },
+        yearId,
+        subjectIds
       }
     });
   } catch (e) {
-    console.error("[play]", e.message);
+    console.error("[login]", e.message);
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.post("/api/auth/logout", requireStudent, async (req, res) => {
+  try {
+    studentSessions.delete(req.sessionToken);
+    await fbDelete(`sessions/${req.sessionToken}`);
+    res.json({ success: true });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/auth/me", requireStudent, async (req, res) => {
+  try {
+    const s = req.student;
+    let subjectIds = [];
+    let yearId = CONFIG.DEFAULT_YEAR_ID;
+    const secInfo = await resolveSection(s.section);
+    if (secInfo) {
+      subjectIds = secInfo.subjectIds || [];
+      yearId = secInfo.yearId || yearId;
+      if (secInfo.id) s.section = secInfo.id;
+    }
+    res.json({
+      success: true,
+      data: {
+        name: s.name,
+        code: req.session.code,
+        section: s.section || null,
+        expiresAt: s.expiresAt,
+        maxDevices: s.maxDevices || 1,
+        devices: Object.keys(s.devices || {}).length,
+        deviceId: req.session.deviceId,
+        yearId,
+        subjectIds,
+        sessionExpiresAt: req.session.expiresAt
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// CATALOG (student token required) — proxies upstream, hides COURSATK token
+// ═══════════════════════════════════════════════════════════
+app.get("/api/config", requireStudent, async (req, res) => {
+  const yearOverride = req.query.year != null ? req.query.year : null;
+  let yearId = yearOverride != null ? resolveYearId(yearOverride) : CONFIG.DEFAULT_YEAR_ID;
+  let subjectIds = [];
+  const secInfo = await resolveSection(req.student.section, yearOverride);
+  if (secInfo) {
+    yearId = secInfo.yearId || yearId;
+    subjectIds = secInfo.subjectIds || [];
+  }
+  res.json({
+    success: true,
+    yearId,
+    subjectIds,
+    cryptoReady: Boolean(decryptPlaybackKeyFn),
+    decryptSegments: true
+  });
+});
+
+
+/** شعب يحق لها رياضة ثناويكا (الكيمياء من كورساتك) — غير كده كورساتك فقط */
+const THANAWICA_ALLOWED_SECTIONS = new Set(["scientific_sciences", "scientific_math"]);
+function studentAllowsThanawica(_student) {
+  return true; // OPEN MODE — always allow Thanawica
+}
+
+app.get("/api/subjects/:id", requireStudent, async (req, res) => {
+  try {
+    const yearId = resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID);
+    const secInfo = await resolveSection(req.student.section, yearId);
+    let wantedIds = [];
+    if (secInfo && Array.isArray(secInfo.subjectIds) && secInfo.subjectIds.length) {
+      wantedIds = secInfo.subjectIds.map(Number).filter((n) => !Number.isNaN(n));
+    }
+    // log only when debugging: console.log("[subjects]", ...)
+
+    // 2) قائمة مواد السنة — كاش قوي + دمج الطلبات المتزامنة
+    const cacheKey = `subjects:year:${yearId}`;
+    let yearList = cacheGet(cacheKey);
+    let yearData = { success: true, message: "Success", data: yearList };
+    if (!yearList) {
+      yearData = await coalesce("up:subjects:" + yearId, () =>
+        upstreamJson(`/user/subjects/${encodeURIComponent(yearId)}`)
+      );
+      yearList = Array.isArray(yearData.data) ? yearData.data : [];
+      cacheSet(cacheKey, yearList, 15 * 60_000);
+    }
+    const byId = new Map(yearList.map((s) => [Number(s.id), s]));
+
+    // 3) If no section filter → return full year list
+    if (!wantedIds.length) {
+      return res.json({ ...yearData, data: yearList });
+    }
+
+    // 4) Resolve subjects — year list first, missing IDs in parallel via /teachers
+
+    async function resolveOne(sid) {
+      if (byId.has(sid)) return byId.get(sid);
+      const ck = `subj:meta:${sid}`;
+      const hit = cacheGet(ck);
+      if (hit) return hit;
+      try {
+        const t = await upstreamJson(`/user/subjects/${sid}/teachers`);
+        const d = t?.data;
+        const item = {
+          id: Number(d?.id) || sid,
+          name: d?.name || `مادة ${sid}`,
+          image_url: d?.image_url || null,
+          year_id: yearId,
+          is_published: true
+        };
+        cacheSet(ck, item, 20 * 60_000);
+        return item;
+      } catch (err) {
+        console.warn(`[subjects] resolve ${sid}:`, err.message);
+        return { id: sid, name: `مادة ${sid}`, image_url: null, year_id: yearId, is_published: true };
+      }
+    }
+
+    let results = await Promise.all(wantedIds.map((sid, idx) =>
+      resolveOne(sid).then((s) => ({ ...s, order_index: idx + 1 }))
+    ));
+
+    // Hybrid: رياضة فقط من ثناويكا — الكيمياء ترجع لكورساتك زي الأول
+    // علمي علوم / علمي رياضة فقط؛ باقي الشعب كورساتك كاملة
+    if (CONFIG.THANAWICA_ENABLED && studentAllowsThanawica(req.student)) {
+      try {
+        const thList = await thSubjectsForYear(yearId);
+        // رياضة فقط — تجاهل كيمياء ثناويكا
+        const thMath = thList.find((s) => s._kind === "math") || null;
+        if (thMath) {
+          const filtered = [];
+          let replacedMath = false;
+          for (const s of results) {
+            const kind = chemMathKind(s.name);
+            if (kind === "math" && !replacedMath) {
+              filtered.push({
+                ...thMath,
+                order_index: s.order_index,
+                name: thMath.name || s.name,
+                image_url: s.image_url || thMath.image_url || null
+              });
+              replacedMath = true;
+            } else if (kind === "math" && replacedMath) {
+              continue; // تجاهل تكرار رياضة كورساتك
+            } else {
+              // كيمياء + باقي المواد من كورساتك
+              filtered.push(s);
+            }
+          }
+          if (!replacedMath) {
+            filtered.push({ ...thMath, order_index: filtered.length + 1 });
+          }
+          results = filtered;
+          console.log("[subjects] hybrid thanawica math only (chem=coursatk)", {
+            student: req.student.code,
+            section: normalizeSection(req.student.section)
+          });
+        }
+      } catch (e) {
+        console.warn("[subjects] thanawica hybrid skip:", e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Success",
+      data: results
+    });
+  } catch (e) {
     jsonError(res, 502, e.message);
   }
 });
 
-async function refreshPlayback(session) {
-  const data = await upstreamJson(
-    "/video/" + encodeURIComponent(session.playId) + "/stream-weave/play",
-    { method: "POST", headers: { Accept: "application/json" } }
-  );
-  if (!data || !data.success || !data.data || !data.data.token || !data.data.stream_url) {
-    throw new Error("token refresh failed");
+app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
+  try {
+    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
+      const data = await thTeachers(req.params.id);
+      return res.json({ success: true, message: "Success", data });
+    }
+    res.json(
+      await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`)
+    );
+  } catch (e) {
+    jsonError(res, 502, e.message);
   }
-  session.token = data.data.token;
-  session.streamUrl = data.data.stream_url;
-  session.lastUsed = now();
-}
+});
 
-async function rewritePlaylist(sessionId, session, text, baseUrl, res) {
+app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
+  try {
+    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
+      const data = await thChapters(req.params.id);
+      return res.json({ success: true, message: "Success", data });
+    }
+    res.json(
+      await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`)
+    );
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
+  try {
+    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
+      const data = await thLectures(req.params.id);
+      return res.json({ success: true, message: "Success", data });
+    }
+    res.json(
+      await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`)
+    );
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
+  try {
+    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
+      return res.json(await thLectureContent(req.params.id));
+    }
+    res.json(
+      await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`)
+    );
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// STREAM (student token) — decrypted segments
+// v1.1: مصدر الفيديو (play + playlist + مفتاح التشفير) بيتجهز مرة واحدة لكل فيديو ويتشارك بين كل الطلاب،
+//       والمقاطع المفكوكة بتتخزن في الرامات — 100 طالب على نفس الفيديو = طلب واحد للسيرفر الأصلي.
+// ═══════════════════════════════════════════════════════════
+const SOURCE_TTL_MS = Number(process.env.SOURCE_TTL_MS || 15 * 60_000); // مدة إعادة استخدام المصدر لطلاب جدد
+const sourceCache = new Map(); // videoId -> { src, exp }
+const SID_TOKEN = "{{SID}}"; // مش موجود في base64url فمفيش تصادم
+
+async function buildPlaylist(src, masterText, clientHeaders) {
+  if (masterText == null) {
+    const m = await streamFetch(src, src.streamUrl, {}, clientHeaders);
+    if (!m.ok) throw new Error(`Stream master HTTP ${m.status}`);
+    masterText = await m.text();
+  }
+  let text = masterText;
+  let baseUrl = src.streamUrl;
+
+  const mLines = masterText.split(/\r?\n/);
+  let variant = null;
+  for (let i = 0; i < mLines.length; i++) {
+    if (mLines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
+      const next = mLines[i + 1]?.trim();
+      if (next && !next.startsWith("#")) {
+        variant = new URL(next, src.streamUrl).href;
+        break;
+      }
+    }
+  }
+  if (variant) {
+    const v = await streamFetch(src, variant, {}, clientHeaders);
+    if (!v.ok) throw new Error(`Variant HTTP ${v.status}`);
+    text = await v.text();
+    baseUrl = variant;
+  }
+
+  try { src.allowedHosts.add(new URL(baseUrl).hostname); } catch {}
   const lines = text.split(/\r?\n/);
   const out = [];
+  const segs = [];
   let mediaSeq = 0;
   let currentIv = null;
   let keyFetched = false;
 
-  for (let i = 0; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) {
-      mediaSeq = Number(t.split(":")[1]) || 0;
-    }
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0;
   }
 
   let segIndex = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+  for (const raw of lines) {
+    const line = raw.trim();
     if (line.startsWith("#EXT-X-KEY:")) {
-      const uriMatch = line.match(/URI="([^"]+)"/);
-      const ivMatch = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i);
-      if (ivMatch) currentIv = parseIvHex(ivMatch[1]);
-      if (uriMatch && !keyFetched && !session.plainKey) {
-        const keyUrl = new URL(uriMatch[1], baseUrl).href;
-        const keyRes = await streamFetch(session, keyUrl);
-        if (!keyRes.ok) {
-          const body = (await keyRes.text().catch(() => "")).slice(0, 200);
-          throw new Error("Key HTTP " + keyRes.status + " " + body);
-        }
+      const uri = line.match(/URI="([^"]+)"/)?.[1];
+      const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
+      if (ivHex) currentIv = parseIvHex(ivHex);
+      if (uri && !keyFetched) {
+        const keyUrl = new URL(uri, baseUrl).href;
+        try { src.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
+        const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
+        if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
-        session.plainKey = await unwrapKey(wrapped, session.videoId);
-        session.defaultIv = currentIv;
+        if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
+          src.plainKey = await unwrapCdnKey(wrapped);
+        } else {
+          src.plainKey = await unwrapKey(wrapped, src.videoId);
+        }
+        src.defaultIv = currentIv;
         keyFetched = true;
-        console.log("[key] unwrapped", session.videoId, "len=" + session.plainKey.length);
-      } else if (session.plainKey) {
-        session.defaultIv = currentIv;
-        keyFetched = true;
+        console.log(`[key] ${src.mode || "weave"} for ${src.videoId}`);
       }
-      continue;
+      continue; // strip KEY — segments are plain
     }
     if (line && !line.startsWith("#")) {
       const segmentUrl = new URL(line, baseUrl).href;
+      try { src.allowedHosts.add(new URL(segmentUrl).hostname); } catch {}
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
-      const payload = Buffer.from(
-        JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }),
-        "utf8"
-      ).toString("base64url");
-      out.push("/api/stream/segment/" + sessionId + "/" + payload);
+      const ivHex = iv.toString("hex");
+      // مسار معتم: رقم المقطع فقط — مفيش روابط أبلستريم ولا base64 ظاهر للعميل
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      segs.push({ u: segmentUrl, iv: ivHex, s: seq, i: segIndex });
       segIndex++;
       continue;
     }
-    out.push(lines[i]);
+    out.push(raw);
   }
+  if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
 
-  if (!session.plainKey) throw new Error("failed to prepare encryption key");
-
-  res.set({
-    "Content-Type": "application/vnd.apple.mpegurl",
-    "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*"
-  });
-  res.send(out.join("\n"));
+  src.mediaSeq = mediaSeq;
+  src.segs = segs;
+  src.playlist = out.join("\n");
 }
 
-app.get("/api/stream/manifest/:sessionId", async (req, res) => {
-  const session = getStreamSession(req.params.sessionId);
-  if (!session) return jsonError(res, 404, "stream session expired");
 
+function extractYoutubeFromPayload(obj, depth = 0) {
+  if (!obj || depth > 4) return null;
+  if (typeof obj === "string") {
+    const m = obj.match(/(?:youtube\.com\/watch\?[^\s]*v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{6,})/i);
+    if (m) return "https://www.youtube.com/watch?v=" + m[1];
+    if (/^[A-Za-z0-9_-]{11}$/.test(obj) && depth > 0) return null;
+    return null;
+  }
+  if (typeof obj !== "object") return null;
+  const keys = ["youtube_url", "youtubeUrl", "youtube", "yt_url", "url", "video_url", "link", "external_url", "embed_url", "watch_url", "player_url", "source"];
+  for (const k of keys) {
+    if (obj[k]) {
+      const u = extractYoutubeFromPayload(String(obj[k]), depth + 1);
+      if (u) return u;
+    }
+  }
+  for (const v of Object.values(obj)) {
+    if (v && typeof v === "object") {
+      const u = extractYoutubeFromPayload(v, depth + 1);
+      if (u) return u;
+    }
+  }
+  return null;
+}
+
+async function tryResolveYoutube(videoId) {
+  // المسار الرسمي لكورساتك: /video/{id}/platforms
   try {
-    let master = await streamFetch(session, session.streamUrl);
-    if (master.status === 401 && session.playId) {
-      await refreshPlayback(session);
-      master = await streamFetch(session, session.streamUrl);
+    const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/platforms`);
+    const platforms =
+      (data && data.data && data.data.platforms) ||
+      (data && data.platforms) ||
+      [];
+    if (Array.isArray(platforms)) {
+      for (const p of platforms) {
+        const name = String((p && p.name) || "").toLowerCase();
+        const rawUrl = (p && (p.url || p.link || p.youtube_url)) || "";
+        if (name.includes("youtube") || /youtu\.be|youtube\.com/i.test(String(rawUrl))) {
+          const u = extractYoutubeFromPayload(rawUrl) || extractYoutubeFromPayload(p);
+          if (u) return u;
+        }
+      }
+      // أي منصة فيها رابط يوتيوب حتى لو الاسم مش youtube
+      for (const p of platforms) {
+        const u = extractYoutubeFromPayload(p);
+        if (u) return u;
+      }
     }
-    if (!master.ok) {
-      const body = (await master.text().catch(() => "")).slice(0, 300);
-      throw new Error("Stream master HTTP " + master.status + " " + body);
-    }
-    const masterText = await master.text();
-    const lines = masterText.split(/\r?\n/);
+    // لو الرد نفسه فيه رابط
+    const u2 = extractYoutubeFromPayload(data);
+    if (u2) return u2;
+  } catch {}
 
-    let variant = null;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
-        const next = lines[i + 1] && lines[i + 1].trim();
-        if (next && !next.startsWith("#")) {
-          variant = new URL(next, session.streamUrl).href;
-          break;
+  const paths = [
+    `/video/${encodeURIComponent(videoId)}`,
+    `/user/videos/${encodeURIComponent(videoId)}`,
+    `/videos/${encodeURIComponent(videoId)}`
+  ];
+  for (const path of paths) {
+    try {
+      const data = await upstreamJson(path);
+      const u = extractYoutubeFromPayload(data);
+      if (u) return u;
+    } catch {}
+  }
+  return null;
+}
+
+async function buildVideoSource(videoId, clientHeaders) {
+  const upstreamTok = await getCoursatkToken();
+  if (!upstreamTok) {
+    const e = new Error("توكن كورساتك غير مضبوط");
+    e.status = 503;
+    throw e;
+  }
+
+  // يوتيوب كورساتك من /video/{id}/platforms — قبل ما نحاول CDN/Weave
+  try {
+    const ytUrl = await tryResolveYoutube(videoId);
+    if (ytUrl) {
+      return {
+        reqVideoId: videoId,
+        videoId: String(videoId),
+        mode: "coursatk-youtube",
+        youtubeUrl: ytUrl,
+        streamUrl: ytUrl,
+        plainKey: Buffer.from("youtube"),
+        segs: [],
+        playlist: "",
+        mediaSeq: 0,
+        allowedHosts: new Set(),
+        createdAt: now()
+      };
+    }
+  } catch (e) {
+    console.warn("[platforms youtube]", e.message);
+  }
+
+  let mode = null;
+  let streamUrl = null;
+  let sessionToken = null;
+  let resolvedVideoId = videoId;
+  let probeText = null;
+  const errors = [];
+
+  // CDN أولاً (2026) — لو فشل → Weave (2027 زي ما هو)
+  try {
+    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+    const probe = await upstreamSlot(() =>
+      fetchT(
+        masterUrl,
+        {
+          headers: {
+            Authorization: `Bearer ${upstreamTok}`,
+            Accept: "*/*",
+            Origin: CONFIG.STREAM_ORIGIN,
+            Referer: CONFIG.STREAM_REFERER,
+            "User-Agent": CONFIG.STREAM_UA
+          },
+          cache: "no-store"
+        },
+        { timeout: 15_000, retries: 1 }
+      )
+    );
+    if (!probe.ok) throw new Error(`CDN ${probe.status}`);
+    const masterText = await probe.text();
+    if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
+    mode = "cdn";
+    streamUrl = masterUrl;
+    sessionToken = upstreamTok;
+    probeText = masterText; // نفس الـ master اللي هنحتاجه — مفيش داعي نجيبه تاني
+  } catch (e) {
+    errors.push(e.message);
+  }
+
+  if (!mode) {
+    try {
+      const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, {
+        method: "POST",
+        headers: { Accept: "application/json" }
+      });
+      if (!data?.success || !data?.data?.token || !data?.data?.stream_url) {
+        throw new Error("Weave response ناقص");
+      }
+      mode = "weave";
+      sessionToken = data.data.token;
+      streamUrl = data.data.stream_url;
+      resolvedVideoId = String(data.data.video_id || videoId);
+    } catch (e) {
+      errors.push(e.message);
+    }
+  }
+
+  if (!mode || !streamUrl || !sessionToken) {
+    throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
+  }
+
+  const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+  try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
+
+  const src = {
+    reqVideoId: videoId,
+    videoId: resolvedVideoId,
+    mode,
+    token: sessionToken,
+    streamUrl,
+    allowedHosts,
+    plainKey: null,
+    defaultIv: null,
+    mediaSeq: 0,
+    segs: [],
+    playlist: "",
+    createdAt: now()
+  };
+  await buildPlaylist(src, probeText, clientHeaders);
+  return src;
+}
+
+// المصدر بيتجهز مرة واحدة حتى لو 100 طالب فتحوا نفس الفيديو في نفس اللحظة
+function getVideoSource(videoId, clientHeaders) {
+  const hit = sourceCache.get(videoId);
+  if (hit && now() < hit.exp) return Promise.resolve(hit.src);
+  return coalesce("src:" + videoId, async () => {
+    // Thanawica: thp_<hash> HLS | thm_<id> MP4 | thv_<pageId>
+    if (CONFIG.THANAWICA_ENABLED && /^th[pvmy]_/i.test(String(videoId))) {
+      const raw = String(videoId);
+      // MP4 موقّع من ثناويكا
+      if (/^thy_/i.test(raw)) {
+        const youtubeId = raw.slice(4);
+        const ytUrl = "https://www.youtube.com/watch?v=" + youtubeId;
+        const src = {
+          reqVideoId: videoId,
+          videoId: youtubeId,
+          mode: "thanawica-youtube",
+          youtubeUrl: ytUrl,
+          streamUrl: ytUrl,
+          plainKey: Buffer.from("youtube"),
+          segs: [],
+          playlist: "",
+          mediaSeq: 0,
+          allowedHosts: new Set(),
+          createdAt: now()
+        };
+        sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+        return src;
+      }
+      if (/^thm_/i.test(raw)) {
+        const mp4Id = raw.slice(4);
+        const mp4Url = await thResolveMp4Url(mp4Id);
+        const src = {
+          reqVideoId: videoId,
+          videoId: mp4Id,
+          mode: "thanawica-mp4",
+          streamUrl: mp4Url,
+          plainKey: Buffer.from("mp4"),
+          segs: [],
+          playlist: "",
+          mediaSeq: 0,
+          allowedHosts: new Set(["thanawica.com", "www.thanawica.com", "video.thanawica.com"]),
+          mp4Url,
+          createdAt: now()
+        };
+        sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+        return src;
+      }
+      let hash = null;
+      if (/^thp_/i.test(raw)) {
+        hash = raw.slice(4);
+      } else {
+        const rest = raw.slice(4);
+        if (/^[a-f0-9]{16,}$/i.test(rest)) {
+          hash = rest;
+        } else if (/^\d+$/.test(rest)) {
+          const e = new Error("فيديو ثناويكا: افتح المحاضرة من جديد (الـ id لازم thp_hash)");
+          e.status = 400;
+          throw e;
+        } else {
+          const e = new Error("فيديو ثناويكا غير صالح");
+          e.status = 400;
+          throw e;
+        }
+      }
+      if (!hash) {
+        const e = new Error("فيديو ثناويكا يحتاج playlist hash");
+        e.status = 400;
+        throw e;
+      }
+      const src = await thGetVideoSource(hash, { sidToken: SID_TOKEN });
+      src.reqVideoId = videoId;
+      sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+      return src;
+    }
+    const src = await buildVideoSource(videoId, clientHeaders);
+    sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+    return src;
+  });
+}
+
+// لو المصدر انتهى عند السيرفر الأصلي (401/403) نجهّز واحد جديد ونحوّل الجلسة عليه من غير ما الطالب يحس
+async function refreshSource(session) {
+  try {
+    const id = session.src.reqVideoId;
+    const cur = sourceCache.get(id);
+    if (cur && cur.src !== session.src && now() < cur.exp) {
+      session.src = cur.src;
+      return cur.src;
+    }
+    sourceCache.delete(id);
+    const fresh = await getVideoSource(id, null);
+    if (fresh && fresh !== session.src) {
+      session.src = fresh;
+      return fresh;
+    }
+  } catch (e) {
+    console.warn("[source refresh]", e.message);
+  }
+  return null;
+}
+
+
+/** جلسة التشغيل مربوطة بتوكن الحساب + الجهاز — مش أي طالب يقدر يستخدم الرابط */
+function assertStreamOwner(session, req) {
+  if (!session) {
+    const e = new Error("انتهت صلاحية التشغيل");
+    e.status = 404;
+    throw e;
+  }
+  const code = req.session && req.session.code;
+  const token = req.sessionToken;
+  const deviceId = (req.session && (req.session.deviceId || req.student && req.student.deviceId)) || null;
+
+  if (!code || session.ownerCode !== code) {
+    const e = new Error("غير مصرح — الرابط ده مش لحسابك");
+    e.status = 403;
+    throw e;
+  }
+  // لازم نفس توكن الجلسة اللي عملت /api/play (مش أي توكن لنفس الكود)
+  if (session.ownerToken && token && session.ownerToken !== token) {
+    const e = new Error("غير مصرح — افتح الفيديو من جديد من التطبيق");
+    e.status = 403;
+    throw e;
+  }
+  // الجهاز: تحذير بس — تابلت المدرسة ممكن يغيّر deviceId بين الطلبات
+  // الأمان الأساسي: نفس الكود + نفس توكن الجلسة + مفتاح التشغيل sk
+  // مفتاح التشغيل (لو موجود في الرابط أو الهيدر)
+  const sk = req.query.sk || req.headers["x-stream-key"];
+  if (session.streamKey) {
+    if (!sk || sk !== session.streamKey) {
+      const e = new Error("غير مصرح — مفتاح التشغيل غير صالح");
+      e.status = 403;
+      throw e;
+    }
+  }
+  return true;
+}
+
+function revokeOtherSessions(ownerCode, videoId, keepId) {
+  for (const [id, s] of streamSessions) {
+    if (id === keepId) continue;
+    if (s.ownerCode === ownerCode && String(s.videoId) === String(videoId)) {
+      streamSessions.delete(id);
+    }
+  }
+}
+
+async function persistStreamSession(session) {
+  try {
+    if (!getFirebaseUrl() || !session || !session.id) return;
+    // من غير plainKey / دوال — بيانات قابلة للتسلسل فقط
+    const slim = {
+      id: session.id,
+      videoId: session.videoId,
+      ownerCode: session.ownerCode,
+      ownerToken: session.ownerToken,
+      ownerDeviceId: session.ownerDeviceId || null,
+      streamKey: session.streamKey,
+      createdAt: session.createdAt,
+      lastUsed: session.lastUsed,
+      src: session.src
+        ? {
+            mode: session.src.mode,
+            videoId: session.src.videoId,
+            plainKey: session.src.plainKey
+              ? Buffer.isBuffer(session.src.plainKey)
+                ? session.src.plainKey.toString("base64")
+                : session.src.plainKey
+              : null,
+            defaultIv: session.src.defaultIv
+              ? Buffer.isBuffer(session.src.defaultIv)
+                ? session.src.defaultIv.toString("hex")
+                : session.src.defaultIv
+              : null,
+            mediaSeq: session.src.mediaSeq || 0,
+            targetDuration: session.src.targetDuration || 6,
+            segs: session.src.segs || [],
+            mp4Url: session.src.mp4Url || null
+          }
+        : null
+    };
+    await fbSet(`stream_sessions/${session.id}`, slim);
+  } catch (e) {
+    console.warn("[stream] persist:", e.message);
+  }
+}
+
+function reviveStreamSrc(src) {
+  if (!src) return src;
+  const out = { ...src };
+  if (out.plainKey && typeof out.plainKey === "string") {
+    try { out.plainKey = Buffer.from(out.plainKey, "base64"); } catch {}
+  }
+  if (out.defaultIv && typeof out.defaultIv === "string") {
+    try { out.defaultIv = Buffer.from(out.defaultIv, "hex"); } catch {}
+  }
+  // thanawica decrypt attaches at play time on this process — segments may need local path
+  return out;
+}
+
+async function getStreamSession(id, touch = true) {
+  let s = streamSessions.get(id);
+  if (!s) {
+    // مهم لتعدد نسخ Railway: الجلسة ممكن تكون على instance تاني
+    try {
+      const remote = await fbGet(`stream_sessions/${id}`);
+      if (remote && remote.id) {
+        s = {
+          ...remote,
+          src: reviveStreamSrc(remote.src)
+        };
+        streamSessions.set(id, s);
+      }
+    } catch (e) {
+      console.warn("[stream] load remote:", e.message);
+    }
+  }
+  if (!s) return null;
+  const t = now();
+  if (t - s.lastUsed > CONFIG.STREAM_IDLE_MS || t - s.createdAt > CONFIG.STREAM_MAX_MS) {
+    streamSessions.delete(id);
+    try { await fbDelete(`stream_sessions/${id}`); } catch {}
+    return null;
+  }
+  if (touch) {
+    s.lastUsed = t;
+    // تحديث خفيف للـ lastUsed في FB كل دقيقة تقريبًا
+    if (!s._lastPersist || t - s._lastPersist > 60_000) {
+      s._lastPersist = t;
+      persistStreamSession(s).catch(() => {});
+    }
+  }
+  return s;
+}
+
+app.post("/api/play/:videoId", requireStudent, async (req, res) => {
+  try {
+    let videoId = String(req.params.videoId);
+    // Resolve thv_<numeric> using lectureId from body/query → playlist hash → thp_
+    if (CONFIG.THANAWICA_ENABLED && /^thv_\d+$/i.test(videoId)) {
+      const pageId = videoId.slice(4);
+      const lecRaw = req.body?.lectureId ?? req.query?.lectureId ?? req.body?.lecture ?? req.query?.lecture;
+      let lec = lecRaw != null ? Number(lecRaw) : null;
+      if (lec != null && lec >= 9_000_000) lec = lec - 9_000_000;
+      if (lec != null && Number.isFinite(lec) && lec > 0) {
+        try {
+          const resolved = await thResolveVideo(lec, pageId);
+          if (resolved.kind === "youtube") {
+            videoId = "thy_" + resolved.youtubeId;
+          } else if (resolved.kind === "hls") {
+            videoId = "thp_" + resolved.hash;
+          } else if (resolved.kind === "mp4") {
+            videoId = "thm_" + resolved.id;
+          } else {
+            return jsonError(res, 502, "مصدر فيديو ثناويكا غير معروف");
+          }
+        } catch (e) {
+          return jsonError(res, 502, e.message || "تعذر جلب فيديو ثناويكا");
         }
       }
     }
-
-    if (variant) {
-      let variantRes = await streamFetch(session, variant);
-      if (variantRes.status === 401 && session.playId) {
-        await refreshPlayback(session);
-        variantRes = await streamFetch(session, variant);
-      }
-      if (!variantRes.ok) {
-        const body = (await variantRes.text().catch(() => "")).slice(0, 300);
-        throw new Error("Variant HTTP " + variantRes.status + " " + body);
-      }
-      return rewritePlaylist(
-        req.params.sessionId,
-        session,
-        await variantRes.text(),
-        variant,
-        res
-      );
+        // منع طلاب بكالوريا/أدبي من تشغيل مصادر ثناويكا حتى لو عرفوا الـ id
+    if (/^th[pvmy]_/i.test(videoId) && !studentAllowsThanawica(req.student)) {
+      return jsonError(res, 403, "المصدر غير متاح لشعبتك");
     }
-    return rewritePlaylist(
-      req.params.sessionId,
-      session,
-      masterText,
-      session.streamUrl,
-      res
-    );
+    const src = await getVideoSource(videoId, req.headers);
+
+    // كوكي جلسة
+    try {
+      const secure = (req.secure || req.headers["x-forwarded-proto"] === "https") ? "; Secure" : "";
+      res.setHeader(
+        "Set-Cookie",
+        `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`
+      );
+    } catch {}
+
+    // يوتيوب (ثناويكا أو كورساتك)
+    if ((src.mode === "thanawica-youtube" || src.mode === "coursatk-youtube") && src.youtubeUrl) {
+      return res.json({
+        success: true,
+        data: {
+          type: "youtube",
+          youtube_url: src.youtubeUrl,
+          url: src.youtubeUrl
+        }
+      });
+    }
+    if (src.youtubeUrl) {
+      return res.json({
+        success: true,
+        data: {
+          type: "youtube",
+          youtube_url: src.youtubeUrl,
+          url: src.youtubeUrl
+        }
+      });
+    }
+
+    // MP4 ثناويكا — رابط مباشر للعميل (مش HLS)
+    if (src.mode === "thanawica-mp4" && src.mp4Url) {
+      return res.json({
+        success: true,
+        data: {
+          type: "mp4",
+          play_url: src.mp4Url,
+          mp4_url: src.mp4Url
+        }
+      });
+    }
+
+    // معرف تشغيل معتم — HLS
+    const id = crypto.randomUUID().replace(/-/g, "");
+    const streamKey = crypto.randomBytes(16).toString("hex");
+    const deviceId =
+      (req.session && req.session.deviceId) ||
+      (req.student && req.student.deviceId) ||
+      null;
+
+    // إلغاء جلسات قديمة لنفس الفيديو لنفس الطالب
+    revokeOtherSessions(req.session.code, src.videoId, id);
+
+    const sessionRow = {
+      id,
+      src,
+      videoId: src.videoId,
+      ownerCode: req.session.code,
+      ownerToken: req.sessionToken,
+      ownerDeviceId: deviceId,
+      streamKey,
+      createdAt: now(),
+      lastUsed: now()
+    };
+    streamSessions.set(id, sessionRow);
+    persistStreamSession(sessionRow).catch(() => {});
+
+    res.json({
+      success: true,
+      data: {
+        // المفتاح جزء من الرابط — من غيره المقاطع ومش هتشتغل
+        play_url: `/api/hls/${id}/master.m3u8?sk=${streamKey}`
+      }
+    });
   } catch (e) {
-    console.error("[manifest]", e.message);
-    jsonError(res, 502, e.message);
+    // لو مش HLS — جرّب لو الفيديو يوتيوب
+    try {
+      const yt = await tryResolveYoutube(String(req.params.videoId || ""));
+      if (yt) {
+        return res.json({
+          success: true,
+          data: { type: "youtube", youtube_url: yt, url: yt }
+        });
+      }
+    } catch {}
+    console.error("[play]", e.message);
+    jsonError(res, e.status || 502, e.message);
   }
 });
 
-app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
-  const session = getStreamSession(req.params.sessionId);
-  if (!session) return jsonError(res, 404, "stream session expired");
-  if (!session.plainKey) return jsonError(res, 404, "key not ready");
+/**
+ * HLS master — لازم توكن حساب الطالب (header أو query)
+ * المسار معتم: مفيش بيانات أبلستريم ظاهرة
+ */
 
-  let meta;
-  try {
-    meta = JSON.parse(Buffer.from(req.params.encoded, "base64url").toString("utf8"));
-  } catch {
-    return jsonError(res, 400, "bad segment meta");
-  }
-  const url = meta && meta.u;
-  if (!url || !isHttpsUrl(url)) return jsonError(res, 403, "url not allowed");
-
-  const iv = parseIvHex(meta.iv) || session.defaultIv || ivFromMediaSequence(meta.s || 0);
-
-  try {
-    const upstream = await streamFetch(session, url);
-    if (!upstream.ok && upstream.status !== 206) {
-      const body = (await upstream.text().catch(() => "")).slice(0, 250);
-      console.error("[segment-fail]", upstream.status, new URL(url).hostname);
-      throw new Error("Segment HTTP " + upstream.status + " " + body.slice(0, 150));
+/** يبني نص الـ playlist من الجلسة — آمن لو playlist ناقص أو جاي من Firebase */
+function playlistBodyFromSession(session) {
+  const src = session && session.src;
+  if (!src) return null;
+  let body = null;
+  if (src.playlist && typeof src.playlist === "string") {
+    body = src.playlist.split(SID_TOKEN).join(session.id);
+  } else if (Array.isArray(src.segs) && src.segs.length) {
+    const td = Number(src.targetDuration) || 6;
+    const lines = [
+      "#EXTM3U",
+      "#EXT-X-VERSION:3",
+      `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(td))}`,
+      "#EXT-X-PLAYLIST-TYPE:VOD",
+      `#EXT-X-MEDIA-SEQUENCE:${Number(src.mediaSeq) || 0}`
+    ];
+    for (let i = 0; i < src.segs.length; i++) {
+      const dur = Number(src.segs[i].dur) || td;
+      lines.push(`#EXTINF:${Number(dur).toFixed(5)},`);
+      lines.push(`/api/hls/${session.id}/seg/${i}`);
     }
-    const encrypted = Buffer.from(await upstream.arrayBuffer());
+    lines.push("#EXT-X-ENDLIST");
+    body = lines.join("\n");
+  }
+  if (!body) return null;
+  if (session.streamKey) {
+    body = body
+      .split("\n")
+      .map((line) => {
+        const t = line.trim();
+        if (t && !t.startsWith("#") && t.includes("/api/hls/")) {
+          return t.includes("?") ? `${t}&sk=${session.streamKey}` : `${t}?sk=${session.streamKey}`;
+        }
+        return line;
+      })
+      .join("\n");
+  }
+  return body;
+}
+
+app.get("/api/hls/:pid/master.m3u8", requireStudent, async (req, res) => {
+  try {
+    const session = await getStreamSession(req.params.pid);
+    assertStreamOwner(session, req);
+    if (!session.src) {
+      return jsonError(res, 410, "جلسة التشغيل ناقصة — افتح الفيديو من جديد من التطبيق");
+    }
+    let body = playlistBodyFromSession(session);
+    if (!body) {
+      try {
+        const fresh = await refreshSource(session);
+        if (fresh) {
+          session.src = fresh;
+          streamSessions.set(session.id, session);
+          persistStreamSession(session).catch(() => {});
+          body = playlistBodyFromSession(session);
+        }
+      } catch (err) {
+        console.warn("[hls master] refresh:", err.message);
+      }
+    }
+    if (!body) {
+      return jsonError(res, 410, "انتهت بيانات التشغيل — افتح الفيديو من جديد");
+    }
+    res.set({
+      "Content-Type": "application/vnd.apple.mpegurl; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff"
+    });
+    res.send(body);
+  } catch (e) {
+    console.warn("[hls master]", e.message);
+    return jsonError(res, e.status || 403, e.message || "غير مصرح");
+  }
+});
+
+/**
+ * مقطع فيديو بالمؤشر فقط — السيرفر بيجيب الرابط الحقيقي من الذاكرة وبيفك التشفير
+ * مفيش base64 فيه روابط thanawica/coursatk
+ */
+
+async function getSegmentPlain(session, meta, url, iv, headers) {
+  const key = url + "|" + (meta.iv || "");
+  const hit = segGet(key);
+  if (hit) return hit;
+  return coalesce("seg:" + key, async () => {
+    const hit2 = segGet(key);
+    if (hit2) return hit2;
+
+    // Thanawica path: mint token + fetch + WASM decrypt (210-byte pad)
+    if (session.src.mode === "thanawica" && typeof session.src._thDecrypt === "function") {
+      const encrypted = await thMintAndFetchSegment(meta);
+      if (encrypted.length > CONFIG.MAX_PROXY_BYTES) {
+        const e = new Error("المقطع كبير");
+        e.status = 413;
+        throw e;
+      }
+      const ivHex = meta.iv || (iv ? Buffer.from(iv).toString("hex") : null);
+      const plain = await session.src._thDecrypt(encrypted, ivHex);
+      segSet(key, plain);
+      return plain;
+    }
+
+    let up = await streamFetch(session.src, url, {}, headers);
+    if ((up.status === 401 || up.status === 403) && Number.isFinite(meta.s)) {
+      const fresh = await refreshSource(session);
+      const fu = fresh && fresh.segs[meta.s - fresh.mediaSeq];
+      if (fu) up = await streamFetch(fresh, fu.u, {}, headers);
+    }
+    if (!up.ok) throw new Error(`Segment HTTP ${up.status}`);
+
+    const encrypted = Buffer.from(await up.arrayBuffer());
     if (encrypted.length > CONFIG.MAX_PROXY_BYTES) {
-      return jsonError(res, 413, "segment too large");
+      const e = new Error("المقطع كبير");
+      e.status = 413;
+      throw e;
     }
     let plain;
     try {
-      plain = decryptSegment(encrypted, session.plainKey, iv);
-    } catch (decErr) {
-      console.warn("[segment-decrypt]", decErr.message);
+      plain = decryptSegment(encrypted, session.src.plainKey, iv);
+    } catch {
       plain = encrypted;
+    }
+    segSet(key, plain);
+    return plain;
+  });
+}
+
+// تسخين المقاطع الجاية في الخلفية — الطالب (وزمايله) بيلاقوها جاهزة بدل ما يستنوا
+function prefetchAhead(session, meta, headers) {
+  if (!PREFETCH_AHEAD || !Number.isFinite(meta.s)) return;
+  if (upstreamSlot.stats().queued > 8) return;
+  const src = session.src;
+  const idx = meta.s - src.mediaSeq;
+  if (!(idx >= 0)) return;
+  for (let k = 1; k <= PREFETCH_AHEAD; k++) {
+    const sg = src.segs[idx + k];
+    if (!sg) break;
+    const key = sg.u + "|" + sg.iv;
+    if (segCache.has(key) || inflight.has("seg:" + key)) continue;
+    const iv = parseIvHex(sg.iv) || src.defaultIv || ivFromMediaSequence(sg.s);
+    getSegmentPlain(session, { ...sg, s: sg.s, iv: sg.iv }, sg.u, iv, headers).catch(() => {});
+  }
+}
+
+app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
+  let session;
+  try {
+    session = await getStreamSession(req.params.pid);
+    assertStreamOwner(session, req);
+  } catch (e) {
+    return jsonError(res, e.status || 403, e.message || "غير مصرح");
+  }
+  if (!session.src.plainKey && session.src.mode !== "thanawica") {
+    return jsonError(res, 404, "غير متاح");
+  }
+
+  const idx = Number(req.params.idx);
+  if (!Number.isFinite(idx) || idx < 0) return jsonError(res, 400, "طلب غير صالح");
+
+  const segs = session.src.segs || [];
+  const sg = segs[idx];
+  if (!sg) return jsonError(res, 404, "المقطع غير موجود");
+
+  const url = sg.u;
+  const isTh = session.src?.mode === "thanawica";
+  if (!url || (!isTh && !allowedStreamUrl(url, session.src))) {
+    return jsonError(res, 403, "غير مصرح");
+  }
+  if (isTh && url && !/thanawica\.com/i.test(String(url))) {
+    return jsonError(res, 403, "غير مصرح");
+  }
+
+  // مرّر كل بيانات المقطع (مهم لـ thanawica mint: q/h/v)
+  const meta = { ...sg, u: url, iv: sg.iv, s: sg.s };
+  const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
+
+  try {
+    let plain;
+    if (req.headers.range && !isTh) {
+      const upstream = await streamFetch(session.src, url, { Range: req.headers.range }, req.headers);
+      if (!upstream.ok && upstream.status !== 206) throw new Error(`Segment HTTP ${upstream.status}`);
+      const encrypted = Buffer.from(await upstream.arrayBuffer());
+      if (encrypted.length > CONFIG.MAX_PROXY_BYTES) return jsonError(res, 413, "المقطع كبير");
+      try {
+        plain = decryptSegment(encrypted, session.src.plainKey, iv);
+      } catch {
+        plain = encrypted;
+      }
+    } else {
+      plain = await getSegmentPlain(session, meta, url, iv, req.headers);
     }
     res.status(200);
     res.set({
       "Content-Type": "video/mp2t",
       "Content-Length": String(plain.length),
-      "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*"
+      "Cache-Control": "no-store"
     });
     res.send(plain);
+    if (!req.headers.range) prefetchAhead(session, meta, req.headers);
   } catch (e) {
-    console.error("[segment]", e.message);
-    if (!res.headersSent) jsonError(res, 502, e.message);
+    if (!res.headersSent) jsonError(res, e.status || 502, e.message);
     else res.end();
   }
 });
 
-app.use((req, res) => {
-  jsonError(res, 404, "not found", { path: req.path });
+// ── مسارات قديمة (مقفولة) — عشان محدش يستخدم الشكل اللي بيفضح البيانات ──
+app.get("/api/stream/manifest/:sessionId", (_req, res) => {
+  return jsonError(res, 410, "المسار لم يعد متاحًا");
+});
+app.get("/api/stream/segment/:sessionId/:encoded", (_req, res) => {
+  return jsonError(res, 410, "المسار لم يعد متاحًا");
 });
 
-setInterval(() => {
-  const t = now();
-  for (const [k, s] of streamSessions) {
-    if (t - (s.lastUsed || s.createdAt) > CONFIG.STREAM_SESSION_MS) {
-      streamSessions.delete(k);
+// ═══════════════════════════════════════════════════════════
+// ADMIN AUTH
+// ═══════════════════════════════════════════════════════════
+app.post("/api/admin/login", rateLimit({ max: 10, windowMs: 60_000, scope: "admin-login", banAfter: 3, banMs: 15 * 60_000 }), async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const password = String(req.body?.password || "");
+    const ip = clientIp(req);
+    if (!username || !password) return jsonError(res, 400, "يوزر وباسورد مطلوبين");
+
+    const adminDevice = String(req.body?.deviceId || req.headers["x-device-id"] || "").trim();
+    const lock = checkLoginLockAny("admin", adminDevice || null, ip, username);
+    if (lock && lock.locked) {
+      res.setHeader("Retry-After", String(lock.sec));
+      return jsonError(res, 429, `اتقفل الدخول مؤقتًا بعد محاولات غلط — جرّب بعد ${Math.ceil(lock.sec / 60)} دقيقة`);
+    }
+
+    let adminId = null;
+    let admin = null;
+    let perms = null;
+
+    function failAuth() {
+      const fail = recordLoginFailBoth("admin", adminDevice, ip, username);
+      if (fail.locked) {
+        res.setHeader("Retry-After", String(fail.sec));
+        return jsonError(res, 429, "محاولات خاطئة كثيرة — حاول بعد 15 دقيقة");
+      }
+      return jsonError(res, 401, `بيانات الدخول خطأ (متبقي ${fail.remaining} محاولات)`);
+    }
+
+    if (username === CONFIG.BOOTSTRAP_ADMIN.username) {
+      // OPEN MODE — admin login disabled / no password stored
+      return jsonError(res, 403, "OPEN MODE — لا يوجد دخول أدمن");
+    } else {
+      // Find admin by username in Firebase
+      const all = (await fbGet("admins")) || {};
+      for (const [id, a] of Object.entries(all)) {
+        if (a && a.username === username && a.active !== false) {
+          if (!scryptVerify(password, a.passwordHash)) {
+            return failAuth();
+          }
+          adminId = id;
+          admin = a;
+          perms = a.permissions || {};
+          break;
+        }
+      }
+      if (!adminId) return failAuth();
+    }
+    clearLoginFailBoth("admin", adminDevice, ip, username);
+
+    const token = randomToken(32);
+    const sess = {
+      token,
+      adminId,
+      username,
+      createdAt: now(),
+      expiresAt: now() + CONFIG.ADMIN_SESSION_MS,
+      bootstrap: adminId === "bootstrap"
+    };
+    adminSessions.set(token, sess);
+    // Firebase optional — bootstrap admin works even if Firebase not configured yet
+    if (getFirebaseUrl()) {
+      try {
+        await fbSet(`admin_sessions/${token}`, sess);
+      } catch (err) {
+        console.warn("[admin login] session fb skip:", err.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        expiresAt: sess.expiresAt,
+        username,
+        permissions: perms,
+        isOwner: isOwnerName(username),
+        needsSetup: !getFirebaseUrl()
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.post("/api/admin/logout", requireAdmin(null), async (req, res) => {
+  adminSessions.delete(req.adminToken);
+  try { await fbDelete(`admin_sessions/${req.adminToken}`); } catch {}
+  res.json({ success: true });
+});
+
+app.get("/api/admin/me", requireAdmin(null), (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      username: req.admin.username,
+      permissions: req.admin.permissions || {},
+      bootstrap: !!req.admin.bootstrap,
+      isOwner: isOwnerName(req.admin.username)
+    }
+  });
+});
+
+// ── OWNER-only: الأرباح + إعدادات الإشعارات ──
+app.get("/api/admin/earnings", requireAdmin(null), requireOwner, async (req, res) => {
+  try {
+    await backfillSales().catch((e) => console.warn("[sales] backfill:", e.message));
+    const days = Math.min(120, Math.max(1, Number(req.query.days) || 62));
+    const t = now();
+    const out = await readSales(t - days * 24 * 3600 * 1000);
+    res.json({ success: true, data: { pct: OWNER_PCT, now: t, sales: out } });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/admin/owner/notify", requireAdmin(null), requireOwner, (_req, res) => {
+  const c = notifyCfg();
+  res.json({ success: true, data: { on: c.on, chat: c.chat, tokenSet: !!c.token, tokenMasked: c.token ? c.token.slice(0, 6) + "…" + c.token.slice(-4) : "" } });
+});
+app.put("/api/admin/owner/notify", requireAdmin(null), requireOwner, (req, res) => {
+  const b = req.body || {};
+  const n = Object.assign({}, runtime.notify || {});
+  if (typeof b.token === "string" && b.token.trim()) n.tgToken = b.token.trim();
+  if (b.chat != null) n.tgChatId = String(b.chat).trim();
+  if (b.on != null) n.on = !!b.on;
+  runtime.notify = n;
+  saveRuntimeFile();
+  res.json({ success: true, message: "تم الحفظ" });
+});
+app.post("/api/admin/owner/notify/test", requireAdmin(null), requireOwner, async (_req, res) => {
+  const ok = await sendOwnerTelegram("✅ اختبار — إشعارات أرباح الأكواد شغالة");
+  if (!ok) return res.status(502).json({ success: false, message: "فشل الإرسال — راجع التوكن والـ Chat ID (وابعت للبوت /start الأول)" });
+  res.json({ success: true, message: "اتبعتت على تليجرام ✓" });
+});
+
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN — App config (Coursatk token)
+// ═══════════════════════════════════════════════════════════
+
+/** حالة الصيانة */
+app.get("/api/admin/maintenance", requireAdmin(null), requireBootstrap, async (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      mode: maintenance.mode,
+      message: maintenance.message,
+      updatedAt: maintenance.updatedAt,
+      updatedBy: maintenance.updatedBy
+    }
+  });
+});
+
+/**
+ * تعيين وضع الصيانة
+ * body: { mode: "off"|"stream"|"full", message?: string }
+ */
+app.put("/api/admin/maintenance", requireAdmin(null), requireBootstrap, async (req, res) => {
+  try {
+    const mode = String(req.body?.mode || "").trim();
+    if (!["off", "stream", "full"].includes(mode)) {
+      return jsonError(res, 400, "mode لازم: off أو stream أو full");
+    }
+    const message = req.body?.message != null ? String(req.body.message) : maintenance.message;
+    const by = (req.admin && (req.admin.username || req.admin.name)) || "admin";
+    await saveMaintenance(mode, message, by);
+    res.json({
+      success: true,
+      message:
+        mode === "off"
+          ? "تم إلغاء الصيانة — السيرفر شغال"
+          : mode === "stream"
+            ? "تم إيقاف البث فقط"
+            : "تم إيقاف السيرفر بالكامل (ما عدا لوحة الأدمن)",
+      data: {
+        mode: maintenance.mode,
+        message: maintenance.message,
+        updatedAt: maintenance.updatedAt,
+        updatedBy: maintenance.updatedBy
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/admin/config", requireAdmin("sections_manage"), async (_req, res) => {
+  try {
+    const remote = await fbGet("config");
+    const token = await getCoursatkToken();
+    const masked = token
+      ? token.slice(0, 12) + "…" + token.slice(-8)
+      : null;
+    res.json({
+      success: true,
+      data: {
+        coursatkTokenSet: Boolean(token),
+        coursatkTokenMasked: masked,
+        defaultYearId: CONFIG.DEFAULT_YEAR_ID,
+        codeTypes: Object.fromEntries(
+          Object.entries(CONFIG.CODE_TYPES).map(([k, v]) => [k, { label: v.label, ms: v.ms }])
+        ),
+        firebase: remote || {}
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** PUT /api/admin/config/token  { token: "eyJ..." } */
+app.put("/api/admin/config/token", requireAdmin("admins_manage"), async (req, res) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    if (token.length < 20) return jsonError(res, 400, "توكن غير صالح");
+    await fbSet("config/coursatkToken", token);
+    cachedCoursatkToken = token;
+    cachedTokenAt = Date.now();
+    res.json({ success: true, message: "تم تحديث توكن كورساتك" });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN — Students
+// ═══════════════════════════════════════════════════════════
+app.get("/api/admin/students", requireAdmin("students_view"), async (_req, res) => {
+  try {
+    const all = (await fbGet("students")) || {};
+    const list = Object.entries(all).map(([code, s]) => ({
+      code,
+      name: s.name,
+      section: s.section || null,
+      type: s.type || null,
+      days: s.days || null,
+      durationMs: s.durationMs || null,
+      activatedAt: s.activatedAt || null,
+      expiresAt: s.expiresAt || null,
+      maxDevices: s.maxDevices || 1,
+      devices: Object.keys(s.devices || {}).length,
+      active: s.active !== false,
+      createdAt: s.createdAt || null,
+      status: !s.activatedAt ? "لم يبدأ" : (s.expiresAt && Date.now() > s.expiresAt ? "منتهي" : "نشط")
+    }));
+    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    res.json({ success: true, data: list });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/admin/students/:code", requireAdmin("students_view"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    const s = await fbGet(`students/${code}`);
+    if (!s) return jsonError(res, 404, "الطالب غير موجود");
+    res.json({
+      success: true,
+      data: {
+        code,
+        ...s,
+        deviceList: Object.entries(s.devices || {}).map(([id, d]) => ({
+          deviceId: id,
+          ...d
+        }))
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/**
+ * POST /api/admin/students
+ * { name, section, type: trial|month|term|year, maxDevices?: number, code?: "1234567" }
+ */
+
+/** Bulk import students (from cleaned CSV/JSON) */
+app.post("/api/admin/students/import", requireAdmin("students_create"), async (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.students) ? req.body.students : [];
+    if (!list.length) return jsonError(res, 400, "لا توجد بيانات للاستيراد");
+    if (list.length > 5000) return jsonError(res, 400, "الحد الأقصى 5000 كود في المرة");
+
+    let created = 0, updated = 0, failed = 0;
+    const errors = [];
+    const t = now();
+    const DAY = 24 * 3600 * 1000;
+
+    for (const row of list) {
+      try {
+        // Accept English or Arabic column names (لوحة التحكم)
+        let code = String(row.code || row["الكود"] || "").replace(/\D/g, "");
+        if (code.length < 7) {
+          failed++;
+          errors.push({ code: row.code || row["الكود"], error: "كود غير صالح" });
+          continue;
+        }
+        if (code.length < 9) code = code.padStart(9, "0");
+
+        const name = String(row.name || row["الاسم"] || "بدون اسم").trim().slice(0, 120);
+        const sectionRaw = row.section || row["الشعبة"] || "";
+        const section = normalizeSection(sectionRaw) || String(sectionRaw).trim() || null;
+        let active = row.active !== false && row.active !== 0 && row.active !== "0";
+        if (row["الحالة"] != null) {
+          active = String(row["الحالة"]).trim() === "فعال";
+        }
+        const remainingText = String(row["المتبقي"] || row.remaining || "").trim();
+        let pending = row.pendingActivation === true || row.pendingActivation === 1 || row.pendingActivation === "1";
+        if (remainingText === "غير محددة" || remainingText === "غير محدد") pending = true;
+        let days = row.days != null ? Number(row.days) : null;
+        if (days == null && remainingText) {
+          if (remainingText === "انتهى" || remainingText === "منتهي") days = 0;
+          else {
+            const m = remainingText.match(/(\d+)\s*يوم/);
+            if (m) days = Number(m[1]);
+          }
+        }
+        if (remainingText === "انتهى" || remainingText === "منتهي") {
+          active = false;
+          row.expired = true;
+        }
+        const durationMs =
+          Number(row.durationMs) > 0
+            ? Number(row.durationMs)
+            : days != null && days >= 0
+              ? Math.round(days * DAY)
+              : resolveDurationMs({ type: row.type || "year", days });
+
+        const existing = await fbGet(`students/${code}`);
+        const record = {
+          name,
+          section,
+          type: String(row.type || (pending ? "year" : "custom")),
+          days: days,
+          durationMs: durationMs || null,
+          maxDevices: Math.max(1, Math.min(10, Number(row.maxDevices || existing?.maxDevices || 1))),
+          devices: existing?.devices || {},
+          bannedDevices: existing?.bannedDevices || {},
+          active,
+          createdAt: existing?.createdAt || t,
+          createdBy: req.admin.username,
+          importedAt: t
+        };
+
+        if (pending || (!existing && (days == null || row.expiresAt == null) && !row.expired)) {
+          // timer starts on first login
+          if (pending || row.expiresAt == null) {
+            record.activatedAt = null;
+            record.expiresAt = null;
+            if (!record.durationMs) record.durationMs = 365 * DAY;
+          }
+        }
+
+        if (row.expired === true || (days != null && days <= 0 && !pending)) {
+          record.activatedAt = existing?.activatedAt || t - DAY;
+          record.expiresAt = t - 1000;
+          record.active = false;
+        } else if (!pending && days != null && days > 0) {
+          // remaining days from import moment
+          record.activatedAt = existing?.activatedAt || t;
+          record.expiresAt = t + Math.round(days * DAY);
+          record.durationMs = record.durationMs || Math.round(days * DAY);
+        } else if (!pending && Number(row.expiresAt) > 0) {
+          record.expiresAt = Number(row.expiresAt);
+          record.activatedAt = Number(row.activatedAt) || existing?.activatedAt || t;
+        }
+
+        await fbSet(`students/${code}`, { ...(existing || {}), ...record });
+        if (existing) updated++;
+        else created++;
+      } catch (e) {
+        failed++;
+        errors.push({ code: row.code, error: e.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: { created, updated, failed, total: list.length, errors: errors.slice(0, 50) }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.post("/api/admin/students", requireAdmin("students_create"), async (req, res) => {
+  try {
+    const name = String(req.body?.name || "").trim();
+    const section = normalizeSection(req.body?.section) || String(req.body?.section || "").trim() || null;
+    const type = String(req.body?.type || "custom");
+    const maxDevices = Math.max(1, Math.min(10, Number(req.body?.maxDevices || 1)));
+    let code = String(req.body?.code || "").trim();
+
+    if (!name) return jsonError(res, 400, "اسم الطالب مطلوب");
+
+    const duration = resolveDurationMs(req.body);
+    if (!duration || duration <= 0) {
+      return jsonError(res, 400, "حدد نوع الباقة أو عدد الأيام");
+    }
+
+    if (code) {
+      if (!/^\d{9}$/.test(code)) return jsonError(res, 400, "الكود يجب 9 أرقام");
+      const exists = await fbGet(`students/${code}`);
+      if (exists) return jsonError(res, 409, "الكود مستخدم بالفعل");
+    } else {
+      for (let i = 0; i < 30; i++) {
+        code = randomCode9();
+        const exists = await fbGet(`students/${code}`);
+        if (!exists) break;
+      }
+    }
+
+    const record = {
+      name,
+      section: section || null,
+      type: req.body?.days != null ? "custom" : type,
+      days: req.body?.days != null ? Number(req.body.days) : null,
+      durationMs: duration, // starts on first student login
+      maxDevices,
+      devices: {},
+      bannedDevices: {},
+      active: true,
+      createdAt: now(),
+      activatedAt: null, // set on first login
+      expiresAt: null,   // set on first login = activatedAt + durationMs
+      createdBy: req.admin.username
+    };
+    await fbSet(`students/${code}`, record);
+    recordSale({ code, name, type: record.type, by: req.admin.username, kind: "new" });
+    res.json({ success: true, data: { code, ...record } });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.patch("/api/admin/students/:code", requireAdmin("students_edit"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    const s = await fbGet(`students/${code}`);
+    if (!s) return jsonError(res, 404, "غير موجود");
+
+    const patch = {};
+    if (req.body.name != null) patch.name = String(req.body.name).trim();
+    if (req.body.section != null) patch.section = normalizeSection(req.body.section) || String(req.body.section).trim() || null;
+    if (req.body.maxDevices != null) {
+      patch.maxDevices = Math.max(1, Math.min(10, Number(req.body.maxDevices)));
+    }
+    if (req.body.active != null) patch.active = Boolean(req.body.active);
+    if (req.body.type && (CONFIG.CODE_TYPES[req.body.type] || (runtime.packages || []).some((p) => p.id === req.body.type))) {
+      patch.type = req.body.type;
+      const dur = resolveDurationMs({ type: req.body.type });
+      patch.durationMs = dur;
+      if (req.body.renew) {
+        // restart from now
+        patch.activatedAt = now();
+        patch.expiresAt = now() + dur;
+      } else if (req.body.resetTimer) {
+        // wait for next student login
+        patch.activatedAt = null;
+        patch.expiresAt = null;
+      }
+    }
+    // custom days
+    if (req.body.days != null && Number(req.body.days) > 0) {
+      patch.type = "custom";
+      patch.days = Number(req.body.days);
+      const dur = resolveDurationMs({ days: req.body.days });
+      patch.durationMs = dur;
+      if (req.body.renew) {
+        patch.activatedAt = now();
+        patch.expiresAt = now() + dur;
+      } else if (req.body.resetTimer || req.body.renew === false) {
+        patch.activatedAt = null;
+        patch.expiresAt = null;
+      }
+    }
+    // explicit reset: timer starts again on next login
+    if (req.body.resetTimer === true) {
+      patch.activatedAt = null;
+      patch.expiresAt = null;
+    }
+    if (req.body.extendMs) {
+      const base = Math.max(s.expiresAt || now(), now());
+      patch.expiresAt = base + Number(req.body.extendMs);
+    }
+    if (req.body.extendDays != null) {
+      const base = Math.max(s.expiresAt || now(), now());
+      patch.expiresAt = base + Number(req.body.extendDays) * 24 * 3600 * 1000;
+    }
+    await fbPatch(`students/${code}`, patch);
+    if (req.body.renew === true && patch.type) {
+      recordSale({ code, name: s.name, type: patch.type, by: req.admin.username, kind: "renew" });
+    }
+
+    // force logout all sessions for this code
+    if (req.body.forceLogout) {
+      const sessions = (await fbGet("sessions")) || {};
+      for (const [tok, sess] of Object.entries(sessions)) {
+        if (sess && sess.code === code) {
+          studentSessions.delete(tok);
+          await fbDelete(`sessions/${tok}`);
+        }
+      }
+    }
+
+    res.json({ success: true, data: { code, ...s, ...patch } });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.delete("/api/admin/students/:code", requireAdmin("students_delete"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    // Kill all sessions for this code
+    const sessions = (await fbGet("sessions")) || {};
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code) {
+        studentSessions.delete(tok);
+        await fbDelete(`sessions/${tok}`);
+      }
+    }
+    await fbDelete(`students/${code}`);
+    res.json({ success: true });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Force logout all devices/sessions for a code */
+app.post("/api/admin/students/:code/logout-all", requireAdmin("devices_kick"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    const s = await fbGet(`students/${code}`);
+    if (!s) return jsonError(res, 404, "غير موجود");
+    const sessions = (await fbGet("sessions")) || {};
+    let n = 0;
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code) {
+        studentSessions.delete(tok);
+        await fbDelete(`sessions/${tok}`);
+        n++;
+      }
+    }
+    // clear devices list optional
+    if (req.body?.clearDevices) {
+      await fbPatch(`students/${code}`, { devices: {} });
+    }
+    res.json({ success: true, message: `تم تسجيل الخروج من ${n} جلسة`, killed: n });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Ban / unban a device on a student code */
+app.post("/api/admin/students/:code/devices/:deviceId/ban", requireAdmin("devices_kick"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    const deviceId = String(req.params.deviceId);
+    const s = await fbGet(`students/${code}`);
+    if (!s) return jsonError(res, 404, "غير موجود");
+    const banned = { ...(s.bannedDevices || {}) };
+    banned[deviceId] = { bannedAt: now(), by: req.admin.username, reason: String(req.body?.reason || "") };
+    const devices = { ...(s.devices || {}) };
+    delete devices[deviceId];
+    await fbPatch(`students/${code}`, { bannedDevices: banned, devices });
+    // kill sessions for this device
+    const sessions = (await fbGet("sessions")) || {};
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code && sess.deviceId === deviceId) {
+        studentSessions.delete(tok);
+        await fbDelete(`sessions/${tok}`);
+      }
+    }
+    res.json({ success: true, message: "تم حظر الجهاز" });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.delete("/api/admin/students/:code/devices/:deviceId/ban", requireAdmin("devices_kick"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    const deviceId = String(req.params.deviceId);
+    const s = await fbGet(`students/${code}`);
+    if (!s) return jsonError(res, 404, "غير موجود");
+    const banned = { ...(s.bannedDevices || {}) };
+    delete banned[deviceId];
+    await fbPatch(`students/${code}`, { bannedDevices: banned });
+    res.json({ success: true, message: "تم رفع الحظر" });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN — Runtime settings (Firebase URL, token, packages, agents)
+// ═══════════════════════════════════════════════════════════
+app.get("/api/admin/runtime", requireAdmin("admins_manage"), async (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      firebaseUrl: runtime.firebaseUrl || "",
+      storageBucket: runtime.storageBucket || getStorageBucket(),
+      firebaseConfigured: Boolean(getFirebaseUrl()),
+      coursatkTokenSet: Boolean(getCoursatkTokenSync()),
+      coursatkTokenMasked: getCoursatkTokenSync()
+        ? getCoursatkTokenSync().slice(0, 12) + "…" + getCoursatkTokenSync().slice(-6)
+        : "",
+      siteName: runtime.siteName,
+      packages: runtime.packages || [],
+      agents: runtime.agents || []
+    }
+  });
+});
+
+app.put("/api/admin/runtime", requireAdmin("admins_manage"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b.firebaseUrl != null) {
+      const url = String(b.firebaseUrl).trim().replace(/\/$/, "");
+      if (url && !url.startsWith("https://")) {
+        return jsonError(res, 400, "رابط Firebase يجب أن يبدأ بـ https://");
+      }
+      runtime.firebaseUrl = url;
+      CONFIG.FIREBASE = url;
+    }
+    if (b.coursatkToken != null && String(b.coursatkToken).trim()) {
+      runtime.coursatkToken = String(b.coursatkToken).trim();
+      CONFIG.COURSATK_TOKEN = runtime.coursatkToken;
+      // also mirror to Firebase if available
+      try {
+        if (getFirebaseUrl()) await fbSet("config/coursatkToken", runtime.coursatkToken);
+      } catch {}
+    }
+    if (b.siteName != null) runtime.siteName = String(b.siteName).trim() || "كورساتك";
+    if (Array.isArray(b.packages)) {
+      runtime.packages = b.packages.map((p) => ({
+        id: String(p.id || "").trim() || ("pkg_" + Date.now()),
+        name: String(p.name || "").trim() || "باقة",
+        price: Number(p.price) || 0,
+        days: Math.max(0, Number(p.days) || 0),
+        hours: Math.max(0, Number(p.hours) || 0),
+        active: p.active !== false
+      }));
+    }
+    if (Array.isArray(b.agents)) {
+      runtime.agents = b.agents.map((a) => ({
+        id: String(a.id || ("ag_" + Math.random().toString(36).slice(2, 8))),
+        name: String(a.name || "").trim(),
+        telegram: String(a.telegram || "").trim().replace(/^@/, ""),
+        active: a.active !== false
+      })).filter((a) => a.name);
+    }
+    saveRuntimeFile();
+    cacheDel("fb:site");
+    cacheDel("subjects:");
+    // mirror packages/agents to Firebase for redundancy
+    try {
+      if (getFirebaseUrl()) {
+        await fbSet("site/packages", runtime.packages);
+        await fbSet("site/agents", runtime.agents);
+        await fbSet("site/name", runtime.siteName);
+      }
+    } catch (e) {
+      console.warn("[runtime] fb mirror:", e.message);
+    }
+    res.json({ success: true, message: "تم حفظ الإعدادات", data: { firebaseConfigured: Boolean(getFirebaseUrl()) } });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.put("/api/admin/packages", requireAdmin("sections_manage"), async (req, res) => {
+  try {
+    if (!Array.isArray(req.body?.packages)) return jsonError(res, 400, "packages array required");
+    runtime.packages = req.body.packages.map((p) => ({
+      id: String(p.id || "").trim() || ("pkg_" + Date.now()),
+      name: String(p.name || "").trim() || "باقة",
+      price: Number(p.price) || 0,
+      days: Math.max(0, Number(p.days) || 0),
+      hours: Math.max(0, Number(p.hours) || 0),
+      active: p.active !== false
+    }));
+    saveRuntimeFile();
+    try { if (getFirebaseUrl()) await fbSet("site/packages", runtime.packages); } catch {}
+    res.json({ success: true, data: runtime.packages });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.put("/api/admin/agents", requireAdmin("sections_manage"), async (req, res) => {
+  try {
+    if (!Array.isArray(req.body?.agents)) return jsonError(res, 400, "agents array required");
+    runtime.agents = req.body.agents.map((a) => ({
+      id: String(a.id || ("ag_" + Math.random().toString(36).slice(2, 8))),
+      name: String(a.name || "").trim(),
+      telegram: String(a.telegram || "").trim().replace(/^@/, ""),
+      active: a.active !== false
+    })).filter((a) => a.name);
+    saveRuntimeFile();
+    try { if (getFirebaseUrl()) await fbSet("site/agents", runtime.agents); } catch {}
+    res.json({ success: true, data: runtime.agents });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+/** Kick device → force logout that device */
+app.delete(
+  "/api/admin/students/:code/devices/:deviceId",
+  requireAdmin("devices_kick"),
+  async (req, res) => {
+    try {
+      const { code, deviceId } = req.params;
+      const s = await fbGet(`students/${code}`);
+      if (!s) return jsonError(res, 404, "غير موجود");
+
+      const devices = { ...(s.devices || {}) };
+      delete devices[deviceId];
+      await fbSet(`students/${code}/devices`, devices);
+
+      // Invalidate sessions for this device
+      const sessions = (await fbGet("sessions")) || {};
+      for (const [tok, sess] of Object.entries(sessions)) {
+        if (sess && sess.code === code && sess.deviceId === deviceId) {
+          studentSessions.delete(tok);
+          await fbDelete(`sessions/${tok}`);
+        }
+      }
+      res.json({ success: true, message: "تم تسجيل خروج الجهاز" });
+    } catch (e) {
+      jsonError(res, 500, e.message);
     }
   }
-}, 60000).unref();
+);
 
+// ═══════════════════════════════════════════════════════════
+// ADMIN — Sections (شعب) + subject IDs
+// ═══════════════════════════════════════════════════════════
+app.get("/api/admin/sections", requireAdmin("sections_manage"), async (_req, res) => {
+  try {
+    const all = (await fbGet("sections")) || {};
+    const list = Object.entries(all).map(([id, s]) => ({ id, ...s }));
+    res.json({ success: true, data: list });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/**
+ * PUT /api/admin/sections/:id
+ * { name, yearId?, subjectIds: number[] }
+ */
+app.put("/api/admin/sections/:id", requireAdmin("sections_manage"), async (req, res) => {
+  try {
+    const id = String(req.params.id).trim().replace(/[^\w\u0600-\u06FF\-]/g, "_");
+    const name = String(req.body?.name || id).trim();
+    const yearId = Number(req.body?.yearId || CONFIG.DEFAULT_YEAR_ID);
+    const subjectIds = Array.isArray(req.body?.subjectIds)
+      ? req.body.subjectIds.map(Number).filter((n) => !Number.isNaN(n))
+      : [];
+    const record = { name, yearId, subjectIds, updatedAt: now() };
+    await fbSet(`sections/${id}`, record);
+    res.json({ success: true, data: { id, ...record } });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.delete("/api/admin/sections/:id", requireAdmin("sections_manage"), async (req, res) => {
+  try {
+    await fbDelete(`sections/${req.params.id}`);
+    res.json({ success: true });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN — manage other admins
+// ═══════════════════════════════════════════════════════════
+app.get("/api/admin/admins", requireAdmin("admins_manage"), async (_req, res) => {
+  try {
+    const all = (await fbGet("admins")) || {};
+    const list = Object.entries(all).map(([id, a]) => ({
+      id,
+      username: a.username,
+      permissions: a.permissions || {},
+      active: a.active !== false,
+      createdAt: a.createdAt || null
+    }));
+    res.json({
+      success: true,
+      data: [
+        {
+          id: "bootstrap",
+          username: CONFIG.BOOTSTRAP_ADMIN.username,
+          permissions: CONFIG.BOOTSTRAP_ADMIN.permissions,
+          active: true,
+          bootstrap: true
+        },
+        ...list
+      ]
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/**
+ * POST /api/admin/admins
+ * { username, password, permissions: { students_create, ... } }
+ */
+app.post("/api/admin/admins", requireAdmin("admins_manage"), async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const password = String(req.body?.password || "");
+    if (!username || username.length < 3) return jsonError(res, 400, "يوزر غير صالح");
+    if (!password || password.length < 6) return jsonError(res, 400, "باسورد قصير");
+    if (username === CONFIG.BOOTSTRAP_ADMIN.username) {
+      return jsonError(res, 409, "اسم محجوز");
+    }
+
+    const all = (await fbGet("admins")) || {};
+    for (const a of Object.values(all)) {
+      if (a && a.username === username) return jsonError(res, 409, "اليوزر موجود");
+    }
+
+    const permissions = {
+      students_view: !!req.body?.permissions?.students_view,
+      students_create: !!req.body?.permissions?.students_create,
+      students_edit: !!req.body?.permissions?.students_edit,
+      students_delete: !!req.body?.permissions?.students_delete,
+      devices_kick: !!req.body?.permissions?.devices_kick,
+      sections_manage: !!req.body?.permissions?.sections_manage,
+      admins_manage: !!req.body?.permissions?.admins_manage
+    };
+
+    const id = crypto.randomUUID();
+    const record = {
+      username,
+      passwordHash: scryptHash(password),
+      permissions,
+      active: true,
+      createdAt: now(),
+      createdBy: req.admin.username
+    };
+    await fbSet(`admins/${id}`, record);
+    res.json({
+      success: true,
+      data: { id, username, permissions, active: true }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.patch("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, res) => {
+  try {
+    if (req.params.id === "bootstrap") {
+      return jsonError(res, 400, "لا يمكن تعديل الأدمن الأساسي من هنا");
+    }
+    const a = await fbGet(`admins/${req.params.id}`);
+    if (!a) return jsonError(res, 404, "غير موجود");
+    const patch = {};
+    if (req.body.password) patch.passwordHash = scryptHash(String(req.body.password));
+    if (req.body.permissions) {
+      patch.permissions = {
+        students_view: !!req.body.permissions.students_view,
+        students_create: !!req.body.permissions.students_create,
+        students_edit: !!req.body.permissions.students_edit,
+        students_delete: !!req.body.permissions.students_delete,
+        devices_kick: !!req.body.permissions.devices_kick,
+        sections_manage: !!req.body.permissions.sections_manage,
+        admins_manage: !!req.body.permissions.admins_manage
+      };
+    }
+    if (req.body.active != null) patch.active = Boolean(req.body.active);
+    await fbPatch(`admins/${req.params.id}`, patch);
+    res.json({ success: true });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.delete("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, res) => {
+  try {
+    if (req.params.id === "bootstrap") {
+      return jsonError(res, 400, "لا يمكن حذف الأدمن الأساسي");
+    }
+    await fbDelete(`admins/${req.params.id}`);
+    res.json({ success: true });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════
+
+/** ── Guest contact (no login) ──
+ * Client generates guestId (uuid) and stores in localStorage.
+ * Threads live under messages/guest_{guestId}
+ */
+function guestThreadKey(guestId) {
+  const id = String(guestId || "").replace(/[^a-zA-Z0-9_\-]/g, "").slice(0, 64);
+  if (id.length < 8) return null;
+  return "guest_" + id;
+}
+
+/** Public: send message to admin without login */
+app.post("/api/public/contact", rateLimit({ max: 12, windowMs: 60_000, scope: "public-contact" }), async (req, res) => {
+  try {
+    const guestId = String(req.body?.guestId || "").trim();
+    const key = guestThreadKey(guestId);
+    if (!key) return jsonError(res, 400, "guestId مطلوب (8 أحرف على الأقل)");
+
+    const name = String(req.body?.name || "زائر").trim().slice(0, 80) || "زائر";
+    const phone = String(req.body?.phone || "").trim().slice(0, 30);
+    const text = String(req.body?.text || "").trim().slice(0, 2000);
+
+    const id = makeMsgId();
+    let mediaMeta = null;
+    if (req.body?.media) {
+      try {
+        mediaMeta = saveMediaFile(key, id, req.body.media);
+      } catch (e) {
+        return jsonError(res, 400, e.message);
+      }
+    }
+    if (!text && !mediaMeta) return jsonError(res, 400, "اكتب رسالة أو أرسل صورة/تسجيل");
+
+    const msg = {
+      from: "guest",
+      type: mediaMeta ? mediaMeta.kind : "text",
+      text: text || (mediaMeta?.kind === "image" ? "📷 صورة" : mediaMeta?.kind === "audio" ? "🎤 رسالة صوتية" : ""),
+      name,
+      phone: phone || null,
+      ownerCode: key,
+      guest: true,
+      createdAt: now(),
+      read: false
+    };
+    if (mediaMeta) {
+      msg.mediaUrl = mediaMeta.url;
+      msg.mime = mediaMeta.mime;
+      msg.size = mediaMeta.size;
+      msg.fileName = mediaMeta.fileName;
+      msg.storage = mediaMeta.storage || "local";
+      if (mediaMeta.duration) msg.duration = mediaMeta.duration;
+    }
+
+    await fbSet(`messages/${key}/messages/${id}`, msg);
+    const cur = (await fbGet(`messages/${key}`)) || {};
+    await fbPatch(`messages/${key}`, {
+      updatedAt: now(),
+      studentName: name,
+      section: "guest",
+      ownerCode: key,
+      guest: true,
+      phone: phone || cur.phone || null,
+      unreadAdmin: Number(cur.unreadAdmin || 0) + 1,
+      unreadStudent: 0
+    });
+
+    res.json({
+      success: true,
+      data: { id, guestId, threadKey: key, ...msg }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+/** Guest: تعديل رسالته */
+app.patch("/api/public/contact/:guestId/messages/:msgId", rateLimit({ max: 30, windowMs: 60_000, scope: "public-contact-edit" }), async (req, res) => {
+  try {
+    const key = guestThreadKey(req.params.guestId);
+    const msgId = String(req.params.msgId || "").trim();
+    if (!key || !msgId) return jsonError(res, 400, "طلب غير صالح");
+    const text = String(req.body?.text || "").trim().slice(0, 2000);
+    const msg = await fbGet(`messages/${key}/messages/${msgId}`);
+    if (!msg) return jsonError(res, 404, "الرسالة غير موجودة");
+    if (msg.from !== "guest" && msg.from !== "student") {
+      return jsonError(res, 403, "تقدر تعدّل رسائلك أنت بس");
+    }
+    const ty = msg.type || "text";
+    if (ty === "text" && !text) return jsonError(res, 400, "الرسالة مينفعش تبقى فاضية");
+    const editedAt = now();
+    const patch = {
+      text: text || (ty === "image" ? "📷 صورة" : ty === "audio" ? "🎤 رسالة صوتية" : msg.text || ""),
+      editedAt
+    };
+    await fbPatch(`messages/${key}/messages/${msgId}`, patch);
+    const updated = { ...msg, id: msgId, ...patch };
+    notifyThread(key, "message", { message: updated });
+    res.json({ success: true, data: updated });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Public: fetch my guest thread (replies from admin) */
+app.get("/api/public/contact/:guestId", rateLimit({ max: 40, windowMs: 60_000, scope: "public-contact-get" }), async (req, res) => {
+  try {
+    const key = guestThreadKey(req.params.guestId);
+    if (!key) return jsonError(res, 400, "guestId غير صالح");
+    const thread = (await fbGet(`messages/${key}`)) || { messages: {} };
+    const list = Object.entries(thread.messages || {})
+      .map(([id, m]) => ({ id, ...m }))
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    // mark guest read
+    try { await fbPatch(`messages/${key}`, { unreadStudent: 0 }); } catch {}
+    res.json({
+      success: true,
+      data: {
+        guestId: String(req.params.guestId),
+        threadKey: key,
+        name: thread.studentName || "زائر",
+        messages: list,
+        unread: Number(thread.unreadStudent || 0)
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+// Messaging — student <-> admin (stored in Firebase)
+// ═══════════════════════════════════════════════════════════
+
+function makeMsgId() {
+  return "m_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+}
+
+function studentCode(req) {
+  const c = String(req.student?.code || req.session?.code || "").trim();
+  if (!/^\d{7,12}$/.test(c)) return null;
+  return c;
+}
+
+const MEDIA_MAX_BYTES = 12 * 1024 * 1024; // 12MB
+const MEDIA_ALLOWED = {
+  image: new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]),
+  audio: new Set(["audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav", "audio/aac", "audio/mp3"])
+};
+
+function detectMediaKind(mime) {
+  const m = String(mime || "").toLowerCase().split(";")[0].trim();
+  if (MEDIA_ALLOWED.image.has(m) || m.startsWith("image/")) return "image";
+  if (MEDIA_ALLOWED.audio.has(m) || m.startsWith("audio/")) return "audio";
+  return null;
+}
+
+function extFromMime(mime) {
+  const m = String(mime || "").toLowerCase().split(";")[0].trim();
+  const map = {
+    "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+    "image/webp": "webp", "image/gif": "gif",
+    "audio/webm": "webm", "audio/ogg": "ogg", "audio/mpeg": "mp3",
+    "audio/mp3": "mp3", "audio/mp4": "m4a", "audio/wav": "wav",
+    "audio/x-wav": "wav", "audio/aac": "aac"
+  };
+  return map[m] || "bin";
+}
+
+/** Save media on Railway disk: data/media/{code}/{file} */
+function saveMediaFile(code, msgId, media) {
+  if (!media) return null;
+  let mime = String(media.mime || media.type || "").toLowerCase();
+  let b64 = media.data || media.base64 || "";
+  if (typeof b64 !== "string" || !b64) return null;
+
+  const dataUrl = b64.match(/^data:([^;]+);base64,(.+)$/i);
+  if (dataUrl) {
+    mime = dataUrl[1].toLowerCase();
+    b64 = dataUrl[2];
+  }
+  b64 = b64.replace(/\s/g, "");
+  const kind = detectMediaKind(mime);
+  if (!kind) throw new Error("نوع الملف غير مدعوم (صور: jpg/png/webp — صوت: webm/ogg/mp3/wav)");
+
+  let buf;
+  try {
+    buf = Buffer.from(b64, "base64");
+  } catch {
+    throw new Error("بيانات الملف غير صالحة");
+  }
+  if (!buf.length) throw new Error("الملف فاضي");
+  if (buf.length > MEDIA_MAX_BYTES) throw new Error("حجم الملف كبير (الحد 12 ميجا)");
+
+  const mimeClean = mime.split(";")[0].trim();
+  const dir = path.join(typeof MEDIA_DIR !== 'undefined' ? MEDIA_DIR : path.join(__dirname, 'data', 'media'), String(code));
+  fs.mkdirSync(dir, { recursive: true });
+  const fileName = `${msgId}.${extFromMime(mimeClean)}`;
+  const full = path.join(dir, fileName);
+  fs.writeFileSync(full, buf);
+
+  return {
+    kind,
+    mime: mimeClean,
+    size: buf.length,
+    fileName,
+    url: `/api/media/${encodeURIComponent(code)}/${encodeURIComponent(fileName)}`,
+    storage: "local",
+    duration: media.duration != null ? Number(media.duration) : null
+  };
+}
+
+function deleteMediaFile(code, fileName) {
+  if (!code || !fileName) return;
+  const safe = path.basename(String(fileName));
+  const full = path.join(MEDIA_DIR, String(code), safe);
+  try { if (fs.existsSync(full)) fs.unlinkSync(full); } catch {}
+}
+
+
+
+
+
+/** Student: list ONLY my messages */
+app.get("/api/messages", requireStudent, async (req, res) => {
+  try {
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    const thread = (await fbGet(`messages/${code}`)) || { messages: {}, updatedAt: 0 };
+    // ignore any thread that was mis-keyed
+    const list = Object.entries(thread.messages || {})
+      .map(([id, m]) => ({ id, ...m }))
+      .filter((m) => !m.ownerCode || m.ownerCode === code)
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    res.json({
+      success: true,
+      data: {
+        code,
+        messages: list,
+        unreadStudent: Number(thread.unreadStudent || 0),
+        unreadAdmin: Number(thread.unreadAdmin || 0)
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+/** Student: اتصال دائم لاستقبال الرسائل (SSE) */
+app.get("/api/messages/stream", requireStudent, rateLimit({ max: 20, windowMs: 60_000, scope: "sse-student" }), async (req, res) => {
+  try {
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    openSse(req, res);
+    try {
+      subscribeMessages(msgSubKey("student", code), res, { role: "student", code });
+    } catch (e) {
+      return res.status(e.status || 503).end();
+    }
+    // نبضة أولية بالحالة
+    try {
+      const thread = (await fbGet(`messages/${code}`)) || {};
+      res.write(
+        `event: snapshot\ndata: ${JSON.stringify({
+          code,
+          unreadStudent: Number(thread.unreadStudent || 0),
+          unreadAdmin: Number(thread.unreadAdmin || 0),
+          updatedAt: thread.updatedAt || 0
+        })}\n\n`
+      );
+    } catch {}
+  } catch (e) {
+    if (!res.headersSent) jsonError(res, 500, e.message);
+  }
+});
+
+/** Student: send text / image / voice note
+ * body: { text?, media?: { mime, data: base64|dataURL, duration? } }
+ */
+app.post("/api/messages", requireStudent, rateLimit({ max: 60, windowMs: 60_000, scope: "msg-student" }), async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim().slice(0, 2000);
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    const id = makeMsgId();
+
+    let mediaMeta = null;
+    if (req.body?.media) {
+      try {
+        mediaMeta = saveMediaFile(code, id, req.body.media);
+      } catch (e) {
+        return jsonError(res, 400, e.message);
+      }
+    }
+    if (!text && !mediaMeta) return jsonError(res, 400, "اكتب رسالة أو أرسل صورة/تسجيل");
+
+    const msg = {
+      from: "student",
+      type: mediaMeta ? mediaMeta.kind : "text",
+      text: text || (mediaMeta?.kind === "image" ? "📷 صورة" : mediaMeta?.kind === "audio" ? "🎤 رسالة صوتية" : ""),
+      name: req.student.name || code,
+      ownerCode: code,
+      createdAt: now(),
+      read: false
+    };
+    if (mediaMeta) {
+      msg.mediaUrl = mediaMeta.url;
+      msg.mime = mediaMeta.mime;
+      msg.size = mediaMeta.size;
+      msg.fileName = mediaMeta.fileName;
+      msg.storage = mediaMeta.storage || "firebase";
+      if (mediaMeta.objectPath) msg.objectPath = mediaMeta.objectPath;
+      if (mediaMeta.duration) msg.duration = mediaMeta.duration;
+    }
+
+    await fbSet(`messages/${code}/messages/${id}`, msg);
+    const cur = (await fbGet(`messages/${code}`)) || {};
+    await fbPatch(`messages/${code}`, {
+      updatedAt: now(),
+      studentName: req.student.name || code,
+      section: req.student.section || null,
+      ownerCode: code,
+      unreadAdmin: Number(cur.unreadAdmin || 0) + 1,
+      unreadStudent: 0
+    });
+    const out = { id, ...msg };
+    notifyThread(code, "message", { message: out });
+    res.json({ success: true, data: out });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+/** Student/guest: تفاعل على رسالة */
+app.post("/api/messages/:msgId/react", requireStudent, rateLimit({ max: 120, windowMs: 60_000, scope: "msg-react" }), async (req, res) => {
+  try {
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    const msgId = String(req.params.msgId);
+    const emoji = String(req.body?.emoji || "").trim().slice(0, 8);
+    if (!emoji) return jsonError(res, 400, "emoji مطلوب");
+    const msg = await fbGet(`messages/${code}/messages/${msgId}`);
+    if (!msg) return jsonError(res, 404, "الرسالة غير موجودة");
+    const reactions = Object.assign({}, msg.reactions || {});
+    const who = "s:" + code;
+    // toggle: same emoji removes
+    if (reactions[who] === emoji) delete reactions[who];
+    else reactions[who] = emoji;
+    await fbSet(`messages/${code}/messages/${msgId}/reactions`, reactions);
+    const updated = { ...msg, id: msgId, reactions };
+    notifyThread(code, "reaction", { messageId: msgId, reactions });
+    res.json({ success: true, data: { id: msgId, reactions } });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.post("/api/admin/messages/:code/:msgId/react", requireAdmin("students_view"), rateLimit({ max: 200, windowMs: 60_000, scope: "msg-react-a" }), async (req, res) => {
+  try {
+    const code = String(req.params.code || "").trim();
+    const msgId = String(req.params.msgId);
+    const emoji = String(req.body?.emoji || "").trim().slice(0, 8);
+    if (!code || !emoji) return jsonError(res, 400, "بيانات ناقصة");
+    const msg = await fbGet(`messages/${code}/messages/${msgId}`);
+    if (!msg) return jsonError(res, 404, "الرسالة غير موجودة");
+    const reactions = Object.assign({}, msg.reactions || {});
+    const who = "a:" + ((req.admin && req.admin.username) || "admin");
+    if (reactions[who] === emoji) delete reactions[who];
+    else reactions[who] = emoji;
+    await fbSet(`messages/${code}/messages/${msgId}/reactions`, reactions);
+    notifyThread(code, "reaction", { messageId: msgId, reactions });
+    res.json({ success: true, data: { id: msgId, reactions } });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+
+/** Student: تعديل رسالة نصية (أو تعليق صورة) */
+app.patch("/api/messages/:msgId", requireStudent, rateLimit({ max: 60, windowMs: 60_000, scope: "msg-edit" }), async (req, res) => {
+  try {
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    const msgId = String(req.params.msgId || "").trim();
+    if (!msgId) return jsonError(res, 400, "معرّف الرسالة مطلوب");
+    const text = String(req.body?.text || "").trim().slice(0, 2000);
+    const msg = await fbGet(`messages/${code}/messages/${msgId}`);
+    if (!msg) return jsonError(res, 404, "الرسالة غير موجودة");
+    if (msg.from && msg.from !== "student" && msg.from !== "guest") {
+      return jsonError(res, 403, "تقدر تعدّل رسائلك أنت بس");
+    }
+    if (msg.ownerCode && msg.ownerCode !== code) {
+      return jsonError(res, 403, "غير مصرح");
+    }
+    const ty = msg.type || "text";
+    if (ty === "text" && !text) return jsonError(res, 400, "الرسالة مينفعش تبقى فاضية");
+    if (ty === "audio" && text) {
+      // تعليق على صوت — مسموح نص اختياري
+    }
+    const editedAt = now();
+    const patch = {
+      text: text || (ty === "image" ? "📷 صورة" : ty === "audio" ? "🎤 رسالة صوتية" : msg.text || ""),
+      editedAt
+    };
+    await fbPatch(`messages/${code}/messages/${msgId}`, patch);
+    const updated = { ...msg, id: msgId, ...patch };
+    notifyThread(code, "message", { message: updated });
+    res.json({ success: true, data: updated });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Admin: تعديل رسالة في محادثة */
+app.patch("/api/admin/messages/:code/:msgId", requireAdmin("students_view"), rateLimit({ max: 80, windowMs: 60_000, scope: "msg-edit-a" }), async (req, res) => {
+  try {
+    const code = String(req.params.code || "").trim();
+    const msgId = String(req.params.msgId || "").trim();
+    const text = String(req.body?.text || "").trim().slice(0, 2000);
+    if (!code || !msgId) return jsonError(res, 400, "بيانات ناقصة");
+    const msg = await fbGet(`messages/${code}/messages/${msgId}`);
+    if (!msg) return jsonError(res, 404, "الرسالة غير موجودة");
+    if (msg.from !== "admin") return jsonError(res, 403, "تعدّل رسائل الأدمن فقط من هنا");
+    if (!text && (msg.type || "text") === "text") return jsonError(res, 400, "الرسالة مينفعش تبقى فاضية");
+    const editedAt = now();
+    const patch = { text: text || msg.text, editedAt };
+    await fbPatch(`messages/${code}/messages/${msgId}`, patch);
+    const updated = { ...msg, id: msgId, ...patch };
+    notifyThread(code, "message", { message: updated });
+    res.json({ success: true, data: updated });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Student: mark thread as read */
+app.post("/api/messages/read", requireStudent, async (req, res) => {
+  try {
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    await fbPatch(`messages/${code}`, { unreadStudent: 0 });
+    notifyThread(code, "read", { by: "student" });
+    res.json({ success: true });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Student: delete one of my messages */
+app.delete("/api/messages/:msgId", requireStudent, async (req, res) => {
+  try {
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    const msgId = String(req.params.msgId);
+    const msg = await fbGet(`messages/${code}/messages/${msgId}`);
+    if (!msg) return jsonError(res, 404, "الرسالة غير موجودة");
+    if (msg.fileName) deleteMediaFile(code, msg.fileName);
+    await fbDelete(`messages/${code}/messages/${msgId}`);
+    notifyThread(code, "deleted", { id: msgId });
+    res.json({ success: true, message: "تم حذف الرسالة" });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Student: clear entire my thread */
+app.delete("/api/messages", requireStudent, async (req, res) => {
+  try {
+    const code = studentCode(req);
+    if (!code) return jsonError(res, 401, "كود الجلسة غير صالح");
+    await fbDelete(`messages/${code}`);
+    notifyThread(code, "cleared", {});
+    res.json({ success: true, message: "تم مسح المحادثة" });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Admin: list all conversation threads */
+
+/** Admin: اتصال دائم لمحادثة طالب */
+app.get("/api/admin/messages/:code/stream", requireAdmin("students_view"), rateLimit({ max: 30, windowMs: 60_000, scope: "sse-admin-th" }), async (req, res) => {
+  try {
+    const code = String(req.params.code || "").trim();
+    if (!code) return jsonError(res, 400, "كود غير صالح");
+    openSse(req, res);
+    subscribeMessages(msgSubKey("admin", code), res, { role: "admin", code });
+  } catch (e) {
+    if (!res.headersSent) jsonError(res, 500, e.message);
+  }
+});
+
+/** Admin: صندوق الوارد اللحظي (أي محادثة فيها جديد) */
+app.get("/api/admin/messages/stream", requireAdmin("students_view"), rateLimit({ max: 20, windowMs: 60_000, scope: "sse-admin-inbox" }), async (req, res) => {
+  try {
+    openSse(req, res);
+    subscribeMessages(msgSubKey("admin-inbox"), res, { role: "admin-inbox" });
+  } catch (e) {
+    if (!res.headersSent) jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/admin/messages", requireAdmin("students_view"), async (_req, res) => {
+  try {
+    const all = (await fbGet("messages")) || {};
+    const threads = Object.entries(all)
+      .filter(([code]) => {
+        if (!code || code === "undefined") return false;
+        if (/^\d{7,12}$/.test(String(code))) return true;
+        if (String(code).startsWith("guest_")) return true;
+        return false;
+      })
+      .map(([code, t]) => {
+      const msgs = Object.values(t.messages || {});
+      const last = msgs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+      return {
+        code,
+        studentName: t.studentName || code,
+        section: t.section || null,
+        updatedAt: t.updatedAt || last?.createdAt || 0,
+        unreadAdmin: Number(t.unreadAdmin || 0),
+        lastMessage: last ? { text: last.text, type: last.type || 'text', from: last.from, createdAt: last.createdAt, mediaUrl: last.mediaUrl || null } : null,
+        count: msgs.length
+      };
+    }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    res.json({ success: true, data: threads });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Admin: get one thread */
+app.get("/api/admin/messages/:code", requireAdmin("students_view"), async (req, res) => {
+  try {
+    const code = String(req.params.code);
+    const thread = (await fbGet(`messages/${code}`)) || { messages: {} };
+    const list = Object.entries(thread.messages || {})
+      .map(([id, m]) => ({ id, ...m }))
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    // mark admin read
+    await fbPatch(`messages/${code}`, { unreadAdmin: 0 });
+    res.json({
+      success: true,
+      data: {
+        code,
+        studentName: thread.studentName || code,
+        messages: list
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Admin: reply (text / image / voice)
+ * body: { text?, media?: { mime, data, duration? } }
+ */
+app.post("/api/admin/messages/:code", requireAdmin("students_view"), rateLimit({ max: 120, windowMs: 60_000, scope: "msg-admin" }), async (req, res) => {
+  try {
+    // طالب: كود رقمي — زائر: guest_xxx (لازم نحافظ عليه، متتشالش منه الحروف)
+    const rawCode = String(req.params.code || "");
+    const code = rawCode.startsWith("guest_")
+      ? guestThreadKey(rawCode.slice(6))
+      : rawCode.replace(/\D/g, "");
+    if (!code) return jsonError(res, 400, "كود غير صالح");
+    const text = String(req.body?.text || "").trim().slice(0, 2000);
+    const id = makeMsgId();
+    let mediaMeta = null;
+    if (req.body?.media) {
+      try {
+        mediaMeta = saveMediaFile(code, id, req.body.media);
+      } catch (e) {
+        return jsonError(res, 400, e.message);
+      }
+    }
+    if (!text && !mediaMeta) return jsonError(res, 400, "اكتب رد أو أرسل صورة/تسجيل");
+    const msg = {
+      from: "admin",
+      type: mediaMeta ? mediaMeta.kind : "text",
+      text: text || (mediaMeta?.kind === "image" ? "📷 صورة" : mediaMeta?.kind === "audio" ? "🎤 رسالة صوتية" : ""),
+      name: req.admin.username || "أدمن",
+      ownerCode: code,
+      createdAt: now(),
+      read: false
+    };
+    if (mediaMeta) {
+      msg.mediaUrl = mediaMeta.url;
+      msg.mime = mediaMeta.mime;
+      msg.size = mediaMeta.size;
+      msg.fileName = mediaMeta.fileName;
+      msg.storage = mediaMeta.storage || "firebase";
+      if (mediaMeta.objectPath) msg.objectPath = mediaMeta.objectPath;
+      if (mediaMeta.duration) msg.duration = mediaMeta.duration;
+    }
+    await fbSet(`messages/${code}/messages/${id}`, msg);
+    const cur = (await fbGet(`messages/${code}`)) || {};
+    await fbPatch(`messages/${code}`, {
+      updatedAt: now(),
+      unreadStudent: Number(cur.unreadStudent || 0) + 1,
+      unreadAdmin: 0,
+      studentName: cur.studentName || code
+    });
+    const out = { id, ...msg };
+    notifyThread(code, "message", { message: out });
+    res.json({ success: true, data: out });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+
+/** Admin: delete one message in a thread */
+app.delete("/api/admin/messages/:code/:msgId", requireAdmin("students_view"), async (req, res) => {
+  try {
+    const code = String(req.params.code).trim();
+    const msgId = String(req.params.msgId);
+    const msg = await fbGet(`messages/${code}/messages/${msgId}`);
+    if (msg?.fileName) deleteMediaFile(code, msg.fileName);
+    await fbDelete(`messages/${code}/messages/${msgId}`);
+    notifyThread(code, "deleted", { id: msgId });
+    res.json({ success: true, message: "تم حذف الرسالة" });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+/** Admin: delete whole thread */
+app.delete("/api/admin/messages/:code", requireAdmin("students_view"), async (req, res) => {
+  try {
+    const code = String(req.params.code).trim();
+    await fbDelete(`messages/${code}`);
+    notifyThread(code, "cleared", {});
+    res.json({ success: true, message: "تم حذف المحادثة" });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+/** Serve chat media (image/audio) — student owns thread OR admin */
+app.get("/api/media/:code/:file", async (req, res) => {
+  try {
+    let code = String(req.params.code || "");
+    // numeric student code OR guest_xxx thread folder
+    if (code.startsWith("guest_")) {
+      code = code.replace(/[^a-zA-Z0-9_\-]/g, "");
+    } else {
+      code = code.replace(/\D/g, "");
+    }
+    const file = path.basename(String(req.params.file || ""));
+    if (!code || !file || file.includes("..")) return jsonError(res, 400, "طلب غير صالح");
+
+    const token = getBearer(req) || String(req.query.token || "").trim();
+    const isGuestPath = code.startsWith("guest_");
+
+    // Guest media: allow if query guestId matches folder (public contact thread)
+    let allowed = false;
+    if (isGuestPath) {
+      const gid = String(req.query.guestId || "").replace(/[^a-zA-Z0-9_\-]/g, "");
+      if (gid && ("guest_" + gid) === code) allowed = true;
+    }
+    if (token) {
+      const stu = studentSessions.get(token);
+      if (stu && String(stu.code) === code) allowed = true;
+      if (!allowed && adminSessions.get(token)) allowed = true;
+      if (!allowed) {
+        try {
+          const remote = await fbGet(`sessions/${token}`);
+          if (remote && String(remote.code) === code) allowed = true;
+        } catch {}
+      }
+    }
+    if (!allowed) return jsonError(res, 403, "غير مصرح");
+
+    const full = path.join(MEDIA_DIR, code, file);
+    if (!fs.existsSync(full)) return jsonError(res, 404, "الملف غير موجود");
+
+    const ext = path.extname(file).toLowerCase();
+    const mimeMap = {
+      ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+      ".webp": "image/webp", ".gif": "image/gif",
+      ".webm": "audio/webm", ".ogg": "audio/ogg", ".mp3": "audio/mpeg",
+      ".m4a": "audio/mp4", ".wav": "audio/wav", ".aac": "audio/aac"
+    };
+    res.setHeader("Content-Type", mimeMap[ext] || "application/octet-stream");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.setHeader("Content-Disposition", `inline; filename="${file}"`);
+    fs.createReadStream(full).pipe(res);
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// OPEN UI — HTML + lightweight catalog helpers (video stack untouched)
+// ═══════════════════════════════════════════════════════════
+app.get("/api/ui/subjects", async (req, res) => {
+  try {
+    const src = String(req.query.src || "coursatk");
+    const yearId = Number(req.query.year || CONFIG.DEFAULT_YEAR_ID);
+    if (src === "thanawica") {
+      await thanawicaLogin().catch(() => {});
+      const data = await thSubjectsForYear(yearId);
+      return res.json({ success: true, data });
+    }
+    // coursatk via existing upstream
+    const yearData = await coalesce("up:subjects:" + yearId, () =>
+      upstreamJson(`/user/subjects/${encodeURIComponent(yearId)}`)
+    );
+    res.json({ success: true, data: Array.isArray(yearData.data) ? yearData.data : yearData });
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+app.get("/api/ui/teachers", async (req, res) => {
+  try {
+    const sid = req.query.subject_id;
+    if (isThId(sid)) {
+      const data = await thTeachers(Number(sid));
+      return res.json({ success: true, data });
+    }
+    const data = await upstreamJson(`/user/subjects/${encodeURIComponent(sid)}/teachers`);
+    res.json({ success: true, data: data.data !== undefined ? data.data : data });
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+app.get("/api/ui/chapters", async (req, res) => {
+  try {
+    const tid = req.query.teacher_id;
+    if (isThId(tid)) {
+      const data = await thChapters(Number(tid));
+      return res.json({ success: true, data });
+    }
+    const data = await upstreamJson(`/user/teachers/${encodeURIComponent(tid)}/chapters`);
+    res.json({ success: true, data: data.data !== undefined ? data.data : data });
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+app.get("/api/ui/lectures", async (req, res) => {
+  try {
+    const cid = req.query.chapter_id;
+    if (isThId(cid)) {
+      const data = await thLectures(Number(cid));
+      return res.json({ success: true, data });
+    }
+    const data = await upstreamJson(`/user/chapters/${encodeURIComponent(cid)}/lectures`);
+    res.json({ success: true, data: data.data !== undefined ? data.data : data });
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+app.get("/api/ui/lecture/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (isThId(id)) {
+      const data = await thLectureContent(Number(id));
+      return res.json(data.success !== undefined ? data : { success: true, data });
+    }
+    const data = await upstreamJson(`/user/lectures/${encodeURIComponent(id)}/content`);
+    res.json(data.success !== undefined ? data : { success: true, data });
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+const OPEN_HTML = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>كورساتك / ثناويكا — Open</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<style>
+:root{--bg:#0b0d12;--card:#151922;--line:#222836;--acc:#6c5ce7;--acc2:#00cec9;--txt:#eef0f5;--mut:#8b93a7}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,Segoe UI,Tahoma,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(180deg,#1a1f2b,#12151c);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+h1{font-size:1.05rem;font-weight:700}
+.tabs{display:flex;gap:8px}
+.tabs button,.chip{border:0;background:#222836;color:var(--txt);padding:8px 14px;border-radius:999px;cursor:pointer;font-weight:600}
+.tabs button.active{background:var(--acc);box-shadow:0 0 0 1px #8b7cff55}
+.chip{background:#1c2230;color:var(--mut);font-size:.85rem}
+main{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 58px)}
+#side{border-left:1px solid var(--line);background:var(--card);overflow:auto;padding:12px}
+#view{padding:16px 18px;overflow:auto}
+.item{padding:10px 12px;border-radius:10px;background:#10141c;margin-bottom:8px;cursor:pointer;border:1px solid transparent;transition:.15s}
+.item:hover{border-color:#343b4d;background:#171c27}
+.item.active{border-color:var(--acc);background:#1a1830}
+.item b{display:block;font-size:.95rem}
+.item small{color:var(--mut);font-size:.78rem}
+.crumb{color:var(--mut);margin-bottom:12px;font-size:.9rem;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.crumb span{color:var(--acc2);cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;cursor:pointer}
+.card:hover{border-color:var(--acc)}
+.card h3{font-size:.95rem;margin-bottom:6px}
+.card p{color:var(--mut);font-size:.8rem}
+#player{margin-top:16px}
+video,iframe{width:100%;max-width:960px;aspect-ratio:16/9;border:0;border-radius:14px;background:#000}
+.empty{color:var(--mut);padding:40px 10px;text-align:center}
+.err{color:#ff7675;background:#2a1518;border:1px solid #5a2428;padding:10px 12px;border-radius:10px;margin:10px 0}
+@media(max-width:800px){main{grid-template-columns:1fr}#side{max-height:34vh;border-left:0;border-bottom:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>📚 Open Proxy — كورساتك / ثناويكا</h1>
+  <div class="tabs">
+    <button id="t-c" class="active" onclick="setSrc('coursatk')">كورساتك</button>
+    <button id="t-t" onclick="setSrc('thanawica')">ثناويكا</button>
+  </div>
+  <span class="chip" id="srcLabel">المصدر: كورساتك</span>
+</header>
+<main>
+  <aside id="side"><div class="empty">جاري التحميل...</div></aside>
+  <section id="view">
+    <div class="crumb" id="crumb"></div>
+    <div id="list" class="grid"></div>
+    <div id="player"></div>
+  </section>
+</main>
+<script>
+let src='coursatk';
+let year=4;
+let stack=[];
+const $ = (id)=>document.getElementById(id);
+
+function setSrc(s){
+  src=s;
+  $('t-c').classList.toggle('active',s==='coursatk');
+  $('t-t').classList.toggle('active',s==='thanawica');
+  $('srcLabel').textContent='المصدر: '+(s==='coursatk'?'كورساتك':'ثناويكا');
+  stack=[{type:'root',name:s==='coursatk'?'كورساتك':'ثناويكا'}];
+  load();
+}
+
+async function api(url, opts){
+  const r=await fetch(url,opts);
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok || j.success===false) throw new Error(j.message||('HTTP '+r.status));
+  return j.data!==undefined?j.data:j;
+}
+
+function crumb(){
+  $('crumb').innerHTML=stack.map((x,i)=>i<stack.length-1
+    ?\`<span onclick="go(\${i})">\${esc(x.name)}</span> <i>/</i>\`
+    :\`<b style="color:var(--txt)">\${esc(x.name)}</b>\`).join(' ');
+}
+function go(i){stack=stack.slice(0,i+1);load();}
+function push(n){stack.push(n);load();}
+function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+
+async function load(){
+  crumb();
+  const list=$('list'); const side=$('side'); const player=$('player');
+  player.innerHTML='';
+  list.innerHTML='<div class="empty">جاري التحميل...</div>';
+  const cur=stack[stack.length-1];
+  try{
+    if(cur.type==='root'){
+      side.innerHTML=\`
+        <div class="item \${year===4?'active':''}" onclick="year=4;load()"><b>2027</b><small>year_id=4</small></div>
+        <div class="item \${year===3?'active':''}" onclick="year=3;load()"><b>2026</b><small>year_id=3</small></div>
+        <div class="item \${year===5?'active':''}" onclick="year=5;load()"><b>مراجعات</b><small>year_id=5</small></div>\`;
+      const subjects=await api('/api/ui/subjects?src='+src+'&year='+year);
+      const arr=Array.isArray(subjects)?subjects:(subjects.data||[]);
+      list.className='grid';
+      list.innerHTML=arr.map(s=>\`
+        <div class="card" onclick="push({type:'subject',id:'\${s.id}',name:'\${esc(s.name||('مادة '+s.id))}'})">
+          <h3>\${esc(s.name||s.id)}</h3>
+          <p>\${s._source||src}</p>
+        </div>\`).join('')||'<div class="empty">لا توجد مواد</div>';
+    } else if(cur.type==='subject'){
+      const teachers=await api('/api/ui/teachers?subject_id='+encodeURIComponent(cur.id));
+      const arr=Array.isArray(teachers)?teachers:(teachers.data||[]);
+      list.className='grid';
+      list.innerHTML=arr.map(t=>\`
+        <div class="card" onclick="push({type:'teacher',id:'\${t.id}',name:'\${esc(t.name||('مدرس '+t.id))}'})">
+          <h3>\${esc(t.name||t.id)}</h3>
+          <p>\${t.chapters_count||t.count||''} فصل</p>
+        </div>\`).join('')||'<div class="empty">لا يوجد مدرسين</div>';
+    } else if(cur.type==='teacher'){
+      const chapters=await api('/api/ui/chapters?teacher_id='+encodeURIComponent(cur.id));
+      const arr=Array.isArray(chapters)?chapters:(chapters.data||[]);
+      list.className='grid';
+      list.innerHTML=arr.map(c=>\`
+        <div class="card" onclick="push({type:'chapter',id:'\${c.id}',name:'\${esc(c.name||('فصل '+c.id))}'})">
+          <h3>\${esc(c.name||c.id)}</h3>
+          <p>\${c.lectures_count||c.count||''} محاضرة</p>
+        </div>\`).join('')||'<div class="empty">لا توجد فصول</div>';
+    } else if(cur.type==='chapter'){
+      const lectures=await api('/api/ui/lectures?chapter_id='+encodeURIComponent(cur.id));
+      const arr=Array.isArray(lectures)?lectures:(lectures.data||[]);
+      list.className='grid';
+      list.innerHTML=arr.map(l=>\`
+        <div class="card" onclick="push({type:'lecture',id:'\${l.id}',name:'\${esc(l.name||('محاضرة '+l.id))}'})">
+          <h3>\${esc(l.name||l.id)}</h3>
+          <p>\${l.videos_count||l.count||''} فيديو</p>
+        </div>\`).join('')||'<div class="empty">لا توجد محاضرات</div>';
+    } else if(cur.type==='lecture'){
+      const content=await api('/api/ui/lecture/'+encodeURIComponent(cur.id));
+      const data=content.data||content;
+      const videos=data.videos||[];
+      list.className='';
+      list.innerHTML=videos.map(v=>\`
+        <div class="item" onclick="play('\${String(v.id).replace(/'/g,\"&#39;\")}', '\${esc(v.name||v.title||'فيديو')}', '\${cur.id}')">
+          <b>▶ \${esc(v.name||v.title||v.id)}</b>
+          <small>\${v.duration_seconds?Math.round(v.duration_seconds/60)+' د':''} · \${v._kind||v.type||''}</small>
+        </div>\`).join('')||'<div class="empty">مفيش فيديوهات</div>';
+    }
+  }catch(e){
+    list.innerHTML='<div class="err">'+esc(e.message)+'</div>';
+  }
+}
+
+async function play(id,name,lectureId){
+  const player=$('player');
+  player.innerHTML='<div class="empty">جاري تجهيز التشغيل...</div>';
+  try{
+    const body={};
+    if(lectureId) body.lectureId=lectureId;
+    const r=await fetch('/api/play/'+encodeURIComponent(id),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    const j=await r.json();
+    if(!r.ok||j.success===false) throw new Error(j.message||'فشل التشغيل');
+    const d=j.data||j;
+    if(d.type==='youtube'||d.youtube_url){
+      const u=d.youtube_url||d.url||'';
+      const m=u.match(/[?&]v=([\\w-]{6,})/)||u.match(/youtu\\.be\\/([\\w-]{6,})/)||u.match(/embed\\/([\\w-]{6,})/);
+      const yid=m?m[1]:(d.youtubeId||'');
+      player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3>
+        <iframe src="https://www.youtube.com/embed/\${yid}" allowfullscreen allow="autoplay; encrypted-media"></iframe>\`;
+      return;
+    }
+    if(d.type==='mp4'||d.mp4_url||d.play_url&&String(d.play_url).includes('.mp4')){
+      const url=d.mp4_url||d.play_url||d.url;
+      player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3><video controls autoplay src="\${url}"></video>\`;
+      return;
+    }
+    const url=d.play_url||d.url||d.playlist;
+    if(!url) throw new Error('مفيش رابط تشغيل');
+    player.innerHTML=\`<h3 style="margin-bottom:10px">\${esc(name)}</h3><video id="v" controls autoplay></video>\`;
+    const video=$('v');
+    if(window.Hls&&Hls.isSupported()&&String(url).includes('m3u8')){
+      const hls=new Hls({enableWorker:true});
+      hls.loadSource(url);
+      hls.attachMedia(video);
+    }else{
+      video.src=url;
+    }
+  }catch(e){
+    player.innerHTML='<div class="err">'+esc(e.message)+'</div>';
+  }
+}
+
+setSrc('coursatk');
+</script>
+</body>
+</html>`;
+
+app.get("/", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(OPEN_HTML);
+});
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "المسار غير موجود",
+    path: req.path
+  });
+});
+
+// آخر خط دفاع: أي خطأ في أي route يرجع JSON بدل ما يوقع السيرفر
+app.use((err, req, res, _next) => {
+  console.error("[express error]", req.method, req.path, (err && err.message) || err);
+  if (res.headersSent) return res.end();
+  const status = (err && (err.status || err.statusCode)) || 500;
+  res.status(status >= 400 && status < 600 ? status : 500).json({
+    success: false,
+    message: status === 400 ? "طلب غير صالح" : "حصل خطأ في السيرفر — جرّب تاني"
+  });
+});
+
+// Cleanup timers
+setInterval(() => {
+  const t = now();
+  for (const [k, s] of studentSessions) {
+    if (s.expiresAt && t > s.expiresAt) studentSessions.delete(k);
+  }
+  for (const [k, s] of adminSessions) {
+    if (s.expiresAt && t > s.expiresAt) adminSessions.delete(k);
+  }
+  for (const [k, s] of streamSessions) {
+    if (t - s.lastUsed > CONFIG.STREAM_IDLE_MS || t - s.createdAt > CONFIG.STREAM_MAX_MS) streamSessions.delete(k);
+  }
+  for (const [k, e] of sourceCache) if (t > e.exp + 60_000) sourceCache.delete(k);
+  for (const [k, e] of upCache) if (t > e.stale) upCache.delete(k);
+  for (const [k, e] of authCache) if (t > e.exp) authCache.delete(k);
+  for (const [k, exp] of badTokens) if (t > exp) badTokens.delete(k);
+  for (const k of [...segCache.keys()]) {
+    const e = segCache.get(k);
+    if (e && t > e.exp) segDel(k);
+  }
+}, 60_000).unref();
+
+// Boot: load crypto + Thanawica cookies (OPEN MODE — no admin password)
+CONFIG.BOOTSTRAP_ADMIN.passwordHash = "";
+CONFIG.BOOTSTRAP_ADMIN.passwordPlain = "";
 await loadDecryptionUtils();
+try {
+  if (CONFIG.THANAWICA_ENABLED) {
+    await thanawicaLogin(); // uses HARDCODED cookies / thanawica_cookies.txt
+    console.log("[API] Thanawica hybrid ON — cookies hardcoded");
+  }
+} catch (e) {
+  console.warn("[API] Thanawica login skipped:", e.message);
+}
 
-app.listen(CONFIG.PORT, () => {
-  console.log("[OPEN " + APP_VERSION + "] http://localhost:" + CONFIG.PORT);
-  console.log("[OPEN " + APP_VERSION + "] health=/health player=/");
+// Load site packages/agents from Firebase if configured
+try {
+  if (getFirebaseUrl()) {
+    const pkgs = await fbGet("site/packages");
+    if (Array.isArray(pkgs) && pkgs.length) runtime.packages = pkgs;
+    const ags = await fbGet("site/agents");
+    if (Array.isArray(ags)) runtime.agents = ags;
+    const sn = await fbGet("site/name");
+    if (typeof sn === "string" && sn) runtime.siteName = sn;
+    const tok = await fbGet("config/coursatkToken");
+    if (typeof tok === "string" && tok.length > 20 && !runtime.coursatkToken) {
+      runtime.coursatkToken = tok;
+      CONFIG.COURSATK_TOKEN = tok;
+    }
+  }
+} catch (e) {
+  console.warn("[API] site load skip:", e.message);
+}
+
+if (!getFirebaseUrl()) {
+  console.warn("[API] WARNING: Firebase URL not set — configure from admin panel (إعدادات التشغيل)");
+}
+
+// Seed sections ONLY if missing — never overwrite admin 2027 data
+try {
+  if (!getFirebaseUrl()) throw new Error("no firebase");
+  const existing = (await fbGet("sections")) || {};
+  let created = 0;
+  for (const [id, def] of Object.entries(SECTION_CATALOG)) {
+    const cur = existing[id];
+    if (cur && Array.isArray(cur.subjectIds) && cur.subjectIds.length) continue;
+    await fbSet(`sections/${id}`, { ...def, updatedAt: Date.now() });
+    created++;
+  }
+  console.log("[API] sections seed: created", created, "(existing untouched)");
+} catch (e) {
+  console.warn("[API] section seed skip:", e.message);
+}
+
+const server = app.listen(CONFIG.PORT, () => {
+  console.log(`[API ${APP_VERSION}] :${CONFIG.PORT} protected · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
+  console.log(`[API] bootstrap admin ready (Hema)`);
+});
+// Railway/الـ proxy بيفضّل الاتصال مفتوح أطول من الـ default بتاع Node (5 ثواني) — ده كان بيسبب ECONNRESET متقطع
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+server.requestTimeout = 0;
+// إيقاف هادي عند الـ deploy
+process.on("SIGTERM", () => {
+  console.log("[API] SIGTERM — closing");
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 10_000).unref();
 });
