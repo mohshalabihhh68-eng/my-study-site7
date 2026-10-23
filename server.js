@@ -1108,6 +1108,14 @@ app.get("/api/stream/manifest/:sessionId", async (req, res) => {
   }
 });
 
+/**
+ * Rewrite playlist:
+ * - Unwrap key on server, expose at /api/stream/key/:sessionId
+ * - Keep segment URLs pointing at CDN (browser fetches them → avoids CF block on Railway IP)
+ * - hls.js decrypts AES-128 client-side using our key URI
+ *
+ * Fallback PROXY mode (query ?mode=proxy): old behavior, server fetches+decrypts segments
+ */
 async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHeaders) {
   try {
     session.allowedHosts.add(new URL(baseUrl).hostname);
@@ -1117,6 +1125,8 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
   let mediaSeq = 0;
   let currentIv = null;
   let keyFetched = false;
+  // Default DIRECT — browser loads segments from CDN
+  const proxyMode = false;
 
   for (const raw of lines) {
     const t = raw.trim();
@@ -1130,10 +1140,7 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
       const uri = line.match(/URI="([^"]+)"/)?.[1];
       const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
       if (ivHex) currentIv = parseIvHex(ivHex);
-      if (uri && !keyFetched && session.plainKey) {
-        session.defaultIv = currentIv;
-        keyFetched = true;
-      } else if (uri && !keyFetched) {
+      if (uri && !keyFetched && !session.plainKey) {
         const keyUrl = new URL(uri, baseUrl).href;
         try {
           session.allowedHosts.add(new URL(keyUrl).hostname);
@@ -1148,21 +1155,41 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
         session.defaultIv = currentIv;
         keyFetched = true;
         console.log(`[key] unwrapped for ${session.videoId} len=${session.plainKey.length}`);
+      } else if (uri && session.plainKey) {
+        session.defaultIv = currentIv;
+        keyFetched = true;
       }
-      continue; // strip KEY — segments returned plain
+
+      if (proxyMode) {
+        // segments will be plain — strip KEY
+        continue;
+      }
+      // DIRECT: point KEY to our unwrapped key endpoint, keep METHOD + IV
+      const ivPart = ivHex
+        ? `,IV=${ivHex.startsWith("0x") || ivHex.startsWith("0X") ? ivHex : "0x" + ivHex}`
+        : currentIv
+          ? `,IV=0x${currentIv.toString("hex")}`
+          : "";
+      out.push(`#EXT-X-KEY:METHOD=AES-128,URI="/api/stream/key/${sessionId}"${ivPart}`);
+      continue;
     }
     if (line && !line.startsWith("#")) {
       const segmentUrl = new URL(line, baseUrl).href;
       try {
         session.allowedHosts.add(new URL(segmentUrl).hostname);
       } catch {}
-      const seq = mediaSeq + segIndex;
-      const iv = currentIv || ivFromMediaSequence(seq);
-      const payload = Buffer.from(
-        JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }),
-        "utf8"
-      ).toString("base64url");
-      out.push(`/api/stream/segment/${sessionId}/${payload}`);
+      if (proxyMode) {
+        const seq = mediaSeq + segIndex;
+        const iv = currentIv || ivFromMediaSequence(seq);
+        const payload = Buffer.from(
+          JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }),
+          "utf8"
+        ).toString("base64url");
+        out.push(`/api/stream/segment/${sessionId}/${payload}`);
+      } else {
+        // DIRECT: absolute CDN URL — browser fetches (bypasses Railway CF block)
+        out.push(segmentUrl);
+      }
       segIndex++;
       continue;
     }
@@ -1175,10 +1202,27 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
   res.set({
     "Content-Type": "application/vnd.apple.mpegurl",
     "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*"
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*"
   });
   res.send(out.join("\n"));
 }
+
+// Raw AES-128 key for hls.js client-side decrypt (DIRECT mode)
+app.get("/api/stream/key/:sessionId", async (req, res) => {
+  const session = getStreamSession(req.params.sessionId);
+  if (!session || !session.plainKey) {
+    return jsonError(res, 404, "مفتاح غير متاح");
+  }
+  res.set({
+    "Content-Type": "application/octet-stream",
+    "Content-Length": String(session.plainKey.length),
+    "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*"
+  });
+  res.send(session.plainKey);
+});
 
 app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
   const session = getStreamSession(req.params.sessionId);
