@@ -1,243 +1,445 @@
-const express = require("express");
-const fetch = require("node-fetch");
-const path = require("path");
-const cors = require("cors");
+/**
+ * Coursatk API — protected backend
+ * (Modification: Open access for frontend testing without login)
+ */
+import express from "express";
+import cors from "cors";
+import compression from "compression";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.set("trust proxy", 1);
+app.use(cors({ origin: true, credentials: false }));
+app.use(express.json({ limit: "512kb" }));
+app.use(compression());
 
-// التوكن الجديد
-const STUDENT_TOKEN =
-  process.env.COURSATK_TOKEN ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs";
-
-const API = "https://api.coursatk.online";
-const SW = "https://api.stream-weave.com";
-
-app.use(cors());
-app.use(express.json());
+// 👇 السيرفر بيقرأ ملفاتك من فولدر public
 app.use(express.static(path.join(__dirname, "public")));
 
-function headers() {
-  return {
-    Authorization: "Bearer " + STUDENT_TOKEN,
-    Accept: "application/json",
-    Origin: "https://coursatk.online",
-    Referer: "https://coursatk.online/",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+// ═══════════════════════════════════════════════════════════
+// Rate limit
+// ═══════════════════════════════════════════════════════════
+const rateBuckets = new Map();
+
+function clientIp(req) {
+  const xf = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return xf || req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+function rateLimit(options = {}) {
+  const windowMs = options.windowMs || 60_000;
+  const max = options.max || 100;
+  const keyFn = options.keyFn || ((req) => clientIp(req) + ":" + (options.scope || "global"));
+  return (req, res, next) => {
+    const key = keyFn(req);
+    const now = Date.now();
+    let b = rateBuckets.get(key);
+    if (!b || now > b.resetAt) {
+      b = { count: 0, resetAt: now + windowMs };
+      rateBuckets.set(key, b);
+    }
+    b.count += 1;
+    if (b.count > max) {
+      return res.status(429).json({ success: false, message: "طلبات كثيرة — حاول بعد دقيقة" });
+    }
+    next();
   };
 }
 
-function browserHeaders(extra) {
-  return Object.assign({
-      Origin: "https://coursatk.online",
-      Referer: "https://coursatk.online/",
-      Accept: "*/*",
-      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-    }, extra || {});
-}
-
-function b64urlEncode(value) {
-  var buf = Buffer.isBuffer(value) ? value : Buffer.from(String(value));
-  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function b64urlDecode(value) {
-  var s = String(value).replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/");
-  while (s.length % 4) s += "=";
-  return Buffer.from(s, "base64").toString("utf8");
-}
-
-function joinRel(base, rel) {
-  var q = ""; var relPath = String(rel);
-  var qi = relPath.indexOf("?");
-  if (qi !== -1) { q = relPath.slice(qi); relPath = relPath.slice(0, qi); }
-  var stack = String(base || "").split("/");
-  if (stack.length && stack[stack.length - 1] !== "" && /\.[a-z0-9]+$/i.test(stack[stack.length - 1])) { stack.pop(); }
-  if (stack.length && stack[stack.length - 1] === "") stack.pop();
-  relPath.split("/").forEach(function (part) {
-    if (!part || part === ".") return;
-    if (part === "..") stack.pop(); else stack.push(part);
-  });
-  return stack.join("/") + q;
-}
-
-async function fetchFollow(url, hdrs, left) {
-  if (left == null) left = 5;
-  var res = await fetch(url, { headers: hdrs, redirect: "manual" });
-  if ([301, 302, 303, 307, 308].indexOf(res.status) !== -1 && left > 0) {
-    var loc = res.headers.get("location");
-    if (!loc) return res;
-    try { if (res.body && res.body.cancel) await res.body.cancel(); else await res.arrayBuffer(); } catch (e) {}
-    var next = new URL(loc, url).href;
-    var nextHeaders = Object.assign({}, hdrs);
-    if (new URL(next).host !== new URL(url).host) delete nextHeaders.Authorization;
-    return fetchFollow(next, nextHeaders, left - 1);
+setInterval(() => {
+  const t = Date.now();
+  for (const [k, b] of rateBuckets) {
+    if (t > b.resetAt) rateBuckets.delete(k);
   }
-  return res;
+}, 60_000).unref();
+
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const CONFIG = {
+  PORT: Number(process.env.PORT || 3000),
+  COURSATK_API: "https://api.coursatk.online/api/v1",
+  COURSATK_TOKEN:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
+  DEFAULT_YEAR_ID: 4,
+  STREAM_HOSTS: [
+    "api.coursatk.online",
+    "stream-weave.com",
+    "floravon.online",
+    "floravon.shop",
+    "c-cdn.online"
+  ],
+  STREAM_ORIGIN: "https://coursatk.online",
+  STREAM_REFERER: "https://coursatk.online/",
+  STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
+  STREAM_UA:
+    "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
+  STREAM_SESSION_MS: 30 * 60 * 1000,
+  MAX_PROXY_BYTES: 12 * 1024 * 1024,
+};
+
+// ═══════════════════════════════════════════════════════════
+// Upstream helpers
+// ═══════════════════════════════════════════════════════════
+async function upstreamHeaders(extra = {}) {
+  return {
+    Authorization: `Bearer ${CONFIG.COURSATK_TOKEN}`,
+    Accept: "application/json",
+    ...extra
+  };
 }
 
-function pipeUpstream(res, upstream, buf) {
-  var ct = upstream.headers.get("content-type") || "application/octet-stream";
-  res.set("Content-Type", ct);
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Accept-Ranges", upstream.headers.get("accept-ranges") || "bytes");
-  var cr = upstream.headers.get("content-range");
-  if (cr) res.set("Content-Range", cr);
-  res.status(upstream.status).send(buf);
-}
-
-async function proxyJson(url, opts) {
-  opts = opts || {};
-  const res = await fetch(url, {
-    method: opts.method || "GET",
-    headers: Object.assign({}, headers(), opts.headers || {}),
-    body: opts.body,
+async function upstreamJson(apiPath, options = {}) {
+  const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, {
+    ...options,
+    headers: await upstreamHeaders(options.headers || {})
   });
-  const text = await res.text();
-  try { return { status: res.status, body: JSON.parse(text) }; } catch (e) { return { status: res.status, body: text }; }
+  const text = await r.text();
+  let data;
+  try { data = JSON.parse(text); } catch {
+    throw new Error(`Upstream non-JSON (${r.status})`);
+  }
+  if (!r.ok) throw new Error(data?.message || `Upstream HTTP ${r.status}`);
+  return data;
 }
 
-// ==================== Routes ====================
+// ═══════════════════════════════════════════════════════════
+// Stream-Weave decrypt (server-only)
+// ═══════════════════════════════════════════════════════════
+let decryptPlaybackKeyFn = null;
 
-app.get("/api/years", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/user/years");
-  res.status(r.status).json(r.body);
-});
-
-app.get("/api/subjects/:id", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/user/subjects/" + req.params.id);
-  res.status(r.status).json(r.body);
-});
-
-app.get("/api/subjects/:id/teachers", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/user/subjects/" + req.params.id + "/teachers");
-  res.status(r.status).json(r.body);
-});
-
-app.get("/api/teachers/:id/chapters", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/user/teachers/" + req.params.id + "/chapters");
-  res.status(r.status).json(r.body);
-});
-
-app.get("/api/chapters/:id/lectures", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/user/chapters/" + req.params.id + "/lectures");
-  res.status(r.status).json(r.body);
-});
-
-app.get("/api/lectures/:id/content", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/user/lectures/" + req.params.id + "/content");
-  res.status(r.status).json(r.body);
-});
-
-app.get("/api/profile", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/user/profile");
-  res.status(r.status).json(r.body);
-});
-
-app.post("/api/video/:id/play", async function (req, res) {
-  const r = await proxyJson(API + "/api/v1/video/" + req.params.id + "/stream-weave/play", {
-    method: "POST",
-    headers: { "Content-Length": "0" },
-    body: "",
-  });
-  res.status(r.status).json(r.body);
-});
-
-app.get("/api/cdn", async function (req, res) {
+async function loadDecryptionUtils() {
+  const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
+  let source = null;
   try {
-    var target = req.query.url || "";
-    if (req.query.u) target = b64urlDecode(String(req.query.u));
-    if (!target) return res.status(400).send("missing url");
-    var hdrs = browserHeaders();
-    if (req.headers.range) hdrs.Range = req.headers.range;
-    var upstream = await fetchFollow(target, hdrs);
-    var buf = Buffer.from(await upstream.arrayBuffer());
-    res.set("Cache-Control", "public, max-age=30");
-    pipeUpstream(res, upstream, buf);
-  } catch (e) { res.status(502).send("cdn error: " + e.message); }
+    if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8");
+  } catch {}
+  if (!source) {
+    console.log("[crypto] fetching player.js…");
+    const r = await fetch(CONFIG.PLAYER_JS, {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }
+    });
+    if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
+    source = await r.text();
+    try { fs.writeFileSync(cachePath, source); } catch {}
+  }
+  const { webcrypto } = crypto;
+  const sandbox = {
+    window: {}, self: {}, globalThis: {}, global: {},
+    console: { log() {}, warn() {}, error() {}, info() {} },
+    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer,
+    atob: (s) => Buffer.from(s, "base64").toString("binary"),
+    btoa: (s) => Buffer.from(s, "binary").toString("base64"),
+    setTimeout, clearTimeout, setInterval, clearInterval,
+    Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date,
+    Map, Set, WeakMap, Symbol, Proxy, Reflect,
+    document: {
+      createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }),
+      head: { appendChild() {} }, body: { appendChild() {} },
+      querySelector: () => null, addEventListener() {}
+    },
+    navigator: { userAgent: "Node" },
+    location: { href: "https://coursatk.online/" },
+    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
+    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
+    Blob: class { constructor(p) { this.p = p; } },
+    fetch: async () => ({ ok: false }),
+    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
+  };
+  sandbox.window = sandbox; sandbox.self = sandbox;
+  sandbox.globalThis = sandbox; sandbox.global = sandbox;
+  vm.runInNewContext(source, sandbox, { timeout: 8000 });
+  const du = sandbox.DecryptionUtils;
+  if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
+  decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
+  console.log("[crypto] ready");
+}
+
+async function unwrapKey(wrappedBuf, videoId) {
+  if (!decryptPlaybackKeyFn) throw new Error("crypto not loaded");
+  const wrapped = Buffer.isBuffer(wrappedBuf) ? new Uint8Array(wrappedBuf) : new Uint8Array(wrappedBuf);
+  if (wrapped.byteLength === 16) return Buffer.from(wrapped);
+  const result = await decryptPlaybackKeyFn(wrapped, String(videoId));
+  const key = result?.key;
+  if (!key) throw new Error("empty key");
+  const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+  if (aes.length !== 16) throw new Error(`key len ${aes.length}`);
+  return aes;
+}
+
+function decryptSegment(encrypted, key, iv) {
+  const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+}
+
+function parseIvHex(hex) {
+  const h = String(hex || "").replace(/^0x/i, "").trim();
+  if (!/^[0-9a-fA-F]{32}$/.test(h)) return null;
+  return Buffer.from(h, "hex");
+}
+
+function ivFromMediaSequence(seq) {
+  const iv = Buffer.alloc(16, 0);
+  iv.writeUInt32BE(Number(seq) >>> 0, 12);
+  return iv;
+}
+
+function allowedStreamUrl(raw, session = null) {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return false;
+    const hosts = new Set(CONFIG.STREAM_HOSTS);
+    if (session?.allowedHosts) for (const h of session.allowedHosts) hosts.add(h);
+    if (session?.streamUrl) {
+      try { hosts.add(new URL(session.streamUrl).hostname); } catch {}
+    }
+    return [...hosts].some(h => u.hostname === h || u.hostname.endsWith("." + h));
+  } catch {
+    return false;
+  }
+}
+
+async function streamFetch(session, url, extra = {}, clientHeaders = null) {
+  if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
+  const ch = clientHeaders || {};
+  const headers = {
+    Accept: "*/*",
+    "Cache-Control": "no-cache",
+    Origin: CONFIG.STREAM_ORIGIN,
+    Referer: CONFIG.STREAM_REFERER,
+    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
+    "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
+  };
+
+  const isMediaSegmentHost = /floravon\.(online|shop)|c-cdn\.online/i.test(url);
+  if (!isMediaSegmentHost && session?.token) {
+    headers.Authorization = `Bearer ${session.token}`;
+  }
+
+  for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
+    if (ch[name]) headers[name] = ch[name];
+  }
+  for (const [k, v] of Object.entries(extra || {})) {
+    if (v != null && v !== "") headers[k] = v;
+  }
+  return fetch(url, { headers, cache: "no-store" });
+}
+
+// ═══════════════════════════════════════════════════════════
+// PUBLIC ROUTES (NO LOGIN REQUIRED)
+// ═══════════════════════════════════════════════════════════
+const globalLimiter = rateLimit({ max: 100, windowMs: 60_000, scope: "global" });
+app.use((req, res, next) => req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next));
+
+app.get("/health", (_req, res) => {
+  res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) });
 });
 
-app.get("/api/stream", async function (req, res) {
+// 🔓 فتح مسارات الكتالوج للكل بدون تسجيل دخول
+app.get("/api/subjects/:id", async (req, res) => {
   try {
-    var swPath = (req.query.path || "").replace(/^\/+/, "");
-    var token = req.query.t;
-    if (!token || !swPath) return res.status(400).json({ error: "missing path or token" });
+    const yearId = Number(req.params.id) || CONFIG.DEFAULT_YEAR_ID;
+    const data = await upstreamJson(`/user/subjects/${encodeURIComponent(yearId)}`);
+    res.json(data);
+  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+});
 
-    var url = SW + "/api/v1/" + swPath;
-    var hdrs = browserHeaders({ Authorization: "Bearer " + token });
-    if (req.headers.range) hdrs.Range = req.headers.range;
-    var upstream = await fetchFollow(url, hdrs);
+app.get("/api/subjects/:id/teachers", async (req, res) => {
+  try {
+    res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`));
+  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+});
 
-    var ct = upstream.headers.get("content-type") || "application/octet-stream";
-    var isM3u8 = ct.indexOf("mpegurl") !== -1 || ct.indexOf("m3u8") !== -1 || swPath.indexOf(".m3u8") !== -1;
+app.get("/api/teachers/:id/chapters", async (req, res) => {
+  try {
+    res.json(await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`));
+  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+});
 
-    if (isM3u8) {
-      var text = await upstream.text();
-      var base = swPath.indexOf("/") !== -1 ? swPath.substring(0, swPath.lastIndexOf("/") + 1) : "";
-      text = text.split("\n").map(function (line) {
-          var s = line.trim();
-          if (!s) return line;
-          if (s.charAt(0) === "#") {
-            return s.replace(/URI="([^"]+)"/g, function (_m, uri) {
-              if (uri.indexOf("http") === 0) return 'URI="/api/cdn?u=' + b64urlEncode(uri) + '"';
-              var clean = uri.charAt(0) === "/" ? uri.slice(1) : uri;
-              clean = clean.replace(/^api\/v1\//, "");
-              if (clean.indexOf("videos/") !== 0) clean = joinRel(base, clean);
-              return 'URI="/api/stream?path=' + encodeURIComponent(clean) + "&t=" + encodeURIComponent(token) + '"';
-            });
-          }
-          if (s.indexOf("http") === 0) {
-            try {
-              var pu = new URL(s);
-              var parts = pu.pathname.split("/").filter(Boolean);
-              var vi = parts.indexOf("videos");
-              if (vi >= 0 && parts.length >= vi + 3) {
-                var vid = parts[vi + 1];
-                var quality = parts[vi + 2];
-                var fname = (parts[vi + 3] || "").split("?")[0];
-                if (vid && quality && fname) {
-                  var swPath = "videos/" + vid + "/stream/" + quality + "/" + fname;
-                  return "/api/stream?path=" + encodeURIComponent(swPath) + "&t=" + encodeURIComponent(token);
-                }
-              }
-            } catch (e) {}
-            return "/api/cdn?u=" + b64urlEncode(s);
-          }
-          return "/api/stream?path=" + encodeURIComponent(joinRel(base, s)) + "&t=" + encodeURIComponent(token);
-        }).join("\n");
+app.get("/api/chapters/:id/lectures", async (req, res) => {
+  try {
+    res.json(await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`));
+  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+});
 
-      res.set("Content-Type", "application/vnd.apple.mpegurl");
-      res.set("Access-Control-Allow-Origin", "*");
-      res.set("Cache-Control", "no-store");
-      return res.status(upstream.status).send(text);
+app.get("/api/lectures/:id/content", async (req, res) => {
+  try {
+    res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`));
+  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+});
+
+// 🔓 فتح مسار تشغيل الفيديو للكل
+const streamSessions = new Map();
+
+app.post("/api/play/:videoId", async (req, res) => {
+  try {
+    const data = await upstreamJson(`/video/${encodeURIComponent(req.params.videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+    if (!data?.success || !data?.data?.token || !data?.data?.stream_url || !data?.data?.video_id) throw new Error("Playback response ناقص");
+    
+    const id = crypto.randomUUID();
+    streamSessions.set(id, {
+      id,
+      videoId: String(data.data.video_id),
+      token: data.data.token,
+      streamUrl: data.data.stream_url,
+      playId: String(req.params.videoId),
+      createdAt: Date.now(),
+      lastUsed: Date.now(),
+      plainKey: null,
+      defaultIv: null,
+      allowedHosts: new Set([new URL(data.data.stream_url).hostname])
+    });
+    
+    res.json({ success: true, data: { session: id, video_id: data.data.video_id, manifest_url: `/api/stream/manifest/${id}` } });
+  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+});
+
+function getStreamSession(id) {
+  const s = streamSessions.get(id);
+  if (!s) return null;
+  const last = s.lastUsed || s.createdAt;
+  if (Date.now() - last > CONFIG.STREAM_SESSION_MS) { streamSessions.delete(id); return null; }
+  s.lastUsed = Date.now();
+  return s;
+}
+
+app.get("/api/stream/manifest/:sessionId", async (req, res) => {
+  const session = getStreamSession(req.params.sessionId);
+  if (!session) return res.status(404).json({ success: false, message: "جلسة التشغيل منتهية" });
+
+  try {
+    let master = await streamFetch(session, session.streamUrl, {}, req.headers);
+    if (!master.ok) throw new Error(`Stream master HTTP ${master.status}`);
+    const masterText = await master.text();
+    const lines = masterText.split(/\r?\n/);
+
+    let variant = null;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
+        const next = lines[i + 1]?.trim();
+        if (next && !next.startsWith("#")) { variant = new URL(next, session.streamUrl).href; break; }
+      }
     }
 
-    var buf = Buffer.from(await upstream.arrayBuffer());
-    res.set("Cache-Control", "no-store");
-    pipeUpstream(res, upstream, buf);
-  } catch (e) { res.status(502).json({ error: e.message }); }
+    if (variant) {
+      let variantRes = await streamFetch(session, variant, {}, req.headers);
+      if (!variantRes.ok) throw new Error(`Variant HTTP ${variantRes.status}`);
+      return rewritePlaylist(req.params.sessionId, session, await variantRes.text(), variant, res, req.headers);
+    }
+    return rewritePlaylist(req.params.sessionId, session, masterText, session.streamUrl, res, req.headers);
+  } catch (e) {
+    res.status(502).json({ success: false, message: e.message });
+  }
 });
 
-app.post("/api/heartbeat", async function (req, res) {
+async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHeaders) {
+  try { session.allowedHosts.add(new URL(baseUrl).hostname); } catch {}
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let mediaSeq = 0;
+  let currentIv = null;
+  let keyFetched = false;
+
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0;
+  }
+
+  let segIndex = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#EXT-X-KEY:")) {
+      const uri = line.match(/URI="([^"]+)"/)?.[1];
+      const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
+      if (ivHex) currentIv = parseIvHex(ivHex);
+      if (uri && !keyFetched && session.plainKey) {
+        session.defaultIv = currentIv;
+        keyFetched = true;
+      } else if (uri && !keyFetched) {
+        const keyUrl = new URL(uri, baseUrl).href;
+        try { session.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
+        const keyRes = await streamFetch(session, keyUrl, {}, clientHeaders);
+        if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
+        const wrapped = Buffer.from(await keyRes.arrayBuffer());
+        session.plainKey = await unwrapKey(wrapped, session.videoId);
+        session.defaultIv = currentIv;
+        keyFetched = true;
+      }
+      continue;
+    }
+    if (line && !line.startsWith("#")) {
+      const segmentUrl = new URL(line, baseUrl).href;
+      try { session.allowedHosts.add(new URL(segmentUrl).hostname); } catch {}
+      const seq = mediaSeq + segIndex;
+      const iv = currentIv || ivFromMediaSequence(seq);
+      const payload = Buffer.from(JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }), "utf8").toString("base64url");
+      out.push(`/api/stream/segment/${sessionId}/${payload}`);
+      segIndex++;
+      continue;
+    }
+    out.push(raw);
+  }
+  if (!session.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
+
+  res.set({ "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
+  res.send(out.join("\n"));
+}
+
+app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
+  const session = getStreamSession(req.params.sessionId);
+  if (!session) return res.status(404).json({ success: false, message: "جلسة التشغيل منتهية" });
+  if (!session.plainKey) return res.status(404).json({ success: false, message: "مفتاح غير متاح" });
+
+  let meta;
+  try { meta = JSON.parse(Buffer.from(req.params.encoded, "base64url").toString("utf8")); } catch { return res.status(400).json({ success: false, message: "segment meta غير صالح" }); }
+  const url = meta?.u;
+  if (!url || !allowedStreamUrl(url, session)) return res.status(403).json({ success: false, message: "رابط غير مسموح" });
+
+  const iv = parseIvHex(meta.iv) || session.defaultIv || ivFromMediaSequence(meta.s || 0);
   try {
-    var url = req.body && req.body.url;
-    var token = req.body && req.body.token;
-    if (!url || !token) return res.status(400).json({ error: "url+token required" });
-    var upstream = await fetch(url, {
-      method: "POST",
-      headers: browserHeaders({ Authorization: "Bearer " + token, "Content-Type": "application/json" }),
-      body: "{}",
-    });
-    var text = await upstream.text();
-    res.status(upstream.status).type("json").send(text);
-  } catch (e) { res.status(502).json({ error: e.message }); }
+    const upstream = await streamFetch(session, url, { Range: req.headers.range || undefined }, req.headers);
+    if (!upstream.ok && upstream.status !== 206) throw new Error(`Segment HTTP ${upstream.status}`);
+    const encrypted = Buffer.from(await upstream.arrayBuffer());
+    if (encrypted.length > CONFIG.MAX_PROXY_BYTES) return res.status(413).json({ success: false, message: "المقطع كبير" });
+
+    let plain;
+    try { plain = decryptSegment(encrypted, session.plainKey, iv); } catch (decErr) { plain = encrypted; }
+    
+    res.status(200);
+    res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
+    res.send(plain);
+  } catch (e) {
+    if (!res.headersSent) res.status(502).json({ success: false, message: e.message }); else res.end();
+  }
 });
 
-app.get("*", function (req, res) {
+// ═══════════════════════════════════════════════════════════
+// Fallback & Setup
+// ═══════════════════════════════════════════════════════════
+app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(PORT, function () {
-  console.log("Running on port " + PORT);
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: "المسار غير موجود" });
+});
+
+setInterval(() => {
+  const t = Date.now();
+  for (const [k, s] of streamSessions) {
+    if (t - (s.lastUsed || s.createdAt) > CONFIG.STREAM_SESSION_MS) streamSessions.delete(k);
+  }
+}, 60_000).unref();
+
+// Boot: load decryption tools
+await loadDecryptionUtils();
+
+app.listen(CONFIG.PORT, () => {
+  console.log(`[API] :${CONFIG.PORT} running (OPEN ACCESS) · segment-decrypt ON`);
 });
