@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -67,9 +67,6 @@
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════
-     شاشة تسجيل الدخول
-     ═══════════════════════════════════════════════ -->
 <div id="loginScreen" class="card login">
   <h1>🎓 منصتي التعليمية</h1>
   <p style="color: #64748b; font-size: 14px;">أدخل كود الطالب المكوّن من 7 أرقام</p>
@@ -80,12 +77,7 @@
   <p id="loginErr" class="error"></p>
 </div>
 
-
-<!-- ═══════════════════════════════════════════════
-     التطبيق بعد الدخول
-     ═══════════════════════════════════════════════ -->
 <div id="appScreen" style="display: none;">
-
   <div class="header">
     <div class="header-info">
       <h1 style="margin: 0;">أهلاً <span id="studentName"></span></h1>
@@ -93,32 +85,21 @@
     </div>
     <button class="ghost" onclick="doLogout()">خروج</button>
   </div>
-
   <div id="breadcrumb" class="breadcrumb"></div>
   <div id="content"></div>
-
 </div>
 
-
 <script>
-/* ═══════════════════════════════════════════════
-   الحالة
-   ═══════════════════════════════════════════════ */
 let token = localStorage.getItem('student_token');
 let deviceId = localStorage.getItem('device_id');
 let currentHls = null;
-let stack = []; // للـ breadcrumb
+let stack = [];
 
-// توليد deviceId لو مش موجود
 if (!deviceId) {
   deviceId = crypto.randomUUID();
   localStorage.setItem('device_id', deviceId);
 }
 
-
-/* ═══════════════════════════════════════════════
-   Helpers
-   ═══════════════════════════════════════════════ */
 async function api(path, options = {}) {
   const r = await fetch(path, {
     ...options,
@@ -131,13 +112,10 @@ async function api(path, options = {}) {
   
   if (r.status === 401 || r.status === 403) {
     const data = await r.json().catch(() => ({}));
-    if (data.message && data.message.includes('جهاز')) {
-      alert(data.message);
-    }
+    if (data.message && data.message.includes('جهاز')) alert(data.message);
     doLogout();
     throw new Error(data.message || 'انتهت الجلسة');
   }
-  
   return r.json();
 }
 
@@ -151,134 +129,75 @@ function daysLeft(ts) {
   return Math.ceil((ts - Date.now()) / 86400000);
 }
 
-
-/* ═══════════════════════════════════════════════
-   Auth — تسجيل دخول
-   ═══════════════════════════════════════════════ */
 async function doLogin() {
   const code = document.getElementById('codeInput').value.trim();
   const err = document.getElementById('loginErr');
   err.textContent = '';
   
-  if (!/^\d{7}$/.test(code)) {
-    err.textContent = 'الكود لازم 7 أرقام';
-    return;
-  }
+  if (!/^\d{7}$/.test(code)) { err.textContent = 'الكود لازم 7 أرقام'; return; }
   
   try {
     const r = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        code,
-        deviceId,
-        deviceName: navigator.userAgent.slice(0, 60)
-      })
+      body: JSON.stringify({ code, deviceId, deviceName: navigator.userAgent.slice(0, 60) })
     });
     
     const data = await r.json();
-    
-    if (!data.success) {
-      err.textContent = data.message || 'كود غير صحيح';
-      return;
-    }
+    if (!data.success) { err.textContent = data.message || 'كود غير صحيح'; return; }
     
     token = data.data.token;
     localStorage.setItem('student_token', token);
+    localStorage.setItem('cstk_tok', token); // تخزين توكن الكورسات
     showApp(data.data.student);
-  } catch (e) {
-    err.textContent = 'خطأ في الاتصال';
-  }
+  } catch (e) { err.textContent = 'خطأ في الاتصال'; }
 }
 
 async function doLogout() {
-  try {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      headers: {'Authorization': 'Bearer ' + token}
-    });
-  } catch {}
-  
+  try { await fetch('/api/auth/logout', { method: 'POST', headers: {'Authorization': 'Bearer ' + token} }); } catch {}
   token = null;
   localStorage.removeItem('student_token');
+  localStorage.removeItem('cstk_tok');
   location.reload();
 }
 
 function showApp(student) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
-  
   document.getElementById('studentName').textContent = student.name;
   
   const days = daysLeft(student.expiresAt);
   const expired = student.expiresAt && Date.now() > student.expiresAt;
   const info = document.getElementById('expiresInfo');
   
-  if (expired) {
-    info.innerHTML = '<span class="badge red">انتهى الاشتراك</span>';
-  } else if (days !== null) {
-    info.innerHTML = `ينتهي: ${formatDate(student.expiresAt)} <span class="badge">${days} يوم</span>`;
-  }
+  if (expired) info.innerHTML = '<span class="badge red">انتهى الاشتراك</span>';
+  else if (days !== null) info.innerHTML = `ينتهي: ${formatDate(student.expiresAt)} <span class="badge">${days} يوم</span>`;
   
-  // ابدأ من المواد
   loadSubjects();
 }
 
-
-/* ═══════════════════════════════════════════════
-   Breadcrumb
-   ═══════════════════════════════════════════════ */
 function updateBreadcrumb() {
   const bc = document.getElementById('breadcrumb');
-  
-  if (stack.length === 0) {
-    bc.innerHTML = '';
-    return;
-  }
-  
-  bc.innerHTML = stack.map((s, i) => `
-    <button onclick="goBack(${i})">${s.label}</button>
-  `).join('<span>›</span>');
+  if (stack.length === 0) { bc.innerHTML = ''; return; }
+  bc.innerHTML = stack.map((s, i) => `<button onclick="goBack(${i})">${s.label}</button>`).join('<span>›</span>');
 }
 
 function goBack(index) {
-  // أغلق الفيديو لو مفتوح
-  if (currentHls) {
-    currentHls.destroy();
-    currentHls = null;
-  }
-  
+  if (currentHls) { currentHls.destroy(); currentHls = null; }
   stack = stack.slice(0, index + 1);
   const target = stack[stack.length - 1];
   updateBreadcrumb();
   target.render();
 }
 
+function showLoading() { document.getElementById('content').innerHTML = '<div class="loading">⏳ جاري التحميل...</div>'; }
+function showEmpty(msg) { document.getElementById('content').innerHTML = `<div class="empty">${msg}</div>`; }
+function showError(msg) { document.getElementById('content').innerHTML = `<div class="empty" style="color:#ef4444">❌ ${msg}</div>`; }
 
-/* ═══════════════════════════════════════════════
-   Loading / Empty
-   ═══════════════════════════════════════════════ */
-function showLoading() {
-  document.getElementById('content').innerHTML = '<div class="loading">⏳ جاري التحميل...</div>';
-}
-
-function showEmpty(msg) {
-  document.getElementById('content').innerHTML = `<div class="empty">${msg}</div>`;
-}
-
-function showError(msg) {
-  document.getElementById('content').innerHTML = `<div class="empty" style="color:#ef4444">❌ ${msg}</div>`;
-}
-
-
-/* ═══════════════════════════════════════════════
-   Level 1 — المواد
-   ═══════════════════════════════════════════════ */
 async function loadSubjects() {
   if (currentHls) { currentHls.destroy(); currentHls = null; }
   showLoading();
   
-  // نظف الـ stack
   if (stack.length && stack[0].type !== 'subjects') {
     stack = [{ label: 'المواد', type: 'subjects', render: loadSubjects }];
   } else if (!stack.length) {
@@ -287,11 +206,11 @@ async function loadSubjects() {
   updateBreadcrumb();
   
   try {
-    // جيب السنة الافتراضية (4)
-    const data = await api('/api/subjects/4');
+    // السيرفر هيروح يجيب المواد من كورساتك باستخدام توكنك
+    const data = await api('/api/subjects/4'); 
     const subjects = data.data || [];
     
-    if (!subjects.length) return showEmpty('لا توجد مواد');
+    if (!subjects.length) return showEmpty('لا توجد مواد (تأكد من حسابك أو من رقم الصف)');
     
     document.getElementById('content').innerHTML = subjects.map(s => `
       <div class="item" onclick="openSubject(${s.id}, '${escapeHtml(s.name)}')">
@@ -302,31 +221,20 @@ async function loadSubjects() {
         <span style="color:#64748b">›</span>
       </div>
     `).join('');
-  } catch (e) {
-    showError(e.message);
-  }
+  } catch (e) { showError(e.message); }
 }
 
+// ... (باقي الدوال زي openSubject, openTeacher, openChapter, openLecture)
+// ... (كود الفيديو زي ما هو، بس بيتأكد إنه بيستخدم /api/play/:id اللي ظبطناه)
 
-/* ═══════════════════════════════════════════════
-   Level 2 — المدرسين
-   ═══════════════════════════════════════════════ */
 async function openSubject(subjectId, subjectName) {
   showLoading();
-  
-  stack.push({
-    label: subjectName,
-    type: 'subject',
-    render: () => openSubject(subjectId, subjectName)
-  });
+  stack.push({ label: subjectName, type: 'subject', render: () => openSubject(subjectId, subjectName) });
   updateBreadcrumb();
-  
   try {
     const data = await api(`/api/subjects/${subjectId}/teachers`);
     const teachers = data.data?.teachers || data.data || [];
-    
     if (!teachers.length) return showEmpty('لا يوجد مدرسين');
-    
     document.getElementById('content').innerHTML = teachers.map(t => `
       <div class="item" onclick="openTeacher(${t.id}, '${escapeHtml(t.name)}')">
         <div>
@@ -336,31 +244,17 @@ async function openSubject(subjectId, subjectName) {
         <span style="color:#64748b">›</span>
       </div>
     `).join('');
-  } catch (e) {
-    showError(e.message);
-  }
+  } catch (e) { showError(e.message); }
 }
 
-
-/* ═══════════════════════════════════════════════
-   Level 3 — الفصول
-   ═══════════════════════════════════════════════ */
 async function openTeacher(teacherId, teacherName) {
   showLoading();
-  
-  stack.push({
-    label: teacherName,
-    type: 'teacher',
-    render: () => openTeacher(teacherId, teacherName)
-  });
+  stack.push({ label: teacherName, type: 'teacher', render: () => openTeacher(teacherId, teacherName) });
   updateBreadcrumb();
-  
   try {
     const data = await api(`/api/teachers/${teacherId}/chapters`);
     const chapters = data.data || [];
-    
     if (!chapters.length) return showEmpty('لا توجد فصول');
-    
     document.getElementById('content').innerHTML = chapters.map(c => `
       <div class="item" onclick="openChapter(${c.id}, '${escapeHtml(c.title || c.name)}')">
         <div>
@@ -370,31 +264,17 @@ async function openTeacher(teacherId, teacherName) {
         <span style="color:#64748b">›</span>
       </div>
     `).join('');
-  } catch (e) {
-    showError(e.message);
-  }
+  } catch (e) { showError(e.message); }
 }
 
-
-/* ═══════════════════════════════════════════════
-   Level 4 — المحاضرات
-   ═══════════════════════════════════════════════ */
 async function openChapter(chapterId, chapterName) {
   showLoading();
-  
-  stack.push({
-    label: chapterName,
-    type: 'chapter',
-    render: () => openChapter(chapterId, chapterName)
-  });
+  stack.push({ label: chapterName, type: 'chapter', render: () => openChapter(chapterId, chapterName) });
   updateBreadcrumb();
-  
   try {
     const data = await api(`/api/chapters/${chapterId}/lectures`);
     const lectures = data.data || [];
-    
     if (!lectures.length) return showEmpty('لا توجد محاضرات');
-    
     document.getElementById('content').innerHTML = lectures.map(l => `
       <div class="item" onclick="openLecture(${l.id}, '${escapeHtml(l.title || l.name)}')">
         <div>
@@ -404,33 +284,19 @@ async function openChapter(chapterId, chapterName) {
         <span style="color:#0ea5e9;font-size:20px">▶</span>
       </div>
     `).join('');
-  } catch (e) {
-    showError(e.message);
-  }
+  } catch (e) { showError(e.message); }
 }
 
-
-/* ═══════════════════════════════════════════════
-   Level 5 — تشغيل الفيديو
-   ═══════════════════════════════════════════════ */
 async function openLecture(lectureId, lectureName) {
   if (currentHls) { currentHls.destroy(); currentHls = null; }
   showLoading();
-  
-  stack.push({
-    label: lectureName,
-    type: 'lecture',
-    render: () => openLecture(lectureId, lectureName)
-  });
+  stack.push({ label: lectureName, type: 'lecture', render: () => openLecture(lectureId, lectureName) });
   updateBreadcrumb();
   
   try {
-    // اطلب تشغيل من السيرفر — السيرفر يفك التشفير
+    // بنطلب من السيرفر يجيب رابط التشغيل (هو هيفك التشفير)
     const data = await api(`/api/play/${lectureId}`, { method: 'POST' });
-    
-    if (!data.success) {
-      return showError(data.message || 'فشل التشغيل');
-    }
+    if (!data.success) return showError(data.message || 'فشل التشغيل');
     
     const manifestUrl = data.data.manifest_url;
     
@@ -445,80 +311,38 @@ async function openLecture(lectureId, lectureName) {
     
     if (Hls.isSupported()) {
       currentHls = new Hls({
-        xhrSetup: (xhr) => {
-          xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-        }
+        xhrSetup: (xhr) => { xhr.setRequestHeader('Authorization', 'Bearer ' + token); }
       });
       currentHls.loadSource(manifestUrl);
       currentHls.attachMedia(video);
-      
       currentHls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          console.error('[HLS]', data);
-          showError('خطأ في تشغيل الفيديو: ' + data.details);
-        }
+        if (data.fatal) showError('خطأ في تشغيل الفيديو: ' + data.details);
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari — بس محتاج token في الـ headers
-      // الحل: نستخدم fetch + blob
-      try {
-        const r = await fetch(manifestUrl, {
-          headers: {'Authorization': 'Bearer ' + token}
-        });
-        const text = await r.text();
-        const blob = new Blob([text], {type: 'application/vnd.apple.mpegurl'});
-        video.src = URL.createObjectURL(blob);
-      } catch (e) {
-        showError('خطأ في التشغيل');
-      }
+      const r = await fetch(manifestUrl, { headers: {'Authorization': 'Bearer ' + token} });
+      const text = await r.text();
+      const blob = new Blob([text], {type: 'application/vnd.apple.mpegurl'});
+      video.src = URL.createObjectURL(blob);
     } else {
-      showError('متصفحك لا يدعم HLS — استخدم Chrome أو Edge');
+      showError('متصفحك لا يدعم HLS');
     }
-  } catch (e) {
-    showError(e.message);
-  }
+  } catch (e) { showError(e.message); }
 }
 
-
-/* ═══════════════════════════════════════════════
-   Helpers
-   ═══════════════════════════════════════════════ */
 function escapeHtml(str) {
-  return String(str || '').replace(/[&<>"']/g, ch => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  })[ch]);
+  return String(str || '').replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
 }
 
-
-/* ═══════════════════════════════════════════════
-   Auto-login عند فتح الصفحة
-   ═══════════════════════════════════════════════ */
 (async function init() {
-  // Enter للدخول
-  document.getElementById('codeInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') doLogin();
-  });
-  
-  // تحقق من token محفوظ
+  document.getElementById('codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   if (token) {
     try {
       const data = await api('/api/auth/me');
-      if (data.success) {
-        showApp({
-          name: data.data.name,
-          expiresAt: data.data.expiresAt
-        });
-      } else {
-        localStorage.removeItem('student_token');
-        token = null;
-      }
-    } catch {
-      localStorage.removeItem('student_token');
-      token = null;
-    }
+      if (data.success) showApp({ name: data.data.name, expiresAt: data.data.expiresAt });
+      else { localStorage.removeItem('student_token'); token = null; }
+    } catch { localStorage.removeItem('student_token'); token = null; }
   }
 })();
 </script>
-
 </body>
 </html>
