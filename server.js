@@ -1,6 +1,6 @@
 /**
  * Coursatk API — Open Proxy with Stream Decrypt
- * (No Login Required)
+ * (Test Mode - No HTML Files Required)
  */
 import express from "express";
 import cors from "cors";
@@ -18,7 +18,7 @@ app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: "512kb" }));
 app.use(compression());
 
-// 👇 السيرفر بيقدم ملفاتك من فولدر public
+// لو حبيت ترفع ملفات HTML بعدين، هتتحط في فولدر public
 app.use(express.static(path.join(__dirname, "public")));
 
 // ═══════════════════════════════════════════════════════════
@@ -225,10 +225,21 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 const globalLimiter = rateLimit({ max: 150, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) => req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next));
 
+// الرابط الأساسي: رسالة تأكيد إن السيرفر شغال (للتجربة)
+app.get("/", (_req, res) => {
+  res.json({ 
+    success: true, 
+    message: "السيرفر شغال تمام التمام! (Test Mode) 🚀", 
+    cryptoReady: Boolean(decryptPlaybackKeyFn) 
+  });
+});
+
+// فحص الحالة
 app.get("/health", (_req, res) => {
   res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) });
 });
 
+// مسارات الـ API
 app.get("/api/subjects/:id", async (req, res) => {
   try {
     const yearId = Number(req.params.id) || CONFIG.DEFAULT_YEAR_ID;
@@ -408,14 +419,10 @@ app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fallback & Setup
+// Fallback
 // ═══════════════════════════════════════════════════════════
-app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: "المسار غير موجود" });
+  res.status(404).json({ success: false, message: "المسار غير موجود (تأكد من الرابط)" });
 });
 
 setInterval(() => {
@@ -429,5 +436,5 @@ setInterval(() => {
 await loadDecryptionUtils();
 
 app.listen(CONFIG.PORT, () => {
-  console.log(`[API] :${CONFIG.PORT} running (OPEN ACCESS) · segment-decrypt ON`);
+  console.log(`[API] :${CONFIG.PORT} running (TEST MODE) · segment-decrypt ON`);
 });
