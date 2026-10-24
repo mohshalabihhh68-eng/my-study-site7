@@ -1,9 +1,5 @@
 /**
- * Coursatk API — نسخة كاملة شبه الأصلية
- * - Firebase: my-platform-e46a6
- * - Admin panel + student codes (7 digits)
- * - Stream-Weave AES-128 decrypt (فك تشفير الفيديو)
- * - كل الـ routes محمية بـ session token
+ * Coursatk API — النسخة النهائية المدمجة
  */
 import express from "express";
 import cors from "cors";
@@ -22,23 +18,20 @@ app.use(express.json({ limit: "512kb" }));
 app.use(compression());
 
 // ═══════════════════════════════════════════════
-// CONFIG — غيّر القيم دي
+// CONFIG
 // ═══════════════════════════════════════════════
 const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
   
-  // Firebase بتاعك
   FIREBASE: "https://my-platform-e46a6-default-rtdb.europe-west1.firebasedatabase.app",
   
-  // بيانات دخول الأدمن — غيّرها
   ADMIN_USERNAME: "admin",
   ADMIN_PASSWORD: "admin123",
   
-  // توكن كورساتك
   COURSATK_API: "https://api.coursatk.online/api/v1",
-  COURSATK_TOKEN: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
+  // التوكن بيتقرأ من Railway أوتوماتيك، لو مش موجود بياخد القديم كاحتياطي
+  COURSATK_TOKEN: process.env.COURSATK_TOKEN || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
   
-  // إعدادات الفيديو
   STREAM_HOSTS: [
     "api.coursatk.online",
     "stream-weave.com",
@@ -51,7 +44,6 @@ const CONFIG = {
   STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
   PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
   
-  // أنواع الاشتراك
   CODE_TYPES: {
     trial: { label: "تجربة", ms: 1 * 3600 * 1000 },
     month: { label: "شهر", ms: 30 * 24 * 3600 * 1000 },
@@ -59,7 +51,6 @@ const CONFIG = {
     year:  { label: "سنة", ms: 365 * 24 * 3600 * 1000 }
   },
   
-  // مدد الجلسات
   STUDENT_SESSION_MS: 7 * 24 * 3600 * 1000,
   ADMIN_SESSION_MS: 12 * 3600 * 1000,
   STREAM_SESSION_MS: 15 * 60 * 1000,
@@ -118,13 +109,12 @@ function getBearer(req) {
 }
 
 // ═══════════════════════════════════════════════
-// الجلسات (في الذاكرة + Firebase)
+// الجلسات
 // ═══════════════════════════════════════════════
 const studentSessions = new Map();
 const adminSessions = new Map();
 const streamSessions = new Map();
 
-// Cache للطلاب
 const studentCache = new Map();
 async function getStudentCached(code) {
   const c = studentCache.get(code);
@@ -149,7 +139,7 @@ setInterval(() => {
 }, 60_000).unref();
 
 // ═══════════════════════════════════════════════
-// Auth middleware — طالب
+// Auth middleware
 // ═══════════════════════════════════════════════
 async function requireStudent(req, res, next) {
   try {
@@ -197,9 +187,6 @@ async function requireStudent(req, res, next) {
   }
 }
 
-// ═══════════════════════════════════════════════
-// Auth middleware — أدمن
-// ═══════════════════════════════════════════════
 function requireAdmin(req, res, next) {
   const token = getBearer(req);
   if (!token) return jsonError(res, 401, "مطلوب دخول الأدمن");
@@ -218,7 +205,7 @@ function requireAdmin(req, res, next) {
 }
 
 // ═══════════════════════════════════════════════
-// Stream decrypt — تحميل player.js في sandbox
+// Stream decrypt
 // ═══════════════════════════════════════════════
 let decryptPlaybackKeyFn = null;
 
@@ -301,14 +288,18 @@ function ivFromMediaSequence(seq) {
 }
 
 // ═══════════════════════════════════════════════
-// Upstream helpers
+// Upstream helpers (تم تعديلها لتجاوز الحماية)
 // ═══════════════════════════════════════════════
 async function upstreamJson(apiPath, options = {}) {
   const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, {
     ...options,
     headers: {
+      // الهيدرز دي هي سر نجاح الكود القديم
       Authorization: `Bearer ${CONFIG.COURSATK_TOKEN}`,
       Accept: "application/json",
+      Origin: "https://coursatk.online",
+      Referer: "https://coursatk.online/",
+      "User-Agent": CONFIG.STREAM_UA,
       ...(options.headers || {})
     }
   });
@@ -354,15 +345,10 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 }
 
 // ═══════════════════════════════════════════════
-// PUBLIC
+// Routes
 // ═══════════════════════════════════════════════
 app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    service: "coursatk-api",
-    cryptoReady: Boolean(decryptPlaybackKeyFn),
-    now: new Date().toISOString()
-  });
+  res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) });
 });
 
 app.get("/api/public/code-types", (_req, res) => {
@@ -373,9 +359,6 @@ app.get("/api/public/code-types", (_req, res) => {
   res.json({ success: true, data: types });
 });
 
-// ═══════════════════════════════════════════════
-// STUDENT AUTH
-// ═══════════════════════════════════════════════
 app.post("/api/auth/login", async (req, res) => {
   try {
     const code = String(req.body?.code || "").trim();
@@ -421,20 +404,14 @@ app.post("/api/auth/login", async (req, res) => {
     res.json({
       success: true,
       data: {
-        token,
-        expiresAt: sess.expiresAt,
+        token, expiresAt: sess.expiresAt,
         student: {
-          name: student.name,
-          code,
-          section: student.section || null,
-          expiresAt: student.expiresAt,
-          maxDevices,
-          deviceId
+          name: student.name, code, section: student.section || null,
+          expiresAt: student.expiresAt, maxDevices, deviceId
         }
       }
     });
   } catch (e) {
-    console.error("[login]", e.message);
     jsonError(res, 500, e.message);
   }
 });
@@ -453,22 +430,15 @@ app.get("/api/auth/me", requireStudent, async (req, res) => {
     res.json({
       success: true,
       data: {
-        name: s.name,
-        code: req.session.code,
-        section: s.section || null,
-        expiresAt: s.expiresAt,
-        maxDevices: s.maxDevices || 1,
-        devices: Object.keys(s.devices || {}).length,
-        deviceId: req.session.deviceId,
+        name: s.name, code: req.session.code, section: s.section || null,
+        expiresAt: s.expiresAt, maxDevices: s.maxDevices || 1,
+        devices: Object.keys(s.devices || {}).length, deviceId: req.session.deviceId,
         sessionExpiresAt: req.session.expiresAt
       }
     });
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ═══════════════════════════════════════════════
-// CATALOG — كورساتك (محمي)
-// ═══════════════════════════════════════════════
 app.get("/api/years", requireStudent, async (_req, res) => {
   try { res.json(await upstreamJson("/user/years")); }
   catch (e) { jsonError(res, 502, e.message); }
@@ -504,9 +474,7 @@ app.get("/api/profile", requireStudent, async (_req, res) => {
   catch (e) { jsonError(res, 502, e.message); }
 });
 
-// ═══════════════════════════════════════════════
-// STREAM — فك التشفير
-// ═══════════════════════════════════════════════
+// Stream Routes (نفس الكود القديم)
 app.post("/api/play/:videoId", requireStudent, async (req, res) => {
   try {
     const data = await upstreamJson(
@@ -519,21 +487,15 @@ app.post("/api/play/:videoId", requireStudent, async (req, res) => {
     const id = crypto.randomUUID();
     streamSessions.set(id, {
       id, videoId: String(data.data.video_id),
-      token: data.data.token,
-      streamUrl: data.data.stream_url,
-      playId: String(req.params.videoId),
-      createdAt: now(), lastUsed: now(),
+      token: data.data.token, streamUrl: data.data.stream_url,
+      playId: String(req.params.videoId), createdAt: now(), lastUsed: now(),
       plainKey: null, defaultIv: null,
       allowedHosts: new Set([new URL(data.data.stream_url).hostname]),
       ownerCode: req.session.code
     });
     res.json({
       success: true,
-      data: {
-        session: id,
-        video_id: data.data.video_id,
-        manifest_url: `/api/stream/manifest/${id}`
-      }
+      data: { session: id, video_id: data.data.video_id, manifest_url: `/api/stream/manifest/${id}` }
     });
   } catch (e) { jsonError(res, 502, e.message); }
 });
@@ -598,7 +560,6 @@ app.get("/api/stream/manifest/:sessionId", requireStudent, async (req, res) => {
     }
     return rewritePlaylist(req.params.sessionId, session, masterText, session.streamUrl, res, req.headers);
   } catch (e) {
-    console.error("[manifest]", e.message);
     jsonError(res, 502, e.message);
   }
 });
@@ -635,7 +596,6 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
         session.plainKey = await unwrapKey(wrapped, session.videoId);
         session.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] unwrapped for ${session.videoId}`);
       }
       continue;
     }
@@ -645,8 +605,7 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
       const payload = Buffer.from(
-        JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }),
-        "utf8"
+        JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }), "utf8"
       ).toString("base64url");
       out.push(`/api/stream/segment/${sessionId}/${payload}`);
       segIndex++;
@@ -656,11 +615,7 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
   }
   if (!session.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
 
-  res.set({
-    "Content-Type": "application/vnd.apple.mpegurl",
-    "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*"
-  });
+  res.set({ "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
   res.send(out.join("\n"));
 }
 
@@ -678,63 +633,31 @@ app.get("/api/stream/segment/:sessionId/:encoded", requireStudent, async (req, r
 
   const iv = parseIvHex(meta.iv) || session.defaultIv || ivFromMediaSequence(meta.s || 0);
   try {
-    const upstream = await streamFetch(session, url, {
-      Range: req.headers.range || undefined
-    }, req.headers);
-    if (!upstream.ok && upstream.status !== 206) {
-      throw new Error(`Segment HTTP ${upstream.status}`);
-    }
+    const upstream = await streamFetch(session, url, { Range: req.headers.range || undefined }, req.headers);
+    if (!upstream.ok && upstream.status !== 206) throw new Error(`Segment HTTP ${upstream.status}`);
     const encrypted = Buffer.from(await upstream.arrayBuffer());
     if (encrypted.length > CONFIG.MAX_PROXY_BYTES) return jsonError(res, 413, "المقطع كبير");
     let plain;
     try { plain = decryptSegment(encrypted, session.plainKey, iv); }
-    catch (decErr) {
-      console.warn("[decrypt-fail]", decErr.message);
-      plain = encrypted;
-    }
-    res.status(200);
-    res.set({
-      "Content-Type": "video/mp2t",
-      "Content-Length": String(plain.length),
-      "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*"
-    });
+    catch (decErr) { plain = encrypted; }
+    res.status(200).set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
     res.send(plain);
   } catch (e) {
-    if (!res.headersSent) jsonError(res, 502, e.message);
-    else res.end();
+    if (!res.headersSent) jsonError(res, 502, e.message); else res.end();
   }
 });
 
-// ═══════════════════════════════════════════════
-// ADMIN AUTH
-// ═══════════════════════════════════════════════
+// Admin Routes
 app.post("/api/admin/login", async (req, res) => {
   try {
     const username = String(req.body?.username || "").trim();
     const password = String(req.body?.password || "");
-    if (!username || !password) return jsonError(res, 400, "يوزر وباسورد مطلوبين");
-
     if (username !== CONFIG.ADMIN_USERNAME || password !== CONFIG.ADMIN_PASSWORD) {
       return jsonError(res, 401, "بيانات الدخول خطأ");
     }
-
     const token = randomToken(32);
-    const sess = {
-      token, username,
-      createdAt: now(),
-      expiresAt: now() + CONFIG.ADMIN_SESSION_MS
-    };
-    adminSessions.set(token, sess);
-
-    res.json({
-      success: true,
-      data: {
-        token,
-        expiresAt: sess.expiresAt,
-        username
-      }
-    });
+    adminSessions.set(token, { token, username, createdAt: now(), expiresAt: now() + CONFIG.ADMIN_SESSION_MS });
+    res.json({ success: true, data: { token, expiresAt: now() + CONFIG.ADMIN_SESSION_MS, username } });
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
@@ -744,30 +667,16 @@ app.post("/api/admin/logout", requireAdmin, (req, res) => {
 });
 
 app.get("/api/admin/me", requireAdmin, (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      username: req.adminSession.username
-    }
-  });
+  res.json({ success: true, data: { username: req.adminSession.username } });
 });
 
-// ═══════════════════════════════════════════════
-// ADMIN — Students
-// ═══════════════════════════════════════════════
 app.get("/api/admin/students", requireAdmin, async (_req, res) => {
   try {
     const all = (await fbGet("students")) || {};
     const list = Object.entries(all).map(([code, s]) => ({
-      code,
-      name: s.name,
-      section: s.section || null,
-      type: s.type || null,
-      expiresAt: s.expiresAt,
-      maxDevices: s.maxDevices || 1,
-      devices: Object.keys(s.devices || {}).length,
-      active: s.active !== false,
-      createdAt: s.createdAt || null
+      code, name: s.name, section: s.section || null, type: s.type || null,
+      expiresAt: s.expiresAt, maxDevices: s.maxDevices || 1,
+      devices: Object.keys(s.devices || {}).length, active: s.active !== false, createdAt: s.createdAt || null
     }));
     list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     res.json({ success: true, data: list });
@@ -778,17 +687,7 @@ app.get("/api/admin/students/:code", requireAdmin, async (req, res) => {
   try {
     const s = await fbGet(`students/${req.params.code}`);
     if (!s) return jsonError(res, 404, "الطالب غير موجود");
-    res.json({
-      success: true,
-      data: {
-        code: req.params.code,
-        ...s,
-        deviceList: Object.entries(s.devices || {}).map(([id, d]) => ({
-          deviceId: id,
-          ...d
-        }))
-      }
-    });
+    res.json({ success: true, data: { code: req.params.code, ...s, deviceList: Object.entries(s.devices || {}).map(([id, d]) => ({ deviceId: id, ...d })) } });
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
@@ -799,32 +698,20 @@ app.post("/api/admin/students", requireAdmin, async (req, res) => {
     const type = String(req.body?.type || "month");
     const maxDevices = Math.max(1, Math.min(10, Number(req.body?.maxDevices || 1)));
     let code = String(req.body?.code || "").trim();
-
     if (!name) return jsonError(res, 400, "اسم الطالب مطلوب");
     if (!CONFIG.CODE_TYPES[type]) return jsonError(res, 400, "نوع غير صالح");
-
     if (code) {
       if (!/^\d{7}$/.test(code)) return jsonError(res, 400, "الكود يجب 7 أرقام");
-      const exists = await fbGet(`students/${code}`);
-      if (exists) return jsonError(res, 409, "الكود مستخدم");
+      if (await fbGet(`students/${code}`)) return jsonError(res, 409, "الكود مستخدم");
     } else {
       for (let i = 0; i < 30; i++) {
         code = randomCode7();
-        const exists = await fbGet(`students/${code}`);
-        if (!exists) break;
+        if (!(await fbGet(`students/${code}`))) break;
       }
     }
-
     const record = {
-      name,
-      section: section || null,
-      type,
-      maxDevices,
-      devices: {},
-      active: true,
-      createdAt: now(),
-      expiresAt: now() + CONFIG.CODE_TYPES[type].ms,
-      createdBy: req.adminSession.username
+      name, section: section || null, type, maxDevices, devices: {}, active: true,
+      createdAt: now(), expiresAt: now() + CONFIG.CODE_TYPES[type].ms, createdBy: req.adminSession.username
     };
     await fbSet(`students/${code}`, record);
     res.json({ success: true, data: { code, ...record } });
@@ -836,7 +723,6 @@ app.patch("/api/admin/students/:code", requireAdmin, async (req, res) => {
     const code = req.params.code;
     const s = await fbGet(`students/${code}`);
     if (!s) return jsonError(res, 404, "غير موجود");
-
     const patch = {};
     if (req.body.name != null) patch.name = String(req.body.name).trim();
     if (req.body.section != null) patch.section = String(req.body.section).trim() || null;
@@ -875,11 +761,9 @@ app.delete("/api/admin/students/:code/devices/:deviceId", requireAdmin, async (r
     const { code, deviceId } = req.params;
     const s = await fbGet(`students/${code}`);
     if (!s) return jsonError(res, 404, "غير موجود");
-
     const devices = { ...(s.devices || {}) };
     delete devices[deviceId];
     await fbSet(`students/${code}/devices`, devices);
-
     const sessions = (await fbGet("sessions")) || {};
     for (const [tok, sess] of Object.entries(sessions)) {
       if (sess && sess.code === code && sess.deviceId === deviceId) {
@@ -891,29 +775,13 @@ app.delete("/api/admin/students/:code/devices/:deviceId", requireAdmin, async (r
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ═══════════════════════════════════════════════
-// Static + Fallback (المعدل عشان يفتح صفحات الـ HTML)
-// ═══════════════════════════════════════════════
 app.use(express.static(path.join(__dirname, "public")));
-
 app.get("*", (req, res) => {
-  // لو المسار بيبدأ بـ api وملقاش حاجة، يرجع خطأ
-  if (req.path.startsWith("/api/")) {
-    return res.status(404).json({ success: false, message: "Not found" });
-  }
-  
-  // لو المسار فيه .html يفتح الملف ده (زي lectures.html)
-  if (req.path.endsWith(".html")) {
-    return res.sendFile(path.join(__dirname, "public", req.path));
-  }
-  
-  // أي حاجة تانية تفتح الصفحة الرئيسية
+  if (req.path.startsWith("/api/")) return res.status(404).json({ success: false, message: "Not found" });
+  if (req.path.endsWith(".html")) return res.sendFile(path.join(__dirname, "public", req.path));
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ═══════════════════════════════════════════════
-// Cleanup + Boot
-// ═══════════════════════════════════════════════
 setInterval(() => {
   const t = now();
   for (const [k, s] of studentSessions) if (s.expiresAt && t > s.expiresAt) studentSessions.delete(k);
@@ -921,11 +789,8 @@ setInterval(() => {
   for (const [k, s] of streamSessions) if (t - (s.lastUsed || s.createdAt) > CONFIG.STREAM_SESSION_MS) streamSessions.delete(k);
 }, 60_000).unref();
 
-// تحميل فك التشفير
 await loadDecryptionUtils();
 
 app.listen(CONFIG.PORT, "0.0.0.0", () => {
   console.log(`[API] :${CONFIG.PORT} · decrypt ON`);
-  console.log(`[API] Firebase: ${CONFIG.FIREBASE}`);
-  console.log(`[API] Admin: ${CONFIG.ADMIN_USERNAME}`);
 });
