@@ -1,11 +1,3 @@
-/**
- * Coursatk API — protected backend
- * - Student codes (7-digit) + devices + sessions in Firebase RTDB
- * - Admin panel API (users, permissions, sections, subject IDs)
- * - Stream-Weave key unwrap + AES-128 segment decrypt (upstream token NEVER leaves server)
- * - All student/catalog/stream routes require valid session token
- * - Admin panel HTML served from /public
- */
 import express from "express";
 import cors from "cors";
 import compression from "compression";
@@ -22,25 +14,20 @@ app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: "512kb" }));
 app.use(compression());
 
-// ✅ NEW: serve admin panel static files
+// ✅ serve public folder
 app.use(express.static(path.join(__dirname, "public")));
 
-// ═══════════════════════════════════════════════════════════
-// Rate limit — ~50 req / minute / IP (stricter on auth)
-// ═══════════════════════════════════════════════════════════
+// ═════════ Rate limit
 const rateBuckets = new Map();
-
 function clientIp(req) {
   const xf = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   return xf || req.ip || req.socket?.remoteAddress || "unknown";
 }
-
 function rateLimit(options = {}) {
   const windowMs = options.windowMs || 60_000;
   const max = options.max || 50;
-  const keyFn = options.keyFn || ((req) => clientIp(req) + ":" + (options.scope || "global"));
   return (req, res, next) => {
-    const key = keyFn(req);
+    const key = clientIp(req) + ":" + (options.scope || "global");
     const nowT = Date.now();
     let b = rateBuckets.get(key);
     if (!b || nowT > b.resetAt) {
@@ -51,43 +38,27 @@ function rateLimit(options = {}) {
     res.setHeader("X-RateLimit-Limit", String(max));
     res.setHeader("X-RateLimit-Remaining", String(Math.max(0, max - b.count)));
     if (b.count > max) {
-      return res.status(429).json({
-        success: false,
-        message: "طلبات كثيرة — حاول بعد دقيقة"
-      });
+      return res.status(429).json({ success: false, message: "طلبات كثيرة — حاول بعد دقيقة" });
     }
     next();
   };
 }
-
 setInterval(() => {
   const t = Date.now();
-  for (const [k, b] of rateBuckets) {
-    if (t > b.resetAt) rateBuckets.delete(k);
-  }
+  for (const [k, b] of rateBuckets) if (t > b.resetAt) rateBuckets.delete(k);
 }, 60_000).unref();
 
-// ═══════════════════════════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════════════════════════
+// ═════════ CONFIG
 const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
   COURSATK_API: "https://api.coursatk.online/api/v1",
-  COURSATK_TOKEN:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
+  COURSATK_TOKEN: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
   DEFAULT_YEAR_ID: 4,
-  STREAM_HOSTS: [
-    "api.coursatk.online",
-    "stream-weave.com",
-    "floravon.online",
-    "floravon.shop",
-    "c-cdn.online"
-  ],
+  STREAM_HOSTS: ["api.coursatk.online","stream-weave.com","floravon.online","floravon.shop","c-cdn.online"],
   STREAM_ORIGIN: "https://coursatk.online",
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
-  STREAM_UA:
-    "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+  STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
   PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
   FIREBASE: "https://my-platform-e46a6-default-rtdb.europe-west1.firebasedatabase.app",
   BOOTSTRAP_ADMIN: {
@@ -95,13 +66,8 @@ const CONFIG = {
     passwordHash: "",
     passwordPlain: "shalaby123",
     permissions: {
-      students_create: true,
-      students_edit: true,
-      students_delete: true,
-      students_view: true,
-      devices_kick: true,
-      sections_manage: true,
-      admins_manage: true
+      students_create: true, students_edit: true, students_delete: true,
+      students_view: true, devices_kick: true, sections_manage: true, admins_manage: true
     }
   },
   STUDENT_SESSION_MS: 7 * 24 * 3600 * 1000,
@@ -116,75 +82,46 @@ const CONFIG = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// Crypto helpers
-// ═══════════════════════════════════════════════════════════
+// ═════════ Crypto
 function scryptHash(password, saltHex) {
   const salt = saltHex ? Buffer.from(saltHex, "hex") : crypto.randomBytes(16);
-  const hash = crypto.scryptSync(password, salt, 32, {
-    N: 16384, r: 8, p: 1
-  });
+  const hash = crypto.scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 });
   return `scrypt$16384$8$1$${salt.toString("hex")}$${hash.toString("hex")}`;
 }
-
 function scryptVerify(password, stored) {
   try {
     if (stored.startsWith("scrypt$")) {
       const parts = stored.split("$");
-      const salt = parts[4];
-      const expect = parts[5];
-      const hash = crypto.scryptSync(password, Buffer.from(salt, "hex"), 32, {
-        N: 16384, r: 8, p: 1
-      });
-      return crypto.timingSafeEqual(Buffer.from(expect, "hex"), hash);
+      const hash = crypto.scryptSync(password, Buffer.from(parts[4], "hex"), 32, { N: 16384, r: 8, p: 1 });
+      return crypto.timingSafeEqual(Buffer.from(parts[5], "hex"), hash);
     }
     return password === stored;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
+function randomToken(bytes = 32) { return crypto.randomBytes(bytes).toString("base64url"); }
+function randomCode7() { return String(Math.floor(1000000 + Math.random() * 9000000)); }
+function now() { return Date.now(); }
 
-function randomToken(bytes = 32) {
-  return crypto.randomBytes(bytes).toString("base64url");
-}
-
-function randomCode7() {
-  return String(Math.floor(1000000 + Math.random() * 9000000));
-}
-
-function now() {
-  return Date.now();
-}
-
-// ═══════════════════════════════════════════════════════════
-// Firebase RTDB REST
-// ═══════════════════════════════════════════════════════════
+// ═════════ Firebase
 async function fbGet(p) {
   const r = await fetch(`${CONFIG.FIREBASE}/${p}.json`);
   if (!r.ok) throw new Error(`Firebase GET ${p} → ${r.status}`);
   return r.json();
 }
-
 async function fbSet(p, data) {
   const r = await fetch(`${CONFIG.FIREBASE}/${p}.json`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error(`Firebase PUT ${p} → ${r.status}`);
   return r.json();
 }
-
 async function fbPatch(p, data) {
   const r = await fetch(`${CONFIG.FIREBASE}/${p}.json`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error(`Firebase PATCH ${p} → ${r.status}`);
   return r.json();
 }
-
 async function fbDelete(p) {
   const r = await fetch(`${CONFIG.FIREBASE}/${p}.json`, { method: "DELETE" });
   if (!r.ok) throw new Error(`Firebase DELETE ${p} → ${r.status}`);
@@ -198,15 +135,11 @@ async function getCoursatkToken() {
   if (cachedCoursatkToken && Date.now() - cachedTokenAt < ttl) return cachedCoursatkToken;
   try {
     const remote = await fbGet("config/coursatkToken");
-    if (remote && typeof remote === "string" && remote.length > 20) {
-      cachedCoursatkToken = remote;
-      cachedTokenAt = Date.now();
-      return remote;
+    if (typeof remote === "string" && remote.length > 20) {
+      cachedCoursatkToken = remote; cachedTokenAt = Date.now(); return remote;
     }
-    if (remote && remote.token) {
-      cachedCoursatkToken = remote.token;
-      cachedTokenAt = Date.now();
-      return remote.token;
+    if (remote?.token) {
+      cachedCoursatkToken = remote.token; cachedTokenAt = Date.now(); return remote.token;
     }
   } catch {}
   cachedCoursatkToken = CONFIG.COURSATK_TOKEN;
@@ -214,17 +147,15 @@ async function getCoursatkToken() {
   return CONFIG.COURSATK_TOKEN;
 }
 
-// ═══════════════════════════════════════════════════════════
-// Sessions caches
-// ═══════════════════════════════════════════════════════════
+// ═════════ Sessions
 const studentSessions = new Map();
 const adminSessions = new Map();
 const streamSessions = new Map();
+const studentCache = new Map();
 
 function jsonError(res, status, message) {
   return res.status(status).json({ success: false, message });
 }
-
 function getBearer(req) {
   const h = req.headers.authorization || "";
   if (h.startsWith("Bearer ")) return h.slice(7).trim();
@@ -233,75 +164,42 @@ function getBearer(req) {
   if (req.query && req.query.token) return String(req.query.token).trim();
   return "";
 }
-
-const studentCache = new Map();
 async function getStudentCached(code) {
   const c = studentCache.get(code);
   if (c && Date.now() - c.at < 30_000) return c.student;
-  let student;
-  try {
-    student = await fbGet(`students/${code}`);
-  } catch {
-    await new Promise((r) => setTimeout(r, 300));
-    try {
-      student = await fbGet(`students/${code}`);
-    } catch (e) {
-      if (c) return c.student;
-      throw e;
-    }
-  }
+  const student = await fbGet(`students/${code}`);
   studentCache.set(code, { student, at: Date.now() });
   return student;
 }
-setInterval(() => {
-  const t = Date.now();
-  for (const [k, c] of studentCache) if (t - c.at > 120_000) studentCache.delete(k);
-}, 60_000).unref();
 
 async function requireStudent(req, res, next) {
   try {
     const token = getBearer(req);
     if (!token) return jsonError(res, 401, "مطلوب تسجيل الدخول");
-
     let sess = studentSessions.get(token);
     if (!sess) {
       const remote = await fbGet(`sessions/${token}`);
       if (!remote) return jsonError(res, 401, "جلسة غير صالحة");
-      sess = remote;
-      studentSessions.set(token, sess);
+      sess = remote; studentSessions.set(token, sess);
     }
-
     if (sess.expiresAt && now() > sess.expiresAt) {
       studentSessions.delete(token);
       try { await fbDelete(`sessions/${token}`); } catch {}
       return jsonError(res, 401, "انتهت صلاحية الجلسة");
     }
-
     const student = await getStudentCached(sess.code);
-    if (!student || student.active === false) {
-      studentSessions.delete(token);
-      return jsonError(res, 401, "الحساب غير موجود أو موقوف");
-    }
-    if (student.expiresAt && now() > student.expiresAt) {
-      return jsonError(res, 403, "انتهت صلاحية كود الاشتراك");
-    }
-
+    if (!student || student.active === false) return jsonError(res, 401, "الحساب غير موجود أو موقوف");
+    if (student.expiresAt && now() > student.expiresAt) return jsonError(res, 403, "انتهت صلاحية كود الاشتراك");
     const devices = student.devices || {};
     if (sess.deviceId && !devices[sess.deviceId]) {
       studentSessions.delete(token);
       studentCache.delete(sess.code);
       try { await fbDelete(`sessions/${token}`); } catch {}
-      return jsonError(res, 401, "تم تسجيل خروج هذا الجهاز من لوحة التحكم");
+      return jsonError(res, 401, "تم تسجيل خروج هذا الجهاز");
     }
-
-    req.student = student;
-    req.session = sess;
-    req.sessionToken = token;
+    req.student = student; req.session = sess; req.sessionToken = token;
     next();
-  } catch (e) {
-    console.error("[auth student]", e.message);
-    return jsonError(res, 500, "خطأ في التحقق من الجلسة");
-  }
+  } catch (e) { jsonError(res, 500, "خطأ في التحقق من الجلسة"); }
 }
 
 function requireAdmin(permission) {
@@ -309,69 +207,42 @@ function requireAdmin(permission) {
     try {
       const token = getBearer(req);
       if (!token) return jsonError(res, 401, "مطلوب دخول الأدمن");
-
       let sess = adminSessions.get(token);
       if (!sess) {
         const remote = await fbGet(`admin_sessions/${token}`);
         if (!remote) return jsonError(res, 401, "جلسة أدمن غير صالحة");
-        sess = remote;
-        adminSessions.set(token, sess);
+        sess = remote; adminSessions.set(token, sess);
       }
-
       if (sess.expiresAt && now() > sess.expiresAt) {
         adminSessions.delete(token);
         try { await fbDelete(`admin_sessions/${token}`); } catch {}
         return jsonError(res, 401, "انتهت جلسة الأدمن");
       }
-
-      let admin = null;
+      let admin;
       if (sess.username === CONFIG.BOOTSTRAP_ADMIN.username) {
-        admin = {
-          username: CONFIG.BOOTSTRAP_ADMIN.username,
-          permissions: CONFIG.BOOTSTRAP_ADMIN.permissions,
-          bootstrap: true
-        };
+        admin = { username: CONFIG.BOOTSTRAP_ADMIN.username, permissions: CONFIG.BOOTSTRAP_ADMIN.permissions, bootstrap: true };
       } else {
         admin = await fbGet(`admins/${sess.adminId}`);
-        if (!admin || admin.active === false) {
-          return jsonError(res, 401, "حساب الأدمن غير موجود");
-        }
+        if (!admin || admin.active === false) return jsonError(res, 401, "حساب الأدمن غير موجود");
       }
-
       if (permission) {
         const perms = admin.permissions || {};
-        if (!perms[permission] && !perms.all) {
-          return jsonError(res, 403, `لا تملك صلاحية: ${permission}`);
-        }
+        if (!perms[permission] && !perms.all) return jsonError(res, 403, `لا تملك صلاحية: ${permission}`);
       }
-
-      req.admin = admin;
-      req.adminSession = sess;
-      req.adminToken = token;
+      req.admin = admin; req.adminSession = sess; req.adminToken = token;
       next();
-    } catch (e) {
-      console.error("[auth admin]", e.message);
-      return jsonError(res, 500, "خطأ في تحقق الأدمن");
-    }
+    } catch (e) { jsonError(res, 500, "خطأ في تحقق الأدمن"); }
   };
 }
 
-// ═══════════════════════════════════════════════════════════
-// Stream-Weave decrypt
-// ═══════════════════════════════════════════════════════════
+// ═════════ Stream-Weave decrypt
 let decryptPlaybackKeyFn = null;
-
 async function loadDecryptionUtils() {
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
   let source = null;
-  try {
-    if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8");
-  } catch {}
+  try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
   if (!source) {
-    console.log("[crypto] fetching player.js…");
-    const r = await fetch(CONFIG.PLAYER_JS, {
-      headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }
-    });
+    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" } });
     if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
     try { fs.writeFileSync(cachePath, source); } catch {}
@@ -386,11 +257,7 @@ async function loadDecryptionUtils() {
     setTimeout, clearTimeout, setInterval, clearInterval,
     Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date,
     Map, Set, WeakMap, Symbol, Proxy, Reflect,
-    document: {
-      createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }),
-      head: { appendChild() {} }, body: { appendChild() {} },
-      querySelector: () => null, addEventListener() {}
-    },
+    document: { createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }), head: { appendChild() {} }, body: { appendChild() {} }, querySelector: () => null, addEventListener() {} },
     navigator: { userAgent: "Node" },
     location: { href: "https://coursatk.online/" },
     HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
@@ -399,300 +266,183 @@ async function loadDecryptionUtils() {
     fetch: async () => ({ ok: false }),
     XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
   };
-  sandbox.window = sandbox; sandbox.self = sandbox;
-  sandbox.globalThis = sandbox; sandbox.global = sandbox;
+  sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox; sandbox.global = sandbox;
   vm.runInNewContext(source, sandbox, { timeout: 8000 });
   const du = sandbox.DecryptionUtils;
   if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
   decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-  console.log("[crypto] ready");
 }
-
 async function unwrapKey(wrappedBuf, videoId) {
   if (!decryptPlaybackKeyFn) throw new Error("crypto not loaded");
-  const wrapped = Buffer.isBuffer(wrappedBuf)
-    ? new Uint8Array(wrappedBuf)
-    : new Uint8Array(wrappedBuf);
+  const wrapped = Buffer.isBuffer(wrappedBuf) ? new Uint8Array(wrappedBuf) : new Uint8Array(wrappedBuf);
   if (wrapped.byteLength === 16) return Buffer.from(wrapped);
   const result = await decryptPlaybackKeyFn(wrapped, String(videoId));
   const key = result?.key;
   if (!key) throw new Error("empty key");
-  const aes = Buffer.isBuffer(key)
-    ? key
-    : key instanceof ArrayBuffer
-      ? Buffer.from(key)
-      : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+  const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key)
+    : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
   if (aes.length !== 16) throw new Error(`key len ${aes.length}`);
   return aes;
 }
-
 function decryptSegment(encrypted, key, iv) {
   const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
-
 function parseIvHex(hex) {
   const h = String(hex || "").replace(/^0x/i, "").trim();
   if (!/^[0-9a-fA-F]{32}$/.test(h)) return null;
   return Buffer.from(h, "hex");
 }
-
 function ivFromMediaSequence(seq) {
   const iv = Buffer.alloc(16, 0);
   iv.writeUInt32BE(Number(seq) >>> 0, 12);
   return iv;
 }
-
 async function upstreamHeaders(extra = {}) {
   const tok = await getCoursatkToken();
-  return {
-    Authorization: `Bearer ${tok}`,
-    Accept: "application/json",
-    ...extra
-  };
+  return { Authorization: `Bearer ${tok}`, Accept: "application/json", ...extra };
 }
-
 async function upstreamJson(apiPath, options = {}) {
-  const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, {
-    ...options,
-    headers: await upstreamHeaders(options.headers || {})
-  });
+  const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, { ...options, headers: await upstreamHeaders(options.headers || {}) });
   const text = await r.text();
-  let data;
-  try { data = JSON.parse(text); } catch {
-    throw new Error(`Upstream non-JSON (${r.status})`);
-  }
+  let data; try { data = JSON.parse(text); } catch { throw new Error(`Upstream non-JSON (${r.status})`); }
   if (!r.ok) throw new Error(data?.message || `Upstream HTTP ${r.status}`);
   return data;
 }
-
 function allowedStreamUrl(raw, session = null) {
   try {
     const u = new URL(raw);
     if (u.protocol !== "https:") return false;
     const hosts = new Set(CONFIG.STREAM_HOSTS);
     if (session?.allowedHosts) for (const h of session.allowedHosts) hosts.add(h);
-    if (session?.streamUrl) {
-      try { hosts.add(new URL(session.streamUrl).hostname); } catch {}
-    }
+    if (session?.streamUrl) { try { hosts.add(new URL(session.streamUrl).hostname); } catch {} }
     return [...hosts].some(h => u.hostname === h || u.hostname.endsWith("." + h));
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
-
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
-  if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
+  if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح`);
   const ch = clientHeaders || {};
   const headers = {
-    Accept: "*/*",
-    "Cache-Control": "no-cache",
-    Origin: CONFIG.STREAM_ORIGIN,
-    Referer: CONFIG.STREAM_REFERER,
+    Accept: "*/*", "Cache-Control": "no-cache",
+    Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER,
     "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
     "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
   };
-
   const isMediaSegmentHost = /floravon\.(online|shop)|c-cdn\.online/i.test(url);
-  if (!isMediaSegmentHost && session?.token) {
-    headers.Authorization = `Bearer ${session.token}`;
-  }
-
-  for (const name of [
-    "sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile",
-    "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"
-  ]) {
+  if (!isMediaSegmentHost && session?.token) headers.Authorization = `Bearer ${session.token}`;
+  for (const name of ["sec-ch-ua-platform","sec-ch-ua","sec-ch-ua-mobile","sec-fetch-site","sec-fetch-mode","sec-fetch-dest","accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
   }
-  for (const [k, v] of Object.entries(extra || {})) {
-    if (v != null && v !== "") headers[k] = v;
-  }
+  for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== "") headers[k] = v;
   return fetch(url, { headers, cache: "no-store" });
 }
 
-// ═══════════════════════════════════════════════════════════
-// PUBLIC
-// ═══════════════════════════════════════════════════════════
+// ═════════ Routes
 const globalLimiter = rateLimit({ max: 50, windowMs: 60_000, scope: "global" });
-app.use((req, res, next) =>
-  req.path.startsWith("/api/stream/") || req.path === "/" || req.path.startsWith("/admin")
-    ? next()
-    : globalLimiter(req, res, next)
-);
-
-app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    service: "coursatk-protected-api",
-    cryptoReady: Boolean(decryptPlaybackKeyFn),
-    decryptSegments: true,
-    now: new Date().toISOString()
-  });
+app.use((req, res, next) => {
+  // Skip rate limit for HTML and stream routes
+  if (
+    req.path === "/" ||
+    req.path === "/admin" ||
+    req.path === "/admin.html" ||
+    req.path === "/health" ||
+    req.path === "/whoami" ||
+    req.path.startsWith("/api/stream/")
+  ) return next();
+  return globalLimiter(req, res, next);
 });
+
+// ✅ serve admin panel on all these paths
+const adminFile = path.join(__dirname, "public", "admin.html");
+app.get("/", (_req, res) => res.sendFile(adminFile));
+app.get("/admin", (_req, res) => res.sendFile(adminFile));
+app.get("/admin.html", (_req, res) => res.sendFile(adminFile));
+
+// Health
+app.get("/health", (_req, res) => res.json({
+  ok: true, service: "coursatk-protected-api",
+  cryptoReady: Boolean(decryptPlaybackKeyFn),
+  decryptSegments: true, now: new Date().toISOString()
+}));
+
+// Debug
+app.get("/whoami", (req, res) => res.json({
+  path: req.path,
+  ip: clientIp(req),
+  hasAdminFile: fs.existsSync(adminFile),
+  adminFile,
+  cwd: process.cwd(),
+  dirname: __dirname
+}));
 
 app.get("/api/public/code-types", (_req, res) => {
   const types = {};
-  for (const [k, v] of Object.entries(CONFIG.CODE_TYPES)) {
-    types[k] = { label: v.label, durationMs: v.ms };
-  }
+  for (const [k, v] of Object.entries(CONFIG.CODE_TYPES)) types[k] = { label: v.label, durationMs: v.ms };
   res.json({ success: true, data: types });
 });
 
-// ═══════════════════════════════════════════════════════════
-// STUDENT AUTH
-// ═══════════════════════════════════════════════════════════
+// ═════════ Student Auth
 app.post("/api/auth/login", rateLimit({ max: 15, windowMs: 60_000, scope: "login" }), async (req, res) => {
   try {
     const code = String(req.body?.code || "").trim();
     const deviceId = String(req.body?.deviceId || "").trim();
     const deviceName = String(req.body?.deviceName || "Unknown").slice(0, 80);
-
-    if (!/^\d{7}$/.test(code)) {
-      return jsonError(res, 400, "الكود يجب أن يكون 7 أرقام");
-    }
-    if (!deviceId || deviceId.length < 8) {
-      return jsonError(res, 400, "deviceId مطلوب");
-    }
-
+    if (!/^\d{7}$/.test(code)) return jsonError(res, 400, "الكود يجب أن يكون 7 أرقام");
+    if (!deviceId || deviceId.length < 8) return jsonError(res, 400, "deviceId مطلوب");
     const student = await fbGet(`students/${code}`);
-    if (!student || student.active === false) {
-      return jsonError(res, 401, "كود غير صحيح أو موقوف");
-    }
-    if (student.expiresAt && now() > student.expiresAt) {
-      return jsonError(res, 403, "انتهت صلاحية الاشتراك");
-    }
-
+    if (!student || student.active === false) return jsonError(res, 401, "كود غير صحيح أو موقوف");
+    if (student.expiresAt && now() > student.expiresAt) return jsonError(res, 403, "انتهت صلاحية الاشتراك");
     const devices = student.devices || {};
     const maxDevices = Number(student.maxDevices || 1);
-
     if (!devices[deviceId]) {
       const activeCount = Object.keys(devices).length;
-      if (activeCount >= maxDevices) {
-        return jsonError(
-          res, 403,
-          `تم بلوغ الحد الأقصى للأجهزة (${maxDevices}). اطلب من الأدمن حذف جهاز.`
-        );
-      }
-      devices[deviceId] = {
-        name: deviceName,
-        addedAt: now(),
-        lastSeen: now()
-      };
+      if (activeCount >= maxDevices) return jsonError(res, 403, `تم بلوغ الحد الأقصى للأجهزة (${maxDevices})`);
+      devices[deviceId] = { name: deviceName, addedAt: now(), lastSeen: now() };
       await fbSet(`students/${code}/devices`, devices);
     } else {
       devices[deviceId].lastSeen = now();
       devices[deviceId].name = deviceName || devices[deviceId].name;
       await fbSet(`students/${code}/devices/${deviceId}`, devices[deviceId]);
     }
-
-    const sessionTtl = Math.min(
-      CONFIG.STUDENT_SESSION_MS,
-      Math.max(60_000, (student.expiresAt || now() + CONFIG.STUDENT_SESSION_MS) - now())
-    );
+    const sessionTtl = Math.min(CONFIG.STUDENT_SESSION_MS, Math.max(60_000, (student.expiresAt || now() + CONFIG.STUDENT_SESSION_MS) - now()));
     const token = randomToken(32);
-    const sess = {
-      token, code, deviceId,
-      name: student.name,
-      section: student.section || null,
-      createdAt: now(),
-      expiresAt: now() + sessionTtl
-    };
+    const sess = { token, code, deviceId, name: student.name, section: student.section || null, createdAt: now(), expiresAt: now() + sessionTtl };
     studentSessions.set(token, sess);
     await fbSet(`sessions/${token}`, sess);
-
     let subjectIds = [];
     let yearId = CONFIG.DEFAULT_YEAR_ID;
     if (student.section) {
       const sec = await fbGet(`sections/${student.section}`);
-      if (sec) {
-        subjectIds = sec.subjectIds || [];
-        if (sec.yearId) yearId = sec.yearId;
-      }
+      if (sec) { subjectIds = sec.subjectIds || []; if (sec.yearId) yearId = sec.yearId; }
     }
-
-    res.json({
-      success: true,
-      data: {
-        token,
-        expiresAt: sess.expiresAt,
-        student: {
-          name: student.name,
-          code,
-          section: student.section || null,
-          expiresAt: student.expiresAt,
-          maxDevices,
-          deviceId
-        },
-        yearId,
-        subjectIds
-      }
-    });
-  } catch (e) {
-    console.error("[login]", e.message);
-    jsonError(res, 500, e.message);
-  }
+    res.json({ success: true, data: { token, expiresAt: sess.expiresAt, student: { name: student.name, code, section: student.section || null, expiresAt: student.expiresAt, maxDevices, deviceId }, yearId, subjectIds } });
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.post("/api/auth/logout", requireStudent, async (req, res) => {
-  try {
-    studentSessions.delete(req.sessionToken);
-    await fbDelete(`sessions/${req.sessionToken}`);
-    res.json({ success: true });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  studentSessions.delete(req.sessionToken);
+  try { await fbDelete(`sessions/${req.sessionToken}`); } catch {}
+  res.json({ success: true });
 });
 
 app.get("/api/auth/me", requireStudent, async (req, res) => {
-  try {
-    const s = req.student;
-    let subjectIds = [];
-    let yearId = CONFIG.DEFAULT_YEAR_ID;
-    if (s.section) {
-      const sec = await fbGet(`sections/${s.section}`);
-      if (sec) {
-        subjectIds = sec.subjectIds || [];
-        if (sec.yearId) yearId = sec.yearId;
-      }
-    }
-    res.json({
-      success: true,
-      data: {
-        name: s.name,
-        code: req.session.code,
-        section: s.section || null,
-        expiresAt: s.expiresAt,
-        maxDevices: s.maxDevices || 1,
-        devices: Object.keys(s.devices || {}).length,
-        deviceId: req.session.deviceId,
-        yearId,
-        subjectIds,
-        sessionExpiresAt: req.session.expiresAt
-      }
-    });
-  } catch (e) {
-    jsonError(res, 500, e.message);
+  const s = req.student;
+  let subjectIds = []; let yearId = CONFIG.DEFAULT_YEAR_ID;
+  if (s.section) {
+    const sec = await fbGet(`sections/${s.section}`);
+    if (sec) { subjectIds = sec.subjectIds || []; if (sec.yearId) yearId = sec.yearId; }
   }
+  res.json({ success: true, data: { name: s.name, code: req.session.code, section: s.section || null, expiresAt: s.expiresAt, maxDevices: s.maxDevices || 1, devices: Object.keys(s.devices || {}).length, deviceId: req.session.deviceId, yearId, subjectIds, sessionExpiresAt: req.session.expiresAt } });
 });
 
-// ═══════════════════════════════════════════════════════════
-// CATALOG
-// ═══════════════════════════════════════════════════════════
+// ═════════ Catalog
 app.get("/api/config", requireStudent, async (req, res) => {
-  let yearId = CONFIG.DEFAULT_YEAR_ID;
-  let subjectIds = [];
+  let yearId = CONFIG.DEFAULT_YEAR_ID; let subjectIds = [];
   if (req.student.section) {
     const sec = await fbGet(`sections/${req.student.section}`);
-    if (sec) {
-      if (sec.yearId) yearId = sec.yearId;
-      subjectIds = sec.subjectIds || [];
-    }
+    if (sec) { if (sec.yearId) yearId = sec.yearId; subjectIds = sec.subjectIds || []; }
   }
-  res.json({
-    success: true, yearId, subjectIds,
-    cryptoReady: Boolean(decryptPlaybackKeyFn),
-    decryptSegments: true
-  });
+  res.json({ success: true, yearId, subjectIds, cryptoReady: Boolean(decryptPlaybackKeyFn), decryptSegments: true });
 });
 
 app.get("/api/subjects/:id", requireStudent, async (req, res) => {
@@ -702,173 +452,83 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
     if (req.student.section) {
       const sec = await fbGet(`sections/${req.student.section}`);
       if (sec) {
-        if (Array.isArray(sec.subjectIds) && sec.subjectIds.length) {
-          wantedIds = sec.subjectIds.map(Number).filter((n) => !Number.isNaN(n));
-        }
+        if (Array.isArray(sec.subjectIds) && sec.subjectIds.length) wantedIds = sec.subjectIds.map(Number).filter(n => !isNaN(n));
         if (sec.yearId) yearId = Number(sec.yearId) || yearId;
       }
     }
-
     const yearData = await upstreamJson(`/user/subjects/${encodeURIComponent(yearId)}`);
     let yearList = Array.isArray(yearData.data) ? yearData.data : [];
-    const byId = new Map(yearList.map((s) => [Number(s.id), s]));
-
-    if (!wantedIds.length) {
-      return res.json({ ...yearData, data: yearList });
-    }
-
+    const byId = new Map(yearList.map(s => [Number(s.id), s]));
+    if (!wantedIds.length) return res.json({ ...yearData, data: yearList });
     const results = [];
     for (const sid of wantedIds) {
-      if (byId.has(sid)) {
-        results.push(byId.get(sid));
-        continue;
-      }
+      if (byId.has(sid)) { results.push(byId.get(sid)); continue; }
       try {
         const t = await upstreamJson(`/user/subjects/${sid}/teachers`);
         const d = t?.data;
-        if (d && (d.id || d.name)) {
-          results.push({
-            id: Number(d.id) || sid,
-            name: d.name || `مادة ${sid}`,
-            image_url: d.image_url || null,
-            year_id: yearId,
-            is_published: true,
-            order_index: results.length + 1
-          });
-        } else {
-          results.push({
-            id: sid, name: `مادة ${sid}`, image_url: null,
-            year_id: yearId, is_published: true, order_index: results.length + 1
-          });
-        }
-      } catch (err) {
-        console.warn(`[subjects] resolve ${sid}:`, err.message);
-        results.push({
-          id: sid, name: `مادة ${sid}`, image_url: null,
-          year_id: yearId, is_published: true, order_index: results.length + 1
-        });
+        results.push(d && (d.id || d.name)
+          ? { id: Number(d.id) || sid, name: d.name || `مادة ${sid}`, image_url: d.image_url || null, year_id: yearId, is_published: true, order_index: results.length + 1 }
+          : { id: sid, name: `مادة ${sid}`, image_url: null, year_id: yearId, is_published: true, order_index: results.length + 1 });
+      } catch {
+        results.push({ id: sid, name: `مادة ${sid}`, image_url: null, year_id: yearId, is_published: true, order_index: results.length + 1 });
       }
     }
-
     res.json({ success: true, message: "Success", data: results });
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
+  } catch (e) { jsonError(res, 502, e.message); }
 });
 
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`)
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
+  try { res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`)); }
+  catch (e) { jsonError(res, 502, e.message); }
 });
-
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`)
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
+  try { res.json(await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`)); }
+  catch (e) { jsonError(res, 502, e.message); }
 });
-
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`)
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
+  try { res.json(await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`)); }
+  catch (e) { jsonError(res, 502, e.message); }
 });
-
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
-  try {
-    res.json(
-      await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`)
-    );
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
+  try { res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`)); }
+  catch (e) { jsonError(res, 502, e.message); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// STREAM
-// ═══════════════════════════════════════════════════════════
+// ═════════ Stream
 app.post("/api/play/:videoId", requireStudent, async (req, res) => {
   try {
-    const data = await upstreamJson(
-      `/video/${encodeURIComponent(req.params.videoId)}/stream-weave/play`,
-      { method: "POST", headers: { Accept: "application/json" } }
-    );
-    if (!data?.success || !data?.data?.token || !data?.data?.stream_url || !data?.data?.video_id) {
-      throw new Error("Playback response ناقص");
-    }
+    const data = await upstreamJson(`/video/${encodeURIComponent(req.params.videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+    if (!data?.success || !data?.data?.token || !data?.data?.stream_url || !data?.data?.video_id) throw new Error("Playback response ناقص");
     const id = crypto.randomUUID();
     streamSessions.set(id, {
-      id,
-      videoId: String(data.data.video_id),
-      token: data.data.token,
-      streamUrl: data.data.stream_url,
-      playId: String(req.params.videoId),
-      createdAt: now(),
-      lastUsed: now(),
-      plainKey: null,
-      defaultIv: null,
-      allowedHosts: new Set([new URL(data.data.stream_url).hostname]),
-      ownerCode: req.session.code
+      id, videoId: String(data.data.video_id), token: data.data.token,
+      streamUrl: data.data.stream_url, playId: String(req.params.videoId),
+      createdAt: now(), lastUsed: now(), plainKey: null, defaultIv: null,
+      allowedHosts: new Set([new URL(data.data.stream_url).hostname]), ownerCode: req.session.code
     });
-    res.json({
-      success: true,
-      data: {
-        session: id,
-        video_id: data.data.video_id,
-        manifest_url: `/api/stream/manifest/${id}`
-      }
-    });
-  } catch (e) {
-    jsonError(res, 502, e.message);
-  }
+    res.json({ success: true, data: { session: id, video_id: data.data.video_id, manifest_url: `/api/stream/manifest/${id}` } });
+  } catch (e) { jsonError(res, 502, e.message); }
 });
 
 function getStreamSession(id) {
   const s = streamSessions.get(id);
   if (!s) return null;
-  const last = s.lastUsed || s.createdAt;
-  if (now() - last > CONFIG.STREAM_SESSION_MS) {
-    streamSessions.delete(id);
-    return null;
-  }
-  s.lastUsed = now();
-  return s;
+  if (now() - (s.lastUsed || s.createdAt) > CONFIG.STREAM_SESSION_MS) { streamSessions.delete(id); return null; }
+  s.lastUsed = now(); return s;
 }
-
 async function refreshPlayback(session) {
-  const data = await upstreamJson(
-    `/video/${encodeURIComponent(session.playId)}/stream-weave/play`,
-    { method: "POST", headers: { Accept: "application/json" } }
-  );
-  if (!data?.success || !data?.data?.token || !data?.data?.stream_url) {
-    throw new Error("فشل تجديد التوكن");
-  }
+  const data = await upstreamJson(`/video/${encodeURIComponent(session.playId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+  if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("فشل تجديد التوكن");
   session.token = data.data.token;
   session.streamUrl = data.data.stream_url;
   try { session.allowedHosts.add(new URL(session.streamUrl).hostname); } catch {}
   session.lastUsed = now();
-  console.log(`[refresh] playback token renewed for ${session.videoId}`);
 }
 
 app.get("/api/stream/manifest/:sessionId", requireStudent, async (req, res) => {
   const session = getStreamSession(req.params.sessionId);
   if (!session) return jsonError(res, 404, "جلسة التشغيل منتهية");
-  if (session.ownerCode !== req.session.code) {
-    return jsonError(res, 403, "جلسة تشغيل ليست لك");
-  }
-
+  if (session.ownerCode !== req.session.code) return jsonError(res, 403, "جلسة تشغيل ليست لك");
   try {
     let master = await streamFetch(session, session.streamUrl, {}, req.headers);
     if (master.status === 401 && session.playId) {
@@ -878,51 +538,35 @@ app.get("/api/stream/manifest/:sessionId", requireStudent, async (req, res) => {
     if (!master.ok) throw new Error(`Stream master HTTP ${master.status}`);
     const masterText = await master.text();
     const lines = masterText.split(/\r?\n/);
-
     let variant = null;
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
         const next = lines[i + 1]?.trim();
-        if (next && !next.startsWith("#")) {
-          variant = new URL(next, session.streamUrl).href;
-          break;
-        }
+        if (next && !next.startsWith("#")) { variant = new URL(next, session.streamUrl).href; break; }
       }
     }
-
     if (variant) {
-      let variantRes = await streamFetch(session, variant, {}, req.headers);
-      if (variantRes.status === 401 && session.playId) {
+      let vres = await streamFetch(session, variant, {}, req.headers);
+      if (vres.status === 401 && session.playId) {
         await refreshPlayback(session);
-        variantRes = await streamFetch(session, variant, {}, req.headers);
+        vres = await streamFetch(session, variant, {}, req.headers);
       }
-      if (!variantRes.ok) throw new Error(`Variant HTTP ${variantRes.status}`);
-      return rewritePlaylist(
-        req.params.sessionId, session, await variantRes.text(), variant, res, req.headers
-      );
+      if (!vres.ok) throw new Error(`Variant HTTP ${vres.status}`);
+      return rewritePlaylist(req.params.sessionId, session, await vres.text(), variant, res, req.headers);
     }
-    return rewritePlaylist(
-      req.params.sessionId, session, masterText, session.streamUrl, res, req.headers
-    );
-  } catch (e) {
-    console.error("[manifest]", e.message);
-    jsonError(res, 502, e.message);
-  }
+    return rewritePlaylist(req.params.sessionId, session, masterText, session.streamUrl, res, req.headers);
+  } catch (e) { jsonError(res, 502, e.message); }
 });
 
 async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHeaders) {
   try { session.allowedHosts.add(new URL(baseUrl).hostname); } catch {}
   const lines = text.split(/\r?\n/);
   const out = [];
-  let mediaSeq = 0;
-  let currentIv = null;
-  let keyFetched = false;
-
+  let mediaSeq = 0, currentIv = null, keyFetched = false;
   for (const raw of lines) {
     const t = raw.trim();
     if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0;
   }
-
   let segIndex = 0;
   for (const raw of lines) {
     const line = raw.trim();
@@ -930,19 +574,15 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
       const uri = line.match(/URI="([^"]+)"/)?.[1];
       const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
       if (ivHex) currentIv = parseIvHex(ivHex);
-      if (uri && !keyFetched && session.plainKey) {
-        session.defaultIv = currentIv;
-        keyFetched = true;
-      } else if (uri && !keyFetched) {
+      if (uri && !keyFetched && session.plainKey) { session.defaultIv = currentIv; keyFetched = true; }
+      else if (uri && !keyFetched) {
         const keyUrl = new URL(uri, baseUrl).href;
         try { session.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
         const keyRes = await streamFetch(session, keyUrl, {}, clientHeaders);
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
         session.plainKey = await unwrapKey(wrapped, session.videoId);
-        session.defaultIv = currentIv;
-        keyFetched = true;
-        console.log(`[key] unwrapped for ${session.videoId}`);
+        session.defaultIv = currentIv; keyFetched = true;
       }
       continue;
     }
@@ -951,10 +591,7 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
       try { session.allowedHosts.add(new URL(segmentUrl).hostname); } catch {}
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
-      const payload = Buffer.from(
-        JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }),
-        "utf8"
-      ).toString("base64url");
+      const payload = Buffer.from(JSON.stringify({ u: segmentUrl, iv: iv.toString("hex"), s: seq }), "utf8").toString("base64url");
       out.push(`/api/stream/segment/${sessionId}/${payload}`);
       segIndex++;
       continue;
@@ -962,12 +599,7 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
     out.push(raw);
   }
   if (!session.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
-
-  res.set({
-    "Content-Type": "application/vnd.apple.mpegurl",
-    "Cache-Control": "no-store",
-    "Access-Control-Allow-Origin": "*"
-  });
+  res.set({ "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
   res.send(out.join("\n"));
 }
 
@@ -976,55 +608,21 @@ app.get("/api/stream/segment/:sessionId/:encoded", requireStudent, async (req, r
   if (!session) return jsonError(res, 404, "جلسة التشغيل منتهية");
   if (session.ownerCode !== req.session.code) return jsonError(res, 403, "جلسة ليست لك");
   if (!session.plainKey) return jsonError(res, 404, "مفتاح غير متاح");
-
   let meta;
-  try {
-    meta = JSON.parse(Buffer.from(req.params.encoded, "base64url").toString("utf8"));
-  } catch {
-    return jsonError(res, 400, "segment meta غير صالح");
-  }
+  try { meta = JSON.parse(Buffer.from(req.params.encoded, "base64url").toString("utf8")); }
+  catch { return jsonError(res, 400, "segment meta غير صالح"); }
   const url = meta?.u;
   if (!url || !allowedStreamUrl(url, session)) return jsonError(res, 403, "رابط غير مسموح");
-
   const iv = parseIvHex(meta.iv) || session.defaultIv || ivFromMediaSequence(meta.s || 0);
   try {
-    const upstream = await streamFetch(session, url, {
-      Range: req.headers.range || undefined
-    }, req.headers);
-    if (!upstream.ok && upstream.status !== 206) {
-      const body = (await upstream.text().catch(() => "")).slice(0, 300);
-      console.error("[segment-fail]", {
-        status: upstream.status,
-        host: new URL(url).hostname,
-        server: upstream.headers.get("server"),
-        cfRay: upstream.headers.get("cf-ray"),
-        ageSec: Math.round((now() - session.createdAt) / 1000),
-        body
-      });
-      throw new Error(`Segment HTTP ${upstream.status}`);
-    }
+    const upstream = await streamFetch(session, url, { Range: req.headers.range || undefined }, req.headers);
+    if (!upstream.ok && upstream.status !== 206) throw new Error(`Segment HTTP ${upstream.status}`);
     const encrypted = Buffer.from(await upstream.arrayBuffer());
-    if (encrypted.length > CONFIG.MAX_PROXY_BYTES) {
-      return jsonError(res, 413, "المقطع كبير");
-    }
+    if (encrypted.length > CONFIG.MAX_PROXY_BYTES) return jsonError(res, 413, "المقطع كبير");
     let plain;
-    try {
-      plain = decryptSegment(encrypted, session.plainKey, iv);
-    } catch (decErr) {
-      console.warn("[segment-decrypt-fail]", {
-        host: new URL(url).hostname,
-        len: encrypted.length,
-        err: decErr.message
-      });
-      plain = encrypted;
-    }
+    try { plain = decryptSegment(encrypted, session.plainKey, iv); } catch { plain = encrypted; }
     res.status(200);
-    res.set({
-      "Content-Type": "video/mp2t",
-      "Content-Length": String(plain.length),
-      "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*"
-    });
+    res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
     res.send(plain);
   } catch (e) {
     if (!res.headersSent) jsonError(res, 502, e.message);
@@ -1032,63 +630,35 @@ app.get("/api/stream/segment/:sessionId/:encoded", requireStudent, async (req, r
   }
 });
 
-// ═══════════════════════════════════════════════════════════
-// ADMIN AUTH
-// ═══════════════════════════════════════════════════════════
+// ═════════ Admin Auth
 app.post("/api/admin/login", rateLimit({ max: 10, windowMs: 60_000, scope: "admin-login" }), async (req, res) => {
   try {
     const username = String(req.body?.username || "").trim();
     const password = String(req.body?.password || "");
     if (!username || !password) return jsonError(res, 400, "يوزر وباسورد مطلوبين");
-
-    let adminId = null;
-    let admin = null;
-    let perms = null;
-
+    let adminId = null, perms = null;
     if (username === CONFIG.BOOTSTRAP_ADMIN.username) {
-      const ok = scryptVerify(password, CONFIG.BOOTSTRAP_ADMIN.passwordHash) ||
-        password === CONFIG.BOOTSTRAP_ADMIN.passwordPlain;
+      const ok = scryptVerify(password, CONFIG.BOOTSTRAP_ADMIN.passwordHash) || password === CONFIG.BOOTSTRAP_ADMIN.passwordPlain;
       if (!ok) return jsonError(res, 401, "بيانات الدخول خطأ");
       adminId = "bootstrap";
       perms = CONFIG.BOOTSTRAP_ADMIN.permissions;
-      admin = { username, permissions: perms, bootstrap: true };
     } else {
       const all = (await fbGet("admins")) || {};
       for (const [id, a] of Object.entries(all)) {
         if (a && a.username === username && a.active !== false) {
-          if (!scryptVerify(password, a.passwordHash)) {
-            return jsonError(res, 401, "بيانات الدخول خطأ");
-          }
-          adminId = id;
-          admin = a;
-          perms = a.permissions || {};
+          if (!scryptVerify(password, a.passwordHash)) return jsonError(res, 401, "بيانات الدخول خطأ");
+          adminId = id; perms = a.permissions || {};
           break;
         }
       }
       if (!adminId) return jsonError(res, 401, "بيانات الدخول خطأ");
     }
-
     const token = randomToken(32);
-    const sess = {
-      token, adminId, username,
-      createdAt: now(),
-      expiresAt: now() + CONFIG.ADMIN_SESSION_MS
-    };
+    const sess = { token, adminId, username, createdAt: now(), expiresAt: now() + CONFIG.ADMIN_SESSION_MS };
     adminSessions.set(token, sess);
     await fbSet(`admin_sessions/${token}`, sess);
-
-    res.json({
-      success: true,
-      data: {
-        token,
-        expiresAt: sess.expiresAt,
-        username,
-        permissions: perms
-      }
-    });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+    res.json({ success: true, data: { token, expiresAt: sess.expiresAt, username, permissions: perms } });
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.post("/api/admin/logout", requireAdmin(null), async (req, res) => {
@@ -1098,39 +668,22 @@ app.post("/api/admin/logout", requireAdmin(null), async (req, res) => {
 });
 
 app.get("/api/admin/me", requireAdmin(null), (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      username: req.admin.username,
-      permissions: req.admin.permissions || {},
-      bootstrap: !!req.admin.bootstrap
-    }
-  });
+  res.json({ success: true, data: { username: req.admin.username, permissions: req.admin.permissions || {}, bootstrap: !!req.admin.bootstrap } });
 });
 
-// ═══════════════════════════════════════════════════════════
-// ADMIN — Config
-// ═══════════════════════════════════════════════════════════
+// ═════════ Admin Config
 app.get("/api/admin/config", requireAdmin("sections_manage"), async (_req, res) => {
   try {
     const remote = await fbGet("config");
     const token = await getCoursatkToken();
     const masked = token ? token.slice(0, 12) + "…" + token.slice(-8) : null;
-    res.json({
-      success: true,
-      data: {
-        coursatkTokenSet: Boolean(token),
-        coursatkTokenMasked: masked,
-        defaultYearId: CONFIG.DEFAULT_YEAR_ID,
-        codeTypes: Object.fromEntries(
-          Object.entries(CONFIG.CODE_TYPES).map(([k, v]) => [k, { label: v.label, ms: v.ms }])
-        ),
-        firebase: remote || {}
-      }
-    });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+    res.json({ success: true, data: {
+      coursatkTokenSet: Boolean(token), coursatkTokenMasked: masked,
+      defaultYearId: CONFIG.DEFAULT_YEAR_ID,
+      codeTypes: Object.fromEntries(Object.entries(CONFIG.CODE_TYPES).map(([k, v]) => [k, { label: v.label, ms: v.ms }])),
+      firebase: remote || {}
+    } });
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.put("/api/admin/config/token", requireAdmin("admins_manage"), async (req, res) => {
@@ -1138,55 +691,32 @@ app.put("/api/admin/config/token", requireAdmin("admins_manage"), async (req, re
     const token = String(req.body?.token || "").trim();
     if (token.length < 20) return jsonError(res, 400, "توكن غير صالح");
     await fbSet("config/coursatkToken", token);
-    cachedCoursatkToken = token;
-    cachedTokenAt = Date.now();
+    cachedCoursatkToken = token; cachedTokenAt = Date.now();
     res.json({ success: true, message: "تم تحديث توكن كورساتك" });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// ADMIN — Students
-// ═══════════════════════════════════════════════════════════
+// ═════════ Admin Students
 app.get("/api/admin/students", requireAdmin("students_view"), async (_req, res) => {
   try {
     const all = (await fbGet("students")) || {};
     const list = Object.entries(all).map(([code, s]) => ({
-      code,
-      name: s.name,
-      section: s.section || null,
-      type: s.type || null,
-      expiresAt: s.expiresAt,
-      maxDevices: s.maxDevices || 1,
+      code, name: s.name, section: s.section || null, type: s.type || null,
+      expiresAt: s.expiresAt, maxDevices: s.maxDevices || 1,
       devices: Object.keys(s.devices || {}).length,
-      active: s.active !== false,
-      createdAt: s.createdAt || null
+      active: s.active !== false, createdAt: s.createdAt || null
     }));
     list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     res.json({ success: true, data: list });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.get("/api/admin/students/:code", requireAdmin("students_view"), async (req, res) => {
   try {
-    const code = req.params.code;
-    const s = await fbGet(`students/${code}`);
+    const s = await fbGet(`students/${req.params.code}`);
     if (!s) return jsonError(res, 404, "الطالب غير موجود");
-    res.json({
-      success: true,
-      data: {
-        code, ...s,
-        deviceList: Object.entries(s.devices || {}).map(([id, d]) => ({
-          deviceId: id, ...d
-        }))
-      }
-    });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+    res.json({ success: true, data: { code: req.params.code, ...s, deviceList: Object.entries(s.devices || {}).map(([id, d]) => ({ deviceId: id, ...d })) } });
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.post("/api/admin/students", requireAdmin("students_create"), async (req, res) => {
@@ -1196,70 +726,44 @@ app.post("/api/admin/students", requireAdmin("students_create"), async (req, res
     const type = String(req.body?.type || "month");
     const maxDevices = Math.max(1, Math.min(10, Number(req.body?.maxDevices || 1)));
     let code = String(req.body?.code || "").trim();
-
     if (!name) return jsonError(res, 400, "اسم الطالب مطلوب");
-    if (!CONFIG.CODE_TYPES[type]) {
-      return jsonError(res, 400, "نوع الكود غير صالح (trial|month|term|year)");
-    }
+    if (!CONFIG.CODE_TYPES[type]) return jsonError(res, 400, "نوع الكود غير صالح");
     if (code) {
       if (!/^\d{7}$/.test(code)) return jsonError(res, 400, "الكود يجب 7 أرقام");
-      const exists = await fbGet(`students/${code}`);
-      if (exists) return jsonError(res, 409, "الكود مستخدم بالفعل");
+      if (await fbGet(`students/${code}`)) return jsonError(res, 409, "الكود مستخدم بالفعل");
     } else {
       for (let i = 0; i < 30; i++) {
         code = randomCode7();
-        const exists = await fbGet(`students/${code}`);
-        if (!exists) break;
+        if (!(await fbGet(`students/${code}`))) break;
       }
     }
-
-    const duration = CONFIG.CODE_TYPES[type].ms;
     const record = {
-      name,
-      section: section || null,
-      type,
-      maxDevices,
-      devices: {},
-      active: true,
-      createdAt: now(),
-      expiresAt: now() + duration,
+      name, section: section || null, type, maxDevices, devices: {},
+      active: true, createdAt: now(), expiresAt: now() + CONFIG.CODE_TYPES[type].ms,
       createdBy: req.admin.username
     };
     await fbSet(`students/${code}`, record);
     res.json({ success: true, data: { code, ...record } });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.patch("/api/admin/students/:code", requireAdmin("students_edit"), async (req, res) => {
   try {
-    const code = req.params.code;
-    const s = await fbGet(`students/${code}`);
+    const s = await fbGet(`students/${req.params.code}`);
     if (!s) return jsonError(res, 404, "غير موجود");
-
     const patch = {};
     if (req.body.name != null) patch.name = String(req.body.name).trim();
     if (req.body.section != null) patch.section = String(req.body.section).trim() || null;
-    if (req.body.maxDevices != null) {
-      patch.maxDevices = Math.max(1, Math.min(10, Number(req.body.maxDevices)));
-    }
+    if (req.body.maxDevices != null) patch.maxDevices = Math.max(1, Math.min(10, Number(req.body.maxDevices)));
     if (req.body.active != null) patch.active = Boolean(req.body.active);
     if (req.body.type && CONFIG.CODE_TYPES[req.body.type]) {
       patch.type = req.body.type;
-      if (req.body.renew) {
-        patch.expiresAt = now() + CONFIG.CODE_TYPES[req.body.type].ms;
-      }
+      if (req.body.renew) patch.expiresAt = now() + CONFIG.CODE_TYPES[req.body.type].ms;
     }
-    if (req.body.extendMs) {
-      const base = Math.max(s.expiresAt || now(), now());
-      patch.expiresAt = base + Number(req.body.extendMs);
-    }
-    await fbPatch(`students/${code}`, patch);
-    res.json({ success: true, data: { code, ...s, ...patch } });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+    if (req.body.extendMs) patch.expiresAt = Math.max(s.expiresAt || now(), now()) + Number(req.body.extendMs);
+    await fbPatch(`students/${req.params.code}`, patch);
+    res.json({ success: true, data: { code: req.params.code, ...s, ...patch } });
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.delete("/api/admin/students/:code", requireAdmin("students_delete"), async (req, res) => {
@@ -1267,112 +771,66 @@ app.delete("/api/admin/students/:code", requireAdmin("students_delete"), async (
     const code = req.params.code;
     const sessions = (await fbGet("sessions")) || {};
     for (const [tok, sess] of Object.entries(sessions)) {
-      if (sess && sess.code === code) {
-        studentSessions.delete(tok);
-        await fbDelete(`sessions/${tok}`);
-      }
+      if (sess && sess.code === code) { studentSessions.delete(tok); await fbDelete(`sessions/${tok}`); }
     }
     await fbDelete(`students/${code}`);
     res.json({ success: true });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
-app.delete(
-  "/api/admin/students/:code/devices/:deviceId",
-  requireAdmin("devices_kick"),
-  async (req, res) => {
-    try {
-      const { code, deviceId } = req.params;
-      const s = await fbGet(`students/${code}`);
-      if (!s) return jsonError(res, 404, "غير موجود");
-
-      const devices = { ...(s.devices || {}) };
-      delete devices[deviceId];
-      await fbSet(`students/${code}/devices`, devices);
-
-      const sessions = (await fbGet("sessions")) || {};
-      for (const [tok, sess] of Object.entries(sessions)) {
-        if (sess && sess.code === code && sess.deviceId === deviceId) {
-          studentSessions.delete(tok);
-          await fbDelete(`sessions/${tok}`);
-        }
-      }
-      res.json({ success: true, message: "تم تسجيل خروج الجهاز" });
-    } catch (e) {
-      jsonError(res, 500, e.message);
+app.delete("/api/admin/students/:code/devices/:deviceId", requireAdmin("devices_kick"), async (req, res) => {
+  try {
+    const { code, deviceId } = req.params;
+    const s = await fbGet(`students/${code}`);
+    if (!s) return jsonError(res, 404, "غير موجود");
+    const devices = { ...(s.devices || {}) };
+    delete devices[deviceId];
+    await fbSet(`students/${code}/devices`, devices);
+    const sessions = (await fbGet("sessions")) || {};
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code && sess.deviceId === deviceId) { studentSessions.delete(tok); await fbDelete(`sessions/${tok}`); }
     }
-  }
-);
+    res.json({ success: true, message: "تم تسجيل خروج الجهاز" });
+  } catch (e) { jsonError(res, 500, e.message); }
+});
 
-// ═══════════════════════════════════════════════════════════
-// ADMIN — Sections
-// ═══════════════════════════════════════════════════════════
+// ═════════ Admin Sections
 app.get("/api/admin/sections", requireAdmin("sections_manage"), async (_req, res) => {
   try {
     const all = (await fbGet("sections")) || {};
-    const list = Object.entries(all).map(([id, s]) => ({ id, ...s }));
-    res.json({ success: true, data: list });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+    res.json({ success: true, data: Object.entries(all).map(([id, s]) => ({ id, ...s })) });
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.put("/api/admin/sections/:id", requireAdmin("sections_manage"), async (req, res) => {
   try {
     const id = String(req.params.id).trim().replace(/[^\w\u0600-\u06FF\-]/g, "_");
-    const name = String(req.body?.name || id).trim();
-    const yearId = Number(req.body?.yearId || CONFIG.DEFAULT_YEAR_ID);
-    const subjectIds = Array.isArray(req.body?.subjectIds)
-      ? req.body.subjectIds.map(Number).filter((n) => !Number.isNaN(n))
-      : [];
-    const record = { name, yearId, subjectIds, updatedAt: now() };
+    const record = {
+      name: String(req.body?.name || id).trim(),
+      yearId: Number(req.body?.yearId || CONFIG.DEFAULT_YEAR_ID),
+      subjectIds: Array.isArray(req.body?.subjectIds) ? req.body.subjectIds.map(Number).filter(n => !isNaN(n)) : [],
+      updatedAt: now()
+    };
     await fbSet(`sections/${id}`, record);
     res.json({ success: true, data: { id, ...record } });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.delete("/api/admin/sections/:id", requireAdmin("sections_manage"), async (req, res) => {
-  try {
-    await fbDelete(`sections/${req.params.id}`);
-    res.json({ success: true });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  try { await fbDelete(`sections/${req.params.id}`); res.json({ success: true }); }
+  catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// ADMIN — Admins
-// ═══════════════════════════════════════════════════════════
+// ═════════ Admin Admins
 app.get("/api/admin/admins", requireAdmin("admins_manage"), async (_req, res) => {
   try {
     const all = (await fbGet("admins")) || {};
     const list = Object.entries(all).map(([id, a]) => ({
-      id,
-      username: a.username,
-      permissions: a.permissions || {},
-      active: a.active !== false,
-      createdAt: a.createdAt || null
+      id, username: a.username, permissions: a.permissions || {},
+      active: a.active !== false, createdAt: a.createdAt || null
     }));
-    res.json({
-      success: true,
-      data: [
-        {
-          id: "bootstrap",
-          username: CONFIG.BOOTSTRAP_ADMIN.username,
-          permissions: CONFIG.BOOTSTRAP_ADMIN.permissions,
-          active: true,
-          bootstrap: true
-        },
-        ...list
-      ]
-    });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+    res.json({ success: true, data: [{ id: "bootstrap", username: CONFIG.BOOTSTRAP_ADMIN.username, permissions: CONFIG.BOOTSTRAP_ADMIN.permissions, active: true, bootstrap: true }, ...list] });
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.post("/api/admin/admins", requireAdmin("admins_manage"), async (req, res) => {
@@ -1381,15 +839,9 @@ app.post("/api/admin/admins", requireAdmin("admins_manage"), async (req, res) =>
     const password = String(req.body?.password || "");
     if (!username || username.length < 3) return jsonError(res, 400, "يوزر غير صالح");
     if (!password || password.length < 6) return jsonError(res, 400, "باسورد قصير");
-    if (username === CONFIG.BOOTSTRAP_ADMIN.username) {
-      return jsonError(res, 409, "اسم محجوز");
-    }
-
+    if (username === CONFIG.BOOTSTRAP_ADMIN.username) return jsonError(res, 409, "اسم محجوز");
     const all = (await fbGet("admins")) || {};
-    for (const a of Object.values(all)) {
-      if (a && a.username === username) return jsonError(res, 409, "اليوزر موجود");
-    }
-
+    for (const a of Object.values(all)) if (a && a.username === username) return jsonError(res, 409, "اليوزر موجود");
     const permissions = {
       students_view: !!req.body?.permissions?.students_view,
       students_create: !!req.body?.permissions?.students_create,
@@ -1399,28 +851,18 @@ app.post("/api/admin/admins", requireAdmin("admins_manage"), async (req, res) =>
       sections_manage: !!req.body?.permissions?.sections_manage,
       admins_manage: !!req.body?.permissions?.admins_manage
     };
-
     const id = crypto.randomUUID();
-    const record = {
-      username,
-      passwordHash: scryptHash(password),
-      permissions,
-      active: true,
-      createdAt: now(),
-      createdBy: req.admin.username
-    };
-    await fbSet(`admins/${id}`, record);
+    await fbSet(`admins/${id}`, {
+      username, passwordHash: scryptHash(password), permissions,
+      active: true, createdAt: now(), createdBy: req.admin.username
+    });
     res.json({ success: true, data: { id, username, permissions, active: true } });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.patch("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, res) => {
   try {
-    if (req.params.id === "bootstrap") {
-      return jsonError(res, 400, "لا يمكن تعديل الأدمن الأساسي من هنا");
-    }
+    if (req.params.id === "bootstrap") return jsonError(res, 400, "لا يمكن تعديل الأدمن الأساسي من هنا");
     const a = await fbGet(`admins/${req.params.id}`);
     if (!a) return jsonError(res, 404, "غير موجود");
     const patch = {};
@@ -1439,88 +881,45 @@ app.patch("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, re
     if (req.body.active != null) patch.active = Boolean(req.body.active);
     await fbPatch(`admins/${req.params.id}`, patch);
     res.json({ success: true });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
 app.delete("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, res) => {
   try {
-    if (req.params.id === "bootstrap") {
-      return jsonError(res, 400, "لا يمكن حذف الأدمن الأساسي");
-    }
+    if (req.params.id === "bootstrap") return jsonError(res, 400, "لا يمكن حذف الأدمن الأساسي");
     await fbDelete(`admins/${req.params.id}`);
     res.json({ success: true });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
+  } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// Root → admin panel
-// ═══════════════════════════════════════════════════════════
-app.get("/", (_req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
-});
-
-// Fallback for /api/*
+// Fallback
 app.use((req, res) => {
-  res.status(403).json({
-    success: false,
-    message: "خطأ: يلزم مصادقة أو المسار غير موجود.",
-    path: req.path
-  });
+  res.status(403).json({ success: false, message: "خطأ: يلزم مصادقة أو المسار غير موجود.", path: req.path });
 });
 
 // Cleanup
 setInterval(() => {
   const t = now();
-  for (const [k, s] of studentSessions) {
-    if (s.expiresAt && t > s.expiresAt) studentSessions.delete(k);
-  }
-  for (const [k, s] of adminSessions) {
-    if (s.expiresAt && t > s.expiresAt) adminSessions.delete(k);
-  }
-  for (const [k, s] of streamSessions) {
-    if (t - (s.lastUsed || s.createdAt) > CONFIG.STREAM_SESSION_MS) streamSessions.delete(k);
-  }
+  for (const [k, s] of studentSessions) if (s.expiresAt && t > s.expiresAt) studentSessions.delete(k);
+  for (const [k, s] of adminSessions) if (s.expiresAt && t > s.expiresAt) adminSessions.delete(k);
+  for (const [k, s] of streamSessions) if (t - (s.lastUsed || s.createdAt) > CONFIG.STREAM_SESSION_MS) streamSessions.delete(k);
 }, 60_000).unref();
 
 // Boot
 CONFIG.BOOTSTRAP_ADMIN.passwordHash = scryptHash(CONFIG.BOOTSTRAP_ADMIN.passwordPlain);
 await loadDecryptionUtils();
 
-// Seed default sections
 try {
   const sectionDefaults = {
-    scientific_sciences: {
-      name: "علمي علوم",
-      yearId: 4,
-      subjectIds: [57, 58, 59, 60, 61],
-      updatedAt: Date.now()
-    },
-    scientific_math: {
-      name: "علمي رياضة",
-      yearId: 4,
-      subjectIds: [57, 58, 59, 60, 65],
-      updatedAt: Date.now()
-    },
-    literary: {
-      name: "أدبي",
-      yearId: 4,
-      subjectIds: [57, 58, 62, 63, 64],
-      updatedAt: Date.now()
-    }
+    scientific_sciences: { name: "علمي علوم", yearId: 4, subjectIds: [57, 58, 59, 60, 61], updatedAt: Date.now() },
+    scientific_math: { name: "علمي رياضة", yearId: 4, subjectIds: [57, 58, 59, 60, 65], updatedAt: Date.now() },
+    literary: { name: "أدبي", yearId: 4, subjectIds: [57, 58, 62, 63, 64], updatedAt: Date.now() }
   };
-  for (const [id, def] of Object.entries(sectionDefaults)) {
-    await fbSet(`sections/${id}`, def);
-  }
+  for (const [id, def] of Object.entries(sectionDefaults)) await fbSet(`sections/${id}`, def);
   console.log("[API] sections subjectIds force-synced");
-} catch (e) {
-  console.warn("[API] section seed skip:", e.message);
-}
+} catch (e) { console.warn("[API] section seed skip:", e.message); }
 
 app.listen(CONFIG.PORT, () => {
-  console.log(`[API] :${CONFIG.PORT} protected · segment-decrypt ON · admin panel ready`);
+  console.log(`[API] :${CONFIG.PORT} · admin panel ready`);
   console.log(`[API] bootstrap admin ready (Shalaby)`);
 });
