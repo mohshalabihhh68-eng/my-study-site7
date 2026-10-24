@@ -1,9 +1,5 @@
 /**
- * Coursatk API — النسخة المدمجة النهائية
- * - تم دمج هيدرز الكود البسيط لتخطي حماية API
- * - Firebase: my-platform-e46a6
- * - Admin panel + student codes (7 digits)
- * - Stream-Weave AES-128 decrypt (فك تشفير الفيديو)
+ * Coursatk API — النسخة المدمجة النهائية (بدون مشاكل 404)
  */
 import express from "express";
 import cors from "cors";
@@ -33,7 +29,7 @@ const CONFIG = {
   ADMIN_PASSWORD: "admin123",
   
   COURSATK_API: "https://api.coursatk.online/api/v1",
-  // بيقرأ من Railway، لو مش موجود بياخد القديم
+  // التوكن الاحتياطي (لو الطالب مش باعت توكن)
   COURSATK_TOKEN: process.env.COURSATK_TOKEN || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
   
   STREAM_HOSTS: [
@@ -292,18 +288,25 @@ function ivFromMediaSequence(seq) {
 }
 
 // ═══════════════════════════════════════════════
-// Upstream helpers (تم دمج هيدرز الكود البسيط هنا)
+// Upstream helpers (السر هنا: بياخد توكن الطالب)
 // ═══════════════════════════════════════════════
-async function upstreamJson(apiPath, options = {}) {
+async function upstreamJson(apiPath, options = {}, req = null) {
+  // 1. بنجيب التوكن من هيدر الطلب (لو موجود)، ولو مش موجود بناخد اللي في الإعدادات
+  const clientAuth = req?.headers?.authorization || "";
+  let tokenToUse = CONFIG.COURSATK_TOKEN;
+  
+  if (clientAuth.startsWith("Bearer ")) {
+    tokenToUse = clientAuth.slice(7).trim();
+  }
+
   const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, {
     ...options,
     headers: {
-      // الهيدرز دي من الكود البسيط بتاعك عشان نتخطى حماية كورساتك
-      Authorization: `Bearer ${CONFIG.COURSATK_TOKEN}`,
+      Authorization: `Bearer ${tokenToUse}`,
       Accept: "application/json",
       Origin: "https://coursatk.online",
       Referer: "https://coursatk.online/",
-      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+      "User-Agent": CONFIG.STREAM_UA,
       ...(options.headers || {})
     }
   });
@@ -443,38 +446,39 @@ app.get("/api/auth/me", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-app.get("/api/years", requireStudent, async (_req, res) => {
-  try { res.json(await upstreamJson("/user/years")); }
+// الكاتالوج (بياخد التوكن من الطالب)
+app.get("/api/years", requireStudent, async (req, res) => {
+  try { res.json(await upstreamJson("/user/years", {}, req)); }
   catch (e) { jsonError(res, 502, e.message); }
 });
 
 app.get("/api/subjects/:id", requireStudent, async (req, res) => {
-  try { res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}`)); }
+  try { res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}`, {}, req)); }
   catch (e) { jsonError(res, 502, e.message); }
 });
 
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
-  try { res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`)); }
+  try { res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`, {}, req)); }
   catch (e) { jsonError(res, 502, e.message); }
 });
 
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
-  try { res.json(await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`)); }
+  try { res.json(await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`, {}, req)); }
   catch (e) { jsonError(res, 502, e.message); }
 });
 
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
-  try { res.json(await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`)); }
+  try { res.json(await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`, {}, req)); }
   catch (e) { jsonError(res, 502, e.message); }
 });
 
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
-  try { res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`)); }
+  try { res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`, {}, req)); }
   catch (e) { jsonError(res, 502, e.message); }
 });
 
-app.get("/api/profile", requireStudent, async (_req, res) => {
-  try { res.json(await upstreamJson("/user/profile")); }
+app.get("/api/profile", requireStudent, async (req, res) => {
+  try { res.json(await upstreamJson("/user/profile", {}, req)); }
   catch (e) { jsonError(res, 502, e.message); }
 });
 
@@ -483,7 +487,8 @@ app.post("/api/play/:videoId", requireStudent, async (req, res) => {
   try {
     const data = await upstreamJson(
       `/video/${encodeURIComponent(req.params.videoId)}/stream-weave/play`,
-      { method: "POST", headers: { Accept: "application/json" } }
+      { method: "POST", headers: { Accept: "application/json" } },
+      req
     );
     if (!data?.success || !data?.data?.token || !data?.data?.stream_url || !data?.data?.video_id) {
       throw new Error("Playback response ناقص");
@@ -515,10 +520,11 @@ function getStreamSession(id) {
   return s;
 }
 
-async function refreshPlayback(session) {
+async function refreshPlayback(session, req) {
   const data = await upstreamJson(
     `/video/${encodeURIComponent(session.playId)}/stream-weave/play`,
-    { method: "POST", headers: { Accept: "application/json" } }
+    { method: "POST", headers: { Accept: "application/json" } },
+    req
   );
   if (!data?.success || !data?.data?.token) throw new Error("فشل تجديد التوكن");
   session.token = data.data.token;
@@ -535,7 +541,7 @@ app.get("/api/stream/manifest/:sessionId", requireStudent, async (req, res) => {
   try {
     let master = await streamFetch(session, session.streamUrl, {}, req.headers);
     if (master.status === 401 && session.playId) {
-      await refreshPlayback(session);
+      await refreshPlayback(session, req);
       master = await streamFetch(session, session.streamUrl, {}, req.headers);
     }
     if (!master.ok) throw new Error(`Stream master HTTP ${master.status}`);
@@ -556,7 +562,7 @@ app.get("/api/stream/manifest/:sessionId", requireStudent, async (req, res) => {
     if (variant) {
       let variantRes = await streamFetch(session, variant, {}, req.headers);
       if (variantRes.status === 401 && session.playId) {
-        await refreshPlayback(session);
+        await refreshPlayback(session, req);
         variantRes = await streamFetch(session, variant, {}, req.headers);
       }
       if (!variantRes.ok) throw new Error(`Variant HTTP ${variantRes.status}`);
