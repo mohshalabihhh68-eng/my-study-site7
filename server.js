@@ -892,14 +892,22 @@ app.delete("/api/admin/students/:code/devices/:deviceId", requireAdmin, async (r
 });
 
 // ═══════════════════════════════════════════════
-// Static + Fallback
+// Static + Fallback (المعدل عشان يفتح صفحات الـ HTML)
 // ═══════════════════════════════════════════════
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("*", (req, res) => {
+  // لو المسار بيبدأ بـ api وملقاش حاجة، يرجع خطأ
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ success: false, message: "Not found" });
   }
+  
+  // لو المسار فيه .html يفتح الملف ده (زي lectures.html)
+  if (req.path.endsWith(".html")) {
+    return res.sendFile(path.join(__dirname, "public", req.path));
+  }
+  
+  // أي حاجة تانية تفتح الصفحة الرئيسية
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
