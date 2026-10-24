@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة التحكم — Coursatk</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --border:#334155;
+    --text:#e2e8f0; --muted:#94a3b8;
+    --primary:#3b82f6; --success:#10b981; --danger:#ef4444; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;padding:10px 16px;font-weight:600;transition:.15s}
+  button:hover{opacity:.9}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  input,select,textarea{font-family:inherit;background:#0f172a;border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;width:100%;font-size:14px}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)}
+  .btn-primary{background:var(--primary);color:#fff}
+  .btn-success{background:var(--success);color:#fff}
+  .btn-danger{background:var(--danger);color:#fff}
+  .btn-warn{background:var(--warn);color:#000}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+
+  /* Login */
+  #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+  .login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:100%;max-width:400px}
+  .login-box h1{text-align:center;margin-bottom:24px;font-size:24px}
+  .login-box .field{margin-bottom:16px}
+  .login-box label{display:block;margin-bottom:6px;font-size:13px;color:var(--muted)}
+  .login-box button{width:100%;padding:12px;margin-top:8px}
+
+  /* App */
+  #app{display:none;min-height:100vh;flex-direction:column}
+  #app.active{display:flex}
+  header{background:var(--card);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+  header h2{font-size:18px}
+  header .user-info{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted)}
+  nav.tabs{background:var(--card);border-bottom:1px solid var(--border);display:flex;gap:4px;padding:0 24px;overflow-x:auto}
+  nav.tabs button{background:transparent;color:var(--muted);padding:14px 20px;border-radius:0;border-bottom:2px solid transparent}
+  nav.tabs button.active{color:var(--primary);border-bottom-color:var(--primary)}
+  nav.tabs button:hover{color:var(--text)}
+  main{padding:24px;flex:1;max-width:1200px;margin:0 auto;width:100%}
+  .panel{display:none}
+  .panel.active{display:block}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+  .card h3{margin-bottom:16px;font-size:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .field{margin-bottom:12px}
+  .field label{display:block;margin-bottom:6px;font-size:13px;color:var(--muted)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .row>*{flex:1;min-width:120px}
+  .row .auto{flex:0 0 auto;min-width:auto}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:10px 8px;text-align:right;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
+  tr:hover td{background:rgba(255,255,255,.02)}
+
+  .badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
+  .badge-success{background:rgba(16,185,129,.15);color:var(--success)}
+  .badge-danger{background:rgba(239,68,68,.15);color:var(--danger)}
+  .badge-warn{background:rgba(245,158,11,.15);color:var(--warn)}
+  .badge-info{background:rgba(59,130,246,.15);color:var(--primary)}
+
+  .toast{position:fixed;bottom:20px;left:20px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 20px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:999;transform:translateY(120%);transition:.3s;font-size:14px}
+  .toast.show{transform:translateY(0)}
+  .toast.success{border-color:var(--success)}
+  .toast.error{border-color:var(--danger)}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:500;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto}
+  .modal h3{margin-bottom:16px}
+  .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+  .empty{text-align:center;padding:40px;color:var(--muted)}
+  .loading{text-align:center;padding:40px;color:var(--muted)}
+  .perms{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+  .perms label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer}
+  .perms input{width:auto}
+
+  @media(max-width:640px){
+    .perms{grid-template-columns:1fr}
+    th,td{font-size:12px;padding:8px 4px}
+    main{padding:16px}
+  }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>🔐 لوحة التحكم</h1>
+    <div class="field">
+      <label>اسم المستخدم</label>
+      <input id="login-user" placeholder="Shalaby" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>كلمة المرور</label>
+      <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" onclick="doLogin()">دخول</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <header>
+    <h2>📚 Coursatk Admin</h2>
+    <div class="user-info">
+      <span id="me-info">—</span>
+      <button class="btn-ghost" onclick="doLogout()">خروج</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <main>
+    <!-- Students -->
+    <section class="panel active" data-panel="students">
+      <div class="card">
+        <h3>
+          <span>👥 الطلاب</span>
+          <button class="btn-primary" id="btn-add-student" onclick="openStudentModal()">+ إضافة طالب</button>
+        </h3>
+        <div id="students-list"><div class="loading">جاري التحميل…</div></div>
+      </div>
+    </section>
+
+    <!-- Sections -->
+    <section class="panel" data-panel="sections">
+      <div class="card">
+        <h3>
+          <span>🗂️ الأقسام (الشُعب)</span>
+          <button class="btn-primary" onclick="openSectionModal()">+ إضافة قسم</button>
+        </h3>
+        <div id="sections-list"><div class="loading">جاري التحميل…</div></div>
+      </div>
+    </section>
+
+    <!-- Admins -->
+    <section class="panel" data-panel="admins">
+      <div class="card">
+        <h3>
+          <span>🛡️ الأدمن</span>
+          <button class="btn-primary" onclick="openAdminModal()">+ إضافة أدمن</button>
+        </h3>
+        <div id="admins-list"><div class="loading">جاري التحميل…</div></div>
+      </div>
+    </section>
+
+    <!-- Config -->
+    <section class="panel" data-panel="config">
+      <div class="card">
+        <h3>⚙️ الإعدادات</h3>
+        <div id="config-info"><div class="loading">جاري التحميل…</div></div>
+      </div>
+      <div class="card" id="token-card" style="display:none">
+        <h3>تحديث توكن Coursatk</h3>
+        <div class="field">
+          <label>Token (JWT)</label>
+          <textarea id="new-token" rows="3" placeholder="eyJhbGciOi…"></textarea>
+        </div>
+        <button class="btn-warn" onclick="saveToken()">حفظ التوكن</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Modals -->
+<div class="modal-bg" id="student-modal">
+  <div class="modal">
+    <h3 id="student-modal-title">إضافة طالب</h3>
+    <div id="student-modal-body"></div>
+    <div class="actions">
+      <button class="btn-ghost" onclick="closeModal('student-modal')">إلغاء</button>
+      <button class="btn-primary" id="student-modal-save">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="section-modal">
+  <div class="modal">
+    <h3 id="section-modal-title">إضافة قسم</h3>
+    <div id="section-modal-body"></div>
+    <div class="actions">
+      <button class="btn-ghost" onclick="closeModal('section-modal')">إلغاء</button>
+      <button class="btn-primary" id="section-modal-save">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="admin-modal">
+  <div class="modal">
+    <h3 id="admin-modal-title">إضافة أدمن</h3>
+    <div id="admin-modal-body"></div>
+    <div class="actions">
+      <button class="btn-ghost" onclick="closeModal('admin-modal')">إلغاء</button>
+      <button class="btn-primary" id="admin-modal-save">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════
+const API = ""; // نفس origin
+let token = localStorage.getItem("admin_token") || "";
+let me = null;
+let currentTab = "students";
+let codeTypes = {};
+
+// ═══════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════
+async function api(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(API + path, { ...options, headers });
+  let data;
+  try { data = await r.json(); } catch { data = {}; }
+  if (!r.ok) throw new Error(data.message || `HTTP ${r.status}`);
+  return data;
+}
+
+function toast(msg, type = "success") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = "toast show " + type;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove("show"), 3000);
+}
+
+function fmtDate(ms) {
+  if (!ms) return "—";
+  return new Date(ms).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" });
+}
+
+function daysLeft(ms) {
+  if (!ms) return "—";
+  const d = Math.ceil((ms - Date.now()) / 86400000);
+  if (d < 0) return `منتهي (${-d} يوم)`;
+  return `${d} يوم`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+function openModal(id) { document.getElementById(id).classList.add("show"); }
+
+// ═══════════════════════════════════════════════
+// Auth
+// ═══════════════════════════════════════════════
+async function doLogin() {
+  const username = document.getElementById("login-user").value.trim();
+  const password = document.getElementById("login-pass").value;
+  if (!username || !password) return toast("املأ الحقول", "error");
+  try {
+    const res = await api("/api/admin/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    });
+    token = res.data.token;
+    localStorage.setItem("admin_token", token);
+    me = res.data;
+    initApp();
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function doLogout() {
+  try { await api("/api/admin/logout", { method: "POST" }); } catch {}
+  token = "";
+  localStorage.removeItem("admin_token");
+  location.reload();
+}
+
+// ═══════════════════════════════════════════════
+// Tabs
+// ═══════════════════════════════════════════════
+const TABS = [
+  { id: "students", label: "👥 الطلاب", perm: "students_view" },
+  { id: "sections", label: "🗂️ الأقسام", perm: "sections_manage" },
+  { id: "admins", label: "🛡️ الأدمن", perm: "admins_manage" },
+  { id: "config", label: "⚙️ الإعدادات", perm: "sections_manage" }
+];
+
+function renderTabs() {
+  const nav = document.getElementById("tabs");
+  const perms = me.permissions || {};
+  const visible = TABS.filter(t => perms[t.perm] || perms.all);
+  nav.innerHTML = visible.map(t =>
+    `<button data-tab="${t.id}" class="${t.id === currentTab ? "active" : ""}" onclick="switchTab('${t.id}')">${t.label}</button>`
+  ).join("");
+  if (!visible.find(t => t.id === currentTab)) {
+    currentTab = visible[0]?.id || "students";
+    switchTab(currentTab, false);
+  }
+}
+
+function switchTab(id, reload = true) {
+  currentTab = id;
+  document.querySelectorAll("nav.tabs button").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === id));
+  document.querySelectorAll(".panel").forEach(p =>
+    p.classList.toggle("active", p.dataset.panel === id));
+  if (reload) loadTab(id);
+}
+
+function loadTab(id) {
+  if (id === "students") loadStudents();
+  else if (id === "sections") loadSections();
+  else if (id === "admins") loadAdmins();
+  else if (id === "config") loadConfig();
+}
+
+// ═══════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════
+async function initApp() {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").classList.add("active");
+  document.getElementById("me-info").textContent = me.username + (me.bootstrap ? " (أساسي)" : "");
+  renderTabs();
+  try {
+    const r = await api("/api/public/code-types");
+    codeTypes = r.data || {};
+  } catch {}
+  loadTab(currentTab);
+}
+
+async function tryAutoLogin() {
+  if (!token) return;
+  try {
+    const r = await api("/api/admin/me");
+    me = r.data;
+    initApp();
+  } catch {
+    token = "";
+    localStorage.removeItem("admin_token");
+  }
+}
+
+// ═══════════════════════════════════════════════
+// Students
+// ═══════════════════════════════════════════════
+async function loadStudents() {
+  const box = document.getElementById("students-list");
+  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
+  try {
+    const r = await api("/api/admin/students");
+    const list = r.data || [];
+    if (!list.length) { box.innerHTML = '<div class="empty">لا يوجد طلاب</div>'; return; }
+    box.innerHTML = `
+      <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>الكود</th><th>الاسم</th><th>القسم</th><th>النوع</th>
+          <th>الأجهزة</th><th>الانتهاء</th><th>الحالة</th><th></th>
+        </tr></thead>
+        <tbody>
+        ${list.map(s => `
+          <tr>
+            <td><code>${s.code}</code></td>
+            <td>${escapeHtml(s.name)}</td>
+            <td>${escapeHtml(s.section || "—")}</td>
+            <td><span class="badge badge-info">${codeTypes[s.type]?.label || s.type || "—"}</span></td>
+            <td>${s.devices}/${s.maxDevices}</td>
+            <td>${daysLeft(s.expiresAt)}</td>
+            <td>${s.active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-danger">موقوف</span>'}</td>
+            <td>
+              <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick="viewStudent('${s.code}')">تفاصيل</button>
+            </td>
+          </tr>
+        `).join("")}
+        </tbody>
+      </table>
+      </div>
+    `;
+  } catch (e) {
+    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function viewStudent(code) {
+  try {
+    const r = await api(`/api/admin/students/${code}`);
+    const s = r.data;
+    const devices = (s.deviceList || []).map(d => `
+      <tr>
+        <td>${escapeHtml(d.name || "—")}</td>
+        <td><code style="font-size:11px">${escapeHtml(d.deviceId.slice(0, 12))}…</code></td>
+        <td>${fmtDate(d.lastSeen)}</td>
+        <td><button class="btn-danger" style="padding:4px 8px;font-size:11px" onclick="kickDevice('${code}','${d.deviceId}')">طرد</button></td>
+      </tr>
+    `).join("") || '<tr><td colspan="4" class="empty">لا أجهزة</td></tr>';
+
+    const typeOptions = Object.entries(codeTypes)
+      .map(([k, v]) => `<option value="${k}" ${s.type === k ? "selected" : ""}>${v.label}</option>`)
+      .join("");
+
+    document.getElementById("student-modal-title").textContent = `الطالب: ${s.name} (${code})`;
+    document.getElementById("student-modal-body").innerHTML = `
+      <div class="row">
+        <div class="field"><label>الاسم</label><input id="ed-name" value="${escapeHtml(s.name)}"></div>
+        <div class="field"><label>القسم</label><input id="ed-section" value="${escapeHtml(s.section || "")}" placeholder="scientific_sciences"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>عدد الأجهزة</label><input id="ed-maxdev" type="number" min="1" max="10" value="${s.maxDevices || 1}"></div>
+        <div class="field"><label>النوع</label><select id="ed-type">${typeOptions}</select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>الحالة</label><select id="ed-active"><option value="true" ${s.active !== false ? "selected" : ""}>نشط</option><option value="false" ${s.active === false ? "selected" : ""}>موقوف</option></select></div>
+        <div class="field"><label>تجديد</label><label style="display:flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="ed-renew" style="width:auto"> عند الحفظ</label></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">تاريخ الانتهاء: ${fmtDate(s.expiresAt)}</p>
+      <h4 style="margin:16px 0 8px;font-size:14px">📱 الأجهزة (${s.deviceList?.length || 0})</h4>
+      <table><thead><tr><th>الاسم</th><th>ID</th><th>آخر ظهور</th><th></th></tr></thead><tbody>${devices}</tbody></table>
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-warn" onclick="renewStudent('${code}', 30)">+30 يوم</button>
+        <button class="btn-warn" onclick="renewStudent('${code}', 180)">+180 يوم</button>
+        <button class="btn-danger" onclick="deleteStudent('${code}')">🗑 حذف الطالب</button>
+      </div>
+    `;
+    document.getElementById("student-modal-save").onclick = () => saveStudent(code);
+    openModal("student-modal");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function saveStudent(code) {
+  const body = {
+    name: document.getElementById("ed-name").value.trim(),
+    section: document.getElementById("ed-section").value.trim(),
+    maxDevices: Number(document.getElementById("ed-maxdev").value),
+    type: document.getElementById("ed-type").value,
+    active: document.getElementById("ed-active").value === "true",
+    renew: document.getElementById("ed-renew").checked
+  };
+  try {
+    await api(`/api/admin/students/${code}`, { method: "PATCH", body: JSON.stringify(body) });
+    toast("تم الحفظ ✓");
+    closeModal("student-modal");
+    loadStudents();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function renewStudent(code, days) {
+  try {
+    await api(`/api/admin/students/${code}`, {
+      method: "PATCH",
+      body: JSON.stringify({ extendMs: days * 86400000 })
+    });
+    toast(`تم تمديد ${days} يوم ✓`);
+    viewStudent(code);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function deleteStudent(code) {
+  if (!confirm(`حذف الطالب ${code} نهائياً؟`)) return;
+  try {
+    await api(`/api/admin/students/${code}`, { method: "DELETE" });
+    toast("تم الحذف ✓");
+    closeModal("student-modal");
+    loadStudents();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function kickDevice(code, deviceId) {
+  if (!confirm("طرد هذا الجهاز؟")) return;
+  try {
+    await api(`/api/admin/students/${code}/devices/${deviceId}`, { method: "DELETE" });
+    toast("تم طرد الجهاز ✓");
+    viewStudent(code);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+function openStudentModal() {
+  const typeOptions = Object.entries(codeTypes).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+  document.getElementById("student-modal-title").textContent = "إضافة طالب جديد";
+  document.getElementById("student-modal-body").innerHTML = `
+    <div class="field"><label>الاسم *</label><input id="new-name" placeholder="اسم الطالب"></div>
+    <div class="row">
+      <div class="field"><label>القسم</label><input id="new-section" placeholder="scientific_sciences"></div>
+      <div class="field"><label>النوع</label><select id="new-type">${typeOptions}</select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>عدد الأجهزة</label><input id="new-maxdev" type="number" min="1" max="10" value="1"></div>
+      <div class="field"><label>كود (اختياري)</label><input id="new-code" placeholder="7 أرقام" maxlength="7"></div>
+    </div>
+  `;
+  document.getElementById("student-modal-save").onclick = async () => {
+    const body = {
+      name: document.getElementById("new-name").value.trim(),
+      section: document.getElementById("new-section").value.trim(),
+      type: document.getElementById("new-type").value,
+      maxDevices: Number(document.getElementById("new-maxdev").value),
+      code: document.getElementById("new-code").value.trim()
+    };
+    if (!body.name) return toast("الاسم مطلوب", "error");
+    try {
+      const r = await api("/api/admin/students", { method: "POST", body: JSON.stringify(body) });
+      toast(`تم الإنشاء ✓ الكود: ${r.data.code}`);
+      closeModal("student-modal");
+      loadStudents();
+    } catch (e) { toast(e.message, "error"); }
+  };
+  openModal("student-modal");
+}
+
+// ═══════════════════════════════════════════════
+// Sections
+// ═══════════════════════════════════════════════
+async function loadSections() {
+  const box = document.getElementById("sections-list");
+  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
+  try {
+    const r = await api("/api/admin/sections");
+    const list = r.data || [];
+    if (!list.length) { box.innerHTML = '<div class="empty">لا أقسام</div>'; return; }
+    box.innerHTML = `
+      <table>
+        <thead><tr><th>ID</th><th>الاسم</th><th>السنة</th><th>المواد</th><th></th></tr></thead>
+        <tbody>
+        ${list.map(s => `
+          <tr>
+            <td><code>${escapeHtml(s.id)}</code></td>
+            <td>${escapeHtml(s.name)}</td>
+            <td>${s.yearId || "—"}</td>
+            <td>${(s.subjectIds || []).join(", ") || "—"}</td>
+            <td>
+              <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick='openSectionModal(${JSON.stringify(s).replace(/'/g, "&apos;")})'>تعديل</button>
+              <button class="btn-danger" style="padding:6px 10px;font-size:12px" onclick="deleteSection('${s.id}')">حذف</button>
+            </td>
+          </tr>
+        `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function openSectionModal(data = null) {
+  const s = data || { id: "", name: "", yearId: 4, subjectIds: [] };
+  document.getElementById("section-modal-title").textContent = data ? "تعديل قسم" : "إضافة قسم";
+  document.getElementById("section-modal-body").innerHTML = `
+    <div class="field"><label>ID (لاتيني) *</label><input id="sec-id" value="${escapeHtml(s.id)}" ${data ? "disabled" : ""} placeholder="scientific_sciences"></div>
+    <div class="field"><label>الاسم *</label><input id="sec-name" value="${escapeHtml(s.name)}"></div>
+    <div class="row">
+      <div class="field"><label>السنة (yearId)</label><input id="sec-year" type="number" value="${s.yearId || 4}"></div>
+    </div>
+    <div class="field"><label>IDs المواد (فاصلة بينهم)</label><input id="sec-subs" value="${(s.subjectIds || []).join(",")}" placeholder="57,58,59"></div>
+  `;
+  document.getElementById("section-modal-save").onclick = async () => {
+    const id = document.getElementById("sec-id").value.trim();
+    const body = {
+      name: document.getElementById("sec-name").value.trim(),
+      yearId: Number(document.getElementById("sec-year").value),
+      subjectIds: document.getElementById("sec-subs").value.split(",").map(x => Number(x.trim())).filter(Boolean)
+    };
+    if (!id || !body.name) return toast("املأ الحقول", "error");
+    try {
+      await api(`/api/admin/sections/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) });
+      toast("تم الحفظ ✓");
+      closeModal("section-modal");
+      loadSections();
+    } catch (e) { toast(e.message, "error"); }
+  };
+  openModal("section-modal");
+}
+
+async function deleteSection(id) {
+  if (!confirm(`حذف القسم ${id}؟`)) return;
+  try {
+    await api(`/api/admin/sections/${encodeURIComponent(id)}`, { method: "DELETE" });
+    toast("تم الحذف ✓");
+    loadSections();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+// ═══════════════════════════════════════════════
+// Admins
+// ═══════════════════════════════════════════════
+const PERM_LABELS = {
+  students_view: "عرض الطلاب",
+  students_create: "إضافة طلاب",
+  students_edit: "تعديل طلاب",
+  students_delete: "حذف طلاب",
+  devices_kick: "طرد أجهزة",
+  sections_manage: "إدارة الأقسام",
+  admins_manage: "إدارة الأدمن"
+};
+
+async function loadAdmins() {
+  const box = document.getElementById("admins-list");
+  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
+  try {
+    const r = await api("/api/admin/admins");
+    const list = r.data || [];
+    box.innerHTML = `
+      <table>
+        <thead><tr><th>اليوزر</th><th>الصلاحيات</th><th>الحالة</th><th></th></tr></thead>
+        <tbody>
+        ${list.map(a => `
+          <tr>
+            <td>${escapeHtml(a.username)} ${a.bootstrap ? '<span class="badge badge-warn">أساسي</span>' : ""}</td>
+            <td>${Object.entries(a.permissions || {}).filter(([, v]) => v).map(([k]) => PERM_LABELS[k] || k).join(" · ") || "—"}</td>
+            <td>${a.active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-danger">موقوف</span>'}</td>
+            <td>
+              ${a.bootstrap ? "" : `
+                <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick='openAdminModal(${JSON.stringify(a).replace(/'/g, "&apos;")})'>تعديل</button>
+                <button class="btn-danger" style="padding:6px 10px;font-size:12px" onclick="deleteAdmin('${a.id}')">حذف</button>
+              `}
+            </td>
+          </tr>
+        `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function openAdminModal(data = null) {
+  const a = data || { username: "", permissions: {}, active: true };
+  document.getElementById("admin-modal-title").textContent = data ? "تعديل أدمن" : "إضافة أدمن";
+  document.getElementById("admin-modal-body").innerHTML = `
+    <div class="field"><label>اسم المستخدم *</label><input id="adm-user" value="${escapeHtml(a.username)}" ${data ? "disabled" : ""}></div>
+    <div class="field"><label>${data ? "كلمة مرور جديدة (اتركها فاضية لعدم التغيير)" : "كلمة المرور *"}</label><input id="adm-pass" type="password" placeholder="••••••••"></div>
+    <div class="field">
+      <label>الصلاحيات</label>
+      <div class="perms">
+        ${Object.entries(PERM_LABELS).map(([k, v]) =>
+          `<label><input type="checkbox" data-perm="${k}" ${a.permissions?.[k] ? "checked" : ""}> ${v}</label>`
+        ).join("")}
+      </div>
+    </div>
+    ${data ? `<div class="field"><label>الحالة</label><select id="adm-active"><option value="true" ${a.active ? "selected" : ""}>نشط</option><option value="false" ${!a.active ? "selected" : ""}>موقوف</option></select></div>` : ""}
+  `;
+  document.getElementById("admin-modal-save").onclick = async () => {
+    const perms = {};
+    document.querySelectorAll("[data-perm]").forEach(cb => perms[cb.dataset.perm] = cb.checked);
+    try {
+      if (data) {
+        const body = { permissions: perms };
+        if (data.id) body.active = document.getElementById("adm-active").value === "true";
+        const pass = document.getElementById("adm-pass").value;
+        if (pass) body.password = pass;
+        await api(`/api/admin/admins/${data.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      } else {
+        const body = {
+          username: document.getElementById("adm-user").value.trim(),
+          password: document.getElementById("adm-pass").value,
+          permissions: perms
+        };
+        await api("/api/admin/admins", { method: "POST", body: JSON.stringify(body) });
+      }
+      toast("تم الحفظ ✓");
+      closeModal("admin-modal");
+      loadAdmins();
+    } catch (e) { toast(e.message, "error"); }
+  };
+  openModal("admin-modal");
+}
+
+async function deleteAdmin(id) {
+  if (!confirm("حذف هذا الأدمن؟")) return;
+  try {
+    await api(`/api/admin/admins/${id}`, { method: "DELETE" });
+    toast("تم الحذف ✓");
+    loadAdmins();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+// ═══════════════════════════════════════════════
+// Config
+// ═══════════════════════════════════════════════
+async function loadConfig() {
+  const box = document.getElementById("config-info");
+  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
+  try {
+    const r = await api("/api/admin/config");
+    const c = r.data;
+    box.innerHTML = `
+      <p style="margin-bottom:12px"><strong>توكن Coursatk:</strong> ${c.coursatkTokenSet ? `<code>${c.coursatkTokenMasked}</code>` : '<span class="badge badge-danger">غير مضبوط</span>'}</p>
+      <p style="margin-bottom:12px"><strong>السنة الافتراضية:</strong> ${c.defaultYearId}</p>
+      <p style="margin-bottom:12px"><strong>أنواع الأكواد:</strong> ${Object.values(c.codeTypes || {}).map(t => t.label).join(" · ")}</p>
+    `;
+    const perms = me.permissions || {};
+    document.getElementById("token-card").style.display = (perms.admins_manage || perms.all) ? "block" : "none";
+  } catch (e) {
+    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function saveToken() {
+  const tok = document.getElementById("new-token").value.trim();
+  if (tok.length < 20) return toast("توكن غير صالح", "error");
+  try {
+    await api("/api/admin/config/token", { method: "PUT", body: JSON.stringify({ token: tok }) });
+    toast("تم تحديث التوكن ✓");
+    document.getElementById("new-token").value = "";
+    loadConfig();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+// ═══════════════════════════════════════════════
+// Boot
+// ═══════════════════════════════════════════════
+document.getElementById("login-pass").addEventListener("keydown", e => {
+  if (e.key === "Enter") doLogin();
+});
+tryAutoLogin();
+</script>
+</body>
+  </html>
