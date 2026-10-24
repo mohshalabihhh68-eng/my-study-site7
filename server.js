@@ -1,6 +1,6 @@
 /**
- * Coursatk API — protected backend
- * (Modification: Open access for frontend testing without login)
+ * Coursatk API — Open Proxy with Stream Decrypt
+ * (No Login Required)
  */
 import express from "express";
 import cors from "cors";
@@ -18,22 +18,20 @@ app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: "512kb" }));
 app.use(compression());
 
-// 👇 السيرفر بيقرأ ملفاتك من فولدر public
+// 👇 السيرفر بيقدم ملفاتك من فولدر public
 app.use(express.static(path.join(__dirname, "public")));
 
 // ═══════════════════════════════════════════════════════════
-// Rate limit
+// Rate limit (حماية السيرفر)
 // ═══════════════════════════════════════════════════════════
 const rateBuckets = new Map();
-
 function clientIp(req) {
   const xf = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   return xf || req.ip || req.socket?.remoteAddress || "unknown";
 }
-
 function rateLimit(options = {}) {
   const windowMs = options.windowMs || 60_000;
-  const max = options.max || 100;
+  const max = options.max || 150;
   const keyFn = options.keyFn || ((req) => clientIp(req) + ":" + (options.scope || "global"));
   return (req, res, next) => {
     const key = keyFn(req);
@@ -50,7 +48,6 @@ function rateLimit(options = {}) {
     next();
   };
 }
-
 setInterval(() => {
   const t = Date.now();
   for (const [k, b] of rateBuckets) {
@@ -64,6 +61,7 @@ setInterval(() => {
 const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
   COURSATK_API: "https://api.coursatk.online/api/v1",
+  // 👇 ضع التوكن بتاعك هنا لو التوكن ده مش شغال
   COURSATK_TOKEN:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
   DEFAULT_YEAR_ID: 4,
@@ -80,12 +78,12 @@ const CONFIG = {
   STREAM_UA:
     "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
   PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
-  STREAM_SESSION_MS: 30 * 60 * 1000,
-  MAX_PROXY_BYTES: 12 * 1024 * 1024,
+  STREAM_SESSION_MS: 60 * 60 * 1000,
+  MAX_PROXY_BYTES: 15 * 1024 * 1024,
 };
 
 // ═══════════════════════════════════════════════════════════
-// Upstream helpers
+// Upstream Proxy Helpers
 // ═══════════════════════════════════════════════════════════
 async function upstreamHeaders(extra = {}) {
   return {
@@ -110,7 +108,7 @@ async function upstreamJson(apiPath, options = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Stream-Weave decrypt (server-only)
+// Stream-Weave Decryption (Server-side)
 // ═══════════════════════════════════════════════════════════
 let decryptPlaybackKeyFn = null;
 
@@ -122,9 +120,7 @@ async function loadDecryptionUtils() {
   } catch {}
   if (!source) {
     console.log("[crypto] fetching player.js…");
-    const r = await fetch(CONFIG.PLAYER_JS, {
-      headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }
-    });
+    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
     try { fs.writeFileSync(cachePath, source); } catch {}
@@ -139,11 +135,7 @@ async function loadDecryptionUtils() {
     setTimeout, clearTimeout, setInterval, clearInterval,
     Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date,
     Map, Set, WeakMap, Symbol, Proxy, Reflect,
-    document: {
-      createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }),
-      head: { appendChild() {} }, body: { appendChild() {} },
-      querySelector: () => null, addEventListener() {}
-    },
+    document: { createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }), head: { appendChild() {} }, body: { appendChild() {} }, querySelector: () => null, addEventListener() {} },
     navigator: { userAgent: "Node" },
     location: { href: "https://coursatk.online/" },
     HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
@@ -200,9 +192,7 @@ function allowedStreamUrl(raw, session = null) {
       try { hosts.add(new URL(session.streamUrl).hostname); } catch {}
     }
     return [...hosts].some(h => u.hostname === h || u.hostname.endsWith("." + h));
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
@@ -216,12 +206,10 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
     "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
     "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
   };
-
   const isMediaSegmentHost = /floravon\.(online|shop)|c-cdn\.online/i.test(url);
   if (!isMediaSegmentHost && session?.token) {
     headers.Authorization = `Bearer ${session.token}`;
   }
-
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
   }
@@ -232,21 +220,19 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PUBLIC ROUTES (NO LOGIN REQUIRED)
+// Public Routes
 // ═══════════════════════════════════════════════════════════
-const globalLimiter = rateLimit({ max: 100, windowMs: 60_000, scope: "global" });
+const globalLimiter = rateLimit({ max: 150, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) => req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) });
 });
 
-// 🔓 فتح مسارات الكتالوج للكل بدون تسجيل دخول
 app.get("/api/subjects/:id", async (req, res) => {
   try {
     const yearId = Number(req.params.id) || CONFIG.DEFAULT_YEAR_ID;
-    const data = await upstreamJson(`/user/subjects/${encodeURIComponent(yearId)}`);
-    res.json(data);
+    res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(yearId)}`));
   } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
 
@@ -274,7 +260,9 @@ app.get("/api/lectures/:id/content", async (req, res) => {
   } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
 
-// 🔓 فتح مسار تشغيل الفيديو للكل
+// ═══════════════════════════════════════════════════════════
+// Play & Stream
+// ═══════════════════════════════════════════════════════════
 const streamSessions = new Map();
 
 app.post("/api/play/:videoId", async (req, res) => {
