@@ -4,6 +4,7 @@
  * - Admin panel API (users, permissions, sections, subject IDs)
  * - Stream-Weave key unwrap + AES-128 segment decrypt (upstream token NEVER leaves server)
  * - All student/catalog/stream routes require valid session token
+ * - Admin panel HTML served from /public
  */
 import express from "express";
 import cors from "cors";
@@ -21,6 +22,9 @@ app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: "512kb" }));
 app.use(compression());
 
+// ✅ NEW: serve admin panel static files
+app.use(express.static(path.join(__dirname, "public")));
+
 // ═══════════════════════════════════════════════════════════
 // Rate limit — ~50 req / minute / IP (stricter on auth)
 // ═══════════════════════════════════════════════════════════
@@ -37,10 +41,10 @@ function rateLimit(options = {}) {
   const keyFn = options.keyFn || ((req) => clientIp(req) + ":" + (options.scope || "global"));
   return (req, res, next) => {
     const key = keyFn(req);
-    const now = Date.now();
+    const nowT = Date.now();
     let b = rateBuckets.get(key);
-    if (!b || now > b.resetAt) {
-      b = { count: 0, resetAt: now + windowMs };
+    if (!b || nowT > b.resetAt) {
+      b = { count: 0, resetAt: nowT + windowMs };
       rateBuckets.set(key, b);
     }
     b.count += 1;
@@ -68,7 +72,6 @@ setInterval(() => {
 // ═══════════════════════════════════════════════════════════
 const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
-  // Upstream Coursatk — stays SERVER-SIDE only
   COURSATK_API: "https://api.coursatk.online/api/v1",
   COURSATK_TOKEN:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
@@ -86,9 +89,7 @@ const CONFIG = {
   STREAM_UA:
     "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
   PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
-  // Firebase RTDB — بتاعك
   FIREBASE: "https://my-platform-e46a6-default-rtdb.europe-west1.firebasedatabase.app",
-  // Bootstrap admin — بتاعتك
   BOOTSTRAP_ADMIN: {
     username: "Shalaby",
     passwordHash: "",
@@ -121,9 +122,7 @@ const CONFIG = {
 function scryptHash(password, saltHex) {
   const salt = saltHex ? Buffer.from(saltHex, "hex") : crypto.randomBytes(16);
   const hash = crypto.scryptSync(password, salt, 32, {
-    N: 16384,
-    r: 8,
-    p: 1
+    N: 16384, r: 8, p: 1
   });
   return `scrypt$16384$8$1$${salt.toString("hex")}$${hash.toString("hex")}`;
 }
@@ -135,9 +134,7 @@ function scryptVerify(password, stored) {
       const salt = parts[4];
       const expect = parts[5];
       const hash = crypto.scryptSync(password, Buffer.from(salt, "hex"), 32, {
-        N: 16384,
-        r: 8,
-        p: 1
+        N: 16384, r: 8, p: 1
       });
       return crypto.timingSafeEqual(Buffer.from(expect, "hex"), hash);
     }
@@ -194,7 +191,6 @@ async function fbDelete(p) {
   return true;
 }
 
-// Runtime config from Firebase
 let cachedCoursatkToken = null;
 let cachedTokenAt = 0;
 async function getCoursatkToken() {
@@ -219,7 +215,7 @@ async function getCoursatkToken() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// In-memory session caches
+// Sessions caches
 // ═══════════════════════════════════════════════════════════
 const studentSessions = new Map();
 const adminSessions = new Map();
@@ -238,7 +234,6 @@ function getBearer(req) {
   return "";
 }
 
-// Student record cache
 const studentCache = new Map();
 async function getStudentCached(code) {
   const c = studentCache.get(code);
@@ -263,7 +258,6 @@ setInterval(() => {
   for (const [k, c] of studentCache) if (t - c.at > 120_000) studentCache.delete(k);
 }, 60_000).unref();
 
-// Student auth middleware
 async function requireStudent(req, res, next) {
   try {
     const token = getBearer(req);
@@ -310,7 +304,6 @@ async function requireStudent(req, res, next) {
   }
 }
 
-// Admin auth middleware
 function requireAdmin(permission) {
   return async (req, res, next) => {
     try {
@@ -450,7 +443,6 @@ function ivFromMediaSequence(seq) {
   return iv;
 }
 
-// Upstream helpers
 async function upstreamHeaders(extra = {}) {
   const tok = await getCoursatkToken();
   return {
@@ -523,7 +515,9 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 // ═══════════════════════════════════════════════════════════
 const globalLimiter = rateLimit({ max: 50, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) =>
-  req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next)
+  req.path.startsWith("/api/stream/") || req.path === "/" || req.path.startsWith("/admin")
+    ? next()
+    : globalLimiter(req, res, next)
 );
 
 app.get("/health", (_req, res) => {
@@ -575,8 +569,7 @@ app.post("/api/auth/login", rateLimit({ max: 15, windowMs: 60_000, scope: "login
       const activeCount = Object.keys(devices).length;
       if (activeCount >= maxDevices) {
         return jsonError(
-          res,
-          403,
+          res, 403,
           `تم بلوغ الحد الأقصى للأجهزة (${maxDevices}). اطلب من الأدمن حذف جهاز.`
         );
       }
@@ -598,9 +591,7 @@ app.post("/api/auth/login", rateLimit({ max: 15, windowMs: 60_000, scope: "login
     );
     const token = randomToken(32);
     const sess = {
-      token,
-      code,
-      deviceId,
+      token, code, deviceId,
       name: student.name,
       section: student.section || null,
       createdAt: now(),
@@ -698,9 +689,7 @@ app.get("/api/config", requireStudent, async (req, res) => {
     }
   }
   res.json({
-    success: true,
-    yearId,
-    subjectIds,
+    success: true, yearId, subjectIds,
     cryptoReady: Boolean(decryptPlaybackKeyFn),
     decryptSegments: true
   });
@@ -748,32 +737,20 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
           });
         } else {
           results.push({
-            id: sid,
-            name: `مادة ${sid}`,
-            image_url: null,
-            year_id: yearId,
-            is_published: true,
-            order_index: results.length + 1
+            id: sid, name: `مادة ${sid}`, image_url: null,
+            year_id: yearId, is_published: true, order_index: results.length + 1
           });
         }
       } catch (err) {
         console.warn(`[subjects] resolve ${sid}:`, err.message);
         results.push({
-          id: sid,
-          name: `مادة ${sid}`,
-          image_url: null,
-          year_id: yearId,
-          is_published: true,
-          order_index: results.length + 1
+          id: sid, name: `مادة ${sid}`, image_url: null,
+          year_id: yearId, is_published: true, order_index: results.length + 1
         });
       }
     }
 
-    res.json({
-      success: true,
-      message: "Success",
-      data: results
-    });
+    res.json({ success: true, message: "Success", data: results });
   } catch (e) {
     jsonError(res, 502, e.message);
   }
@@ -1093,9 +1070,7 @@ app.post("/api/admin/login", rateLimit({ max: 10, windowMs: 60_000, scope: "admi
 
     const token = randomToken(32);
     const sess = {
-      token,
-      adminId,
-      username,
+      token, adminId, username,
       createdAt: now(),
       expiresAt: now() + CONFIG.ADMIN_SESSION_MS
     };
@@ -1140,9 +1115,7 @@ app.get("/api/admin/config", requireAdmin("sections_manage"), async (_req, res) 
   try {
     const remote = await fbGet("config");
     const token = await getCoursatkToken();
-    const masked = token
-      ? token.slice(0, 12) + "…" + token.slice(-8)
-      : null;
+    const masked = token ? token.slice(0, 12) + "…" + token.slice(-8) : null;
     res.json({
       success: true,
       data: {
@@ -1205,11 +1178,9 @@ app.get("/api/admin/students/:code", requireAdmin("students_view"), async (req, 
     res.json({
       success: true,
       data: {
-        code,
-        ...s,
+        code, ...s,
         deviceList: Object.entries(s.devices || {}).map(([id, d]) => ({
-          deviceId: id,
-          ...d
+          deviceId: id, ...d
         }))
       }
     });
@@ -1439,10 +1410,7 @@ app.post("/api/admin/admins", requireAdmin("admins_manage"), async (req, res) =>
       createdBy: req.admin.username
     };
     await fbSet(`admins/${id}`, record);
-    res.json({
-      success: true,
-      data: { id, username, permissions, active: true }
-    });
+    res.json({ success: true, data: { id, username, permissions, active: true } });
   } catch (e) {
     jsonError(res, 500, e.message);
   }
@@ -1489,15 +1457,13 @@ app.delete("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, r
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fallback
+// Root → admin panel
 // ═══════════════════════════════════════════════════════════
 app.get("/", (_req, res) => {
-  res.status(403).json({
-    success: false,
-    message: "خطأ: يلزم مصادقة. الوصول المباشر غير مسموح."
-  });
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
+// Fallback for /api/*
 app.use((req, res) => {
   res.status(403).json({
     success: false,
@@ -1555,6 +1521,6 @@ try {
 }
 
 app.listen(CONFIG.PORT, () => {
-  console.log(`[API] :${CONFIG.PORT} protected · segment-decrypt ON`);
+  console.log(`[API] :${CONFIG.PORT} protected · segment-decrypt ON · admin panel ready`);
   console.log(`[API] bootstrap admin ready (Shalaby)`);
 });
