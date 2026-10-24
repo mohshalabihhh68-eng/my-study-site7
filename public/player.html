@@ -50,7 +50,7 @@ img{display:block;max-width:100%}
 /* طبقة اللمس */
 .ptap{position:absolute;inset:0;z-index:2;background:transparent;-webkit-touch-callout:none}
 
-/* إظهار / إخفاء الواجهة (الحاويات نفسها مش بتاخد لمس، الأزرار بس) */
+/* إظهار / إخفاء الواجهة */
 .ptop,.pcenter,.pctrl{position:absolute;opacity:0;transition:opacity .22s;pointer-events:none}
 .screen.show-ui .ptop,.screen.show-ui .pcenter,.screen.show-ui .pctrl{opacity:1}
 .screen.show-ui .ptop>*,.screen.show-ui .pcenter>*,.screen.show-ui .pctrl>*{pointer-events:auto}
@@ -61,7 +61,7 @@ img{display:block;max-width:100%}
 .ptitle{flex:1;min-width:0;color:#fff;font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .plive{font-size:10px;font-weight:900;background:#3b82f633;color:#93c5fd;border-radius:99px;padding:4px 9px;flex:none}
 
-/* الأزرار الدائرية - مقاس موحّد */
+/* الأزرار الدائرية */
 .ib{--ibs:40px;width:var(--ibs);height:var(--ibs);flex:none;border:0;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center;position:relative;transition:transform .15s,background .15s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .ib:hover{background:#ffffff2e}
 .ib:active{transform:scale(.92)}
@@ -149,7 +149,7 @@ img{display:block;max-width:100%}
 .holdb.show{display:inline-flex}
 .holdb svg{width:16px;height:16px;stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
-/* توست داخل المشغّل (بيظهر حتى في ملء الشاشة) */
+/* توست داخل المشغّل */
 .toast{position:absolute;top:16%;left:50%;transform:translate(-50%,-10px);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;background:#0b1220ee;border:1px solid #ffffff22;color:#fff;padding:7px 14px;border-radius:99px;z-index:25;font-size:12px;font-weight:800;box-shadow:0 8px 28px #0008;max-width:calc(100% - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
@@ -245,7 +245,6 @@ img{display:block;max-width:100%}
   .itemtitle{font-size:11px}
   .stat b{font-size:16px}
   .stat{padding:10px 6px}
-  /* المشغّل */
   .ptop{padding:8px 10px 22px;gap:8px}
   .ptitle{font-size:12px}
   .ib{--ibs:36px}
@@ -264,7 +263,6 @@ img{display:block;max-width:100%}
   .plive{display:none}
   .pill{min-width:40px;height:28px;padding:0 8px;font-size:12px;margin:0 2px}
 }
-
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
@@ -303,15 +301,12 @@ img{display:block;max-width:100%}
         <div class="screen paused" id="screen">
           <video id="video" playsinline webkit-playsinline preload="metadata" controlslist="nodownload noplaybackrate" oncontextmenu="return false"></video>
 
-          <!-- طبقة اللمس -->
           <div class="ptap" id="ptap"></div>
 
-          <!-- تأثيرات -->
           <div class="fx l" id="fxl"></div>
           <div class="fx r" id="fxr"></div>
           <div class="holdb" id="holdb"><svg viewBox="0 0 24 24"><path d="m5 6 6 6-6 6M13 6l6 6-6 6"/></svg><span>سرعة 2×</span></div>
 
-          <!-- الشريط العلوي -->
           <div class="ptop">
             <button class="ib" id="pback" type="button" aria-label="رجوع">
               <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
@@ -320,14 +315,12 @@ img{display:block;max-width:100%}
             <span class="plive">ثانوية club</span>
           </div>
 
-          <!-- أزرار المنتصف (للموبايل) -->
           <div class="pcenter">
             <button class="ib sk" id="pb" type="button" aria-label="رجوع 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 0 6 2.5"/><path d="M15.5 1.2 12 4l3.5 2.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
             <button class="bigplay" id="pc" type="button" aria-label="تشغيل"><svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></button>
             <button class="ib sk" id="pf" type="button" aria-label="تقديم 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 1-6 2.5"/><path d="M8.5 1.2 12 4 8.5 6.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
           </div>
 
-          <!-- الشريط السفلي -->
           <div class="pctrl">
             <div class="seekwrap" id="pseek" tabindex="0" role="slider" aria-label="تقدم الفيديو" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
               <div class="rail"><i id="pbuf"></i><i id="pplayed"></i></div>
@@ -350,19 +343,15 @@ img{display:block;max-width:100%}
             </div>
           </div>
 
-          <!-- القائمة العائمة -->
           <div class="pmenu" id="pmenu"></div>
 
-          <!-- توست -->
           <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-          <!-- Loading -->
           <div class="loading show" id="loading">
             <div class="spin"></div>
             <span id="loadText">جاري تحميل المحاضرة…</span>
           </div>
 
-          <!-- Error -->
           <div class="error" id="error">
             <div class="eic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.1"/></svg></div>
             <b id="errorTitle">مش قادر أشغّل الفيديو</b>
@@ -375,7 +364,6 @@ img{display:block;max-width:100%}
         </div>
       </article>
 
-      <!-- Info -->
       <div class="titlebox">
         <div class="eyebrow" id="lectureName">محتوى المحاضرة</div>
         <h1 id="videoTitle">جاري تجهيز الفيديو…</h1>
@@ -396,7 +384,6 @@ img{display:block;max-width:100%}
       </div>
     </section>
 
-    <!-- PLAYLIST -->
     <aside class="panel">
       <div class="panel-head">
         <div class="panel-heading">
@@ -428,163 +415,22 @@ img{display:block;max-width:100%}
   </div>
 </main>
 
-
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <script>
 (function(){
 'use strict';
 
-/* ============ CONFIG ============ */
-// نفس الـ origin (server.js) عشان /api/stream و /api/video تشتغل
+// ===== CONFIG =====
 const API = '';
 const token = localStorage.getItem('cstk_tok') || '';
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
 const initialVideoId = qs.get('videoId');
 
-/* Stream-Weave crypto + playlist helpers (من app.js) */
-let cryptoUtils = null;
-let currentKeyBlobUrl = null;
-let currentPlaylistBlobUrl = null;
-let hbTimer = null;
-
-function findCrypto() {
-  if (window.DecryptionUtils && typeof window.DecryptionUtils.decryptPlaybackKey === 'function') {
-    return window.DecryptionUtils;
-  }
-  var names = Object.getOwnPropertyNames(window);
-  for (var i = 0; i < names.length; i++) {
-    try {
-      var obj = window[names[i]];
-      if (obj && typeof obj === 'object' && typeof obj.decryptPlaybackKey === 'function') {
-        return obj;
-      }
-    } catch (e) {}
-  }
-  return null;
-}
-
-function loadPlayerScript() {
-  return new Promise(function (resolve, reject) {
-    if (findCrypto()) return resolve(findCrypto());
-    var existing = document.querySelector('script[src*="player.stream-weave.com"]');
-    if (existing) {
-      var tries = 0;
-      var t = setInterval(function () {
-        var c = findCrypto();
-        if (c) { clearInterval(t); resolve(c); }
-        else if (++tries > 40) { clearInterval(t); reject(new Error('timeout crypto')); }
-      }, 150);
-      return;
-    }
-    var s = document.createElement('script');
-    s.src = 'https://player.stream-weave.com/assets/player.js?v=1.1.1';
-    s.onload = function () {
-      var tries = 0;
-      var t = setInterval(function () {
-        var c = findCrypto();
-        if (c) { clearInterval(t); resolve(c); }
-        else if (++tries > 40) { clearInterval(t); reject(new Error('crypto not found')); }
-      }, 150);
-    };
-    s.onerror = function () { reject(new Error('failed to load player.js')); };
-    document.head.appendChild(s);
-  });
-}
-
-function toB64url(str) {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-function fromB64url(value) {
-  var s = String(value).replace(/-/g, '+').replace(/_/g, '/');
-  while (s.length % 4) s += '=';
-  return decodeURIComponent(escape(atob(s)));
-}
-function joinRel(base, rel) {
-  var q = '', relPath = String(rel);
-  var qi = relPath.indexOf('?');
-  if (qi !== -1) { q = relPath.slice(qi); relPath = relPath.slice(0, qi); }
-  var stack = String(base || '').split('/');
-  if (stack.length && stack[stack.length - 1] !== '' && /\.[a-z0-9]+$/i.test(stack[stack.length - 1])) stack.pop();
-  if (stack.length && stack[stack.length - 1] === '') stack.pop();
-  relPath.split('/').forEach(function (part) {
-    if (!part || part === '.') return;
-    if (part === '..') stack.pop();
-    else stack.push(part);
-  });
-  return stack.join('/') + q;
-}
-function resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) {
-  if (/^(blob:|data:)/i.test(uri)) return uri;
-
-  var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
-
-  // فك /api/cdn?u=... لو موجود
-  try {
-    if (uri.indexOf('/api/cdn') === 0 || (origin && uri.indexOf(origin + '/api/cdn') === 0)) {
-      var cu = new URL(uri, origin || 'https://localhost');
-      var enc = cu.searchParams.get('u') || cu.searchParams.get('url');
-      if (enc) uri = fromB64url(enc);
-    }
-  } catch (e) {}
-
-  // مهم: روابط /api/stream لازم تكون absolute
-  // لأن الـ playlist بيتحمّل من blob: URL → المسار النسبي بيتحوّل لـ blob:https:/api/...
-  if (uri.indexOf('/api/stream') === 0) return origin + uri;
-  if (origin && uri.indexOf(origin + '/api/stream') === 0) return uri;
-
-  // روابط CDN الخارجية → مسار Stream-Weave عبر /api/stream (absolute)
-  if (/^https?:\/\//i.test(uri)) {
-    try {
-      var pu = new URL(uri);
-      var parts = pu.pathname.split('/').filter(Boolean);
-      var vi = parts.indexOf('videos');
-      if (vi >= 0 && parts.length >= vi + 3) {
-        var vid = parts[vi + 1];
-        var quality = parts[vi + 2];
-        var fname = (parts[vi + 3] || '').split('?')[0];
-        if (vid && quality && fname) {
-          var swPath = 'videos/' + vid + '/stream/' + quality + '/' + fname;
-          return origin + '/api/stream?path=' + encodeURIComponent(swPath) + '&t=' + encodeURIComponent(streamToken);
-        }
-      }
-    } catch (e) {}
-    return uri;
-  }
-
-  if (variantFileUrl) {
-    try {
-      var abs = new URL(uri, variantFileUrl).href;
-      if (/^https?:\/\//i.test(abs)) return resolveMedia(abs, variantBasePath, streamToken, null);
-    } catch (e) {}
-  }
-  return origin + '/api/stream?path=' + encodeURIComponent(joinRel(variantBasePath || '', uri)) + '&t=' + encodeURIComponent(streamToken);
-}
-function rewritePlaylist(text, streamToken, keyBlobUrl, variantBasePath, variantFileUrl) {
-  return text.split('\n').map(function (line) {
-    var s = line.trim();
-    if (!s) return line;
-    if (s.charAt(0) === '#') {
-      if (s.indexOf('#EXT-X-KEY:') === 0 && keyBlobUrl) {
-        return s.replace(/URI="[^"]+"/, 'URI="' + keyBlobUrl + '"');
-      }
-      return s.replace(/URI="([^"]+)"/g, function (_m, uri) {
-        return 'URI="' + resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) + '"';
-      });
-    }
-    return resolveMedia(s, variantBasePath, streamToken, variantFileUrl);
-  }).join('\n');
-}
-
-// تحميل الـ crypto من الأول
-loadPlayerScript().then(function (c) { cryptoUtils = c; }).catch(function () {});
-
 const $=id=>document.getElementById(id);
 const video=$('video');
 const screenEl=$('screen');
 
-/* تفضيلات المشغّل (بتتحفظ على الجهاز) */
 const PREF_KEY='cstk_player_pref';
 function readPref(){try{return JSON.parse(localStorage.getItem(PREF_KEY)||'{}')||{}}catch(e){return {}}}
 let prefs=Object.assign({rate:1,autonext:true,volume:1,muted:false},readPref());
@@ -593,7 +439,6 @@ function savePref(){try{localStorage.setItem(PREF_KEY,JSON.stringify(prefs))}cat
 let videos=[],current=-1,hls=null,lastSaved=0,toastTimer=0,ready=false;
 let lectureTitle='المحاضرة',listFilter='all',listQuery='',pendingRestore=-1;
 
-/* ============ HELPERS ============ */
 const storeKey=id=>'cstk_w_'+String(id);
 function readProgress(id){try{return JSON.parse(localStorage.getItem(storeKey(id))||'null')}catch(e){return null}}
 function saveProgress(){
@@ -660,14 +505,12 @@ async function api(path,opts={}){
     if(r.status===401||r.status===403){er.kind='auth';er.message='جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.'}
     throw er;
   }
-  // unwrap data if present (نفس سلوك app.js)
   return (d && d.data !== undefined) ? d.data : d;
 }
 function esc(s){
   return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-/* ============ ICONS ============ */
 const SVG_PLAY='<svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>';
 const SVG_PAUSE='<svg class="f" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/></svg>';
 const SVG_REPLAY='<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
@@ -677,7 +520,6 @@ const SVG_VOL_OFF='<svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4z"/><pa
 const SVG_FS_ON='<svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/></svg>';
 const SVG_FS_OFF='<svg viewBox="0 0 24 24"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></svg>';
 
-/* ============ RENDER STATS ============ */
 function renderStats(){
   const done=videos.filter(v=>{const p=readProgress(v.id);return p&&(p.watched||p.percent>=90)}).length;
   const total=videos.length,remaining=total-done;
@@ -690,7 +532,6 @@ function renderStats(){
   $('listSub').textContent=`${total} فيديو · ${done} مكتمل · ${remaining} متبقي`;
 }
 
-/* ============ RENDER LIST ============ */
 function renderList(){
   const list=$('videoList');
   if(!videos.length){
@@ -728,7 +569,6 @@ function renderList(){
   });
 }
 
-/* ============ PLAYER STATE ============ */
 const RATES=[.5,.75,1,1.25,1.5,1.75,2,2.5,3];
 let rate=RATES.includes(+prefs.rate)?+prefs.rate:1;
 const rateLabel=x=>x+'×';
@@ -739,7 +579,6 @@ const tap={t:0,side:'',timer:0,seekUntil:0};
 const seek=$('pseek');
 const isOpen=()=>$('pmenu').classList.contains('open');
 
-/* ============ PLAYER UI ============ */
 function showUI(pin){
   if(!screenEl.classList.contains('show-ui')){screenEl.classList.add('show-ui');paintProgress()}
   clearTimeout(uiTimer);
@@ -766,7 +605,6 @@ function seekBy(d){
   return true;
 }
 
-/* ---- رسم التقدم ---- */
 function paintProgress(){
   const d=Number(video.duration)||0;
   const t=scrub?scrub.t:(Number(video.currentTime)||0);
@@ -814,7 +652,6 @@ async function updateWakeLock(){
 }
 document.addEventListener('visibilitychange',updateWakeLock);
 
-/* ---- الصوت ---- */
 function syncVolume(){
   const off=video.muted||video.volume===0;
   $('pmute').innerHTML=off?SVG_VOL_OFF:(video.volume<.5?SVG_VOL_LOW:SVG_VOL_ON);
@@ -841,7 +678,6 @@ $('pmute').onclick=e=>{
   showUI();
 };
 
-/* ---- السرعة ---- */
 function applyRate(){video.defaultPlaybackRate=rate;video.playbackRate=rate}
 function setRate(x,quiet){
   rate=x;applyRate();
@@ -855,7 +691,6 @@ function stepRate(dir){
   setRate(RATES[i]);
 }
 
-/* ---- القوائم (السرعة / الجودة / الإعدادات) ---- */
 function qualityLevels(){
   if(!hls||!hls.levels||hls.levels.length<2)return null;
   return hls.levels.map((l,i)=>({i,h:l.height||0,b:l.bitrate||0})).sort((a,b)=>(b.h-a.h)||(b.b-a.b));
@@ -927,7 +762,6 @@ document.addEventListener('pointerdown',e=>{
   if(isOpen()&&!$('pmenu').contains(e.target)&&!$('pset').contains(e.target)&&!$('pspeed').contains(e.target))closeMenu();
 });
 
-/* ============ PLAY VIDEO ============ */
 function cleanup(){
   endHold();
   closeMenu(true);
@@ -954,6 +788,7 @@ function updateMediaSession(){
     });
   }catch(e){}
 }
+
 async function playIndex(i,autoplay){
   if(i<0||i>=videos.length)return;
   saveProgress();
@@ -978,146 +813,15 @@ async function playIndex(i,autoplay){
   updateMediaSession();
 
   try{
-    // 1) طلب جلسة التشغيل من السيرفر (نفس app.js → /api/video/:id/play)
-    const session = await api('/api/video/' + encodeURIComponent(item.id) + '/play', {method:'POST'});
+    // 1) طلب تشغيل من السيرفر بتاعنا (هو اللي بيفك التشفير)
+    const session = await api('/api/play/' + encodeURIComponent(item.id), {method:'POST'});
     if(my!==playToken)return;
 
-    // session ممكن تكون {token, video_id, ...} أو متداخلة
-    const s = (session && (session.token || session.video_id)) ? session
-            : (session && session.data) ? session.data
-            : (session || {});
-    const streamToken = s.token || s.stream_token;
-    const swVideoId = s.video_id || s.sw_video_id;
-    const hbUrl = s.heartbeat_url;
-
-    if(!streamToken || !swVideoId){
-      throw new Error('الجلسة ناقصة (مفيش token أو video_id)');
+    if(!session || !session.manifest_url){
+      throw new Error('السيرفر مرجعش رابط الفيديو');
     }
 
-    // 2) تحميل أدوات فك التشفير
-    setLoading(true,'تحميل أدوات فك التشفير…');
-    if(!cryptoUtils) cryptoUtils = await loadPlayerScript();
-    if(my!==playToken)return;
-
-    // 3) جلب master.m3u8
-    setLoading(true,'جلب قائمة التشغيل…');
-    const masterUrl =
-      '/api/stream?path=' +
-      encodeURIComponent('videos/' + swVideoId + '/stream/master.m3u8') +
-      '&t=' + encodeURIComponent(streamToken);
-
-    const masterRes = await fetch(masterUrl);
-    if(!masterRes.ok) throw new Error('master.m3u8 → HTTP ' + masterRes.status);
-    const masterText = await masterRes.text();
-    if(my!==playToken)return;
-
-    let variantRel = masterText.split('\n').map(l=>l.trim()).find(l=>l && l.charAt(0)!=='#');
-    if(!variantRel) throw new Error('مفيش variant في الـ master');
-
-    let variantUrl, variantBasePath = 'videos/' + swVideoId + '/stream/', variantFileUrl = null;
-
-    if(variantRel.indexOf('/api/stream')===0 || variantRel.indexOf('/api/cdn')===0){
-      variantUrl = variantRel;
-      try{
-        const vu = new URL(variantRel, location.origin);
-        if(vu.pathname.indexOf('/api/stream')===0 && vu.searchParams.get('path')){
-          variantBasePath = vu.searchParams.get('path');
-        }
-        if(vu.pathname.indexOf('/api/cdn')===0 && vu.searchParams.get('u')){
-          variantFileUrl = fromB64url(vu.searchParams.get('u'));
-        }
-      }catch(e){}
-    }else if(variantRel.indexOf('http')===0){
-      variantFileUrl = variantRel;
-      variantUrl = '/api/cdn?u=' + toB64url(variantRel);
-    }else{
-      variantBasePath = 'videos/' + swVideoId + '/stream/' + variantRel;
-      variantUrl =
-        '/api/stream?path=' + encodeURIComponent(variantBasePath) +
-        '&t=' + encodeURIComponent(streamToken);
-    }
-
-    const variantRes = await fetch(variantUrl);
-    if(!variantRes.ok) throw new Error('variant → HTTP ' + variantRes.status);
-    const variantText = await variantRes.text();
-    if(my!==playToken)return;
-
-    // 4) استخراج مسار المفتاح + IV
-    setLoading(true,'فك المفتاح…');
-    const keyLine = variantText.split('\n').find(l=>l.indexOf('EXT-X-KEY')!==-1);
-    let keyPath = 'videos/' + swVideoId + '/key';
-    let ivHex = null;
-    if(keyLine){
-      const keyUriMatch = keyLine.match(/URI="([^"]+)"/);
-      const ivMatch = keyLine.match(/IV=0x([0-9a-fA-F]+)/i);
-      if(ivMatch) ivHex = ivMatch[1];
-      if(keyUriMatch){
-        const uri = keyUriMatch[1];
-        if(uri.indexOf('/api/stream')===0 || uri.indexOf(location.origin + '/api/stream')===0){
-          try{
-            const u = new URL(uri, location.origin);
-            const pth = u.searchParams.get('path');
-            if(pth) keyPath = pth;
-          }catch(e){}
-        }else if(uri.indexOf('http')!==0 && uri.indexOf('/api/cdn')!==0){
-          keyPath = uri.replace(/^\//,'').replace(/^api\/v1\//,'');
-        }
-      }
-    }
-
-    const keyUrl =
-      '/api/stream?path=' + encodeURIComponent(keyPath) +
-      '&t=' + encodeURIComponent(streamToken);
-
-    const keyRes = await fetch(keyUrl);
-    if(!keyRes.ok) throw new Error('key → HTTP ' + keyRes.status);
-    const wrappedKey = new Uint8Array(await keyRes.arrayBuffer());
-    if(my!==playToken)return;
-
-    const keyResult = await cryptoUtils.decryptPlaybackKey(wrappedKey, swVideoId);
-    const aesKey = keyResult && keyResult.key;
-    if(!aesKey || aesKey.byteLength !== 16){
-      throw new Error('المفتاح غير صالح (مش 16 بايت)');
-    }
-
-    // 5) Blob للمفتاح + rewrite playlist
-    const keyBytes =
-      aesKey instanceof ArrayBuffer
-        ? aesKey
-        : aesKey.buffer.slice(aesKey.byteOffset, aesKey.byteOffset + aesKey.byteLength);
-
-    const keyBlob = new Blob([keyBytes], {type:'application/octet-stream'});
-    currentKeyBlobUrl = URL.createObjectURL(keyBlob);
-
-    let fixedVariant = rewritePlaylist(
-      variantText, streamToken, currentKeyBlobUrl, variantBasePath, variantFileUrl
-    );
-
-    if(fixedVariant.indexOf('#EXTM3U')!==0){
-      fixedVariant = '#EXTM3U\n' + fixedVariant.replace(/^#EXTM3U\s*/m, '');
-    }
-    if(fixedVariant.indexOf('EXT-X-KEY')===-1){
-      const ivPart = ivHex ? ',IV=0x' + ivHex : '';
-      fixedVariant =
-        '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="' + currentKeyBlobUrl + '"' + ivPart + '\n' +
-        fixedVariant.replace(/^#EXTM3U\s*/m, '');
-    }
-
-    const playlistBlob = new Blob([fixedVariant], {type:'application/vnd.apple.mpegurl'});
-    currentPlaylistBlobUrl = URL.createObjectURL(playlistBlob);
-
-    // 6) Heartbeat
-    if(hbUrl){
-      hbTimer = setInterval(function(){
-        fetch('/api/heartbeat', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({url: hbUrl, token: streamToken})
-        }).catch(function(){});
-      }, 25000);
-    }
-
-    // 7) تشغيل بـ HLS.js على الـ playlist المفكوك
+    // 2) تشغيل الفيديو باستخدام HLS.js
     const saved = readProgress(item.id);
     const resumeAt = saved && saved.currentTime > 2 && !saved.watched ? +saved.currentTime : 0;
     applyRate();
@@ -1135,6 +839,10 @@ async function playIndex(i,autoplay){
 
     if(window.Hls && Hls.isSupported()){
       hls = new Hls({
+        xhrSetup: function(xhr) {
+          // إرسال التوكن مع كل طلب عشان السيرفر يسمح
+          xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+        },
         enableWorker: false,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
@@ -1153,25 +861,12 @@ async function playIndex(i,autoplay){
 
       hls.on(Hls.Events.ERROR, function(_e, d){
         if(my!==playToken || !d || !d.fatal) return;
-        const code = d.response && d.response.code;
-        if(code === 401){
-          showError('جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.','انتهت الجلسة','leave');
-          return;
-        }
-        if(code === 403){
-          showError('السيرفر أو الـ CDN رفض تحميل مقطع الفيديو (403). جرّب من شبكة تانية أو حدّث الصفحة.','فشل تحميل المقطع');
-          return;
-        }
         if(d.type === Hls.ErrorTypes.NETWORK_ERROR){
           if(hlsRetry.net++ < 3){
             setLoading(true,'النت ضعيف… بحاول تاني', false);
             setTimeout(function(){
               if(my!==playToken || !hls) return;
-              if(d.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || d.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT){
-                hls.loadSource(currentPlaylistBlobUrl);
-              } else {
-                hls.startLoad();
-              }
+              hls.startLoad();
             }, 700 * hlsRetry.net);
           } else {
             showError('النت ضعيف أو مقطوع. اتأكد من الاتصال وجرّب تاني.','مشكلة في الاتصال');
@@ -1184,7 +879,7 @@ async function playIndex(i,autoplay){
         }
       });
 
-      hls.loadSource(currentPlaylistBlobUrl);
+      hls.loadSource(session.manifest_url);
       hls.attachMedia(video);
     } else {
       showError('المتصفح لا يدعم HLS.js','تعذّر تشغيل الفيديو');
@@ -1198,16 +893,13 @@ async function playIndex(i,autoplay){
   }
 }
 
-/* ============ INIT ============ */
 async function init(){
-  // مع السيرفر المحلي (server.js) التوكن موجود على السيرفر؛ الـ token المحلي اختياري
   if(!lectureId){
     showError('رابط المشغل ناقصه رقم المحاضرة. افتح الفيديو من صفحة المواد.','رابط ناقص','leave');
     return;
   }
   try{
     const r=await api('/api/lectures/'+encodeURIComponent(lectureId)+'/content');
-    // api() بتفك .data بالفعل — متاخدش r.data تاني
     const d = (r && (r.videos || r.lecture)) ? r : (r && r.data) ? r.data : (r || {});
     videos=(d.videos||[]).map((v,i)=>({
       id:v.id,
@@ -1236,7 +928,6 @@ async function init(){
   }
 }
 
-/* ============ SEEK BAR (السحب يعاين، والتثبيت عند الإفلات) ============ */
 function fracAt(e){
   const r=seek.getBoundingClientRect();
   return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
@@ -1289,14 +980,12 @@ seek.addEventListener('keydown',e=>{
   showUI();
 });
 
-/* ============ BUTTONS ============ */
 $('pplay').onclick=e=>{e.stopPropagation();togglePlay()};
 $('pc').onclick=e=>{e.stopPropagation();togglePlay()};
 $('pb').onclick=e=>{e.stopPropagation();seekBy(-10);showUI()};
 $('pf').onclick=e=>{e.stopPropagation();seekBy(10);showUI()};
 $('pnx').onclick=e=>{e.stopPropagation();if(current<videos.length-1)playIndex(current+1,true)};
 
-/* PiP */
 if(!(document.pictureInPictureEnabled&&video.requestPictureInPicture))$('ppip').style.display='none';
 $('ppip').onclick=async e=>{
   e.stopPropagation();
@@ -1309,7 +998,6 @@ $('ppip').onclick=async e=>{
 video.addEventListener('enterpictureinpicture',()=>$('ppip').classList.add('active'));
 video.addEventListener('leavepictureinpicture',()=>$('ppip').classList.remove('active'));
 
-/* Fullscreen */
 const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement;
 function toggleFs(){
   if(fsEl()){(document.exitFullscreen||document.webkitExitFullscreen)?.call(document);return}
@@ -1330,7 +1018,6 @@ function onFsChange(){
 ['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,onFsChange));
 $('pfs').onclick=e=>{e.stopPropagation();toggleFs()};
 
-/* Back */
 const goBack=()=>{
   if(history.length>1)history.back();
   else location.href='subjects.html';
@@ -1338,7 +1025,6 @@ const goBack=()=>{
 $('pback').onclick=e=>{e.stopPropagation();goBack()};
 $('backBtn').onclick=goBack;
 
-/* ============ الضغط المطوّل = سرعة 2× (زي يوتيوب) ============ */
 function startHold(e){
   if(e.pointerType==='mouse'&&e.button!==0)return;
   hold.x=e.clientX;hold.y=e.clientY;
@@ -1370,7 +1056,6 @@ ptap.addEventListener('pointermove',e=>{
 window.addEventListener('blur',endHold);
 ptap.addEventListener('contextmenu',e=>e.preventDefault());
 
-/* ============ اللمس والماوس على الشاشة ============ */
 const DOUBLE_TAP_DELAY=280;
 let fxAcc=0,fxAt=0,fxSide='';
 function flashFx(side){
@@ -1388,12 +1073,10 @@ ptap.addEventListener('click',e=>{
   const now=Date.now();
   if(now-hold.endedAt<400||now-menuClosedAt<400)return;
   if(lastPtype==='mouse'){
-    // ماوس: كليك = تشغيل/إيقاف، دبل كليك = ملء الشاشة
     clearTimeout(tap.timer);
     tap.timer=setTimeout(togglePlay,220);
     return;
   }
-  // لمس: ضغطة = إظهار/إخفاء الأزرار، ضغطتين = تقديم/رجوع 10 ثواني
   const r=screenEl.getBoundingClientRect();
   const side=(e.clientX-r.left)<r.width/2?'left':'right';
   if(now<tap.seekUntil&&tap.side===side){
@@ -1417,7 +1100,6 @@ screenEl.addEventListener('pointerleave',e=>{
   if(e.pointerType==='mouse'&&!video.paused&&!isOpen()&&!scrub)hideUI();
 });
 
-/* ============ VIDEO EVENTS ============ */
 ['loadedmetadata','resize'].forEach(ev=>video.addEventListener(ev,()=>{if(isOpen()&&menuView==='main')renderMenu()}));
 ['progress','loadedmetadata','durationchange','seeked'].forEach(ev=>video.addEventListener(ev,()=>{paintBuffered();paintProgress()}));
 video.addEventListener('timeupdate',()=>{
@@ -1430,7 +1112,7 @@ video.addEventListener('pause',()=>{saveProgress();showUI(true)});
 video.addEventListener('waiting',()=>{if(!$('error').classList.contains('show'))setLoading(true,'',true)});
 ['playing','canplay'].forEach(ev=>video.addEventListener(ev,()=>{if(!$('error').classList.contains('show'))setLoading(false)}));
 video.addEventListener('error',()=>{
-  if(hls||!video.error||!video.currentSrc)return;     // لو HLS شغال هو اللي بيتعامل مع الأخطاء
+  if(hls||!video.error||!video.currentSrc)return;
   const code=video.error.code;
   const msg=code===2?'مشكلة في الاتصال أثناء تحميل الفيديو.':
     code===3?'تعذّر فك ترميز الفيديو.':
@@ -1456,7 +1138,6 @@ window.addEventListener('online',()=>{
   else showToast('النت رجع');
 });
 
-/* ============ MEDIA SESSION (أزرار الإشعارات / شاشة القفل) ============ */
 if('mediaSession' in navigator){
   const ms=(a,f)=>{try{navigator.mediaSession.setActionHandler(a,f)}catch(e){}};
   ms('play',()=>video.play().catch(()=>{}));
@@ -1468,14 +1149,13 @@ if('mediaSession' in navigator){
   ms('seekto',d=>{if(d&&Number.isFinite(d.seekTime))video.currentTime=d.seekTime});
 }
 
-/* ============ KEYBOARD (بالـ code عشان تشتغل مع الكيبورد العربي) ============ */
 document.addEventListener('keydown',e=>{
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   const tag=(e.target.tagName||'').toLowerCase();
   if(tag==='input'||tag==='textarea'||tag==='select')return;
   const c=e.code;
   if(c==='Escape'){closeMenu();return}
-  if((c==='Space'||c==='Enter')&&tag==='button')return;   // خلّي الزرار يشتغل بنفسه
+  if((c==='Space'||c==='Enter')&&tag==='button')return;
   if(c==='Space'||c==='KeyK'){e.preventDefault();togglePlay()}
   else if(c==='ArrowLeft'){e.preventDefault();seekBy(-5);showUI()}
   else if(c==='ArrowRight'){e.preventDefault();seekBy(5);showUI()}
@@ -1495,13 +1175,11 @@ document.addEventListener('keydown',e=>{
   else if(/^(Digit|Numpad)[0-9]$/.test(c)&&video.duration>0){e.preventDefault();video.currentTime=video.duration*(+c.slice(-1))/10;showUI()}
 });
 
-/* ============ حالة البداية ============ */
 setRate(rate,true);
 syncVolume();
 syncPlayState();
 $('pfs').innerHTML=SVG_FS_ON;
 
-/* ============ SEARCH & FILTER ============ */
 $('videoSearch').addEventListener('input',e=>{
   listQuery=e.target.value;
   renderList();
@@ -1514,11 +1192,9 @@ document.querySelectorAll('[data-filter]').forEach(b=>{
   });
 });
 
-/* ============ PREV/NEXT ============ */
 $('prevBtn').onclick=()=>{if(current>0)playIndex(current-1,true)};
 $('nextBtn').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)};
 
-/* Retry / Skip */
 $('retryBtn').onclick=()=>{
   if(errAction==='leave'){location.href='subjects.html';return}
   hideError();
@@ -1528,13 +1204,9 @@ $('skipBtn').onclick=()=>{
   if(current<videos.length-1){hideError();playIndex(current+1,true)}
 };
 
-/* ============ START ============ */
 init();
 
 })();
 </script>
 </body>
-</html>
-
-
-
+  </html>
