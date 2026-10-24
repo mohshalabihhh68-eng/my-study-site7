@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ar-EG" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>المحاضرات | ثانوية club</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#070b14;--card:#121a2b;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif}
+button{font:inherit;cursor:pointer}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Navbar */
+.app-nav{position:sticky;top:0;z-index:40;background:rgba(7,11,20,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer}
+.brand img{width:36px;height:36px;border-radius:11px}
+.brand small{display:block;font-size:10px;font-weight:600;color:var(--muted)}
+.profile-wrap{position:relative;margin-right:auto}
+.profile-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px 5px 5px;cursor:pointer;font-weight:800;font-size:12px;color:var(--ink)}
+.profile-btn .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue3));color:#fff;display:grid;place-items:center;font-weight:900;font-size:13px}
+.profile-menu{position:absolute;top:calc(100% + 8px);left:0;min-width:210px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;box-shadow:0 24px 60px rgba(0,0,0,.45);display:none;z-index:50}
+.profile-menu.open{display:block}
+.profile-menu button{width:100%;text-align:right;border:0;background:transparent;padding:11px 12px;border-radius:12px;cursor:pointer;font-weight:700;font-size:13px;display:flex;align-items:center;gap:10px;color:var(--ink)}
+.profile-menu button:hover{background:rgba(255,255,255,.04)}
+.profile-menu button.danger{color:#ff8a80}
+
+/* Main Content */
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
+.back-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:9px 14px;font-weight:800;font-size:12px;cursor:pointer;margin-bottom:14px;color:var(--ink);transition:.2s}
+.back-btn:hover{background:var(--card-hover)}
+.page-head{margin-bottom:24px;animation:fadeUp .4s ease}
+.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);color:var(--blue2);border:1px solid rgba(59,130,246,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
+.page-head h1{margin:0;font-size:26px;font-weight:900}
+.page-head p{margin:8px 0 0;color:var(--muted);font-size:13px}
+
+/* Grid Cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;cursor:pointer;transition:all .3s cubic-bezier(0.4, 0, 0.2, 1);animation:fadeUp .45s ease both;position:relative;text-decoration:none;color:var(--ink)}
+.card:hover{transform:translateY(-6px);border-color:rgba(59,130,246,.4);box-shadow:0 15px 35px rgba(0,0,0,.3)}
+.card-img{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg, var(--blue3), #1e1b4b);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.card-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.85;transition:transform .3s ease}
+.card:hover .card-img img{transform:scale(1.05)}
+.card-img::after{content:'';position:absolute;inset:0;background:linear-gradient(0deg, rgba(13,20,36,1) 0%, transparent 60%)}
+.card-icon{position:relative;z-index:2;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.15);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;color:#fff;transition:.3s}
+.card:hover .card-icon{background:var(--blue);transform:scale(1.1)}
+.card-icon svg{width:24px;height:24px;fill:currentColor;margin-left:3px}
+.card-body{padding:18px;display:flex;flex-direction:column;flex:1}
+.card-title{font-size:16px;font-weight:800;line-height:1.5;margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:1}
+.card-meta{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--muted);padding-top:12px;border-top:1px solid var(--line);margin-top:auto}
+.card-meta svg{width:16px;height:16px;fill:currentColor;color:var(--blue2)}
+
+/* Loading */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
+.spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
+
+@media (max-width: 600px) {
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+  <header class="app-nav"><div class="app-nav-in">
+    <div class="brand" id="brand-home"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563eb'/%3E%3Cpath d='M32 14 8 26l24 12 24-12z' fill='%23fff'/%3E%3C/svg%3E" alt=""><div>ثانوية club<small>منصة الثانوية العامة</small></div></div>
+    <div class="profile-wrap"><button type="button" class="profile-btn" id="profile-btn"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button><div class="profile-menu" id="profile-menu"><button type="button" id="menu-account">حسابي</button><button type="button" class="danger" id="menu-logout">خروج</button></div></div>
+  </div></header>
+
+  <main class="wrap" id="main"><div class="loading"><div class="spinner"></div><p>جاري تحميل المحاضرات...</p></div></main>
+
+<script>
+(function(){
+'use strict';
+const API_BASE = '', TOKEN_KEY = 'cstk_tok', token = localStorage.getItem(TOKEN_KEY);
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const chapterId = qs.get('chapterId');
+const chapterName = qs.get('chapterName') || '';
+const teacherName = qs.get('teacherName') || '';
+const subjectName = qs.get('subjectName') || '';
+
+const api = async (path, opts = {}) => {
+  const headers = { Accept: 'application/json', ...opts.headers };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ في السيرفر');
+  return data.data;
+};
+const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+async function load() {
+  if (!chapterId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف الفصل غير موجود.</div>'; return; }
+  try {
+    const lectures = await api('/api/chapters/' + chapterId + '/lectures');
+    if (!lectures || !lectures.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد محاضرات.</div>'; return; }
+    
+    let html = `<button class="back-btn" onclick="history.back()">← رجوع</button>
+    <div class="page-head">
+      <div class="badge">المحاضرات</div>
+      <h1>محاضرات الفصل</h1>
+      <p>اختار المحاضرة لفتح المحتوى</p>
+    </div>
+    <div class="grid">`;
+    
+    lectures.forEach(l => {
+      // التصميم الجديد للكارت
+      const thumb = l.image_url ? `<img src="${esc(l.image_url)}" onerror="this.style.display='none'">` : '';
+      html += `<div class="card" onclick="window.location.href='content.html?lectureId=${l.id}&chapterName=${encodeURIComponent(chapterName)}&teacherName=${encodeURIComponent(teacherName)}&subjectName=${encodeURIComponent(subjectName)}&lectureName=${encodeURIComponent(l.name)}'">
+        
+        <div class="card-img">
+          ${thumb}
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+        </div>
+        
+        <div class="card-body">
+          <div class="card-title">${esc(l.name)}</div>
+          <div class="card-meta">
+            <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+            <span>${l.video_count || 0} فيديو</span>
+          </div>
+        </div>
+
+      </div>`;
+    });
+    html += '</div>'; $('main').innerHTML = html;
+  } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
+}
+async function loadProfile() { try { const me = await api('/api/profile'); $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); } catch (e) {} }
+$('brand-home').onclick = () => window.location.href = 'subjects.html';
+$('profile-btn').onclick = () => $('profile-menu').classList.toggle('open');
+document.addEventListener('click', (e) => { if (!e.target.closest('.profile-wrap')) $('profile-menu').classList.remove('open'); });
+$('menu-account').onclick = () => window.location.href = 'profile.html';
+$('menu-logout').onclick = () => { localStorage.removeItem(TOKEN_KEY); window.location.replace('index.html'); };
+load(); loadProfile();
+})();
+</script>
+</body>
+</html>
