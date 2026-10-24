@@ -916,7 +916,7 @@ setInterval(() => {
 // تحميل فك التشفير
 await loadDecryptionUtils();
 
-app.listen(CONFIG.PORT, () => {
+app.listen(CONFIG.PORT, "0.0.0.0", () => {
   console.log(`[API] :${CONFIG.PORT} · decrypt ON`);
   console.log(`[API] Firebase: ${CONFIG.FIREBASE}`);
   console.log(`[API] Admin: ${CONFIG.ADMIN_USERNAME}`);
