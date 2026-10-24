@@ -1,5 +1,9 @@
 /**
- * Coursatk API — النسخة النهائية المدمجة
+ * Coursatk API — النسخة المدمجة النهائية
+ * - تم دمج هيدرز الكود البسيط لتخطي حماية API
+ * - Firebase: my-platform-e46a6
+ * - Admin panel + student codes (7 digits)
+ * - Stream-Weave AES-128 decrypt (فك تشفير الفيديو)
  */
 import express from "express";
 import cors from "cors";
@@ -29,7 +33,7 @@ const CONFIG = {
   ADMIN_PASSWORD: "admin123",
   
   COURSATK_API: "https://api.coursatk.online/api/v1",
-  // التوكن بيتقرأ من Railway أوتوماتيك، لو مش موجود بياخد القديم كاحتياطي
+  // بيقرأ من Railway، لو مش موجود بياخد القديم
   COURSATK_TOKEN: process.env.COURSATK_TOKEN || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
   
   STREAM_HOSTS: [
@@ -41,7 +45,7 @@ const CONFIG = {
   ],
   STREAM_ORIGIN: "https://coursatk.online",
   STREAM_REFERER: "https://coursatk.online/",
-  STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+  STREAM_UA: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
   PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
   
   CODE_TYPES: {
@@ -288,18 +292,18 @@ function ivFromMediaSequence(seq) {
 }
 
 // ═══════════════════════════════════════════════
-// Upstream helpers (تم تعديلها لتجاوز الحماية)
+// Upstream helpers (تم دمج هيدرز الكود البسيط هنا)
 // ═══════════════════════════════════════════════
 async function upstreamJson(apiPath, options = {}) {
   const r = await fetch(`${CONFIG.COURSATK_API}${apiPath}`, {
     ...options,
     headers: {
-      // الهيدرز دي هي سر نجاح الكود القديم
+      // الهيدرز دي من الكود البسيط بتاعك عشان نتخطى حماية كورساتك
       Authorization: `Bearer ${CONFIG.COURSATK_TOKEN}`,
       Accept: "application/json",
       Origin: "https://coursatk.online",
       Referer: "https://coursatk.online/",
-      "User-Agent": CONFIG.STREAM_UA,
+      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
       ...(options.headers || {})
     }
   });
@@ -474,7 +478,7 @@ app.get("/api/profile", requireStudent, async (_req, res) => {
   catch (e) { jsonError(res, 502, e.message); }
 });
 
-// Stream Routes (نفس الكود القديم)
+// Stream Routes
 app.post("/api/play/:videoId", requireStudent, async (req, res) => {
   try {
     const data = await upstreamJson(
