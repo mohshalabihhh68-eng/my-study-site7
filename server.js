@@ -1,6 +1,6 @@
 /**
  * Coursatk API — Open Proxy with Stream Decrypt
- * (Full Server + HTML Routing)
+ * (Final Stable Version)
  */
 import express from "express";
 import cors from "cors";
@@ -22,7 +22,7 @@ app.use(compression());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ═══════════════════════════════════════════════════════════
-// Rate limit (حماية السيرفر)
+// Rate limit
 // ═══════════════════════════════════════════════════════════
 const rateBuckets = new Map();
 function clientIp(req) {
@@ -107,7 +107,7 @@ async function upstreamJson(apiPath, options = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Stream-Weave Decryption (Server-side)
+// Stream-Weave Decryption
 // ═══════════════════════════════════════════════════════════
 let decryptPlaybackKeyFn = null;
 
@@ -224,12 +224,10 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 const globalLimiter = rateLimit({ max: 150, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) => req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next));
 
-// فحص الحالة
 app.get("/health", (_req, res) => {
   res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) });
 });
 
-// مسارات الـ API
 app.get("/api/subjects/:id", async (req, res) => {
   try {
     const yearId = Number(req.params.id) || CONFIG.DEFAULT_YEAR_ID;
@@ -409,31 +407,31 @@ app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fallback & HTML Routing (عشان يفتح index.html أوتوماتيك)
+// Fallback & HTML Routing (السر كله هنا)
 // ═══════════════════════════════════════════════════════════
 
-// أي مسار تاني (زي subjects.html أو index.html) هيفتحه عادي
-// لو المسار مش موجود أو الرابط الأساسي، هيفتح index.html
 app.get("*", (req, res) => {
-  // لو الطلب على مسار API مش معروف، رجع 404
+  // لو المسار بيبدأ بـ /api/ يبقى ده مسار API مش موجود
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ success: false, message: "المسار غير موجود (API)" });
   }
   
-  // لو المستخدم طلب صفحة HTML محددة
+  // لو المستخدم طالب ملف HTML معين (زي subjects.html)
   if (req.path !== "/" && path.extname(req.path)) {
-    return res.sendFile(path.join(__dirname, "public", req.path), (err) => {
-      // لو الملف مش موجود، افتح index.html
+    const filePath = path.join(__dirname, "public", req.path);
+    return res.sendFile(filePath, (err) => {
       if (err) {
+        // لو الملف مش موجود، هيفتح index.html
         res.sendFile(path.join(__dirname, "public", "index.html"));
       }
     });
   }
   
-  // لو طلب الرابط الأساسي، افتح index.html
+  // لو المستخدم طالب الرابط الأساسي (/) أو أي مسار تاني
   res.sendFile(path.join(__dirname, "public", "index.html"), (err) => {
     if (err) {
-      res.json({ success: true, message: "السيرفر شغال تمام! بس ملف index.html مش موجود في فولدر public." });
+      // لو index.html مش موجود، هيوريلك رسالة بسيطة
+      res.send("السيرفر شغال تمام! بس ملف index.html مش موجود في فولدر public.");
     }
   });
 });
