@@ -1,7 +1,3 @@
-/**
- * Coursatk API — Open Proxy with Stream Decrypt
- * (Final Stable Version)
- */
 import express from "express";
 import cors from "cors";
 import compression from "compression";
@@ -18,23 +14,16 @@ app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: "512kb" }));
 app.use(compression());
 
-// تقديم ملفات الويب من فولدر public
+// تقديم ملفات الويب
 app.use(express.static(path.join(__dirname, "public")));
 
-// ═══════════════════════════════════════════════════════════
-// Rate limit
-// ═══════════════════════════════════════════════════════════
+// Rate Limiting (حماية بسيطة)
 const rateBuckets = new Map();
-function clientIp(req) {
-  const xf = (req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  return xf || req.ip || req.socket?.remoteAddress || "unknown";
-}
 function rateLimit(options = {}) {
   const windowMs = options.windowMs || 60_000;
   const max = options.max || 150;
-  const keyFn = options.keyFn || ((req) => clientIp(req) + ":" + (options.scope || "global"));
   return (req, res, next) => {
-    const key = keyFn(req);
+    const key = (req.ip || "unknown") + ":" + (options.scope || "global");
     const now = Date.now();
     let b = rateBuckets.get(key);
     if (!b || now > b.resetAt) {
@@ -42,54 +31,29 @@ function rateLimit(options = {}) {
       rateBuckets.set(key, b);
     }
     b.count += 1;
-    if (b.count > max) {
-      return res.status(429).json({ success: false, message: "طلبات كثيرة — حاول بعد دقيقة" });
-    }
+    if (b.count > max) return res.status(429).json({ success: false, message: "طلبات كثيرة" });
     next();
   };
 }
-setInterval(() => {
-  const t = Date.now();
-  for (const [k, b] of rateBuckets) {
-    if (t > b.resetAt) rateBuckets.delete(k);
-  }
-}, 60_000).unref();
 
-// ═══════════════════════════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════════════════════════
 const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
   COURSATK_API: "https://api.coursatk.online/api/v1",
   COURSATK_TOKEN:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
   DEFAULT_YEAR_ID: 4,
-  STREAM_HOSTS: [
-    "api.coursatk.online",
-    "stream-weave.com",
-    "floravon.online",
-    "floravon.shop",
-    "c-cdn.online"
-  ],
+  STREAM_HOSTS: ["api.coursatk.online", "stream-weave.com", "floravon.online", "floravon.shop", "c-cdn.online"],
   STREAM_ORIGIN: "https://coursatk.online",
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
-  STREAM_UA:
-    "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+  STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
   PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
   STREAM_SESSION_MS: 60 * 60 * 1000,
   MAX_PROXY_BYTES: 15 * 1024 * 1024,
 };
 
-// ═══════════════════════════════════════════════════════════
-// Upstream Proxy Helpers
-// ═══════════════════════════════════════════════════════════
 async function upstreamHeaders(extra = {}) {
-  return {
-    Authorization: `Bearer ${CONFIG.COURSATK_TOKEN}`,
-    Accept: "application/json",
-    ...extra
-  };
+  return { Authorization: `Bearer ${CONFIG.COURSATK_TOKEN}`, Accept: "application/json", ...extra };
 }
 
 async function upstreamJson(apiPath, options = {}) {
@@ -99,26 +63,18 @@ async function upstreamJson(apiPath, options = {}) {
   });
   const text = await r.text();
   let data;
-  try { data = JSON.parse(text); } catch {
-    throw new Error(`Upstream non-JSON (${r.status})`);
-  }
+  try { data = JSON.parse(text); } catch { throw new Error(`Upstream non-JSON (${r.status})`); }
   if (!r.ok) throw new Error(data?.message || `Upstream HTTP ${r.status}`);
   return data;
 }
 
-// ═══════════════════════════════════════════════════════════
-// Stream-Weave Decryption
-// ═══════════════════════════════════════════════════════════
 let decryptPlaybackKeyFn = null;
 
 async function loadDecryptionUtils() {
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
   let source = null;
-  try {
-    if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8");
-  } catch {}
+  try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
   if (!source) {
-    console.log("[crypto] fetching player.js…");
     const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
@@ -135,21 +91,16 @@ async function loadDecryptionUtils() {
     Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date,
     Map, Set, WeakMap, Symbol, Proxy, Reflect,
     document: { createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }), head: { appendChild() {} }, body: { appendChild() {} }, querySelector: () => null, addEventListener() {} },
-    navigator: { userAgent: "Node" },
-    location: { href: "https://coursatk.online/" },
+    navigator: { userAgent: "Node" }, location: { href: "https://coursatk.online/" },
     HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
-    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
-    Blob: class { constructor(p) { this.p = p; } },
-    fetch: async () => ({ ok: false }),
-    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
+    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} }, Blob: class { constructor(p) { this.p = p; } },
+    fetch: async () => ({ ok: false }), XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
   };
-  sandbox.window = sandbox; sandbox.self = sandbox;
-  sandbox.globalThis = sandbox; sandbox.global = sandbox;
+  sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox; sandbox.global = sandbox;
   vm.runInNewContext(source, sandbox, { timeout: 8000 });
   const du = sandbox.DecryptionUtils;
   if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
   decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-  console.log("[crypto] ready");
 }
 
 async function unwrapKey(wrappedBuf, videoId) {
@@ -187,9 +138,7 @@ function allowedStreamUrl(raw, session = null) {
     if (u.protocol !== "https:") return false;
     const hosts = new Set(CONFIG.STREAM_HOSTS);
     if (session?.allowedHosts) for (const h of session.allowedHosts) hosts.add(h);
-    if (session?.streamUrl) {
-      try { hosts.add(new URL(session.streamUrl).hostname); } catch {}
-    }
+    if (session?.streamUrl) { try { hosts.add(new URL(session.streamUrl).hostname); } catch {} }
     return [...hosts].some(h => u.hostname === h || u.hostname.endsWith("." + h));
   } catch { return false; }
 }
@@ -198,35 +147,22 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
   const ch = clientHeaders || {};
   const headers = {
-    Accept: "*/*",
-    "Cache-Control": "no-cache",
-    Origin: CONFIG.STREAM_ORIGIN,
-    Referer: CONFIG.STREAM_REFERER,
-    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
-    "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
+    Accept: "*/*", "Cache-Control": "no-cache", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER,
+    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH, "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
   };
   const isMediaSegmentHost = /floravon\.(online|shop)|c-cdn\.online/i.test(url);
-  if (!isMediaSegmentHost && session?.token) {
-    headers.Authorization = `Bearer ${session.token}`;
-  }
+  if (!isMediaSegmentHost && session?.token) headers.Authorization = `Bearer ${session.token}`;
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
   }
-  for (const [k, v] of Object.entries(extra || {})) {
-    if (v != null && v !== "") headers[k] = v;
-  }
+  for (const [k, v] of Object.entries(extra || {})) { if (v != null && v !== "") headers[k] = v; }
   return fetch(url, { headers, cache: "no-store" });
 }
 
-// ═══════════════════════════════════════════════════════════
-// Public Routes
-// ═══════════════════════════════════════════════════════════
 const globalLimiter = rateLimit({ max: 150, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) => req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next));
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) });
-});
+app.get("/health", (_req, res) => { res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) }); });
 
 app.get("/api/subjects/:id", async (req, res) => {
   try {
@@ -236,53 +172,33 @@ app.get("/api/subjects/:id", async (req, res) => {
 });
 
 app.get("/api/subjects/:id/teachers", async (req, res) => {
-  try {
-    res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`));
-  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+  try { res.json(await upstreamJson(`/user/subjects/${encodeURIComponent(req.params.id)}/teachers`)); } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
 
 app.get("/api/teachers/:id/chapters", async (req, res) => {
-  try {
-    res.json(await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`));
-  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+  try { res.json(await upstreamJson(`/user/teachers/${encodeURIComponent(req.params.id)}/chapters`)); } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
 
 app.get("/api/chapters/:id/lectures", async (req, res) => {
-  try {
-    res.json(await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`));
-  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+  try { res.json(await upstreamJson(`/user/chapters/${encodeURIComponent(req.params.id)}/lectures`)); } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
 
 app.get("/api/lectures/:id/content", async (req, res) => {
-  try {
-    res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`));
-  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
+  try { res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`)); } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// Play & Stream
-// ═══════════════════════════════════════════════════════════
 const streamSessions = new Map();
 
 app.post("/api/play/:videoId", async (req, res) => {
   try {
     const data = await upstreamJson(`/video/${encodeURIComponent(req.params.videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
     if (!data?.success || !data?.data?.token || !data?.data?.stream_url || !data?.data?.video_id) throw new Error("Playback response ناقص");
-    
     const id = crypto.randomUUID();
     streamSessions.set(id, {
-      id,
-      videoId: String(data.data.video_id),
-      token: data.data.token,
-      streamUrl: data.data.stream_url,
-      playId: String(req.params.videoId),
-      createdAt: Date.now(),
-      lastUsed: Date.now(),
-      plainKey: null,
-      defaultIv: null,
-      allowedHosts: new Set([new URL(data.data.stream_url).hostname])
+      id, videoId: String(data.data.video_id), token: data.data.token, streamUrl: data.data.stream_url,
+      playId: String(req.params.videoId), createdAt: Date.now(), lastUsed: Date.now(),
+      plainKey: null, defaultIv: null, allowedHosts: new Set([new URL(data.data.stream_url).hostname])
     });
-    
     res.json({ success: true, data: { session: id, video_id: data.data.video_id, manifest_url: `/api/stream/manifest/${id}` } });
   } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
@@ -299,13 +215,11 @@ function getStreamSession(id) {
 app.get("/api/stream/manifest/:sessionId", async (req, res) => {
   const session = getStreamSession(req.params.sessionId);
   if (!session) return res.status(404).json({ success: false, message: "جلسة التشغيل منتهية" });
-
   try {
     let master = await streamFetch(session, session.streamUrl, {}, req.headers);
     if (!master.ok) throw new Error(`Stream master HTTP ${master.status}`);
     const masterText = await master.text();
     const lines = masterText.split(/\r?\n/);
-
     let variant = null;
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
@@ -313,16 +227,13 @@ app.get("/api/stream/manifest/:sessionId", async (req, res) => {
         if (next && !next.startsWith("#")) { variant = new URL(next, session.streamUrl).href; break; }
       }
     }
-
     if (variant) {
       let variantRes = await streamFetch(session, variant, {}, req.headers);
       if (!variantRes.ok) throw new Error(`Variant HTTP ${variantRes.status}`);
       return rewritePlaylist(req.params.sessionId, session, await variantRes.text(), variant, res, req.headers);
     }
     return rewritePlaylist(req.params.sessionId, session, masterText, session.streamUrl, res, req.headers);
-  } catch (e) {
-    res.status(502).json({ success: false, message: e.message });
-  }
+  } catch (e) { res.status(502).json({ success: false, message: e.message }); }
 });
 
 async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHeaders) {
@@ -332,12 +243,10 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
   let mediaSeq = 0;
   let currentIv = null;
   let keyFetched = false;
-
   for (const raw of lines) {
     const t = raw.trim();
     if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0;
   }
-
   let segIndex = 0;
   for (const raw of lines) {
     const line = raw.trim();
@@ -346,8 +255,7 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
       const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
       if (ivHex) currentIv = parseIvHex(ivHex);
       if (uri && !keyFetched && session.plainKey) {
-        session.defaultIv = currentIv;
-        keyFetched = true;
+        session.defaultIv = currentIv; keyFetched = true;
       } else if (uri && !keyFetched) {
         const keyUrl = new URL(uri, baseUrl).href;
         try { session.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
@@ -355,8 +263,7 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
         session.plainKey = await unwrapKey(wrapped, session.videoId);
-        session.defaultIv = currentIv;
-        keyFetched = true;
+        session.defaultIv = currentIv; keyFetched = true;
       }
       continue;
     }
@@ -373,7 +280,6 @@ async function rewritePlaylist(sessionId, session, text, baseUrl, res, clientHea
     out.push(raw);
   }
   if (!session.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
-
   res.set({ "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
   res.send(out.join("\n"));
 }
@@ -382,22 +288,18 @@ app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
   const session = getStreamSession(req.params.sessionId);
   if (!session) return res.status(404).json({ success: false, message: "جلسة التشغيل منتهية" });
   if (!session.plainKey) return res.status(404).json({ success: false, message: "مفتاح غير متاح" });
-
   let meta;
   try { meta = JSON.parse(Buffer.from(req.params.encoded, "base64url").toString("utf8")); } catch { return res.status(400).json({ success: false, message: "segment meta غير صالح" }); }
   const url = meta?.u;
   if (!url || !allowedStreamUrl(url, session)) return res.status(403).json({ success: false, message: "رابط غير مسموح" });
-
   const iv = parseIvHex(meta.iv) || session.defaultIv || ivFromMediaSequence(meta.s || 0);
   try {
     const upstream = await streamFetch(session, url, { Range: req.headers.range || undefined }, req.headers);
     if (!upstream.ok && upstream.status !== 206) throw new Error(`Segment HTTP ${upstream.status}`);
     const encrypted = Buffer.from(await upstream.arrayBuffer());
     if (encrypted.length > CONFIG.MAX_PROXY_BYTES) return res.status(413).json({ success: false, message: "المقطع كبير" });
-
     let plain;
     try { plain = decryptSegment(encrypted, session.plainKey, iv); } catch (decErr) { plain = encrypted; }
-    
     res.status(200);
     res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
     res.send(plain);
@@ -407,31 +309,19 @@ app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fallback & HTML Routing (السر كله هنا)
+// 🔥 السر هنا: توجيه أي مسار تاني لملف index.html
 // ═══════════════════════════════════════════════════════════
 
 app.get("*", (req, res) => {
-  // لو المسار بيبدأ بـ /api/ يبقى ده مسار API مش موجود
+  // لو مسار API مش معروف، رجع 404
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ success: false, message: "المسار غير موجود (API)" });
   }
   
-  // لو المستخدم طالب ملف HTML معين (زي subjects.html)
-  if (req.path !== "/" && path.extname(req.path)) {
-    const filePath = path.join(__dirname, "public", req.path);
-    return res.sendFile(filePath, (err) => {
-      if (err) {
-        // لو الملف مش موجود، هيفتح index.html
-        res.sendFile(path.join(__dirname, "public", "index.html"));
-      }
-    });
-  }
-  
-  // لو المستخدم طالب الرابط الأساسي (/) أو أي مسار تاني
+  // أي مسار تاني (سواء / أو /anything) هيفتح index.html
   res.sendFile(path.join(__dirname, "public", "index.html"), (err) => {
     if (err) {
-      // لو index.html مش موجود، هيوريلك رسالة بسيطة
-      res.send("السيرفر شغال تمام! بس ملف index.html مش موجود في فولدر public.");
+      res.status(404).send("ملف index.html مش موجود في فولدر public.");
     }
   });
 });
@@ -443,7 +333,6 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
-// Boot: load decryption tools
 await loadDecryptionUtils();
 
 app.listen(CONFIG.PORT, () => {
