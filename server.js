@@ -1,6 +1,6 @@
 /**
  * Coursatk API — Open Proxy with Stream Decrypt
- * (Test Mode - No HTML Files Required)
+ * (Full Server with SPA Routing)
  */
 import express from "express";
 import cors from "cors";
@@ -18,7 +18,7 @@ app.use(cors({ origin: true, credentials: false }));
 app.use(express.json({ limit: "512kb" }));
 app.use(compression());
 
-// لو حبيت ترفع ملفات HTML بعدين، هتتحط في فولدر public
+// تقديم ملفات الويب من فولدر public
 app.use(express.static(path.join(__dirname, "public")));
 
 // ═══════════════════════════════════════════════════════════
@@ -61,7 +61,6 @@ setInterval(() => {
 const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
   COURSATK_API: "https://api.coursatk.online/api/v1",
-  // 👇 ضع التوكن بتاعك هنا لو التوكن ده مش شغال
   COURSATK_TOKEN:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMDk1NTUsInJvbGUiOiJzdHVkZW50IiwidXVpZCI6IjU3OGIxNjBjMjgxZWVkY2Y1ZTY4MjViNDZmMWExNTY0In0.x9vV-N_13KcrGbx-y9owTgGdirKpKh_X0JXDpolYegs",
   DEFAULT_YEAR_ID: 4,
@@ -224,15 +223,6 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 // ═══════════════════════════════════════════════════════════
 const globalLimiter = rateLimit({ max: 150, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) => req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next));
-
-// الرابط الأساسي: رسالة تأكيد إن السيرفر شغال (للتجربة)
-app.get("/", (_req, res) => {
-  res.json({ 
-    success: true, 
-    message: "السيرفر شغال تمام التمام! (Test Mode) 🚀", 
-    cryptoReady: Boolean(decryptPlaybackKeyFn) 
-  });
-});
 
 // فحص الحالة
 app.get("/health", (_req, res) => {
@@ -419,10 +409,17 @@ app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fallback
+// Fallback & SPA Routing (عشان يفتح index.html أوتوماتيك)
 // ═══════════════════════════════════════════════════════════
-app.use((req, res) => {
-  res.status(404).json({ success: false, message: "المسار غير موجود (تأكد من الرابط)" });
+
+// لو دخلت على الرابط الأساسي / أو أي مسار HTML مش معروف
+app.get("*", (req, res) => {
+  // لو الطلب على مسار API، رجع 404
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ success: false, message: "المسار غير موجود" });
+  }
+  // غير كده، افتح index.html
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 setInterval(() => {
@@ -436,5 +433,5 @@ setInterval(() => {
 await loadDecryptionUtils();
 
 app.listen(CONFIG.PORT, () => {
-  console.log(`[API] :${CONFIG.PORT} running (TEST MODE) · segment-decrypt ON`);
+  console.log(`[API] :${CONFIG.PORT} running · segment-decrypt ON`);
 });
