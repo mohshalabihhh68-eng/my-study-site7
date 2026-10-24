@@ -1,732 +1,505 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html dir="rtl" lang="ar">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>لوحة التحكم — Coursatk</title>
+<title>لوحة التحكم</title>
 <style>
-  :root{
-    --bg:#0f172a; --card:#1e293b; --border:#334155;
-    --text:#e2e8f0; --muted:#94a3b8;
-    --primary:#3b82f6; --success:#10b981; --danger:#ef4444; --warn:#f59e0b;
+  * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+  body { margin: 0; padding: 16px; background: #0f172a; color: #e2e8f0; }
+  h1 { color: #38bdf8; margin: 0 0 5px; }
+  h2 { color: #38bdf8; font-size: 18px; margin: 0 0 12px; }
+  
+  input, select, button {
+    padding: 10px 12px; border-radius: 8px;
+    border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
+    font-size: 14px; outline: none;
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-  button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;padding:10px 16px;font-weight:600;transition:.15s}
-  button:hover{opacity:.9}
-  button:disabled{opacity:.5;cursor:not-allowed}
-  input,select,textarea{font-family:inherit;background:#0f172a;border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;width:100%;font-size:14px}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)}
-  .btn-primary{background:var(--primary);color:#fff}
-  .btn-success{background:var(--success);color:#fff}
-  .btn-danger{background:var(--danger);color:#fff}
-  .btn-warn{background:var(--warn);color:#000}
-  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
-
-  /* Login */
-  #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-  .login-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px;width:100%;max-width:400px}
-  .login-box h1{text-align:center;margin-bottom:24px;font-size:24px}
-  .login-box .field{margin-bottom:16px}
-  .login-box label{display:block;margin-bottom:6px;font-size:13px;color:var(--muted)}
-  .login-box button{width:100%;padding:12px;margin-top:8px}
-
-  /* App */
-  #app{display:none;min-height:100vh;flex-direction:column}
-  #app.active{display:flex}
-  header{background:var(--card);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
-  header h2{font-size:18px}
-  header .user-info{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted)}
-  nav.tabs{background:var(--card);border-bottom:1px solid var(--border);display:flex;gap:4px;padding:0 24px;overflow-x:auto}
-  nav.tabs button{background:transparent;color:var(--muted);padding:14px 20px;border-radius:0;border-bottom:2px solid transparent}
-  nav.tabs button.active{color:var(--primary);border-bottom-color:var(--primary)}
-  nav.tabs button:hover{color:var(--text)}
-  main{padding:24px;flex:1;max-width:1200px;margin:0 auto;width:100%}
-  .panel{display:none}
-  .panel.active{display:block}
-
-  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
-  .card h3{margin-bottom:16px;font-size:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
-  .field{margin-bottom:12px}
-  .field label{display:block;margin-bottom:6px;font-size:13px;color:var(--muted)}
-  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .row>*{flex:1;min-width:120px}
-  .row .auto{flex:0 0 auto;min-width:auto}
-
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{padding:10px 8px;text-align:right;border-bottom:1px solid var(--border)}
-  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
-  tr:hover td{background:rgba(255,255,255,.02)}
-
-  .badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
-  .badge-success{background:rgba(16,185,129,.15);color:var(--success)}
-  .badge-danger{background:rgba(239,68,68,.15);color:var(--danger)}
-  .badge-warn{background:rgba(245,158,11,.15);color:var(--warn)}
-  .badge-info{background:rgba(59,130,246,.15);color:var(--primary)}
-
-  .toast{position:fixed;bottom:20px;left:20px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 20px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:999;transform:translateY(120%);transition:.3s;font-size:14px}
-  .toast.show{transform:translateY(0)}
-  .toast.success{border-color:var(--success)}
-  .toast.error{border-color:var(--danger)}
-
-  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:500;padding:20px}
-  .modal-bg.show{display:flex}
-  .modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto}
-  .modal h3{margin-bottom:16px}
-  .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-
-  .empty{text-align:center;padding:40px;color:var(--muted)}
-  .loading{text-align:center;padding:40px;color:var(--muted)}
-  .perms{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
-  .perms label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer}
-  .perms input{width:auto}
-
-  @media(max-width:640px){
-    .perms{grid-template-columns:1fr}
-    th,td{font-size:12px;padding:8px 4px}
-    main{padding:16px}
+  input:focus, select:focus { border-color: #0ea5e9; }
+  button { background: #0ea5e9; cursor: pointer; border: none; padding: 10px 18px; font-weight: 500; }
+  button:hover { background: #0284c7; }
+  button.danger { background: #ef4444; }
+  button.danger:hover { background: #dc2626; }
+  button.ghost { background: transparent; border: 1px solid #334155; }
+  button.ghost:hover { background: #334155; }
+  
+  .card {
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 12px; padding: 20px; margin-bottom: 16px;
+  }
+  .login-card { max-width: 400px; margin: 60px auto; }
+  .login-card input { width: 100%; margin-bottom: 10px; }
+  .login-card button { width: 100%; }
+  
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row > input, .row > select { flex: 1; min-width: 140px; }
+  .row > button { flex: 0 0 auto; }
+  
+  .student {
+    background: #0f172a; border: 1px solid #334155;
+    border-radius: 10px; padding: 12px 14px; margin: 8px 0;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; flex-wrap: wrap;
+  }
+  .student.expired { opacity: 0.55; }
+  .student-info { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex: 1; }
+  .student-name { font-weight: 600; }
+  
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 12px; background: #0ea5e9; color: #fff;
+  }
+  .badge.red { background: #ef4444; }
+  .badge.gray { background: #475569; }
+  .badge.green { background: #22c55e; }
+  
+  .code { font-family: 'Courier New', monospace; color: #facc15; font-size: 15px; letter-spacing: 1px; }
+  
+  .msg { font-size: 14px; margin-top: 8px; min-height: 20px; }
+  .msg.err { color: #ef4444; }
+  .msg.ok { color: #22c55e; }
+  
+  .search { width: 100%; padding: 12px 16px; font-size: 15px; }
+  
+  .empty { text-align: center; padding: 30px; color: #64748b; }
+  
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 12px; padding: 24px; max-width: 500px; width: 100%;
+    max-height: 85vh; overflow-y: auto;
+  }
+  .modal h2 { margin-top: 0; }
+  
+  .device {
+    background: #0f172a; border: 1px solid #334155;
+    border-radius: 8px; padding: 10px 12px; margin: 8px 0;
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px;
+  }
+  .device small { color: #64748b; font-size: 12px; }
+  
+  hr { border: none; border-top: 1px solid #334155; margin: 20px 0; }
+  
+  .header-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
   }
 </style>
 </head>
 <body>
 
-<!-- Login -->
-<div id="login-screen">
-  <div class="login-box">
-    <h1>🔐 لوحة التحكم</h1>
-    <div class="field">
-      <label>اسم المستخدم</label>
-      <input id="login-user" placeholder="Shalaby" autocomplete="username">
-    </div>
-    <div class="field">
-      <label>كلمة المرور</label>
-      <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password">
-    </div>
-    <button class="btn-primary" onclick="doLogin()">دخول</button>
-  </div>
+<!-- ═══════════════════════════════════════════════
+     شاشة تسجيل الدخول
+     ═══════════════════════════════════════════════ -->
+<div id="loginScreen" class="card login-card">
+  <h1>🔐 دخول الأدمن</h1>
+  <p style="color: #64748b; font-size: 13px; margin: 5px 0 15px;">سجل دخولك للوصول للوحة التحكم</p>
+  
+  <input id="loginUser" placeholder="اسم المستخدم" autocomplete="username">
+  <input id="loginPass" type="password" placeholder="كلمة المرور" autocomplete="current-password">
+  <button onclick="doLogin()">دخول</button>
+  
+  <p id="loginErr" class="msg err"></p>
 </div>
 
-<!-- App -->
-<div id="app">
-  <header>
-    <h2>📚 Coursatk Admin</h2>
-    <div class="user-info">
-      <span id="me-info">—</span>
-      <button class="btn-ghost" onclick="doLogout()">خروج</button>
-    </div>
-  </header>
 
-  <nav class="tabs" id="tabs"></nav>
+<!-- ═══════════════════════════════════════════════
+     اللوحة
+     ═══════════════════════════════════════════════ -->
+<div id="panel" style="display: none;">
 
-  <main>
-    <!-- Students -->
-    <section class="panel active" data-panel="students">
-      <div class="card">
-        <h3>
-          <span>👥 الطلاب</span>
-          <button class="btn-primary" id="btn-add-student" onclick="openStudentModal()">+ إضافة طالب</button>
-        </h3>
-        <div id="students-list"><div class="loading">جاري التحميل…</div></div>
+  <!-- هيدر -->
+  <div class="card">
+    <div class="header-bar">
+      <div>
+        <h1>🎓 لوحة التحكم</h1>
+        <p style="color: #64748b; margin: 5px 0 0; font-size: 13px;">
+          مرحباً، <strong id="adminName" style="color: #38bdf8;"></strong>
+        </p>
       </div>
-    </section>
-
-    <!-- Sections -->
-    <section class="panel" data-panel="sections">
-      <div class="card">
-        <h3>
-          <span>🗂️ الأقسام (الشُعب)</span>
-          <button class="btn-primary" onclick="openSectionModal()">+ إضافة قسم</button>
-        </h3>
-        <div id="sections-list"><div class="loading">جاري التحميل…</div></div>
-      </div>
-    </section>
-
-    <!-- Admins -->
-    <section class="panel" data-panel="admins">
-      <div class="card">
-        <h3>
-          <span>🛡️ الأدمن</span>
-          <button class="btn-primary" onclick="openAdminModal()">+ إضافة أدمن</button>
-        </h3>
-        <div id="admins-list"><div class="loading">جاري التحميل…</div></div>
-      </div>
-    </section>
-
-    <!-- Config -->
-    <section class="panel" data-panel="config">
-      <div class="card">
-        <h3>⚙️ الإعدادات</h3>
-        <div id="config-info"><div class="loading">جاري التحميل…</div></div>
-      </div>
-      <div class="card" id="token-card" style="display:none">
-        <h3>تحديث توكن Coursatk</h3>
-        <div class="field">
-          <label>Token (JWT)</label>
-          <textarea id="new-token" rows="3" placeholder="eyJhbGciOi…"></textarea>
-        </div>
-        <button class="btn-warn" onclick="saveToken()">حفظ التوكن</button>
-      </div>
-    </section>
-  </main>
-</div>
-
-<!-- Modals -->
-<div class="modal-bg" id="student-modal">
-  <div class="modal">
-    <h3 id="student-modal-title">إضافة طالب</h3>
-    <div id="student-modal-body"></div>
-    <div class="actions">
-      <button class="btn-ghost" onclick="closeModal('student-modal')">إلغاء</button>
-      <button class="btn-primary" id="student-modal-save">حفظ</button>
+      <button class="ghost" onclick="doLogout()">خروج</button>
     </div>
   </div>
-</div>
 
-<div class="modal-bg" id="section-modal">
-  <div class="modal">
-    <h3 id="section-modal-title">إضافة قسم</h3>
-    <div id="section-modal-body"></div>
-    <div class="actions">
-      <button class="btn-ghost" onclick="closeModal('section-modal')">إلغاء</button>
-      <button class="btn-primary" id="section-modal-save">حفظ</button>
+  <!-- إضافة طالب -->
+  <div class="card">
+    <h2>➕ إضافة طالب جديد</h2>
+    <div class="row">
+      <input id="newName" placeholder="اسم الطالب">
+      <select id="newType">
+        <option value="trial">تجربة (ساعة)</option>
+        <option value="month" selected>شهر</option>
+        <option value="term">ترم (6 شهور)</option>
+        <option value="year">سنة</option>
+      </select>
+      <input id="newDevices" type="number" value="1" min="1" max="10" style="max-width: 100px;" placeholder="أجهزة">
+      <input id="newCode" placeholder="كود مخصص (اختياري)" style="max-width: 180px;">
+      <button onclick="addStudent()">إضافة</button>
     </div>
+    <p id="addMsg" class="msg"></p>
   </div>
+
+  <!-- الطلاب -->
+  <div class="card">
+    <h2>👥 الطلاب (<span id="count">0</span>)</h2>
+    <input id="search" class="search" placeholder="🔍 بحث بالاسم أو الكود..." oninput="renderStudents()">
+    <div id="studentsList" style="margin-top: 12px;"></div>
+  </div>
+
 </div>
 
-<div class="modal-bg" id="admin-modal">
-  <div class="modal">
-    <h3 id="admin-modal-title">إضافة أدمن</h3>
-    <div id="admin-modal-body"></div>
-    <div class="actions">
-      <button class="btn-ghost" onclick="closeModal('admin-modal')">إلغاء</button>
-      <button class="btn-primary" id="admin-modal-save">حفظ</button>
-    </div>
-  </div>
+
+<!-- ═══════════════════════════════════════════════
+     مودال تفاصيل الطالب
+     ═══════════════════════════════════════════════ -->
+<div id="modal" class="modal-overlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal" id="modalContent"></div>
 </div>
 
-<div class="toast" id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════════
-// State
-// ═══════════════════════════════════════════════
-const API = ""; // نفس origin
-let token = localStorage.getItem("admin_token") || "";
-let me = null;
-let currentTab = "students";
-let codeTypes = {};
+/* ═══════════════════════════════════════════════
+   الحالة
+   ═══════════════════════════════════════════════ */
+let token = localStorage.getItem('admin_token');
+let students = [];
 
-// ═══════════════════════════════════════════════
-// Helpers
-// ═══════════════════════════════════════════════
+
+/* ═══════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════ */
 async function api(path, options = {}) {
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const r = await fetch(API + path, { ...options, headers });
-  let data;
-  try { data = await r.json(); } catch { data = {}; }
-  if (!r.ok) throw new Error(data.message || `HTTP ${r.status}`);
-  return data;
+  const r = await fetch(path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token,
+      ...(options.headers || {})
+    }
+  });
+  
+  if (r.status === 401) {
+    doLogout();
+    throw new Error('انتهت الجلسة');
+  }
+  
+  return r.json();
 }
 
-function toast(msg, type = "success") {
-  const el = document.getElementById("toast");
-  el.textContent = msg;
-  el.className = "toast show " + type;
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove("show"), 3000);
+function formatDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString('ar-EG', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
 }
 
-function fmtDate(ms) {
-  if (!ms) return "—";
-  return new Date(ms).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" });
+function daysLeft(expiresAt) {
+  if (!expiresAt) return null;
+  return Math.ceil((expiresAt - Date.now()) / 86400000);
 }
 
-function daysLeft(ms) {
-  if (!ms) return "—";
-  const d = Math.ceil((ms - Date.now()) / 86400000);
-  if (d < 0) return `منتهي (${-d} يوم)`;
-  return `${d} يوم`;
-}
 
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  }[c]));
-}
-
-function closeModal(id) { document.getElementById(id).classList.remove("show"); }
-function openModal(id) { document.getElementById(id).classList.add("show"); }
-
-// ═══════════════════════════════════════════════
-// Auth
-// ═══════════════════════════════════════════════
+/* ═══════════════════════════════════════════════
+   تسجيل الدخول
+   ═══════════════════════════════════════════════ */
 async function doLogin() {
-  const username = document.getElementById("login-user").value.trim();
-  const password = document.getElementById("login-pass").value;
-  if (!username || !password) return toast("املأ الحقول", "error");
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
+  
+  if (!username || !password) {
+    err.textContent = 'اكتب الاسم والباسورد';
+    return;
+  }
+  
   try {
-    const res = await api("/api/admin/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password })
+    const r = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
     });
-    token = res.data.token;
-    localStorage.setItem("admin_token", token);
-    me = res.data;
-    initApp();
+    
+    const data = await r.json();
+    
+    if (!data.success) {
+      err.textContent = data.message || 'فشل الدخول';
+      return;
+    }
+    
+    token = data.data.token;
+    localStorage.setItem('admin_token', token);
+    localStorage.setItem('admin_name', data.data.username);
+    showPanel();
   } catch (e) {
-    toast(e.message, "error");
+    err.textContent = 'خطأ في الاتصال';
   }
 }
 
 async function doLogout() {
-  try { await api("/api/admin/logout", { method: "POST" }); } catch {}
-  token = "";
-  localStorage.removeItem("admin_token");
+  try {
+    await fetch('/api/admin/logout', {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + token}
+    });
+  } catch {}
+  
+  token = null;
+  localStorage.removeItem('admin_token');
+  localStorage.removeItem('admin_name');
   location.reload();
 }
 
-// ═══════════════════════════════════════════════
-// Tabs
-// ═══════════════════════════════════════════════
-const TABS = [
-  { id: "students", label: "👥 الطلاب", perm: "students_view" },
-  { id: "sections", label: "🗂️ الأقسام", perm: "sections_manage" },
-  { id: "admins", label: "🛡️ الأدمن", perm: "admins_manage" },
-  { id: "config", label: "⚙️ الإعدادات", perm: "sections_manage" }
-];
-
-function renderTabs() {
-  const nav = document.getElementById("tabs");
-  const perms = me.permissions || {};
-  const visible = TABS.filter(t => perms[t.perm] || perms.all);
-  nav.innerHTML = visible.map(t =>
-    `<button data-tab="${t.id}" class="${t.id === currentTab ? "active" : ""}" onclick="switchTab('${t.id}')">${t.label}</button>`
-  ).join("");
-  if (!visible.find(t => t.id === currentTab)) {
-    currentTab = visible[0]?.id || "students";
-    switchTab(currentTab, false);
-  }
+function showPanel() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('panel').style.display = 'block';
+  document.getElementById('adminName').textContent = localStorage.getItem('admin_name') || 'أدمن';
+  loadStudents();
 }
 
-function switchTab(id, reload = true) {
-  currentTab = id;
-  document.querySelectorAll("nav.tabs button").forEach(b =>
-    b.classList.toggle("active", b.dataset.tab === id));
-  document.querySelectorAll(".panel").forEach(p =>
-    p.classList.toggle("active", p.dataset.panel === id));
-  if (reload) loadTab(id);
-}
 
-function loadTab(id) {
-  if (id === "students") loadStudents();
-  else if (id === "sections") loadSections();
-  else if (id === "admins") loadAdmins();
-  else if (id === "config") loadConfig();
-}
-
-// ═══════════════════════════════════════════════
-// Init
-// ═══════════════════════════════════════════════
-async function initApp() {
-  document.getElementById("login-screen").style.display = "none";
-  document.getElementById("app").classList.add("active");
-  document.getElementById("me-info").textContent = me.username + (me.bootstrap ? " (أساسي)" : "");
-  renderTabs();
-  try {
-    const r = await api("/api/public/code-types");
-    codeTypes = r.data || {};
-  } catch {}
-  loadTab(currentTab);
-}
-
-async function tryAutoLogin() {
-  if (!token) return;
-  try {
-    const r = await api("/api/admin/me");
-    me = r.data;
-    initApp();
-  } catch {
-    token = "";
-    localStorage.removeItem("admin_token");
-  }
-}
-
-// ═══════════════════════════════════════════════
-// Students
-// ═══════════════════════════════════════════════
+/* ═══════════════════════════════════════════════
+   الطلاب
+   ═══════════════════════════════════════════════ */
 async function loadStudents() {
-  const box = document.getElementById("students-list");
-  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
   try {
-    const r = await api("/api/admin/students");
-    const list = r.data || [];
-    if (!list.length) { box.innerHTML = '<div class="empty">لا يوجد طلاب</div>'; return; }
-    box.innerHTML = `
-      <div style="overflow-x:auto">
-      <table>
-        <thead><tr>
-          <th>الكود</th><th>الاسم</th><th>القسم</th><th>النوع</th>
-          <th>الأجهزة</th><th>الانتهاء</th><th>الحالة</th><th></th>
-        </tr></thead>
-        <tbody>
-        ${list.map(s => `
-          <tr>
-            <td><code>${s.code}</code></td>
-            <td>${escapeHtml(s.name)}</td>
-            <td>${escapeHtml(s.section || "—")}</td>
-            <td><span class="badge badge-info">${codeTypes[s.type]?.label || s.type || "—"}</span></td>
-            <td>${s.devices}/${s.maxDevices}</td>
-            <td>${daysLeft(s.expiresAt)}</td>
-            <td>${s.active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-danger">موقوف</span>'}</td>
-            <td>
-              <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick="viewStudent('${s.code}')">تفاصيل</button>
-            </td>
-          </tr>
-        `).join("")}
-        </tbody>
-      </table>
+    const data = await api('/api/admin/students');
+    students = data.data || [];
+    document.getElementById('count').textContent = students.length;
+    renderStudents();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderStudents() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const filtered = students.filter(s =>
+    !q || s.name.toLowerCase().includes(q) || s.code.includes(q)
+  );
+  
+  const container = document.getElementById('studentsList');
+  
+  if (!filtered.length) {
+    container.innerHTML = '<p class="empty">لا يوجد طلاب</p>';
+    return;
+  }
+  
+  container.innerHTML = filtered.map(s => {
+    const expired = s.expiresAt && Date.now() > s.expiresAt;
+    const inactive = s.active === false;
+    const days = daysLeft(s.expiresAt);
+    
+    let statusBadge = '';
+    if (expired) statusBadge = '<span class="badge red">منتهي</span>';
+    else if (inactive) statusBadge = '<span class="badge gray">موقوف</span>';
+    else if (days !== null) statusBadge = `<span class="badge green">${days} يوم</span>`;
+    
+    return `
+      <div class="student ${expired || inactive ? 'expired' : ''}">
+        <div class="student-info">
+          <span class="student-name">${s.name}</span>
+          <span class="code">${s.code}</span>
+          ${statusBadge}
+          <span class="badge gray">📱 ${s.devices}/${s.maxDevices}</span>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="viewStudent('${s.code}')">تفاصيل</button>
+          <button class="danger" onclick="deleteStudent('${s.code}', '${s.name.replace(/'/g, "\\'")}')">حذف</button>
+        </div>
       </div>
     `;
+  }).join('');
+}
+
+
+/* ═══════════════════════════════════════════════
+   إضافة
+   ═══════════════════════════════════════════════ */
+async function addStudent() {
+  const msg = document.getElementById('addMsg');
+  msg.className = 'msg';
+  msg.textContent = '';
+  
+  const body = {
+    name: document.getElementById('newName').value.trim(),
+    type: document.getElementById('newType').value,
+    maxDevices: Number(document.getElementById('newDevices').value)
+  };
+  
+  const customCode = document.getElementById('newCode').value.trim();
+  if (customCode) body.code = customCode;
+  
+  if (!body.name) {
+    msg.className = 'msg err';
+    msg.textContent = 'اسم الطالب مطلوب';
+    return;
+  }
+  
+  try {
+    const data = await api('/api/admin/students', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    
+    if (!data.success) {
+      msg.className = 'msg err';
+      msg.textContent = data.message;
+      return;
+    }
+    
+    msg.className = 'msg ok';
+    msg.textContent = '✅ تم! الكود: ' + data.data.code;
+    
+    document.getElementById('newName').value = '';
+    document.getElementById('newCode').value = '';
+    loadStudents();
   } catch (e) {
-    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+    msg.className = 'msg err';
+    msg.textContent = e.message;
   }
 }
 
+
+/* ═══════════════════════════════════════════════
+   حذف
+   ═══════════════════════════════════════════════ */
+async function deleteStudent(code, name) {
+  if (!confirm(`متأكد من حذف "${name}"؟`)) return;
+  
+  try {
+    const data = await api('/api/admin/students/' + code, { method: 'DELETE' });
+    if (!data.success) return alert(data.message);
+    loadStudents();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+
+/* ═══════════════════════════════════════════════
+   تفاصيل
+   ═══════════════════════════════════════════════ */
 async function viewStudent(code) {
   try {
-    const r = await api(`/api/admin/students/${code}`);
-    const s = r.data;
-    const devices = (s.deviceList || []).map(d => `
-      <tr>
-        <td>${escapeHtml(d.name || "—")}</td>
-        <td><code style="font-size:11px">${escapeHtml(d.deviceId.slice(0, 12))}…</code></td>
-        <td>${fmtDate(d.lastSeen)}</td>
-        <td><button class="btn-danger" style="padding:4px 8px;font-size:11px" onclick="kickDevice('${code}','${d.deviceId}')">طرد</button></td>
-      </tr>
-    `).join("") || '<tr><td colspan="4" class="empty">لا أجهزة</td></tr>';
-
-    const typeOptions = Object.entries(codeTypes)
-      .map(([k, v]) => `<option value="${k}" ${s.type === k ? "selected" : ""}>${v.label}</option>`)
-      .join("");
-
-    document.getElementById("student-modal-title").textContent = `الطالب: ${s.name} (${code})`;
-    document.getElementById("student-modal-body").innerHTML = `
-      <div class="row">
-        <div class="field"><label>الاسم</label><input id="ed-name" value="${escapeHtml(s.name)}"></div>
-        <div class="field"><label>القسم</label><input id="ed-section" value="${escapeHtml(s.section || "")}" placeholder="scientific_sciences"></div>
-      </div>
-      <div class="row">
-        <div class="field"><label>عدد الأجهزة</label><input id="ed-maxdev" type="number" min="1" max="10" value="${s.maxDevices || 1}"></div>
-        <div class="field"><label>النوع</label><select id="ed-type">${typeOptions}</select></div>
-      </div>
-      <div class="row">
-        <div class="field"><label>الحالة</label><select id="ed-active"><option value="true" ${s.active !== false ? "selected" : ""}>نشط</option><option value="false" ${s.active === false ? "selected" : ""}>موقوف</option></select></div>
-        <div class="field"><label>تجديد</label><label style="display:flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="ed-renew" style="width:auto"> عند الحفظ</label></div>
-      </div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">تاريخ الانتهاء: ${fmtDate(s.expiresAt)}</p>
-      <h4 style="margin:16px 0 8px;font-size:14px">📱 الأجهزة (${s.deviceList?.length || 0})</h4>
-      <table><thead><tr><th>الاسم</th><th>ID</th><th>آخر ظهور</th><th></th></tr></thead><tbody>${devices}</tbody></table>
-      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-warn" onclick="renewStudent('${code}', 30)">+30 يوم</button>
-        <button class="btn-warn" onclick="renewStudent('${code}', 180)">+180 يوم</button>
-        <button class="btn-danger" onclick="deleteStudent('${code}')">🗑 حذف الطالب</button>
-      </div>
-    `;
-    document.getElementById("student-modal-save").onclick = () => saveStudent(code);
-    openModal("student-modal");
+    const data = await api('/api/admin/students/' + code);
+    if (!data.success) return alert(data.message);
+    showModal(code, data.data);
   } catch (e) {
-    toast(e.message, "error");
+    alert(e.message);
   }
 }
 
-async function saveStudent(code) {
-  const body = {
-    name: document.getElementById("ed-name").value.trim(),
-    section: document.getElementById("ed-section").value.trim(),
-    maxDevices: Number(document.getElementById("ed-maxdev").value),
-    type: document.getElementById("ed-type").value,
-    active: document.getElementById("ed-active").value === "true",
-    renew: document.getElementById("ed-renew").checked
-  };
-  try {
-    await api(`/api/admin/students/${code}`, { method: "PATCH", body: JSON.stringify(body) });
-    toast("تم الحفظ ✓");
-    closeModal("student-modal");
-    loadStudents();
-  } catch (e) { toast(e.message, "error"); }
+function showModal(code, s) {
+  const devices = s.deviceList || [];
+  const days = daysLeft(s.expiresAt);
+  
+  document.getElementById('modalContent').innerHTML = `
+    <h2>${s.name}</h2>
+    <p>الكود: <span class="code">${code}</span></p>
+    <p>ينتهي: ${formatDate(s.expiresAt)} ${days !== null ? `(${days} يوم)` : ''}</p>
+    <p>الأجهزة: ${devices.length}/${s.maxDevices || 1}</p>
+    
+    <hr>
+    
+    <h3>📱 الأجهزة</h3>
+    ${devices.length ? devices.map(d => `
+      <div class="device">
+        <div>
+          <strong>${d.name || 'جهاز'}</strong><br>
+          <small>${d.deviceId}</small><br>
+          <small>آخر ظهور: ${formatDate(d.lastSeen)}</small>
+        </div>
+        <button class="danger" onclick="kickDevice('${code}', '${d.deviceId}')">طرد</button>
+      </div>
+    `).join('') : '<p class="empty">لا توجد أجهزة</p>'}
+    
+    <hr>
+    
+    <h3>⏱️ تمديد</h3>
+    <button onclick="extend('${code}', 30)">+30 يوم</button>
+    <button onclick="extend('${code}', 180)">+180 يوم</button>
+    <button onclick="extend('${code}', 365)">+365 يوم</button>
+    
+    <hr>
+    
+    <button class="ghost" onclick="closeModal()" style="width: 100%;">إغلاق</button>
+  `;
+  
+  document.getElementById('modal').classList.add('show');
 }
 
-async function renewStudent(code, days) {
-  try {
-    await api(`/api/admin/students/${code}`, {
-      method: "PATCH",
-      body: JSON.stringify({ extendMs: days * 86400000 })
-    });
-    toast(`تم تمديد ${days} يوم ✓`);
-    viewStudent(code);
-  } catch (e) { toast(e.message, "error"); }
-}
-
-async function deleteStudent(code) {
-  if (!confirm(`حذف الطالب ${code} نهائياً؟`)) return;
-  try {
-    await api(`/api/admin/students/${code}`, { method: "DELETE" });
-    toast("تم الحذف ✓");
-    closeModal("student-modal");
-    loadStudents();
-  } catch (e) { toast(e.message, "error"); }
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
 }
 
 async function kickDevice(code, deviceId) {
-  if (!confirm("طرد هذا الجهاز؟")) return;
+  if (!confirm('طرد هذا الجهاز؟')) return;
+  
   try {
-    await api(`/api/admin/students/${code}/devices/${deviceId}`, { method: "DELETE" });
-    toast("تم طرد الجهاز ✓");
-    viewStudent(code);
-  } catch (e) { toast(e.message, "error"); }
-}
-
-function openStudentModal() {
-  const typeOptions = Object.entries(codeTypes).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
-  document.getElementById("student-modal-title").textContent = "إضافة طالب جديد";
-  document.getElementById("student-modal-body").innerHTML = `
-    <div class="field"><label>الاسم *</label><input id="new-name" placeholder="اسم الطالب"></div>
-    <div class="row">
-      <div class="field"><label>القسم</label><input id="new-section" placeholder="scientific_sciences"></div>
-      <div class="field"><label>النوع</label><select id="new-type">${typeOptions}</select></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>عدد الأجهزة</label><input id="new-maxdev" type="number" min="1" max="10" value="1"></div>
-      <div class="field"><label>كود (اختياري)</label><input id="new-code" placeholder="7 أرقام" maxlength="7"></div>
-    </div>
-  `;
-  document.getElementById("student-modal-save").onclick = async () => {
-    const body = {
-      name: document.getElementById("new-name").value.trim(),
-      section: document.getElementById("new-section").value.trim(),
-      type: document.getElementById("new-type").value,
-      maxDevices: Number(document.getElementById("new-maxdev").value),
-      code: document.getElementById("new-code").value.trim()
-    };
-    if (!body.name) return toast("الاسم مطلوب", "error");
-    try {
-      const r = await api("/api/admin/students", { method: "POST", body: JSON.stringify(body) });
-      toast(`تم الإنشاء ✓ الكود: ${r.data.code}`);
-      closeModal("student-modal");
+    const data = await api(`/api/admin/students/${code}/devices/${deviceId}`, {
+      method: 'DELETE'
+    });
+    
+    alert(data.success ? 'تم الطرد' : data.message);
+    if (data.success) {
+      viewStudent(code);
       loadStudents();
-    } catch (e) { toast(e.message, "error"); }
-  };
-  openModal("student-modal");
-}
-
-// ═══════════════════════════════════════════════
-// Sections
-// ═══════════════════════════════════════════════
-async function loadSections() {
-  const box = document.getElementById("sections-list");
-  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
-  try {
-    const r = await api("/api/admin/sections");
-    const list = r.data || [];
-    if (!list.length) { box.innerHTML = '<div class="empty">لا أقسام</div>'; return; }
-    box.innerHTML = `
-      <table>
-        <thead><tr><th>ID</th><th>الاسم</th><th>السنة</th><th>المواد</th><th></th></tr></thead>
-        <tbody>
-        ${list.map(s => `
-          <tr>
-            <td><code>${escapeHtml(s.id)}</code></td>
-            <td>${escapeHtml(s.name)}</td>
-            <td>${s.yearId || "—"}</td>
-            <td>${(s.subjectIds || []).join(", ") || "—"}</td>
-            <td>
-              <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick='openSectionModal(${JSON.stringify(s).replace(/'/g, "&apos;")})'>تعديل</button>
-              <button class="btn-danger" style="padding:6px 10px;font-size:12px" onclick="deleteSection('${s.id}')">حذف</button>
-            </td>
-          </tr>
-        `).join("")}
-        </tbody>
-      </table>
-    `;
+    }
   } catch (e) {
-    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+    alert(e.message);
   }
 }
 
-function openSectionModal(data = null) {
-  const s = data || { id: "", name: "", yearId: 4, subjectIds: [] };
-  document.getElementById("section-modal-title").textContent = data ? "تعديل قسم" : "إضافة قسم";
-  document.getElementById("section-modal-body").innerHTML = `
-    <div class="field"><label>ID (لاتيني) *</label><input id="sec-id" value="${escapeHtml(s.id)}" ${data ? "disabled" : ""} placeholder="scientific_sciences"></div>
-    <div class="field"><label>الاسم *</label><input id="sec-name" value="${escapeHtml(s.name)}"></div>
-    <div class="row">
-      <div class="field"><label>السنة (yearId)</label><input id="sec-year" type="number" value="${s.yearId || 4}"></div>
-    </div>
-    <div class="field"><label>IDs المواد (فاصلة بينهم)</label><input id="sec-subs" value="${(s.subjectIds || []).join(",")}" placeholder="57,58,59"></div>
-  `;
-  document.getElementById("section-modal-save").onclick = async () => {
-    const id = document.getElementById("sec-id").value.trim();
-    const body = {
-      name: document.getElementById("sec-name").value.trim(),
-      yearId: Number(document.getElementById("sec-year").value),
-      subjectIds: document.getElementById("sec-subs").value.split(",").map(x => Number(x.trim())).filter(Boolean)
-    };
-    if (!id || !body.name) return toast("املأ الحقول", "error");
-    try {
-      await api(`/api/admin/sections/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) });
-      toast("تم الحفظ ✓");
-      closeModal("section-modal");
-      loadSections();
-    } catch (e) { toast(e.message, "error"); }
-  };
-  openModal("section-modal");
-}
-
-async function deleteSection(id) {
-  if (!confirm(`حذف القسم ${id}؟`)) return;
+async function extend(code, days) {
   try {
-    await api(`/api/admin/sections/${encodeURIComponent(id)}`, { method: "DELETE" });
-    toast("تم الحذف ✓");
-    loadSections();
-  } catch (e) { toast(e.message, "error"); }
-}
-
-// ═══════════════════════════════════════════════
-// Admins
-// ═══════════════════════════════════════════════
-const PERM_LABELS = {
-  students_view: "عرض الطلاب",
-  students_create: "إضافة طلاب",
-  students_edit: "تعديل طلاب",
-  students_delete: "حذف طلاب",
-  devices_kick: "طرد أجهزة",
-  sections_manage: "إدارة الأقسام",
-  admins_manage: "إدارة الأدمن"
-};
-
-async function loadAdmins() {
-  const box = document.getElementById("admins-list");
-  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
-  try {
-    const r = await api("/api/admin/admins");
-    const list = r.data || [];
-    box.innerHTML = `
-      <table>
-        <thead><tr><th>اليوزر</th><th>الصلاحيات</th><th>الحالة</th><th></th></tr></thead>
-        <tbody>
-        ${list.map(a => `
-          <tr>
-            <td>${escapeHtml(a.username)} ${a.bootstrap ? '<span class="badge badge-warn">أساسي</span>' : ""}</td>
-            <td>${Object.entries(a.permissions || {}).filter(([, v]) => v).map(([k]) => PERM_LABELS[k] || k).join(" · ") || "—"}</td>
-            <td>${a.active ? '<span class="badge badge-success">نشط</span>' : '<span class="badge badge-danger">موقوف</span>'}</td>
-            <td>
-              ${a.bootstrap ? "" : `
-                <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick='openAdminModal(${JSON.stringify(a).replace(/'/g, "&apos;")})'>تعديل</button>
-                <button class="btn-danger" style="padding:6px 10px;font-size:12px" onclick="deleteAdmin('${a.id}')">حذف</button>
-              `}
-            </td>
-          </tr>
-        `).join("")}
-        </tbody>
-      </table>
-    `;
+    const data = await api('/api/admin/students/' + code, {
+      method: 'PATCH',
+      body: JSON.stringify({extendMs: days * 86400000})
+    });
+    
+    alert(data.success ? `تم تمديد ${days} يوم` : data.message);
+    if (data.success) {
+      viewStudent(code);
+      loadStudents();
+    }
   } catch (e) {
-    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+    alert(e.message);
   }
 }
 
-function openAdminModal(data = null) {
-  const a = data || { username: "", permissions: {}, active: true };
-  document.getElementById("admin-modal-title").textContent = data ? "تعديل أدمن" : "إضافة أدمن";
-  document.getElementById("admin-modal-body").innerHTML = `
-    <div class="field"><label>اسم المستخدم *</label><input id="adm-user" value="${escapeHtml(a.username)}" ${data ? "disabled" : ""}></div>
-    <div class="field"><label>${data ? "كلمة مرور جديدة (اتركها فاضية لعدم التغيير)" : "كلمة المرور *"}</label><input id="adm-pass" type="password" placeholder="••••••••"></div>
-    <div class="field">
-      <label>الصلاحيات</label>
-      <div class="perms">
-        ${Object.entries(PERM_LABELS).map(([k, v]) =>
-          `<label><input type="checkbox" data-perm="${k}" ${a.permissions?.[k] ? "checked" : ""}> ${v}</label>`
-        ).join("")}
-      </div>
-    </div>
-    ${data ? `<div class="field"><label>الحالة</label><select id="adm-active"><option value="true" ${a.active ? "selected" : ""}>نشط</option><option value="false" ${!a.active ? "selected" : ""}>موقوف</option></select></div>` : ""}
-  `;
-  document.getElementById("admin-modal-save").onclick = async () => {
-    const perms = {};
-    document.querySelectorAll("[data-perm]").forEach(cb => perms[cb.dataset.perm] = cb.checked);
+
+/* ═══════════════════════════════════════════════
+   Auto-login عند فتح الصفحة
+   ═══════════════════════════════════════════════ */
+(async function init() {
+  document.getElementById('loginPass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+  
+  if (token) {
     try {
-      if (data) {
-        const body = { permissions: perms };
-        if (data.id) body.active = document.getElementById("adm-active").value === "true";
-        const pass = document.getElementById("adm-pass").value;
-        if (pass) body.password = pass;
-        await api(`/api/admin/admins/${data.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      const data = await api('/api/admin/me');
+      if (data.success) {
+        showPanel();
       } else {
-        const body = {
-          username: document.getElementById("adm-user").value.trim(),
-          password: document.getElementById("adm-pass").value,
-          permissions: perms
-        };
-        await api("/api/admin/admins", { method: "POST", body: JSON.stringify(body) });
+        localStorage.removeItem('admin_token');
+        token = null;
       }
-      toast("تم الحفظ ✓");
-      closeModal("admin-modal");
-      loadAdmins();
-    } catch (e) { toast(e.message, "error"); }
-  };
-  openModal("admin-modal");
-}
-
-async function deleteAdmin(id) {
-  if (!confirm("حذف هذا الأدمن؟")) return;
-  try {
-    await api(`/api/admin/admins/${id}`, { method: "DELETE" });
-    toast("تم الحذف ✓");
-    loadAdmins();
-  } catch (e) { toast(e.message, "error"); }
-}
-
-// ═══════════════════════════════════════════════
-// Config
-// ═══════════════════════════════════════════════
-async function loadConfig() {
-  const box = document.getElementById("config-info");
-  box.innerHTML = '<div class="loading">جاري التحميل…</div>';
-  try {
-    const r = await api("/api/admin/config");
-    const c = r.data;
-    box.innerHTML = `
-      <p style="margin-bottom:12px"><strong>توكن Coursatk:</strong> ${c.coursatkTokenSet ? `<code>${c.coursatkTokenMasked}</code>` : '<span class="badge badge-danger">غير مضبوط</span>'}</p>
-      <p style="margin-bottom:12px"><strong>السنة الافتراضية:</strong> ${c.defaultYearId}</p>
-      <p style="margin-bottom:12px"><strong>أنواع الأكواد:</strong> ${Object.values(c.codeTypes || {}).map(t => t.label).join(" · ")}</p>
-    `;
-    const perms = me.permissions || {};
-    document.getElementById("token-card").style.display = (perms.admins_manage || perms.all) ? "block" : "none";
-  } catch (e) {
-    box.innerHTML = `<div class="empty">خطأ: ${escapeHtml(e.message)}</div>`;
+    } catch {
+      localStorage.removeItem('admin_token');
+      token = null;
+    }
   }
-}
-
-async function saveToken() {
-  const tok = document.getElementById("new-token").value.trim();
-  if (tok.length < 20) return toast("توكن غير صالح", "error");
-  try {
-    await api("/api/admin/config/token", { method: "PUT", body: JSON.stringify({ token: tok }) });
-    toast("تم تحديث التوكن ✓");
-    document.getElementById("new-token").value = "";
-    loadConfig();
-  } catch (e) { toast(e.message, "error"); }
-}
-
-// ═══════════════════════════════════════════════
-// Boot
-// ═══════════════════════════════════════════════
-document.getElementById("login-pass").addEventListener("keydown", e => {
-  if (e.key === "Enter") doLogin();
-});
-tryAutoLogin();
+})();
 </script>
+
 </body>
-  </html>
+</html>
