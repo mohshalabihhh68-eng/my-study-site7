@@ -1,6 +1,6 @@
 /**
  * Coursatk API — Open Proxy with Stream Decrypt
- * (Full Server with SPA Routing)
+ * (Full Server + Safe Fallback for testing)
  */
 import express from "express";
 import cors from "cors";
@@ -224,7 +224,6 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 const globalLimiter = rateLimit({ max: 150, windowMs: 60_000, scope: "global" });
 app.use((req, res, next) => req.path.startsWith("/api/stream/") ? next() : globalLimiter(req, res, next));
 
-// فحص الحالة
 app.get("/health", (_req, res) => {
   res.json({ ok: true, cryptoReady: Boolean(decryptPlaybackKeyFn) });
 });
@@ -409,17 +408,25 @@ app.get("/api/stream/segment/:sessionId/:encoded", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fallback & SPA Routing (عشان يفتح index.html أوتوماتيك)
+// Fallback & Safe Routing
 // ═══════════════════════════════════════════════════════════
-
-// لو دخلت على الرابط الأساسي / أو أي مسار HTML مش معروف
 app.get("*", (req, res) => {
   // لو الطلب على مسار API، رجع 404
   if (req.path.startsWith("/api/")) {
-    return res.status(404).json({ success: false, message: "المسار غير موجود" });
+    return res.status(404).json({ success: false, message: "المسار غير موجود (API)" });
   }
-  // غير كده، افتح index.html
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  
+  // بنحاول نفتح index.html
+  res.sendFile(path.join(__dirname, "public", "index.html"), (err) => {
+    if (err) {
+      // لو مفيش ملف index.html، بنبعت رسالة تأكيد عشان تعرف إن السيرفر شغال
+      res.json({ 
+        success: true, 
+        message: "السيرفر شغال تمام! بس ملف index.html مش مرفوع في فولدر public عشان يفتح الصفحة الرئيسية.",
+        cryptoReady: Boolean(decryptPlaybackKeyFn)
+      });
+    }
+  });
 });
 
 setInterval(() => {
