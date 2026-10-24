@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ar-EG" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ملفي الشخصي | ثانوية Club</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080d18;--panel:#111a2b;--line:rgba(148,163,184,.15);--text:#f2f6ff;--muted:#94a3bd;--blue:#3b82f6;--green:#34d399;--red:#fb7185}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;color:var(--text);font-family:Cairo,sans-serif;background:var(--bg)}
+.top{position:sticky;top:0;z-index:5;border-bottom:1px solid var(--line);background:#080d18d9;backdrop-filter:blur(18px)}
+.topin{max-width:1050px;margin:auto;padding:12px 18px;display:flex;align-items:center;gap:12px}
+.logo{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#60a5fa,#1d4ed8);font-size:20px}
+.brand{font-weight:900}
+.btn{border:1px solid var(--line);border-radius:13px;padding:9px 14px;background:#ffffff08;color:var(--text);font-size:12px;font-weight:800;cursor:pointer}
+.wrap{max-width:1050px;margin:auto;padding:26px 18px 60px}
+.hero{border:1px solid var(--line);border-radius:27px;padding:25px;background:linear-gradient(115deg,#142b4b,#111a2b 55%,#10243b);margin-bottom:24px;display:flex;align-items:center;gap:18px}
+.avatar{width:82px;height:82px;display:grid;place-items:center;border-radius:25px;background:linear-gradient(140deg,#60a5fa,#1d4ed8);font-size:32px;font-weight:900}
+.name{font-size:23px;font-weight:900}
+.details{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.detail{border:1px solid var(--line);border-radius:17px;padding:15px;background:#111a2bc9}
+.label{font-size:11px;color:var(--muted);font-weight:700}
+.value{font-size:14px;font-weight:800;margin-top:3px}
+</style>
+</head>
+<body>
+  <header class="top"><div class="topin">
+    <div class="logo">🎓</div>
+    <div class="brand">ثانوية Club<small>ملف الطالب</small></div>
+    <div style="flex:1"></div>
+    <button class="btn" id="backBtn">← المواد</button>
+  </div></header>
+
+  <main class="wrap" id="main">
+    <div style="text-align:center;padding:50px;color:var(--muted)">جاري تحميل بياناتك...</div>
+  </main>
+
+<script>
+(function(){
+'use strict';
+
+const API_BASE = '';
+const TOKEN_KEY = 'cstk_tok';
+const token = localStorage.getItem(TOKEN_KEY);
+
+if (!token) { window.location.replace('index.html'); return; }
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s || '');
+
+async function loadProfile() {
+  try {
+    const res = await fetch(API_BASE + '/api/profile', {
+      headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+    });
+    const data = await res.json();
+    
+    if (!res.ok || data.success === false) throw new Error(data.message || 'فشل جلب البيانات');
+    
+    const me = data.data;
+    
+    let html = `
+      <div class="hero">
+        <div class="avatar">${esc(me.name?.charAt(0) || 'ط')}</div>
+        <div>
+          <div class="name">${esc(me.name || 'طالب')}</div>
+          <div style="color:var(--muted);font-size:12px;margin-top:5px">${esc(me.section || '')}</div>
+        </div>
+      </div>
+      <div class="details">
+        <div class="detail"><div class="label">الاسم</div><div class="value">${esc(me.name)}</div></div>
+        <div class="detail"><div class="label">كود الاشتراك</div><div class="value">${esc(me.code || '—')}</div></div>
+        <div class="detail"><div class="label">حالة الحساب</div><div class="value" style="color:var(--green)">نشط</div></div>
+        <div class="detail"><div class="label">تاريخ الانتهاء</div><div class="value">${me.expiresAt ? new Date(me.expiresAt).toLocaleDateString('ar-EG') : '—'}</div></div>
+      </div>
+    `;
+    
+    $('main').innerHTML = html;
+  } catch (e) {
+    $('main').innerHTML = `<div style="text-align:center;color:var(--red)">خطأ: ${e.message}</div>`;
+  }
+}
+
+$('backBtn').onclick = () => window.location.href = 'subjects.html';
+loadProfile();
+
+})();
+</script>
+</body>
+</html>
