@@ -96,7 +96,7 @@ button{font:inherit;cursor:pointer; outline: none;}
 <script>
 (function(){
 'use strict';
-const API_BASE = '', TOKEN_KEY = 'cstk_tok', token = localStorage.getItem(TOKEN_KEY);
+const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(TOKEN_KEY);
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
@@ -144,7 +144,7 @@ async function load() {
   } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
 }
 
-async function loadProfile() { try { const me = await api('/api/profile'); $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); } catch (e) {} }
+async function loadProfile() { try { const me = await api('/api/auth/me'); $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); } catch (e) {} }
 $('brand-home').onclick = () => window.location.href = 'index.html';
 load(); loadProfile();
 })();
