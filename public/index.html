@@ -1,348 +1,74 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>منصتي التعليمية</title>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13"></script>
-<style>
-  * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-  body { margin: 0; background: #0f172a; color: #e2e8f0; padding: 16px; }
-  h1 { color: #38bdf8; margin: 0 0 10px; }
-  h2 { color: #38bdf8; font-size: 18px; margin: 15px 0 10px; }
-  input, button {
-    padding: 12px; border-radius: 8px;
-    border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
-    font-size: 15px;
-  }
-  button { background: #0ea5e9; cursor: pointer; border: none; padding: 12px 20px; }
-  button:hover { background: #0284c7; }
-  button.danger { background: #ef4444; }
-  button.ghost { background: transparent; border: 1px solid #334155; }
-  .card {
-    background: #1e293b; border: 1px solid #334155;
-    border-radius: 12px; padding: 20px; margin-bottom: 16px;
-  }
-  .login { max-width: 400px; margin: 60px auto; text-align: center; }
-  .login input { width: 100%; text-align: center; font-family: monospace; font-size: 28px; letter-spacing: 8px; margin: 15px 0; }
-  .login button { width: 100%; }
-  .error { color: #ef4444; margin-top: 10px; min-height: 20px; font-size: 14px; }
-  
-  .item {
-    background: #0f172a; border: 1px solid #334155;
-    border-radius: 10px; padding: 14px; margin: 8px 0;
-    display: flex; justify-content: space-between; align-items: center;
-    gap: 10px; cursor: pointer;
-    transition: border-color 0.15s;
-  }
-  .item:hover { border-color: #0ea5e9; }
-  .item strong { display: block; color: #e2e8f0; margin-bottom: 4px; }
-  .item small { color: #64748b; font-size: 12px; }
-  
-  .breadcrumb {
-    display: flex; gap: 8px; flex-wrap: wrap;
-    margin-bottom: 15px; font-size: 13px;
-  }
-  .breadcrumb span { color: #64748b; }
-  .breadcrumb button { padding: 6px 12px; font-size: 13px; background: #475569; }
-  
-  .video-wrap {
-    background: #000; border-radius: 12px; overflow: hidden;
-    margin-bottom: 16px;
-  }
-  video { width: 100%; max-height: 60vh; display: block; background: #000; }
-  
-  .header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 20px; flex-wrap: wrap; gap: 10px;
-  }
-  .header-info { display: flex; flex-direction: column; gap: 4px; }
-  .header-info small { color: #64748b; }
-  
-  .empty { text-align: center; padding: 30px; color: #64748b; }
-  .loading { text-align: center; padding: 30px; color: #38bdf8; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #0ea5e9; }
-  .badge.red { background: #ef4444; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>منصة كورساتك - المواد</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+    header { text-align: center; margin-bottom: 40px; padding: 20px; background: #1e293b; border-radius: 12px; }
+    header h1 { color: #38bdf8; font-size: 28px; }
+    header p { color: #94a3b8; margin-top: 8px; }
+    #loading, #error { text-align: center; padding: 40px; font-size: 18px; }
+    #error { color: #f87171; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+    .card { background: #1e293b; border-radius: 12px; overflow: hidden; cursor: pointer; transition: all 0.3s; border: 1px solid #334155; }
+    .card:hover { transform: translateY(-5px); border-color: #38bdf8; box-shadow: 0 10px 25px rgba(56,189,248,0.2); }
+    .card img { width: 100%; height: 140px; object-fit: cover; background: #334155; display: block; }
+    .card .info { padding: 16px; }
+    .card h3 { font-size: 16px; color: #e2e8f0; }
+    .card .id { font-size: 12px; color: #64748b; margin-top: 4px; }
+  </style>
 </head>
 <body>
+  <header>
+    <h1>📚 منصة كورساتك</h1>
+    <p>اختر المادة لعرض المدرسين</p>
+  </header>
 
-<div id="loginScreen" class="card login">
-  <h1>🎓 منصتي التعليمية</h1>
-  <p style="color: #64748b; font-size: 14px;">أدخل كود الطالب المكوّن من 7 أرقام</p>
-  
-  <input id="codeInput" maxlength="7" inputmode="numeric" placeholder="1234567" autofocus>
-  <button onclick="doLogin()">دخول</button>
-  
-  <p id="loginErr" class="error"></p>
-</div>
+  <div id="loading">⏳ جاري تحميل المواد...</div>
+  <div id="error" style="display:none"></div>
+  <div class="grid" id="grid"></div>
 
-<div id="appScreen" style="display: none;">
-  <div class="header">
-    <div class="header-info">
-      <h1 style="margin: 0;">أهلاً <span id="studentName"></span></h1>
-      <small id="expiresInfo"></small>
-    </div>
-    <button class="ghost" onclick="doLogout()">خروج</button>
-  </div>
-  <div id="breadcrumb" class="breadcrumb"></div>
-  <div id="content"></div>
-</div>
+  <script>
+    const API = ""; // نفس السيرفر
+    const YEAR_ID = 4;
 
-<script>
-let token = localStorage.getItem('student_token');
-let deviceId = localStorage.getItem('device_id');
-let currentHls = null;
-let stack = [];
+    async function loadSubjects() {
+      try {
+        const res = await fetch(`${API}/api/subjects/${YEAR_ID}`);
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.data)) throw new Error("لا توجد مواد");
 
-if (!deviceId) {
-  deviceId = crypto.randomUUID();
-  localStorage.setItem('device_id', deviceId);
-}
+        document.getElementById("loading").style.display = "none";
+        const grid = document.getElementById("grid");
 
-async function api(path, options = {}) {
-  const r = await fetch(path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + token,
-      ...(options.headers || {})
+        data.data.forEach(sub => {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <img src="${sub.image_url || 'https://via.placeholder.com/200x140/334155/94a3b8?text=' + encodeURIComponent(sub.name)}" 
+                 alt="${sub.name}" onerror="this.src='https://via.placeholder.com/200x140/334155/94a3b8?text=No+Image'">
+            <div class="info">
+              <h3>${sub.name}</h3>
+              <div class="id">ID: ${sub.id}</div>
+            </div>
+          `;
+          card.onclick = () => {
+            window.location.href = `subjects.html?id=${sub.id}&name=${encodeURIComponent(sub.name)}`;
+          };
+          grid.appendChild(card);
+        });
+      } catch (e) {
+        document.getElementById("loading").style.display = "none";
+        const err = document.getElementById("error");
+        err.style.display = "block";
+        err.textContent = "❌ خطأ: " + e.message;
+      }
     }
-  });
-  
-  if (r.status === 401 || r.status === 403) {
-    const data = await r.json().catch(() => ({}));
-    if (data.message && data.message.includes('جهاز')) alert(data.message);
-    doLogout();
-    throw new Error(data.message || 'انتهت الجلسة');
-  }
-  return r.json();
-}
 
-function formatDate(ts) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-function daysLeft(ts) {
-  if (!ts) return null;
-  return Math.ceil((ts - Date.now()) / 86400000);
-}
-
-async function doLogin() {
-  const code = document.getElementById('codeInput').value.trim();
-  const err = document.getElementById('loginErr');
-  err.textContent = '';
-  
-  if (!/^\d{7}$/.test(code)) { err.textContent = 'الكود لازم 7 أرقام'; return; }
-  
-  try {
-    const r = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ code, deviceId, deviceName: navigator.userAgent.slice(0, 60) })
-    });
-    
-    const data = await r.json();
-    if (!data.success) { err.textContent = data.message || 'كود غير صحيح'; return; }
-    
-    token = data.data.token;
-    localStorage.setItem('student_token', token);
-    localStorage.setItem('cstk_tok', token); // تخزين توكن الكورسات
-    showApp(data.data.student);
-  } catch (e) { err.textContent = 'خطأ في الاتصال'; }
-}
-
-async function doLogout() {
-  try { await fetch('/api/auth/logout', { method: 'POST', headers: {'Authorization': 'Bearer ' + token} }); } catch {}
-  token = null;
-  localStorage.removeItem('student_token');
-  localStorage.removeItem('cstk_tok');
-  location.reload();
-}
-
-function showApp(student) {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('appScreen').style.display = 'block';
-  document.getElementById('studentName').textContent = student.name;
-  
-  const days = daysLeft(student.expiresAt);
-  const expired = student.expiresAt && Date.now() > student.expiresAt;
-  const info = document.getElementById('expiresInfo');
-  
-  if (expired) info.innerHTML = '<span class="badge red">انتهى الاشتراك</span>';
-  else if (days !== null) info.innerHTML = `ينتهي: ${formatDate(student.expiresAt)} <span class="badge">${days} يوم</span>`;
-  
-  loadSubjects();
-}
-
-function updateBreadcrumb() {
-  const bc = document.getElementById('breadcrumb');
-  if (stack.length === 0) { bc.innerHTML = ''; return; }
-  bc.innerHTML = stack.map((s, i) => `<button onclick="goBack(${i})">${s.label}</button>`).join('<span>›</span>');
-}
-
-function goBack(index) {
-  if (currentHls) { currentHls.destroy(); currentHls = null; }
-  stack = stack.slice(0, index + 1);
-  const target = stack[stack.length - 1];
-  updateBreadcrumb();
-  target.render();
-}
-
-function showLoading() { document.getElementById('content').innerHTML = '<div class="loading">⏳ جاري التحميل...</div>'; }
-function showEmpty(msg) { document.getElementById('content').innerHTML = `<div class="empty">${msg}</div>`; }
-function showError(msg) { document.getElementById('content').innerHTML = `<div class="empty" style="color:#ef4444">❌ ${msg}</div>`; }
-
-async function loadSubjects() {
-  if (currentHls) { currentHls.destroy(); currentHls = null; }
-  showLoading();
-  
-  if (stack.length && stack[0].type !== 'subjects') {
-    stack = [{ label: 'المواد', type: 'subjects', render: loadSubjects }];
-  } else if (!stack.length) {
-    stack = [{ label: 'المواد', type: 'subjects', render: loadSubjects }];
-  }
-  updateBreadcrumb();
-  
-  try {
-    // السيرفر هيروح يجيب المواد من كورساتك باستخدام توكنك
-    const data = await api('/api/subjects/4'); 
-    const subjects = data.data || [];
-    
-    if (!subjects.length) return showEmpty('لا توجد مواد (تأكد من حسابك أو من رقم الصف)');
-    
-    document.getElementById('content').innerHTML = subjects.map(s => `
-      <div class="item" onclick="openSubject(${s.id}, '${escapeHtml(s.name)}')">
-        <div>
-          <strong>${escapeHtml(s.name)}</strong>
-          <small>${s.teachers_count || ''} مدرس</small>
-        </div>
-        <span style="color:#64748b">›</span>
-      </div>
-    `).join('');
-  } catch (e) { showError(e.message); }
-}
-
-// ... (باقي الدوال زي openSubject, openTeacher, openChapter, openLecture)
-// ... (كود الفيديو زي ما هو، بس بيتأكد إنه بيستخدم /api/play/:id اللي ظبطناه)
-
-async function openSubject(subjectId, subjectName) {
-  showLoading();
-  stack.push({ label: subjectName, type: 'subject', render: () => openSubject(subjectId, subjectName) });
-  updateBreadcrumb();
-  try {
-    const data = await api(`/api/subjects/${subjectId}/teachers`);
-    const teachers = data.data?.teachers || data.data || [];
-    if (!teachers.length) return showEmpty('لا يوجد مدرسين');
-    document.getElementById('content').innerHTML = teachers.map(t => `
-      <div class="item" onclick="openTeacher(${t.id}, '${escapeHtml(t.name)}')">
-        <div>
-          <strong>${escapeHtml(t.name)}</strong>
-          <small>${t.chapters_count || ''} فصل</small>
-        </div>
-        <span style="color:#64748b">›</span>
-      </div>
-    `).join('');
-  } catch (e) { showError(e.message); }
-}
-
-async function openTeacher(teacherId, teacherName) {
-  showLoading();
-  stack.push({ label: teacherName, type: 'teacher', render: () => openTeacher(teacherId, teacherName) });
-  updateBreadcrumb();
-  try {
-    const data = await api(`/api/teachers/${teacherId}/chapters`);
-    const chapters = data.data || [];
-    if (!chapters.length) return showEmpty('لا توجد فصول');
-    document.getElementById('content').innerHTML = chapters.map(c => `
-      <div class="item" onclick="openChapter(${c.id}, '${escapeHtml(c.title || c.name)}')">
-        <div>
-          <strong>${escapeHtml(c.title || c.name)}</strong>
-          <small>${c.lectures_count || ''} محاضرة</small>
-        </div>
-        <span style="color:#64748b">›</span>
-      </div>
-    `).join('');
-  } catch (e) { showError(e.message); }
-}
-
-async function openChapter(chapterId, chapterName) {
-  showLoading();
-  stack.push({ label: chapterName, type: 'chapter', render: () => openChapter(chapterId, chapterName) });
-  updateBreadcrumb();
-  try {
-    const data = await api(`/api/chapters/${chapterId}/lectures`);
-    const lectures = data.data || [];
-    if (!lectures.length) return showEmpty('لا توجد محاضرات');
-    document.getElementById('content').innerHTML = lectures.map(l => `
-      <div class="item" onclick="openLecture(${l.id}, '${escapeHtml(l.title || l.name)}')">
-        <div>
-          <strong>${escapeHtml(l.title || l.name)}</strong>
-          <small>${l.duration ? l.duration + ' د' : ''}</small>
-        </div>
-        <span style="color:#0ea5e9;font-size:20px">▶</span>
-      </div>
-    `).join('');
-  } catch (e) { showError(e.message); }
-}
-
-async function openLecture(lectureId, lectureName) {
-  if (currentHls) { currentHls.destroy(); currentHls = null; }
-  showLoading();
-  stack.push({ label: lectureName, type: 'lecture', render: () => openLecture(lectureId, lectureName) });
-  updateBreadcrumb();
-  
-  try {
-    // بنطلب من السيرفر يجيب رابط التشغيل (هو هيفك التشفير)
-    const data = await api(`/api/play/${lectureId}`, { method: 'POST' });
-    if (!data.success) return showError(data.message || 'فشل التشغيل');
-    
-    const manifestUrl = data.data.manifest_url;
-    
-    document.getElementById('content').innerHTML = `
-      <div class="video-wrap">
-        <video id="player" controls autoplay playsinline></video>
-      </div>
-      <h2>${escapeHtml(lectureName)}</h2>
-    `;
-    
-    const video = document.getElementById('player');
-    
-    if (Hls.isSupported()) {
-      currentHls = new Hls({
-        xhrSetup: (xhr) => { xhr.setRequestHeader('Authorization', 'Bearer ' + token); }
-      });
-      currentHls.loadSource(manifestUrl);
-      currentHls.attachMedia(video);
-      currentHls.on(Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) showError('خطأ في تشغيل الفيديو: ' + data.details);
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      const r = await fetch(manifestUrl, { headers: {'Authorization': 'Bearer ' + token} });
-      const text = await r.text();
-      const blob = new Blob([text], {type: 'application/vnd.apple.mpegurl'});
-      video.src = URL.createObjectURL(blob);
-    } else {
-      showError('متصفحك لا يدعم HLS');
-    }
-  } catch (e) { showError(e.message); }
-}
-
-function escapeHtml(str) {
-  return String(str || '').replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
-}
-
-(async function init() {
-  document.getElementById('codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-  if (token) {
-    try {
-      const data = await api('/api/auth/me');
-      if (data.success) showApp({ name: data.data.name, expiresAt: data.data.expiresAt });
-      else { localStorage.removeItem('student_token'); token = null; }
-    } catch { localStorage.removeItem('student_token'); token = null; }
-  }
-})();
-</script>
+    loadSubjects();
+  </script>
 </body>
 </html>
