@@ -74,7 +74,7 @@ video{width:100%;height:100%;display:block;object-fit:contain}
 </main>
 
 <script>
-const API_BASE = '';
+const API_BASE = window.location.origin;
 const TOKEN = localStorage.getItem('student_token');
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
@@ -111,8 +111,6 @@ async function playVideo(videoId, title) {
     if (title) document.getElementById('videoTitle').textContent = title;
 
     const res = await fetchAPI('/api/play/' + encodeURIComponent(videoId), { method: 'POST' });
-    
-    // السيرفر بيرجع البيانات جوه data أو مباشرة
     const playData = res.data || res;
 
     if (playData.type === 'youtube') {
@@ -122,14 +120,18 @@ async function playVideo(videoId, title) {
     }
 
     if (playData.type === 'mp4') {
-       player.src = playData.play_url || playData.mp4_url;
+       let url = playData.play_url || playData.mp4_url;
+       if (url.startsWith('/')) url = window.location.origin + url;
+       player.src = url;
        player.play();
        loader.classList.remove('show');
        return;
     }
 
-    const playUrl = playData.play_url;
+    let playUrl = playData.play_url;
     if (playUrl) {
+       if (playUrl.startsWith('/')) playUrl = window.location.origin + playUrl;
+
        if (window.Hls && Hls.isSupported()) {
          hls = new Hls({ maxBufferLength: 30 });
          hls.loadSource(playUrl);
@@ -175,8 +177,6 @@ async function init() {
 
   try {
     const res = await fetchAPI('/api/lectures/' + encodeURIComponent(lectureId) + '/content');
-    
-    // تعديل مهم: السيرفر بيرجع البيانات جوه data
     const data = res.data || res;
     const lectureName = data.name || data.lecture_name || data.title || 'المحاضرة';
     document.getElementById('lectureName').textContent = 'محتوى: ' + lectureName;
