@@ -2,7 +2,7 @@
  * Coursatk API — protected backend (NO LOGIN VERSION)
  * - Stream-Weave key unwrap + AES-128 segment decrypt (upstream token NEVER leaves server)
  * - Catalog + stream routes are OPEN (no student session required)
- * - Admin panel + student codes + sessions: REMOVED
+ * - Serves frontend static files from /public
  *
  * Style: CommonJS (require)
  */
@@ -400,8 +400,12 @@ async function streamFetch(session, url, extra, clientHeaders) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PUBLIC
+// PUBLIC & FRONTEND STATIC
 // ═══════════════════════════════════════════════════════════
+
+// تقديم ملفات الواجهة (Frontend) من مجلد public
+app.use(express.static(path.join(__dirname, "public")));
+
 const globalLimiter = rateLimit({ max: 50, windowMs: 60_000, scope: "global" });
 app.use(function (req, res, next) {
   if (req.path.startsWith("/api/stream/")) return next();
@@ -796,28 +800,8 @@ app.get(
 );
 
 // ═══════════════════════════════════════════════════════════
-// Fallback
+// Fallback (404 for unknown API routes)
 // ═══════════════════════════════════════════════════════════
-app.get("/", function (_req, res) {
-  res.json({
-    success: true,
-    service: "coursatk-protected-api",
-    message: "API شغال — استخدم /api/config للبدء",
-    endpoints: [
-      "GET /health",
-      "GET /api/config",
-      "GET /api/subjects/:yearId",
-      "GET /api/subjects/:id/teachers",
-      "GET /api/teachers/:id/chapters",
-      "GET /api/chapters/:id/lectures",
-      "GET /api/lectures/:id/content",
-      "POST /api/play/:videoId",
-      "GET /api/stream/manifest/:sessionId",
-      "GET /api/stream/segment/:sessionId/:encoded",
-    ],
-  });
-});
-
 app.use(function (req, res) {
   res.status(404).json({
     success: false,
