@@ -1,14 +1,11 @@
 {
-  "name": "coursatk-api",
+  "name": "coursatk-protected-api",
   "version": "1.0.0",
-  "type": "module",
-  "main": "server-full.js",
-  "scripts": {
-    "start": "node server-full.js"
-  },
+  "main": "server.js",
   "dependencies": {
-    "express": "^4.21.0",
+    "express": "^4.19.2",
     "cors": "^2.8.5",
-    "compression": "^1.7.4"
+    "compression": "^1.7.4",
+    "node-fetch": "^2.7.0"
   }
 }
