@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ar-EG" dir="rtl">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <style>
+/* نفس ستايل الملف القديم بالظبط */
 :root{--bg:#080d18;--panel:#111a2a;--line:rgba(255,255,255,.1);--text:#f3f6ff;--muted:#91a0ba;--blue:#4285ff;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:'Cairo',sans-serif;min-height:100vh}
@@ -18,7 +19,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:'Cairo',sans-se
 .wrap{max-width:1100px;margin:0 auto;padding:20px}
 .layout{display:grid;grid-template-columns:1fr 320px;gap:20px}
 @media(max-width:900px){.layout{grid-template-columns:1fr}}
-.video-container{background:#000;border-radius:16px;overflow:hidden;position:relative;aspect-ratio:16/9;border:1px solid var(--line);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+.video-container{background:#000;border-radius:16px;overflow:hidden;position:relative;aspect-ratio:16/9;border:1px solid var(--line)}
 video{width:100%;height:100%;display:block;object-fit:contain}
 .error-overlay{position:absolute;inset:0;background:rgba(0,0,0,.8);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:10}
 .error-overlay.show{display:flex}
@@ -28,7 +29,7 @@ video{width:100%;height:100%;display:block;object-fit:contain}
 @keyframes spin{to{transform:rotate(360deg)}}
 .info-box{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px}
 .info-box h1{font-size:22px;margin:0 0 10px;font-weight:900}
-.info-box p{color:var(--muted);font-size:14px;margin:0;line-height:1.6}
+.info-box p{color:var(--muted);font-size:14px;margin:0}
 .playlist{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 100px)}
 .playlist-head{padding:16px;border-bottom:1px solid var(--line);font-weight:900;font-size:15px}
 .playlist-items{overflow-y:auto;flex:1}
@@ -37,7 +38,7 @@ video{width:100%;height:100%;display:block;object-fit:contain}
 .v-item.active{background:rgba(66,133,255,.1);border-right:3px solid var(--blue)}
 .v-item .num{width:24px;height:24px;background:rgba(255,255,255,.05);border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0}
 .v-item.active .num{background:var(--blue);color:#fff}
-.v-item .title{font-size:13px;font-weight:700;line-height:1.4}
+.v-item .title{font-size:13px;font-weight:700}
 </style>
 </head>
 <body>
@@ -56,7 +57,7 @@ video{width:100%;height:100%;display:block;object-fit:contain}
         <div class="error-overlay" id="errorOverlay">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2" style="margin-bottom:15px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
           <h2 id="errorTitle" style="margin:0 0 10px;font-size:18px">مش قادر أشغّل الفيديو</h2>
-          <p id="errorText" style="color:var(--muted);font-size:14px;margin-bottom:20px">حاول تحديث الصفحة أو تسجيل الدخول من جديد</p>
+          <p id="errorText" style="color:var(--muted);font-size:14px;margin-bottom:20px">حاول تحديث الصفحة</p>
           <button class="btn" onclick="location.reload()" style="background:var(--blue);border:none">إعادة المحاولة</button>
         </div>
       </div>
@@ -75,7 +76,7 @@ video{width:100%;height:100%;display:block;object-fit:contain}
 
 <script>
 const API_BASE = window.location.origin;
-const TOKEN = localStorage.getItem('student_token');
+const TOKEN = localStorage.getItem('student_token') || '';
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
 const videoId = qs.get('videoId');
@@ -95,10 +96,11 @@ async function fetchAPI(path, options = {}) {
   if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
   const res = await fetch(API_BASE + path, { ...options, headers });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'خطأ في الاتصال بالسيرفر');
+  if (!res.ok) throw new Error(data.message || 'خطأ في الاتصال');
   return data;
 }
 
+// تشغيل الفيديو بنفس طريقة stream-weave
 async function playVideo(videoId, title) {
   try {
     loader.classList.add('show');
@@ -110,15 +112,18 @@ async function playVideo(videoId, title) {
 
     if (title) document.getElementById('videoTitle').textContent = title;
 
+    // طلب التوكن من سيرفرك الجديد
     const res = await fetchAPI('/api/play/' + encodeURIComponent(videoId), { method: 'POST' });
     const playData = res.data || res;
 
+    // لو يوتيوب
     if (playData.type === 'youtube') {
-       window.open(playData.youtube_url || playData.url, '_blank');
+       window.open(playData.youtube_url, '_blank');
        loader.classList.remove('show');
        return;
     }
 
+    // لو MP4
     if (playData.type === 'mp4') {
        let url = playData.play_url || playData.mp4_url;
        if (url.startsWith('/')) url = window.location.origin + url;
@@ -128,6 +133,7 @@ async function playVideo(videoId, title) {
        return;
     }
 
+    // لو HLS من سيرفرك
     let playUrl = playData.play_url;
     if (playUrl) {
        if (playUrl.startsWith('/')) playUrl = window.location.origin + playUrl;
@@ -145,25 +151,22 @@ async function playVideo(videoId, title) {
              loader.classList.remove('show');
              errorOverlay.classList.add('show');
              errorTitle.textContent = 'خطأ في التشغيل';
-             errorText.textContent = 'حدث خطأ أثناء تحميل الفيديو، قد تكون الجلسة انتهت.';
+             errorText.textContent = 'حدث خطأ أثناء تحميل الفيديو.';
            }
          });
        } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
          player.src = playUrl;
          loader.classList.remove('show');
          player.play();
-       } else {
-         throw new Error('متصفحك لا يدعم تشغيل الفيديو');
        }
        return;
     }
 
-    throw new Error('لم يتم العثور على رابط الفيديو في رد السيرفر');
+    throw new Error('لم يتم العثور على رابط الفيديو');
 
   } catch (error) {
     loader.classList.remove('show');
     errorOverlay.classList.add('show');
-    errorTitle.textContent = 'مشكلة في التشغيل';
     errorText.textContent = error.message;
   }
 }
@@ -171,7 +174,7 @@ async function playVideo(videoId, title) {
 async function init() {
   if (!lectureId) {
     errorOverlay.classList.add('show');
-    errorText.textContent = 'رابط المشغل خاطئ، يرجى العودة لصفحة المحتوى.';
+    errorText.textContent = 'رابط المشغل خاطئ';
     return;
   }
 
