@@ -1,74 +1,292 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>منصة كورساتك - المواد</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
-    header { text-align: center; margin-bottom: 40px; padding: 20px; background: #1e293b; border-radius: 12px; }
-    header h1 { color: #38bdf8; font-size: 28px; }
-    header p { color: #94a3b8; margin-top: 8px; }
-    #loading, #error { text-align: center; padding: 40px; font-size: 18px; }
-    #error { color: #f87171; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
-    .card { background: #1e293b; border-radius: 12px; overflow: hidden; cursor: pointer; transition: all 0.3s; border: 1px solid #334155; }
-    .card:hover { transform: translateY(-5px); border-color: #38bdf8; box-shadow: 0 10px 25px rgba(56,189,248,0.2); }
-    .card img { width: 100%; height: 140px; object-fit: cover; background: #334155; display: block; }
-    .card .info { padding: 16px; }
-    .card h3 { font-size: 16px; color: #e2e8f0; }
-    .card .id { font-size: 12px; color: #64748b; margin-top: 4px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة الكورسات</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1a1a2e; color: #fff; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .card { background: #16213e; padding: 20px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; border: none; border-radius: 5px; font-size: 16px; box-sizing: border-box; }
+        button { background-color: #e94560; color: white; font-weight: bold; cursor: pointer; }
+        button:hover { background-color: #c0354d; }
+        .hidden { display: none; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .item { background: #0f3460; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; transition: 0.3s; }
+        .item:hover { background: #1a1a2e; border: 1px solid #e94560; }
+        h2, h3 { text-align: center; color: #e94560; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .logout { background: #555; width: auto; padding: 5px 15px; font-size: 14px; }
+    </style>
 </head>
 <body>
-  <header>
-    <h1>📚 منصة كورساتك</h1>
-    <p>اختر المادة لعرض المدرسين</p>
-  </header>
 
-  <div id="loading">⏳ جاري تحميل المواد...</div>
-  <div id="error" style="display:none"></div>
-  <div class="grid" id="grid"></div>
+<div class="container" id="loginScreen">
+    <div class="card">
+        <h2>تسجيل الدخول</h2>
+        <input type="text" id="studentCode" placeholder="أدخل الكود المكون من 7 أرقام" maxlength="7">
+        <button onclick="login()">دخول</button>
+        <p id="loginError" style="color: #e94560; text-align: center;"></p>
+    </div>
+</div>
 
-  <script>
-    const API = ""; // نفس السيرفر
-    const YEAR_ID = 4;
+<div class="container hidden" id="mainScreen">
+    <div class="header">
+        <h3 id="welcomeMsg">أهلاً بك</h3>
+        <button class="logout" onclick="logout()">خروج</button>
+    </div>
 
-    async function loadSubjects() {
-      try {
-        const res = await fetch(`${API}/api/subjects/${YEAR_ID}`);
-        const data = await res.json();
-        if (!data.success || !Array.isArray(data.data)) throw new Error("لا توجد مواد");
+    <!-- قائمة المواد -->
+    <div id="subjectsSection" class="card">
+        <h3>موادك الدراسية</h3>
+        <div class="grid" id="subjectsGrid"></div>
+    </div>
 
-        document.getElementById("loading").style.display = "none";
-        const grid = document.getElementById("grid");
+    <!-- قائمة الدروس (تظهر بعد اختيار مادة) -->
+    <div id="lecturesSection" class="card hidden">
+        <button onclick="backToSubjects()" style="width: auto; background: #555; margin-bottom: 10px;">&larr; رجوع</button>
+        <h3 id="currentSubjectName">اسم المادة</h3>
+        <div class="grid" id="lecturesGrid"></div>
+    </div>
 
-        data.data.forEach(sub => {
-          const card = document.createElement("div");
-          card.className = "card";
-          card.innerHTML = `
-            <img src="${sub.image_url || 'https://via.placeholder.com/200x140/334155/94a3b8?text=' + encodeURIComponent(sub.name)}" 
-                 alt="${sub.name}" onerror="this.src='https://via.placeholder.com/200x140/334155/94a3b8?text=No+Image'">
-            <div class="info">
-              <h3>${sub.name}</h3>
-              <div class="id">ID: ${sub.id}</div>
-            </div>
-          `;
-          card.onclick = () => {
-            window.location.href = `subjects.html?id=${sub.id}&name=${encodeURIComponent(sub.name)}`;
-          };
-          grid.appendChild(card);
-        });
-      } catch (e) {
-        document.getElementById("loading").style.display = "none";
-        const err = document.getElementById("error");
-        err.style.display = "block";
-        err.textContent = "❌ خطأ: " + e.message;
-      }
+    <!-- شاشة الفيديو -->
+    <div id="videoSection" class="card hidden">
+        <button onclick="backToLectures()" style="width: auto; background: #555; margin-bottom: 10px;">&larr; رجوع للدروس</button>
+        <h3 id="currentLectureName">اسم الدرس</h3>
+        <video id="videoPlayer" controls style="width: 100%; border-radius: 8px; background: #000;"></video>
+    </div>
+</div>
+
+<script>
+    // ⚠️ الرابط بتاع السيرفر بتاعك على Railway
+    const API_URL = "https://mo7a-platform-mo.up.railway.app";
+    
+    let studentToken = localStorage.getItem("studentToken");
+    let currentSubject = null;
+
+    // تسجيل الدخول
+    async function login() {
+        const code = document.getElementById("studentCode").value.trim();
+        if (code.length !== 7) return document.getElementById("loginError").innerText = "الكود يجب أن يكون 7 أرقام";
+
+        // توليد جهاز وهمي للمتصفح
+        let deviceId = localStorage.getItem("deviceId");
+        if (!deviceId) {
+            deviceId = "web-" + Math.random().toString(36).substring(2, 10);
+            localStorage.setItem("deviceId", deviceId);
+        }
+
+        try {
+            document.getElementById("loginError").innerText = "جاري الدخول...";
+            const res = await fetch(`${API_URL}/api/auth/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: code, deviceId: deviceId, deviceName: "متصفح ويب" })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                localStorage.setItem("studentToken", data.data.token);
+                localStorage.setItem("studentName", data.data.student.name);
+                localStorage.setItem("subjectIds", JSON.stringify(data.data.subjectIds));
+                
+                studentToken = data.data.token;
+                showMainScreen(data.data.student.name);
+            } else {
+                document.getElementById("loginError").innerText = data.message;
+            }
+        } catch (e) {
+            document.getElementById("loginError").innerText = "خطأ في الاتصال بالسيرفر";
+        }
     }
 
-    loadSubjects();
-  </script>
+    // عرض الشاشة الرئيسية
+    function showMainScreen(name) {
+        document.getElementById("loginScreen").classList.add("hidden");
+        document.getElementById("mainScreen").classList.remove("hidden");
+        document.getElementById("welcomeMsg").innerText = `أهلاً بك، ${name}`;
+        loadSubjects();
+    }
+
+    // جلب المواد
+    async function loadSubjects() {
+        try {
+            const res = await fetch(`${API_URL}/api/config`, {
+                headers: { "Authorization": `Bearer ${studentToken}` }
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                const subjectIds = data.subjectIds;
+                const grid = document.getElementById("subjectsGrid");
+                grid.innerHTML = "";
+                
+                // جلب أسماء المواد من السيرفر
+                for (let id of subjectIds) {
+                    const subRes = await fetch(`${API_URL}/api/subjects/${id}`, {
+                        headers: { "Authorization": `Bearer ${studentToken}` }
+                    });
+                    const subData = await subRes.json();
+                    // بناخد أول مادة من اللي راجعين
+                    let subName = "مادة " + id;
+                    if(subData.data && subData.data.length > 0) {
+                         subName = subData.data[0].name;
+                    }
+                    
+                    grid.innerHTML += `
+                        <div class="item" onclick="loadTeachers(${id}, '${subName}')">
+                            ${subName}
+                        </div>
+                    `;
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    // جلب المدرسين للمادة
+    async function loadTeachers(subjectId, subjectName) {
+        document.getElementById("subjectsSection").classList.add("hidden");
+        document.getElementById("lecturesSection").classList.remove("hidden");
+        document.getElementById("currentSubjectName").innerText = subjectName;
+        
+        const grid = document.getElementById("lecturesGrid");
+        grid.innerHTML = "جاري التحميل...";
+
+        try {
+            const res = await fetch(`${API_URL}/api/subjects/${subjectId}/teachers`, {
+                headers: { "Authorization": `Bearer ${studentToken}` }
+            });
+            const data = await res.json();
+            grid.innerHTML = "";
+            
+            if (data.data && data.data.length > 0) {
+                data.data.forEach(teacher => {
+                    grid.innerHTML += `
+                        <div class="item" onclick="loadChapters(${teacher.id}, '${teacher.name}')">
+                            أ. ${teacher.name}
+                        </div>
+                    `;
+                });
+            } else {
+                grid.innerHTML = "لا يوجد مدرسين لهذه المادة.";
+            }
+        } catch (e) {
+            grid.innerHTML = "خطأ في جلب البيانات";
+        }
+    }
+
+    // جلب الفصول للمدرس
+    async function loadChapters(teacherId, teacherName) {
+        document.getElementById("currentSubjectName").innerText = "فصول " + teacherName;
+        const grid = document.getElementById("lecturesGrid");
+        grid.innerHTML = "جاري التحميل...";
+
+        try {
+            const res = await fetch(`${API_URL}/api/teachers/${teacherId}/chapters`, {
+                headers: { "Authorization": `Bearer ${studentToken}` }
+            });
+            const data = await res.json();
+            grid.innerHTML = "";
+            
+            if (data.data && data.data.length > 0) {
+                data.data.forEach(chapter => {
+                    grid.innerHTML += `
+                        <div class="item" onclick="loadLectures(${chapter.id}, '${chapter.name}')">
+                            ${chapter.name}
+                        </div>
+                    `;
+                });
+            } else {
+                grid.innerHTML = "لا يوجد فصول.";
+            }
+        } catch (e) {
+            grid.innerHTML = "خطأ في جلب البيانات";
+        }
+    }
+
+    // جلب الدروس للفصل
+    async function loadLectures(chapterId, chapterName) {
+        document.getElementById("currentSubjectName").innerText = chapterName;
+        const grid = document.getElementById("lecturesGrid");
+        grid.innerHTML = "جاري التحميل...";
+
+        try {
+            const res = await fetch(`${API_URL}/api/chapters/${chapterId}/lectures`, {
+                headers: { "Authorization": `Bearer ${studentToken}` }
+            });
+            const data = await res.json();
+            grid.innerHTML = "";
+            
+            if (data.data && data.data.length > 0) {
+                data.data.forEach(lecture => {
+                    grid.innerHTML += `
+                        <div class="item" onclick="playVideo(${lecture.id}, '${lecture.name}')">
+                            ${lecture.name}
+                        </div>
+                    `;
+                });
+            } else {
+                grid.innerHTML = "لا يوجد دروس.";
+            }
+        } catch (e) {
+            grid.innerHTML = "خطأ في جلب البيانات";
+        }
+    }
+
+    // تشغيل الفيديو
+    async function playVideo(lectureId, lectureName) {
+        document.getElementById("lecturesSection").classList.add("hidden");
+        document.getElementById("videoSection").classList.remove("hidden");
+        document.getElementById("currentLectureName").innerText = lectureName;
+        const video = document.getElementById("videoPlayer");
+        video.src = ""; // تفريغ المشغل
+
+        try {
+            const res = await fetch(`${API_URL}/api/play/${lectureId}`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${studentToken}` }
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                // الرابط اللي هيتشغل في المشغل بيبدأ بـ api/stream/manifest
+                const manifestUrl = API_URL + data.data.manifest_url + "?token=" + studentToken;
+                video.src = manifestUrl;
+                video.play();
+            } else {
+                alert("خطأ: " + data.message);
+            }
+        } catch (e) {
+            alert("خطأ في تشغيل الفيديو");
+        }
+    }
+
+    // أزرار الرجوع
+    function backToSubjects() {
+        document.getElementById("lecturesSection").classList.add("hidden");
+        document.getElementById("subjectsSection").classList.remove("hidden");
+    }
+
+    function backToLectures() {
+        document.getElementById("videoSection").classList.add("hidden");
+        document.getElementById("lecturesSection").classList.remove("hidden");
+        document.getElementById("videoPlayer").pause();
+    }
+
+    // خروج
+    function logout() {
+        localStorage.clear();
+        location.reload();
+    }
+
+    // تشغيل تلقائي لو مسجل دخول
+    if (studentToken) {
+        showMainScreen(localStorage.getItem("studentName") || "الطالب");
+    }
+</script>
+
 </body>
 </html>
