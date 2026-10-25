@@ -1,582 +1,234 @@
 <!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="ar-EG" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#080d18">
 <title>مشغل المحاضرة | ثانوية club</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <style>
-:root{
-  --bg:#080d18;--panel:#111a2a;--panel2:#172338;--line:#26344b;
-  --text:#f3f6ff;--muted:#91a0ba;--blue:#5b8cff;--blue2:#8ab4ff;--green:#34d399;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
-body{margin:0;background:radial-gradient(900px 380px at 50% -180px,#173b76 0,transparent 70%),var(--bg);color:var(--text);font-family:Cairo,system-ui,sans-serif;overflow-x:hidden}
-button,select,input{font:inherit;color:inherit}
-button{cursor:pointer;border:0;background:none}
-img{display:block;max-width:100%}
-
-/* ============ TOP BAR ============ */
-.top{position:sticky;top:0;z-index:100;background:#080d18ef;backdrop-filter:blur(16px);border-bottom:1px solid #ffffff12}
-.topin{max-width:1180px;margin:auto;padding:10px 16px;display:flex;align-items:center;gap:10px}
-.brand{font-weight:900;display:flex;align-items:center;gap:10px;min-width:0}
-.logo{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#60a5fa,#1d4ed8);box-shadow:0 8px 24px #2563eb40;position:relative;overflow:hidden}
-.logo:after{content:"";position:absolute;inset:-60%;background:linear-gradient(110deg,transparent 38%,#ffffff80 50%,transparent 62%);transform:translateX(-100%);animation:logoSweep 5s ease-in-out infinite}
-@keyframes logoSweep{0%,65%{transform:translateX(-100%)}85%,100%{transform:translateX(100%)}}
-.brand-txt{min-width:0;overflow:hidden}
-.brand-txt b{display:block;font-size:14px;font-weight:900;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.brand-txt span{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px}
-.grow{flex:1;min-width:0}
-.btn{border:1px solid var(--line);background:#ffffff08;color:var(--text);border-radius:12px;padding:8px 12px;font-weight:800;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:background .18s,transform .18s;white-space:nowrap}
-.btn:hover{background:#ffffff12}
-.btn:active{transform:scale(.96)}
-.btn svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
-
-/* ============ LAYOUT ============ */
-.wrap{max-width:1180px;margin:auto;padding:16px 14px 60px}
-.crumb{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
-.main{min-width:0}
-
-/* ============ PLAYER ============ */
-.player-card{background:linear-gradient(180deg,#131d30,#0f1726);border:1px solid #ffffff16;border-radius:20px;overflow:hidden;box-shadow:0 25px 80px #0004}
-.screen{position:relative;background:#000;aspect-ratio:16/9;overflow:hidden;isolation:isolate;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;outline:none}
-.screen:fullscreen,.screen:-webkit-full-screen{aspect-ratio:auto;width:100%;height:100%;border-radius:0}
-.screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1;transition:transform .25s cubic-bezier(.2,.8,.2,1)}
-
-.ptap{position:absolute;inset:0;z-index:2;background:transparent;-webkit-touch-callout:none}
-.ptop,.pcenter,.pctrl{position:absolute;opacity:0;transition:opacity .22s;pointer-events:none}
-.screen.show-ui .ptop,.screen.show-ui .pcenter,.screen.show-ui .pctrl{opacity:1}
-.screen.show-ui .ptop>*,.screen.show-ui .pcenter>*,.screen.show-ui .pctrl>*{pointer-events:auto}
-.screen.holding .ptop,.screen.holding .pcenter,.screen.holding .pctrl{opacity:0!important}
-
-.ptop{top:0;left:0;right:0;z-index:7;display:flex;align-items:center;gap:10px;padding:10px 12px 30px;background:linear-gradient(#000b,transparent)}
-.ptitle{flex:1;min-width:0;color:#fff;font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
-.plive{font-size:10px;font-weight:900;background:#3b82f633;color:#93c5fd;border-radius:99px;padding:4px 9px;flex:none}
-
-.ib{--ibs:40px;width:var(--ibs);height:var(--ibs);flex:none;border:0;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center;position:relative;transition:transform .15s,background .15s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.ib:hover{background:#ffffff2e}
-.ib:active{transform:scale(.92)}
-.ib:disabled{opacity:.35;pointer-events:none}
-.ib svg,.bigplay svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;display:block}
-.ib svg.f,.bigplay svg.f{fill:currentColor}
-.ib.active{background:var(--blue)}
-
-.pcenter{inset:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:clamp(20px,7vw,60px);direction:ltr}
-.pcenter .ib.sk{--ibs:52px;background:#0007;box-shadow:0 6px 22px #0005}
-.pcenter .ib.sk svg{width:32px;height:32px;stroke-width:1.9}
-.bigplay{width:66px;height:66px;border-radius:50%;background:linear-gradient(145deg,#5b8cff,#2563eb);color:#fff;display:grid;place-items:center;box-shadow:0 10px 34px #3b82f670,inset 0 1px 0 #ffffff40;transition:transform .18s}
-.bigplay:active{transform:scale(.92)}
-.bigplay svg{width:30px;height:30px}
-@media (hover:hover) and (pointer:fine){
-  .pcenter .ib.sk{display:none}
-  .screen:not(.paused) .bigplay{display:none}
-}
-
-.pctrl{left:0;right:0;bottom:0;z-index:7;padding:36px max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:linear-gradient(transparent,#000d);direction:ltr}
-
-.seekwrap{position:relative;height:30px;cursor:pointer;display:flex;align-items:center;touch-action:none;outline:none}
-.rail{position:relative;width:100%;height:4px;border-radius:99px;background:#ffffff2e;transition:height .15s}
-.seekwrap:hover .rail,.seekwrap.drag .rail,.seekwrap:focus-visible .rail{height:7px}
-.rail i{position:absolute;top:0;bottom:0;left:0;width:0;border-radius:99px}
-#pbuf{background:#ffffff4d}
-#pplayed{background:linear-gradient(90deg,#38bdf8,#5b8cff 55%,#a78bfa)}
-#pknob{position:absolute;top:50%;left:0;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px #5b8cff44,0 2px 10px #0009;transform:scale(0);transition:transform .15s}
-.seekwrap:hover #pknob,.seekwrap.drag #pknob,.seekwrap:focus-visible #pknob{transform:scale(1)}
-@media (pointer:coarse){#pknob{transform:scale(.85)}.seekwrap.drag #pknob{transform:scale(1.3)}}
-
-.prow{display:flex;align-items:center;gap:2px;flex-wrap:nowrap}
-.prow .ib{--ibs:38px;background:transparent}
-.prow .ib:hover{background:#ffffff1f}
-.prow .ib.active{background:var(--blue)}
-.ptime{font-size:12px;color:#fff;padding:0 8px;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:800;flex:none}
-.sp{flex:1;min-width:4px}
-.pill{height:30px;min-width:44px;padding:0 11px;border-radius:99px;background:#ffffff1f;color:#fff;font-weight:900;font-size:12.5px;font-variant-numeric:tabular-nums;display:grid;place-items:center;flex:none;margin:0 4px;transition:background .15s,transform .15s}
-.pill:hover{background:#ffffff33}
-.pill:active{transform:scale(.94)}
-
-.vol{display:flex;align-items:center;flex:none}
-.vr{-webkit-appearance:none;appearance:none;width:0;opacity:0;height:4px;border-radius:99px;margin:0;padding:0;border:0;background:linear-gradient(to right,#fff var(--v,100%),#ffffff40 var(--v,100%));transition:width .2s,opacity .2s,margin .2s;cursor:pointer;outline:none}
-@media (hover:hover) and (pointer:fine){.vol:hover .vr,.vol:focus-within .vr{width:68px;opacity:1;margin:0 10px 0 4px}}
-
-.pmenu{position:absolute;right:12px;bottom:72px;z-index:20;width:250px;max-width:calc(100% - 24px);max-height:calc(100% - 92px);overflow:auto;background:#0d1424f8;border:1px solid #ffffff22;border-radius:16px;padding:8px;display:none;direction:rtl;color:#fff;box-shadow:0 20px 55px #0009;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);scrollbar-width:thin}
-.pmenu.open{display:block;animation:menuIn .18s cubic-bezier(.2,.8,.2,1)}
-@keyframes menuIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
-.mrow{display:flex;align-items:center;gap:10px;width:100%;padding:10px;border-radius:10px;font-weight:800;font-size:13px;text-align:right;transition:background .15s}
-.mrow:hover{background:#ffffff14}
-.mrow .lbl{flex:1}
-.mrow .val{color:var(--muted);font-size:12px;font-weight:700}
-.mrow .chev{color:var(--muted);font-size:16px;line-height:1}
-.mrow.on .val{color:var(--blue2)}
-.mhead{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px 10px;margin-bottom:6px;border-bottom:1px solid #ffffff14;font-weight:900;font-size:13px;text-align:right}
-.mhead svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;padding:2px}
-.opts button{border:1px solid #ffffff20;background:#ffffff0d;color:#fff;border-radius:10px;padding:8px 4px;font-size:12px;font-weight:800;transition:background .15s}
-.opts button:hover{background:#ffffff1c}
-.opts button.on{background:var(--blue);border-color:var(--blue)}
-
-.toast{position:absolute;top:16%;left:50%;transform:translate(-50%,-10px);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;background:#0b1220ee;border:1px solid #ffffff22;color:#fff;padding:7px 14px;border-radius:99px;z-index:25;font-size:12px;font-weight:800;box-shadow:0 8px 28px #0008;max-width:calc(100% - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.toast.show{opacity:1;transform:translate(-50%,0)}
-
-.loading{position:absolute;inset:0;z-index:15;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#000a;font-weight:800;font-size:13px;color:#fff}
-.loading.show{display:flex}
-.spin{width:38px;height:38px;border:3px solid #ffffff30;border-top-color:var(--blue2);border-radius:50%;animation:spin .7s linear infinite}
+:root{--bg:#080d18;--panel:#111a2a;--line:rgba(255,255,255,.1);--text:#f3f6ff;--muted:#91a0ba;--blue:#4285ff;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Cairo',sans-serif;min-height:100vh}
+.top{position:sticky;top:0;z-index:100;background:rgba(8,13,24,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+.brand{font-weight:900;font-size:18px;display:flex;align-items:center;gap:10px}
+.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#60a5fa,#1d4ed8);display:grid;place-items:center}
+.btn{background:rgba(255,255,255,.05);border:1px solid var(--line);color:#fff;padding:8px 16px;border-radius:10px;font-family:inherit;font-weight:700;cursor:pointer;text-decoration:none;transition:.2s}
+.btn:hover{background:rgba(255,255,255,.1)}
+.wrap{max-width:1100px;margin:0 auto;padding:20px}
+.layout{display:grid;grid-template-columns:1fr 320px;gap:20px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.video-container{background:#000;border-radius:16px;overflow:hidden;position:relative;aspect-ratio:16/9;border:1px solid var(--line);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+video{width:100%;height:100%;display:block;object-fit:contain}
+.error-overlay{position:absolute;inset:0;background:rgba(0,0,0,.8);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:10}
+.error-overlay.show{display:flex}
+.loader{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:9}
+.loader.show{display:flex}
+.spin{width:40px;height:40px;border:3px solid rgba(255,255,255,.2);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.error{display:none;position:absolute;inset:0;background:linear-gradient(#080d18f7,#0a1222fa);z-index:16;align-items:center;justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:14px 18px;overflow:auto}
-.error.show{display:flex}
-.eic{width:42px;height:42px;flex:none;border-radius:50%;display:grid;place-items:center;background:#ef444422;color:#fca5a5;border:1px solid #ef444455}
-.eic svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.error b{font-size:14.5px;font-weight:900;line-height:1.4}
-.error p{color:var(--muted);margin:0;font-size:12px;line-height:1.7;max-width:330px}
-.eact{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;justify-content:center}
-.ctrl{border:1px solid #ffffff14;background:#ffffff08;color:#fff;border-radius:12px;padding:9px 14px;font-weight:800;transition:background .18s,transform .18s}
-.ctrl.sm{padding:7px 14px;font-size:12.5px;border-radius:10px}
-.ctrl.primary{background:var(--blue);border-color:var(--blue)}
-.ctrl:hover{background:#ffffff18}
-.ctrl.primary:hover{background:#4a7ff0}
-.ctrl:active{transform:scale(.96)}
-.ctrl:disabled{opacity:.4;pointer-events:none}
-
-.titlebox{padding:16px 2px 0;animation:fadeUp .45s both}
-@keyframes fadeUp{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
-.eyebrow{font-size:11px;color:var(--blue2);font-weight:900;letter-spacing:.2px}
-.titlebox h1{font-size:clamp(18px,3vw,25px);line-height:1.45;margin:4px 0 10px;font-weight:900}
-.subline{color:var(--muted);font-size:12px;display:flex;gap:8px;flex-wrap:wrap}
-.subline span{background:#ffffff08;border:1px solid #ffffff0c;padding:4px 9px;border-radius:9px;font-weight:700}
-.statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
-.stat{border:1px solid #ffffff10;background:#ffffff06;border-radius:14px;padding:12px;text-align:center}
-.stat b{display:block;font-size:18px;font-weight:900}
-.stat span{font-size:10px;color:var(--muted);font-weight:800}
-.controls-under{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 0 0}
-
-.panel{background:linear-gradient(155deg,#15233aee,#0d1524f5);border:1px solid #8ab4ff20;border-radius:20px;overflow:hidden;box-shadow:0 22px 70px #0003;position:sticky;top:78px}
-.panel-head{padding:16px 16px 12px;background:linear-gradient(120deg,#1d3559aa,transparent);border-bottom:1px solid #ffffff0c}
-.panel-heading{display:flex;align-items:center;gap:10px}
-.panel-icon{width:38px;height:38px;flex:none;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,#477ff5,#234ab1);color:white;box-shadow:0 7px 22px #2563eb40}
-.panel-head h2{font-size:14px;margin:0;font-weight:900}
-.panel-head p{font-size:11px;color:var(--muted);margin:4px 0 0;line-height:1.6}
-.playlist-tools{padding:12px 12px 4px}
-.searchbox{display:flex;align-items:center;gap:8px;padding:0 11px;height:40px;border-radius:12px;background:#050b16a8;border:1px solid #ffffff13;color:var(--muted);transition:border-color .2s,box-shadow .2s}
-.searchbox:focus-within{border-color:#5b8cff99;box-shadow:0 0 0 3px #5b8cff19}
-.searchbox svg{flex:none}
-.searchbox input{width:100%;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:700 12px Cairo,sans-serif}
-.searchbox input::placeholder{color:#71819c}
-.listfilters{display:flex;gap:5px;padding:9px 12px 3px}
-.filter-btn{flex:1;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:10px;padding:7px 5px;font:800 10px Cairo,sans-serif;transition:all .2s}
-.filter-btn:hover{background:#ffffff08;color:#fff}
-.filter-btn.active{background:#477ff51c;border-color:#5b8cff40;color:#a9c6ff}
-.list{padding:9px 10px 13px;display:flex;flex-direction:column;gap:7px;max-height:min(62vh,680px);overflow:auto;scrollbar-width:thin;scrollbar-color:#324766 transparent}
-.list::-webkit-scrollbar{width:6px}
-.list::-webkit-scrollbar-thumb{background:#324766;border-radius:99px}
-.item{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid transparent;border-radius:14px;cursor:pointer;transition:background .2s,border-color .2s,transform .2s;position:relative;min-width:0}
-.item:before{content:"";position:absolute;right:0;top:20%;bottom:20%;width:3px;border-radius:4px;background:var(--blue2);transform:scaleY(0);transition:transform .2s}
-.item:hover{background:#ffffff08;border-color:#ffffff12}
-.item.active{background:linear-gradient(105deg,#477ff51b,#477ff508);border-color:#5b8cff45}
-.item.active:before{transform:scaleY(1)}
-.num{flex:0 0 26px;width:26px;height:26px;border-radius:9px;background:#ffffff0d;display:grid;place-items:center;color:var(--muted);font-size:11px;font-weight:900}
-.item.active .num{background:var(--blue);color:#fff;box-shadow:0 4px 12px #2563eb55}
-.thumb{width:76px;aspect-ratio:16/9;flex:0 0 auto;border-radius:9px;background:linear-gradient(135deg,#183e76,#111a2a);display:grid;place-items:center;position:relative;overflow:hidden;border:1px solid #ffffff12}
-.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.thumb .duration{position:absolute;bottom:3px;left:4px;background:#000b;border-radius:4px;font-size:9px;padding:1px 4px;color:#fff;font-weight:800}
-.itemtxt{min-width:0;flex:1}
-.itemtitle{font-size:11.5px;font-weight:800;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.itemmeta{font-size:10px;color:var(--muted);margin-top:4px}
-.mini{height:3px;background:#ffffff10;margin-top:6px;border-radius:99px;overflow:hidden}
-.mini i{display:block;height:100%;background:var(--blue2);border-radius:99px;transition:width .4s ease}
-.empty{padding:28px 18px;text-align:center;color:var(--muted);font-size:13px}
-.skeleton{padding:30px;text-align:center;color:var(--muted)}
-
-@media(max-width:900px){
-  .layout{grid-template-columns:1fr;gap:16px}
-  .panel{position:relative;top:auto;order:2}
-  .list{max-height:440px}
-}
-@media(max-width:640px){
-  .wrap{padding:12px 10px 40px}
-  .player-card,.panel{border-radius:16px}
-  .topin{padding:9px 12px}
-  .brand-txt b{font-size:13px}
-  .btn{padding:7px 10px;font-size:12px}
-  .btn span{display:none}
-  .logo{width:34px;height:34px}
-  .thumb{width:64px}
-  .item{gap:8px;padding:8px}
-  .itemtitle{font-size:11px}
-  .stat b{font-size:16px}
-  .stat{padding:10px 6px}
-  .ptop{padding:8px 10px 22px;gap:8px}
-  .ptitle{font-size:12px}
-  .ib{--ibs:36px}
-  .prow .ib{--ibs:34px}
-  .prow .ib svg{width:19px;height:19px}
-  .ptime{font-size:11px;padding:0 5px}
-  .pcenter .ib.sk{--ibs:46px}
-  .pcenter .ib.sk svg{width:28px;height:28px}
-  .bigplay{width:58px;height:58px}
-  .bigplay svg{width:26px;height:26px}
-  .pctrl{padding-top:28px}
-  .pmenu{left:8px;right:8px;width:auto;max-width:none;bottom:62px;max-height:calc(100% - 72px)}
-}
-@media(max-width:420px){
-  #ppip,#pnx{display:none}
-  .plive{display:none}
-  .pill{min-width:40px;height:28px;padding:0 8px;font-size:12px;margin:0 2px}
-}
-@media(prefers-reduced-motion:reduce){
-  *,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}
-}
+.info-box{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px}
+.info-box h1{font-size:22px;margin:0 0 10px;font-weight:900}
+.info-box p{color:var(--muted);font-size:14px;margin:0;line-height:1.6}
+.playlist{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;max-height:calc(100vh - 100px)}
+.playlist-head{padding:16px;border-bottom:1px solid var(--line);font-weight:900;font-size:15px}
+.playlist-items{overflow-y:auto;flex:1}
+.v-item{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--line);transition:.2s}
+.v-item:hover{background:rgba(255,255,255,.03)}
+.v-item.active{background:rgba(66,133,255,.1);border-right:3px solid var(--blue)}
+.v-item .num{width:24px;height:24px;background:rgba(255,255,255,.05);border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0}
+.v-item.active .num{background:var(--blue);color:#fff}
+.v-item .title{font-size:13px;font-weight:700;line-height:1.4}
 </style>
 </head>
 <body>
 
 <header class="top">
-  <div class="topin">
-    <div class="brand">
-      <div class="logo">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 5 11 7-11 7z"/></svg>
-      </div>
-      <div class="brand-txt">
-        <b>ثانوية club</b>
-        <span>مشغل المحاضرات</span>
-      </div>
-    </div>
-    <div class="grow"></div>
-    <button class="btn" id="backBtn">
-      <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 0 14h-2"/></svg>
-      <span>رجوع للمحتوى</span>
-    </button>
-  </div>
+  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m8 5 11 7-11 7z"/></svg></div>ثانوية club</div>
+  <a href="subjects.html" class="btn">← رجوع للمواد</a>
 </header>
 
 <main class="wrap">
-  <div class="crumb" id="crumb">المحاضرات / جاري تجهيز المشغل…</div>
-
   <div class="layout">
-    <section class="main">
-      <article class="player-card">
-        <div class="screen paused" id="screen">
-          <video id="video" playsinline webkit-playsinline preload="metadata" controlslist="nodownload noplaybackrate" oncontextmenu="return false"></video>
-
-          <div class="ptap" id="ptap"></div>
-          <div class="fx l" id="fxl"></div>
-          <div class="fx r" id="fxr"></div>
-          <div class="holdb" id="holdb"><svg viewBox="0 0 24 24"><path d="m5 6 6 6-6 6M13 6l6 6-6 6"/></svg><span>سرعة 2×</span></div>
-
-          <div class="ptop">
-            <button class="ib" id="pback" type="button" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
-            <div class="ptitle" id="ptitle"></div>
-            <span class="plive">ثانوية club</span>
-          </div>
-
-          <div class="pcenter">
-            <button class="ib sk" id="pb" type="button" aria-label="رجوع 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 0 6 2.5"/><path d="M15.5 1.2 12 4l3.5 2.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
-            <button class="bigplay" id="pc" type="button" aria-label="تشغيل"><svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></button>
-            <button class="ib sk" id="pf" type="button" aria-label="تقديم 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 1-6 2.5"/><path d="M8.5 1.2 12 4 8.5 6.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
-          </div>
-
-          <div class="pctrl">
-            <div class="seekwrap" id="pseek" tabindex="0" role="slider" aria-label="تقدم الفيديو" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-              <div class="rail"><i id="pbuf"></i><i id="pplayed"></i></div>
-              <b id="pknob"></b>
-              <span class="ptip" id="ptip">0:00</span>
-            </div>
-            <div class="prow">
-              <button class="ib" id="pplay" type="button" aria-label="تشغيل"><svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></button>
-              <button class="ib" id="pnx" type="button" aria-label="الفيديو التالي"><svg class="f" viewBox="0 0 24 24"><path d="M6 6.5v11l8-5.5z"/><rect x="16" y="6" width="2.4" height="12" rx="1"/></svg></button>
-              <div class="vol">
-                <button class="ib" id="pmute" type="button" aria-label="كتم الصوت"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M18.5 6.5a9 9 0 0 1 0 11"/></svg></button>
-                <input class="vr" id="pvol" type="range" min="0" max="1" step="0.05" value="1" aria-label="مستوى الصوت">
-              </div>
-              <span class="ptime" id="ptime">0:00 / 0:00</span>
-              <span class="sp"></span>
-              <button class="pill" id="pspeed" type="button" aria-label="سرعة التشغيل">1×</button>
-              <button class="ib" id="pset" type="button" aria-label="الإعدادات"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button>
-              <button class="ib" id="ppip" type="button" aria-label="نافذة عائمة"><svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><rect x="12" y="11" width="7" height="5.5" rx="1" fill="currentColor" stroke="none"/></svg></button>
-              <button class="ib" id="pfs" type="button" aria-label="ملء الشاشة"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/></svg></button>
-            </div>
-          </div>
-
-          <div class="pmenu" id="pmenu"></div>
-          <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-          <div class="loading show" id="loading">
-            <div class="spin"></div>
-            <span id="loadText">جاري تحميل المحاضرة…</span>
-          </div>
-
-          <div class="error" id="error">
-            <div class="eic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.1"/></svg></div>
-            <b id="errorTitle">مش قادر أشغّل الفيديو</b>
-            <p id="errorText">تأكد من الاتصال وحاول مرة تانية.</p>
-            <div class="eact">
-              <button class="ctrl primary sm" id="retryBtn" type="button">إعادة المحاولة</button>
-              <button class="ctrl sm" id="skipBtn" type="button" style="display:none">تخطّي للتالي</button>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <div class="titlebox">
-        <div class="eyebrow" id="lectureName">محتوى المحاضرة</div>
-        <h1 id="videoTitle">جاري تجهيز الفيديو…</h1>
-        <div class="subline">
-          <span id="videoCount">— فيديو</span>
-          <span id="watchedCount">0 تمت مشاهدته</span>
-          <span id="remainingCount">— متبقي</span>
-        </div>
-        <div class="statrow">
-          <div class="stat"><b id="statDone">0</b><span>فيديو مكتمل</span></div>
-          <div class="stat"><b id="statRemain">0</b><span>فيديو متبقي</span></div>
-          <div class="stat"><b id="statPercent">0%</b><span>إنجاز المحاضرة</span></div>
-        </div>
-        <div class="controls-under">
-          <button class="ctrl" id="prevBtn">السابق</button>
-          <button class="ctrl" id="nextBtn">التالي ⟵</button>
+    <!-- الفيديو -->
+    <div class="main">
+      <div class="video-container">
+        <video id="player" controls playsinline></video>
+        <div class="loader" id="loader"><div class="spin"></div><span style="margin-top:10px;font-weight:700;font-size:14px">جاري التحميل...</span></div>
+        <div class="error-overlay" id="errorOverlay">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2" style="margin-bottom:15px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <h2 id="errorTitle" style="margin:0 0 10px;font-size:18px">مش قادر أشغّل الفيديو</h2>
+          <p id="errorText" style="color:var(--muted);font-size:14px;margin-bottom:20px">حاول تحديث الصفحة أو تسجيل الدخول من جديد</p>
+          <button class="btn" onclick="location.reload()" style="background:var(--blue);border:none">إعادة المحاولة</button>
         </div>
       </div>
-    </section>
+      <div class="info-box">
+        <h1 id="videoTitle">جاري تجهيز المحاضرة...</h1>
+        <p id="lectureName">يرجى الانتظار...</p>
+      </div>
+    </div>
 
-    <aside class="panel">
-      <div class="panel-head">
-        <div class="panel-heading">
-          <div class="panel-icon">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="7" height="7" rx="2"/><rect x="14" y="4" width="7" height="7" rx="2"/>
-              <rect x="3" y="15" width="7" height="6" rx="2"/><path d="M14 17h7M14 20h7"/>
-            </svg>
-          </div>
-          <div>
-            <h2>محتوى المحاضرة</h2>
-            <p id="listSub">الفيديو الحالي وما تبقّى</p>
-          </div>
-        </div>
-      </div>
-      <div class="playlist-tools">
-        <label class="searchbox">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
-          <input id="videoSearch" type="search" placeholder="ابحث عن فيديو..." autocomplete="off" aria-label="ابحث">
-        </label>
-      </div>
-      <div class="listfilters" role="group">
-        <button class="filter-btn active" data-filter="all">الكل</button>
-        <button class="filter-btn" data-filter="progress">قيد المشاهدة</button>
-        <button class="filter-btn" data-filter="done">مكتمل</button>
-      </div>
-      <div class="list" id="videoList"><div class="skeleton">جاري تحميل قائمة الفيديوهات…</div></div>
-    </aside>
+    <!-- قائمة الفيديوهات -->
+    <div class="playlist">
+      <div class="playlist-head">قائمة المحاضرات</div>
+      <div class="playlist-items" id="playlist"></div>
+    </div>
   </div>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <script>
-(function(){
-'use strict';
-
-const API = '';
-const TOKEN_KEY = 'student_token'; 
-const token = localStorage.getItem(TOKEN_KEY);
+const API_BASE = '';
+const TOKEN = localStorage.getItem('student_token');
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
-const initialVideoId = qs.get('videoId');
+const videoId = qs.get('videoId');
 
-const $ = id => document.getElementById(id);
-const video = $('video');
+const player = document.getElementById('player');
+const loader = document.getElementById('loader');
+const errorOverlay = document.getElementById('errorOverlay');
+const errorTitle = document.getElementById('errorTitle');
+const errorText = document.getElementById('errorText');
 
-let videos = [], current = -1, hls = null;
+let hls = null;
+let videosList = [];
+let currentIndex = -1;
 
-async function api(path, opts = {}) {
-  const headers = { Accept: 'application/json', ...opts.headers };
-  if (token) headers.Authorization = 'Bearer ' + token;
-  const r = await fetch(API + path, { method: opts.method || 'GET', headers, body: opts.body, cache: 'no-store' });
-  let d = {};
-  try { d = await r.json(); } catch (e) {}
-  if (!r.ok) {
-    const er = new Error(d.message || `خطأ (${r.status})`);
-    er.status = r.status;
-    throw er;
-  }
-  return d.data !== undefined ? d.data : d;
-}
-
-function setLoading(on, text) {
-  const l = $('loading');
-  l.classList.toggle('show', !!on);
-  if (text) $('loadText').textContent = text;
-}
-
-function showError(msg, title) {
-  $('errorText').textContent = msg;
-  if(title) $('errorTitle').textContent = title;
-  $('error').classList.add('show');
-  setLoading(false);
-}
-function hideError() { $('error').classList.remove('show'); }
-
-function fmt(s) {
-  s = Math.max(0, Math.floor(Number(s) || 0));
-  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
-  return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
-}
-
-async function playIndex(i, autoplay) {
-  if (i < 0 || i >= videos.length) return;
-  current = i;
-  const item = videos[i];
+// دالة الاتصال بالسيرفر
+async function fetchAPI(path, options = {}) {
+  const headers = { 'Accept': 'application/json', ...(options.headers || {}) };
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
   
-  $('videoTitle').textContent = item.title;
-  $('ptitle').textContent = item.title;
-  hideError();
-  setLoading(true, 'جاري تجهيز الفيديو...');
+  const res = await fetch(API_BASE + path, { ...options, headers });
+  const data = await res.json();
   
-  if (hls) { hls.destroy(); hls = null; }
-  video.removeAttribute('src');
-  video.load();
-  $('pplayed').style.width = '0%';
-  $('pbuf').style.width = '0%';
-  $('pknob').style.left = '0%';
+  if (!res.ok) throw new Error(data.message || 'خطأ في الاتصال بالسيرفر');
+  return data;
+}
 
+// دالة تشغيل الفيديو
+async function playVideo(videoId, title) {
   try {
-    const res = await api('/api/play/' + encodeURIComponent(item.id), { method: 'POST' });
+    loader.classList.add('show');
+    errorOverlay.classList.remove('show');
+    player.pause();
+    player.removeAttribute('src');
+    if(hls) { hls.destroy(); hls = null; }
+    player.load();
+
+    if (title) document.getElementById('videoTitle').textContent = title;
+
+    // طلب رابط الفيديو من السيرفر
+    const res = await fetchAPI('/api/play/' + encodeURIComponent(videoId), { method: 'POST' });
     
-    if (res && res.type === 'youtube') {
-      setLoading(false);
-      window.location.href = res.youtube_url;
-      return;
+    if (res.type === 'youtube') {
+       // لو السيرفر رجع يوتيوب
+       window.open(res.youtube_url, '_blank');
+       loader.classList.remove('show');
+       return;
     }
 
-    if (res && res.type === 'mp4') {
-      setLoading(false);
-      video.src = res.play_url;
-      if (autoplay) video.play().catch(()=>{});
-      renderList();
-      return;
+    if (res.type === 'mp4') {
+       player.src = res.play_url;
+       player.play();
+       loader.classList.remove('show');
+       return;
     }
 
-    if (res && res.play_url) {
-      if (window.Hls && Hls.isSupported()) {
-        hls = new Hls({ maxBufferLength: 30 });
-        hls.loadSource(res.play_url);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, function() {
-          setLoading(false);
-          if (autoplay) video.play().catch(()=>{});
-        });
-        hls.on(Hls.Events.ERROR, function(_e, d) {
-          if (d.fatal) {
-            if (d.response && d.response.code === 401) {
-               showError('انتهت الجلسة. سجل الدخول من جديد.', 'انتهت الجلسة');
-            } else {
-               showError('مشكلة في تحميل الفيديو. حاول تاني.', 'مشكلة في الاتصال');
-            }
-          }
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = res.play_url;
-        setLoading(false);
-        if (autoplay) video.play().catch(()=>{});
-      } else {
-        showError('متصفحك لا يدعم تشغيل HLS', 'متصفح غير مدعوم');
-      }
-      renderList();
-      return;
+    if (res.play_url) {
+       // لو رابط HLS (m3u8)
+       if (window.Hls && Hls.isSupported()) {
+         hls = new Hls({ maxBufferLength: 30 });
+         hls.loadSource(res.play_url);
+         hls.attachMedia(player);
+         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+           loader.classList.remove('show');
+           player.play();
+         });
+         hls.on(Hls.Events.ERROR, (event, data) => {
+           if (data.fatal) {
+             loader.classList.remove('show');
+             errorOverlay.classList.add('show');
+             errorTitle.textContent = 'خطأ في التشغيل';
+             errorText.textContent = 'حدث خطأ أثناء تحميل الفيديو، قد تكون الجلسة انتهت.';
+           }
+         });
+       } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
+         player.src = res.play_url;
+         loader.classList.remove('show');
+         player.play();
+       } else {
+         throw new Error('متصفحك لا يدعم تشغيل الفيديو');
+       }
+       return;
     }
-    
-    throw new Error('لم يتم إرجاع رابط فيديو صالح من السيرفر');
-    
-  } catch (e) {
-    if (e.status === 401) showError('انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.', 'انتهت الجلسة');
-    else showError(e.message || 'حدث خطأ غير متوقع', 'فشل التحميل');
+
+    throw new Error('لم يتم العثور على رابط الفيديو في رد السيرفر');
+
+  } catch (error) {
+    loader.classList.remove('show');
+    errorOverlay.classList.add('show');
+    errorTitle.textContent = 'مشكلة في التشغيل';
+    errorText.textContent = error.message;
   }
 }
 
-function renderList() {
-  const list = $('videoList');
-  if (!videos.length) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">لا يوجد فيديوهات.</div>';
-    return;
-  }
-  list.innerHTML = videos.map((v, i) => `
-    <div class="item ${i === current ? 'active' : ''}" onclick="window.playVideo(${i})">
-      <div class="num">${i+1}</div>
-      <div class="thumb">${v.thumbnail ? `<img src="${v.thumbnail}">` : ''}</div>
-      <div class="itemtxt">
-        <div class="itemtitle">${v.title}</div>
-      </div>
-    </div>
-  `).join('');
-}
-
-window.playVideo = function(i) { playIndex(i, true); };
-
+// تحميل قائمة الفيديوهات
 async function init() {
   if (!lectureId) {
-    showError('رابط المشغل غير صحيح.', 'خطأ في الرابط');
+    errorOverlay.classList.add('show');
+    errorText.textContent = 'رابط المشغل خاطئ، يرجى العودة لصفحة المحتوى.';
     return;
   }
-  try {
-    const d = await api('/api/lectures/' + encodeURIComponent(lectureId) + '/content');
-    videos = (d.videos || []).map((v, i) => ({
-      id: v.id,
-      title: v.title || v.name || `فيديو ${i+1}`,
-      thumbnail: v.thumbnail || v.image_url || ''
-    }));
-    
-    const lectureName = d.name || d.title || 'المحاضرة';
-    $('crumb').textContent = 'المحتوى / ' + lectureName;
-    $('lectureName').textContent = lectureName;
-    $('videoCount').textContent = videos.length + ' فيديو';
 
-    renderList();
+  try {
+    const data = await fetchAPI('/api/lectures/' + encodeURIComponent(lectureId) + '/content');
     
-    let idx = videos.findIndex(v => String(v.id) === String(initialVideoId));
-    if (idx < 0) idx = 0;
+    const lectureName = data.name || data.title || 'المحاضرة';
+    document.getElementById('lectureName').textContent = 'محتوى: ' + lectureName;
     
-    if (videos.length > 0) {
-      await playIndex(idx, false);
-    } else {
-      setLoading(false);
-      $('videoTitle').textContent = 'لا توجد فيديوهات متاحة';
+    videosList = data.videos || [];
+    
+    const playlistDiv = document.getElementById('playlist');
+    if (videosList.length === 0) {
+      playlistDiv.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">لا يوجد فيديوهات</div>';
+      return;
     }
+
+    // رسم القائمة
+    playlistDiv.innerHTML = videosList.map((v, i) => `
+      <div class="v-item" onclick="playVideo('${v.id}', '${(v.title || v.name || 'فيديو').replace(/'/g, "\\'")}')" data-idx="${i}">
+        <div class="num">${i+1}</div>
+        <div class="title">${v.title || v.name || 'فيديو'}</div>
+      </div>
+    `).join('');
+
+    // تشغيل الفيديو المطلوب
+    let targetId = videoId;
+    if (!targetId && videosList.length > 0) targetId = videosList[0].id;
+    
+    const idx = videosList.findIndex(v => String(v.id) === String(targetId));
+    currentIndex = idx >= 0 ? idx : 0;
+    
+    const targetVideo = videosList[currentIndex];
+    document.querySelectorAll('.v-item').forEach((el, i) => {
+      if (i === currentIndex) el.classList.add('active');
+    });
+
+    playVideo(targetVideo.id, targetVideo.title || targetVideo.name);
+
   } catch (e) {
-    if (e.status === 401) showError('انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.', 'انتهت الجلسة');
-    else showError(e.message, 'خطأ');
+    errorOverlay.classList.add('show');
+    errorText.textContent = e.message;
   }
 }
 
-$('backBtn').onclick = () => history.back();
-$('retryBtn').onclick = () => playIndex(current, true);
-
-// أزرار التحكم الأساسية
-const videoEl = $('video');
-$('pplay').onclick = $('pc').onclick = () => { if(videoEl.paused) videoEl.play(); else videoEl.pause(); };
-videoEl.onplay = () => { $('pplay').innerHTML = '<svg class="f" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/></svg>'; $('pc').innerHTML = '<svg class="f" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/></svg>'; };
-videoEl.onpause = () => { $('pplay').innerHTML = '<svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; $('pc').innerHTML = '<svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; };
-
-videoEl.ontimeupdate = () => {
-  const d = videoEl.duration || 0;
-  const t = videoEl.currentTime || 0;
-  const p = d ? (t/d)*100 : 0;
-  $('pplayed').style.width = p+'%';
-  $('pknob').style.left = p+'%';
-  $('ptime').textContent = fmt(t) + ' / ' + fmt(d);
+// تتبع الفيديو الحالي في القائمة
+player.onplay = () => {
+  document.querySelectorAll('.v-item').forEach((el, i) => {
+    el.classList.toggle('active', i === currentIndex);
+  });
 };
-$('pseek').onclick = (e) => {
-  const r = e.currentTarget.getBoundingClientRect();
-  const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-  if(videoEl.duration) videoEl.currentTime = x * videoEl.duration;
-};
-$('pfs').onclick = () => {
-  if (!document.fullscreenElement) $('screen').requestFullscreen();
-  else document.exitFullscreen();
-};
-$('pb').onclick = () => videoEl.currentTime -= 10;
-$('pf').onclick = () => videoEl.currentTime += 10;
-$('pnx').onclick = () => { if(current < videos.length-1) playIndex(current+1, true); };
 
 init();
-})();
 </script>
 </body>
-          </html>
+</html>
