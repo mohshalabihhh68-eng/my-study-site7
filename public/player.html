@@ -23,6 +23,8 @@ img{display:block;max-width:100%}
 .topin{max-width:1180px;margin:auto;padding:10px 16px;display:flex;align-items:center;gap:10px}
 .brand{font-weight:900;display:flex;align-items:center;gap:10px;min-width:0}
 .logo{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:13px;background:linear-gradient(135deg,#60a5fa,#1d4ed8);box-shadow:0 8px 24px #2563eb40;position:relative;overflow:hidden}
+.logo:after{content:"";position:absolute;inset:-60%;background:linear-gradient(110deg,transparent 38%,#ffffff80 50%,transparent 62%);transform:translateX(-100%);animation:logoSweep 5s ease-in-out infinite}
+@keyframes logoSweep{0%,65%{transform:translateX(-100%)}85%,100%{transform:translateX(100%)}}
 .brand-txt{min-width:0;overflow:hidden}
 .brand-txt b{display:block;font-size:14px;font-weight:900;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand-txt span{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px}
@@ -40,51 +42,190 @@ img{display:block;max-width:100%}
 
 /* ============ PLAYER ============ */
 .player-card{background:linear-gradient(180deg,#131d30,#0f1726);border:1px solid #ffffff16;border-radius:20px;overflow:hidden;box-shadow:0 25px 80px #0004}
-.screen{position:relative;background:#000;aspect-ratio:16/9;overflow:hidden;isolation:isolate;user-select:none;-webkit-user-select:none;outline:none}
-.screen:fullscreen{width:100%;height:100%;border-radius:0}
-.screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
+.screen{position:relative;background:#000;aspect-ratio:16/9;overflow:hidden;isolation:isolate;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;outline:none}
+.screen:fullscreen,.screen:-webkit-full-screen{aspect-ratio:auto;width:100%;height:100%;border-radius:0}
+.screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1;transition:transform .25s cubic-bezier(.2,.8,.2,1)}
 
-/* Loading & Error */
+.ptap{position:absolute;inset:0;z-index:2;background:transparent;-webkit-touch-callout:none}
+.ptop,.pcenter,.pctrl{position:absolute;opacity:0;transition:opacity .22s;pointer-events:none}
+.screen.show-ui .ptop,.screen.show-ui .pcenter,.screen.show-ui .pctrl{opacity:1}
+.screen.show-ui .ptop>*,.screen.show-ui .pcenter>*,.screen.show-ui .pctrl>*{pointer-events:auto}
+.screen.holding .ptop,.screen.holding .pcenter,.screen.holding .pctrl{opacity:0!important}
+
+.ptop{top:0;left:0;right:0;z-index:7;display:flex;align-items:center;gap:10px;padding:10px 12px 30px;background:linear-gradient(#000b,transparent)}
+.ptitle{flex:1;min-width:0;color:#fff;font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.plive{font-size:10px;font-weight:900;background:#3b82f633;color:#93c5fd;border-radius:99px;padding:4px 9px;flex:none}
+
+.ib{--ibs:40px;width:var(--ibs);height:var(--ibs);flex:none;border:0;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center;position:relative;transition:transform .15s,background .15s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.ib:hover{background:#ffffff2e}
+.ib:active{transform:scale(.92)}
+.ib:disabled{opacity:.35;pointer-events:none}
+.ib svg,.bigplay svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;display:block}
+.ib svg.f,.bigplay svg.f{fill:currentColor}
+.ib.active{background:var(--blue)}
+
+.pcenter{inset:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:clamp(20px,7vw,60px);direction:ltr}
+.pcenter .ib.sk{--ibs:52px;background:#0007;box-shadow:0 6px 22px #0005}
+.pcenter .ib.sk svg{width:32px;height:32px;stroke-width:1.9}
+.bigplay{width:66px;height:66px;border-radius:50%;background:linear-gradient(145deg,#5b8cff,#2563eb);color:#fff;display:grid;place-items:center;box-shadow:0 10px 34px #3b82f670,inset 0 1px 0 #ffffff40;transition:transform .18s}
+.bigplay:active{transform:scale(.92)}
+.bigplay svg{width:30px;height:30px}
+@media (hover:hover) and (pointer:fine){
+  .pcenter .ib.sk{display:none}
+  .screen:not(.paused) .bigplay{display:none}
+}
+
+.pctrl{left:0;right:0;bottom:0;z-index:7;padding:36px max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:linear-gradient(transparent,#000d);direction:ltr}
+
+.seekwrap{position:relative;height:30px;cursor:pointer;display:flex;align-items:center;touch-action:none;outline:none}
+.rail{position:relative;width:100%;height:4px;border-radius:99px;background:#ffffff2e;transition:height .15s}
+.seekwrap:hover .rail,.seekwrap.drag .rail,.seekwrap:focus-visible .rail{height:7px}
+.rail i{position:absolute;top:0;bottom:0;left:0;width:0;border-radius:99px}
+#pbuf{background:#ffffff4d}
+#pplayed{background:linear-gradient(90deg,#38bdf8,#5b8cff 55%,#a78bfa)}
+#pknob{position:absolute;top:50%;left:0;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px #5b8cff44,0 2px 10px #0009;transform:scale(0);transition:transform .15s}
+.seekwrap:hover #pknob,.seekwrap.drag #pknob,.seekwrap:focus-visible #pknob{transform:scale(1)}
+@media (pointer:coarse){#pknob{transform:scale(.85)}.seekwrap.drag #pknob{transform:scale(1.3)}}
+
+.prow{display:flex;align-items:center;gap:2px;flex-wrap:nowrap}
+.prow .ib{--ibs:38px;background:transparent}
+.prow .ib:hover{background:#ffffff1f}
+.prow .ib.active{background:var(--blue)}
+.ptime{font-size:12px;color:#fff;padding:0 8px;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:800;flex:none}
+.sp{flex:1;min-width:4px}
+.pill{height:30px;min-width:44px;padding:0 11px;border-radius:99px;background:#ffffff1f;color:#fff;font-weight:900;font-size:12.5px;font-variant-numeric:tabular-nums;display:grid;place-items:center;flex:none;margin:0 4px;transition:background .15s,transform .15s}
+.pill:hover{background:#ffffff33}
+.pill:active{transform:scale(.94)}
+
+.vol{display:flex;align-items:center;flex:none}
+.vr{-webkit-appearance:none;appearance:none;width:0;opacity:0;height:4px;border-radius:99px;margin:0;padding:0;border:0;background:linear-gradient(to right,#fff var(--v,100%),#ffffff40 var(--v,100%));transition:width .2s,opacity .2s,margin .2s;cursor:pointer;outline:none}
+@media (hover:hover) and (pointer:fine){.vol:hover .vr,.vol:focus-within .vr{width:68px;opacity:1;margin:0 10px 0 4px}}
+
+.pmenu{position:absolute;right:12px;bottom:72px;z-index:20;width:250px;max-width:calc(100% - 24px);max-height:calc(100% - 92px);overflow:auto;background:#0d1424f8;border:1px solid #ffffff22;border-radius:16px;padding:8px;display:none;direction:rtl;color:#fff;box-shadow:0 20px 55px #0009;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);scrollbar-width:thin}
+.pmenu.open{display:block;animation:menuIn .18s cubic-bezier(.2,.8,.2,1)}
+@keyframes menuIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+.mrow{display:flex;align-items:center;gap:10px;width:100%;padding:10px;border-radius:10px;font-weight:800;font-size:13px;text-align:right;transition:background .15s}
+.mrow:hover{background:#ffffff14}
+.mrow .lbl{flex:1}
+.mrow .val{color:var(--muted);font-size:12px;font-weight:700}
+.mrow .chev{color:var(--muted);font-size:16px;line-height:1}
+.mrow.on .val{color:var(--blue2)}
+.mhead{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px 10px;margin-bottom:6px;border-bottom:1px solid #ffffff14;font-weight:900;font-size:13px;text-align:right}
+.mhead svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;padding:2px}
+.opts button{border:1px solid #ffffff20;background:#ffffff0d;color:#fff;border-radius:10px;padding:8px 4px;font-size:12px;font-weight:800;transition:background .15s}
+.opts button:hover{background:#ffffff1c}
+.opts button.on{background:var(--blue);border-color:var(--blue)}
+
+.toast{position:absolute;top:16%;left:50%;transform:translate(-50%,-10px);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;background:#0b1220ee;border:1px solid #ffffff22;color:#fff;padding:7px 14px;border-radius:99px;z-index:25;font-size:12px;font-weight:800;box-shadow:0 8px 28px #0008;max-width:calc(100% - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
 .loading{position:absolute;inset:0;z-index:15;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#000a;font-weight:800;font-size:13px;color:#fff}
 .loading.show{display:flex}
 .spin{width:38px;height:38px;border:3px solid #ffffff30;border-top-color:var(--blue2);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.error{display:none;position:absolute;inset:0;background:linear-gradient(#080d18f7,#0a1222fa);z-index:16;align-items:center;justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:14px 18px;}
+.error{display:none;position:absolute;inset:0;background:linear-gradient(#080d18f7,#0a1222fa);z-index:16;align-items:center;justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:14px 18px;overflow:auto}
 .error.show{display:flex}
-.eic{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:#ef444422;color:#fca5a5;border:1px solid #ef444455}
-.eic svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none}
-.error b{font-size:14.5px;font-weight:900;}
+.eic{width:42px;height:42px;flex:none;border-radius:50%;display:grid;place-items:center;background:#ef444422;color:#fca5a5;border:1px solid #ef444455}
+.eic svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.error b{font-size:14.5px;font-weight:900;line-height:1.4}
 .error p{color:var(--muted);margin:0;font-size:12px;line-height:1.7;max-width:330px}
-.eact{display:flex;gap:8px;margin-top:4px;}
-.ctrl{border:1px solid #ffffff14;background:#ffffff08;color:#fff;border-radius:12px;padding:9px 14px;font-weight:800;transition:.18s}
+.eact{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+.ctrl{border:1px solid #ffffff14;background:#ffffff08;color:#fff;border-radius:12px;padding:9px 14px;font-weight:800;transition:background .18s,transform .18s}
+.ctrl.sm{padding:7px 14px;font-size:12.5px;border-radius:10px}
+.ctrl.primary{background:var(--blue);border-color:var(--blue)}
 .ctrl:hover{background:#ffffff18}
+.ctrl.primary:hover{background:#4a7ff0}
+.ctrl:active{transform:scale(.96)}
+.ctrl:disabled{opacity:.4;pointer-events:none}
 
-/* Info */
-.titlebox{padding:16px 2px 0;}
+.titlebox{padding:16px 2px 0;animation:fadeUp .45s both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+.eyebrow{font-size:11px;color:var(--blue2);font-weight:900;letter-spacing:.2px}
 .titlebox h1{font-size:clamp(18px,3vw,25px);line-height:1.45;margin:4px 0 10px;font-weight:900}
 .subline{color:var(--muted);font-size:12px;display:flex;gap:8px;flex-wrap:wrap}
 .subline span{background:#ffffff08;border:1px solid #ffffff0c;padding:4px 9px;border-radius:9px;font-weight:700}
+.statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.stat{border:1px solid #ffffff10;background:#ffffff06;border-radius:14px;padding:12px;text-align:center}
+.stat b{display:block;font-size:18px;font-weight:900}
+.stat span{font-size:10px;color:var(--muted);font-weight:800}
+.controls-under{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 0 0}
 
-/* Panel */
-.panel{background:linear-gradient(155deg,#15233aee,#0d1524f5);border:1px solid #8ab4ff20;border-radius:20px;overflow:hidden;position:sticky;top:78px}
-.panel-head{padding:16px;border-bottom:1px solid #ffffff0c}
+.panel{background:linear-gradient(155deg,#15233aee,#0d1524f5);border:1px solid #8ab4ff20;border-radius:20px;overflow:hidden;box-shadow:0 22px 70px #0003;position:sticky;top:78px}
+.panel-head{padding:16px 16px 12px;background:linear-gradient(120deg,#1d3559aa,transparent);border-bottom:1px solid #ffffff0c}
+.panel-heading{display:flex;align-items:center;gap:10px}
+.panel-icon{width:38px;height:38px;flex:none;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,#477ff5,#234ab1);color:white;box-shadow:0 7px 22px #2563eb40}
 .panel-head h2{font-size:14px;margin:0;font-weight:900}
-.list{padding:9px 10px;display:flex;flex-direction:column;gap:7px;max-height:min(62vh,680px);overflow:auto}
-.item{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid transparent;border-radius:14px;cursor:pointer;transition:.2s;}
+.panel-head p{font-size:11px;color:var(--muted);margin:4px 0 0;line-height:1.6}
+.playlist-tools{padding:12px 12px 4px}
+.searchbox{display:flex;align-items:center;gap:8px;padding:0 11px;height:40px;border-radius:12px;background:#050b16a8;border:1px solid #ffffff13;color:var(--muted);transition:border-color .2s,box-shadow .2s}
+.searchbox:focus-within{border-color:#5b8cff99;box-shadow:0 0 0 3px #5b8cff19}
+.searchbox svg{flex:none}
+.searchbox input{width:100%;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:700 12px Cairo,sans-serif}
+.searchbox input::placeholder{color:#71819c}
+.listfilters{display:flex;gap:5px;padding:9px 12px 3px}
+.filter-btn{flex:1;border:1px solid transparent;background:transparent;color:var(--muted);border-radius:10px;padding:7px 5px;font:800 10px Cairo,sans-serif;transition:all .2s}
+.filter-btn:hover{background:#ffffff08;color:#fff}
+.filter-btn.active{background:#477ff51c;border-color:#5b8cff40;color:#a9c6ff}
+.list{padding:9px 10px 13px;display:flex;flex-direction:column;gap:7px;max-height:min(62vh,680px);overflow:auto;scrollbar-width:thin;scrollbar-color:#324766 transparent}
+.list::-webkit-scrollbar{width:6px}
+.list::-webkit-scrollbar-thumb{background:#324766;border-radius:99px}
+.item{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid transparent;border-radius:14px;cursor:pointer;transition:background .2s,border-color .2s,transform .2s;position:relative;min-width:0}
+.item:before{content:"";position:absolute;right:0;top:20%;bottom:20%;width:3px;border-radius:4px;background:var(--blue2);transform:scaleY(0);transition:transform .2s}
 .item:hover{background:#ffffff08;border-color:#ffffff12}
 .item.active{background:linear-gradient(105deg,#477ff51b,#477ff508);border-color:#5b8cff45}
+.item.active:before{transform:scaleY(1)}
 .num{flex:0 0 26px;width:26px;height:26px;border-radius:9px;background:#ffffff0d;display:grid;place-items:center;color:var(--muted);font-size:11px;font-weight:900}
-.item.active .num{background:var(--blue);color:#fff}
-.thumb{width:76px;aspect-ratio:16/9;border-radius:9px;background:#111a2a;position:relative;overflow:hidden;border:1px solid #ffffff12}
+.item.active .num{background:var(--blue);color:#fff;box-shadow:0 4px 12px #2563eb55}
+.thumb{width:76px;aspect-ratio:16/9;flex:0 0 auto;border-radius:9px;background:linear-gradient(135deg,#183e76,#111a2a);display:grid;place-items:center;position:relative;overflow:hidden;border:1px solid #ffffff12}
 .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.thumb .duration{position:absolute;bottom:3px;left:4px;background:#000b;border-radius:4px;font-size:9px;padding:1px 4px;color:#fff;font-weight:800}
 .itemtxt{min-width:0;flex:1}
 .itemtitle{font-size:11.5px;font-weight:800;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .itemmeta{font-size:10px;color:var(--muted);margin-top:4px}
+.mini{height:3px;background:#ffffff10;margin-top:6px;border-radius:99px;overflow:hidden}
+.mini i{display:block;height:100%;background:var(--blue2);border-radius:99px;transition:width .4s ease}
+.empty{padding:28px 18px;text-align:center;color:var(--muted);font-size:13px}
+.skeleton{padding:30px;text-align:center;color:var(--muted)}
 
-/* ============ RESPONSIVE ============ */
 @media(max-width:900px){
   .layout{grid-template-columns:1fr;gap:16px}
   .panel{position:relative;top:auto;order:2}
+  .list{max-height:440px}
+}
+@media(max-width:640px){
+  .wrap{padding:12px 10px 40px}
+  .player-card,.panel{border-radius:16px}
+  .topin{padding:9px 12px}
+  .brand-txt b{font-size:13px}
+  .btn{padding:7px 10px;font-size:12px}
+  .btn span{display:none}
+  .logo{width:34px;height:34px}
+  .thumb{width:64px}
+  .item{gap:8px;padding:8px}
+  .itemtitle{font-size:11px}
+  .stat b{font-size:16px}
+  .stat{padding:10px 6px}
+  .ptop{padding:8px 10px 22px;gap:8px}
+  .ptitle{font-size:12px}
+  .ib{--ibs:36px}
+  .prow .ib{--ibs:34px}
+  .prow .ib svg{width:19px;height:19px}
+  .ptime{font-size:11px;padding:0 5px}
+  .pcenter .ib.sk{--ibs:46px}
+  .pcenter .ib.sk svg{width:28px;height:28px}
+  .bigplay{width:58px;height:58px}
+  .bigplay svg{width:26px;height:26px}
+  .pctrl{padding-top:28px}
+  .pmenu{left:8px;right:8px;width:auto;max-width:none;bottom:62px;max-height:calc(100% - 72px)}
+}
+@media(max-width:420px){
+  #ppip,#pnx{display:none}
+  .plive{display:none}
+  .pill{min-width:40px;height:28px;padding:0 8px;font-size:12px;margin:0 2px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
 </style>
 </head>
@@ -110,48 +251,120 @@ img{display:block;max-width:100%}
 </header>
 
 <main class="wrap">
-  <div class="crumb" id="crumb">جاري تجهيز المشغل…</div>
+  <div class="crumb" id="crumb">المحاضرات / جاري تجهيز المشغل…</div>
 
   <div class="layout">
     <section class="main">
       <article class="player-card">
-        <div class="screen" id="screen">
-          <video id="video" playsinline webkit-playsinline controls></video>
+        <div class="screen paused" id="screen">
+          <video id="video" playsinline webkit-playsinline preload="metadata" controlslist="nodownload noplaybackrate" oncontextmenu="return false"></video>
 
-          <!-- Loading -->
+          <div class="ptap" id="ptap"></div>
+          <div class="fx l" id="fxl"></div>
+          <div class="fx r" id="fxr"></div>
+          <div class="holdb" id="holdb"><svg viewBox="0 0 24 24"><path d="m5 6 6 6-6 6M13 6l6 6-6 6"/></svg><span>سرعة 2×</span></div>
+
+          <div class="ptop">
+            <button class="ib" id="pback" type="button" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+            <div class="ptitle" id="ptitle"></div>
+            <span class="plive">ثانوية club</span>
+          </div>
+
+          <div class="pcenter">
+            <button class="ib sk" id="pb" type="button" aria-label="رجوع 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 0 6 2.5"/><path d="M15.5 1.2 12 4l3.5 2.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
+            <button class="bigplay" id="pc" type="button" aria-label="تشغيل"><svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></button>
+            <button class="ib sk" id="pf" type="button" aria-label="تقديم 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 1-6 2.5"/><path d="M8.5 1.2 12 4 8.5 6.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
+          </div>
+
+          <div class="pctrl">
+            <div class="seekwrap" id="pseek" tabindex="0" role="slider" aria-label="تقدم الفيديو" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+              <div class="rail"><i id="pbuf"></i><i id="pplayed"></i></div>
+              <b id="pknob"></b>
+              <span class="ptip" id="ptip">0:00</span>
+            </div>
+            <div class="prow">
+              <button class="ib" id="pplay" type="button" aria-label="تشغيل"><svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></button>
+              <button class="ib" id="pnx" type="button" aria-label="الفيديو التالي"><svg class="f" viewBox="0 0 24 24"><path d="M6 6.5v11l8-5.5z"/><rect x="16" y="6" width="2.4" height="12" rx="1"/></svg></button>
+              <div class="vol">
+                <button class="ib" id="pmute" type="button" aria-label="كتم الصوت"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M18.5 6.5a9 9 0 0 1 0 11"/></svg></button>
+                <input class="vr" id="pvol" type="range" min="0" max="1" step="0.05" value="1" aria-label="مستوى الصوت">
+              </div>
+              <span class="ptime" id="ptime">0:00 / 0:00</span>
+              <span class="sp"></span>
+              <button class="pill" id="pspeed" type="button" aria-label="سرعة التشغيل">1×</button>
+              <button class="ib" id="pset" type="button" aria-label="الإعدادات"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button>
+              <button class="ib" id="ppip" type="button" aria-label="نافذة عائمة"><svg viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><rect x="12" y="11" width="7" height="5.5" rx="1" fill="currentColor" stroke="none"/></svg></button>
+              <button class="ib" id="pfs" type="button" aria-label="ملء الشاشة"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/></svg></button>
+            </div>
+          </div>
+
+          <div class="pmenu" id="pmenu"></div>
+          <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
           <div class="loading show" id="loading">
             <div class="spin"></div>
             <span id="loadText">جاري تحميل المحاضرة…</span>
           </div>
 
-          <!-- Error -->
           <div class="error" id="error">
             <div class="eic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.1"/></svg></div>
             <b id="errorTitle">مش قادر أشغّل الفيديو</b>
             <p id="errorText">تأكد من الاتصال وحاول مرة تانية.</p>
             <div class="eact">
-              <button class="ctrl" id="retryBtn" type="button">إعادة المحاولة</button>
+              <button class="ctrl primary sm" id="retryBtn" type="button">إعادة المحاولة</button>
+              <button class="ctrl sm" id="skipBtn" type="button" style="display:none">تخطّي للتالي</button>
             </div>
           </div>
         </div>
       </article>
 
-      <!-- Info -->
       <div class="titlebox">
-        <div class="eyebrow" id="lectureName" style="font-size:11px;color:var(--blue2);font-weight:900;">محتوى المحاضرة</div>
+        <div class="eyebrow" id="lectureName">محتوى المحاضرة</div>
         <h1 id="videoTitle">جاري تجهيز الفيديو…</h1>
         <div class="subline">
           <span id="videoCount">— فيديو</span>
+          <span id="watchedCount">0 تمت مشاهدته</span>
+          <span id="remainingCount">— متبقي</span>
+        </div>
+        <div class="statrow">
+          <div class="stat"><b id="statDone">0</b><span>فيديو مكتمل</span></div>
+          <div class="stat"><b id="statRemain">0</b><span>فيديو متبقي</span></div>
+          <div class="stat"><b id="statPercent">0%</b><span>إنجاز المحاضرة</span></div>
+        </div>
+        <div class="controls-under">
+          <button class="ctrl" id="prevBtn">السابق</button>
+          <button class="ctrl" id="nextBtn">التالي ⟵</button>
         </div>
       </div>
     </section>
 
-    <!-- PLAYLIST -->
     <aside class="panel">
       <div class="panel-head">
-        <h2>قائمة الفيديوهات</h2>
+        <div class="panel-heading">
+          <div class="panel-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="7" height="7" rx="2"/><rect x="14" y="4" width="7" height="7" rx="2"/>
+              <rect x="3" y="15" width="7" height="6" rx="2"/><path d="M14 17h7M14 20h7"/>
+            </svg>
+          </div>
+          <div>
+            <h2>محتوى المحاضرة</h2>
+            <p id="listSub">الفيديو الحالي وما تبقّى</p>
+          </div>
+        </div>
       </div>
-      <div class="list" id="videoList"><div style="padding:20px;text-align:center;color:var(--muted)">جاري التحميل...</div></div>
+      <div class="playlist-tools">
+        <label class="searchbox">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
+          <input id="videoSearch" type="search" placeholder="ابحث عن فيديو..." autocomplete="off" aria-label="ابحث">
+        </label>
+      </div>
+      <div class="listfilters" role="group">
+        <button class="filter-btn active" data-filter="all">الكل</button>
+        <button class="filter-btn" data-filter="progress">قيد المشاهدة</button>
+        <button class="filter-btn" data-filter="done">مكتمل</button>
+      </div>
+      <div class="list" id="videoList"><div class="skeleton">جاري تحميل قائمة الفيديوهات…</div></div>
     </aside>
   </div>
 </main>
@@ -193,12 +406,19 @@ function setLoading(on, text) {
   if (text) $('loadText').textContent = text;
 }
 
-function showError(msg) {
+function showError(msg, title) {
   $('errorText').textContent = msg;
+  if(title) $('errorTitle').textContent = title;
   $('error').classList.add('show');
   setLoading(false);
 }
 function hideError() { $('error').classList.remove('show'); }
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(Number(s) || 0));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
+}
 
 async function playIndex(i, autoplay) {
   if (i < 0 || i >= videos.length) return;
@@ -206,25 +426,26 @@ async function playIndex(i, autoplay) {
   const item = videos[i];
   
   $('videoTitle').textContent = item.title;
+  $('ptitle').textContent = item.title;
   hideError();
   setLoading(true, 'جاري تجهيز الفيديو...');
   
   if (hls) { hls.destroy(); hls = null; }
   video.removeAttribute('src');
   video.load();
+  $('pplayed').style.width = '0%';
+  $('pbuf').style.width = '0%';
+  $('pknob').style.left = '0%';
 
   try {
-    // طلب جلسة تشغيل من السيرفر
     const res = await api('/api/play/' + encodeURIComponent(item.id), { method: 'POST' });
     
-    // لو الفيديو يوتيوب
     if (res && res.type === 'youtube') {
       setLoading(false);
       window.location.href = res.youtube_url;
       return;
     }
 
-    // لو الفيديو MP4 مباشر
     if (res && res.type === 'mp4') {
       setLoading(false);
       video.src = res.play_url;
@@ -233,7 +454,6 @@ async function playIndex(i, autoplay) {
       return;
     }
 
-    // لو الفيديو HLS (الرابط اللي راجع من السيرفر زي /api/hls/...)
     if (res && res.play_url) {
       if (window.Hls && Hls.isSupported()) {
         hls = new Hls({ maxBufferLength: 30 });
@@ -246,9 +466,9 @@ async function playIndex(i, autoplay) {
         hls.on(Hls.Events.ERROR, function(_e, d) {
           if (d.fatal) {
             if (d.response && d.response.code === 401) {
-               showError('انتهت الجلسة. سجل الدخول من جديد.');
+               showError('انتهت الجلسة. سجل الدخول من جديد.', 'انتهت الجلسة');
             } else {
-               showError('مشكلة في تحميل الفيديو. حاول تاني.');
+               showError('مشكلة في تحميل الفيديو. حاول تاني.', 'مشكلة في الاتصال');
             }
           }
         });
@@ -257,7 +477,7 @@ async function playIndex(i, autoplay) {
         setLoading(false);
         if (autoplay) video.play().catch(()=>{});
       } else {
-        showError('متصفحك لا يدعم تشغيل HLS');
+        showError('متصفحك لا يدعم تشغيل HLS', 'متصفح غير مدعوم');
       }
       renderList();
       return;
@@ -266,8 +486,8 @@ async function playIndex(i, autoplay) {
     throw new Error('لم يتم إرجاع رابط فيديو صالح من السيرفر');
     
   } catch (e) {
-    if (e.status === 401) showError('انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.');
-    else showError(e.message || 'حدث خطأ غير متوقع');
+    if (e.status === 401) showError('انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.', 'انتهت الجلسة');
+    else showError(e.message || 'حدث خطأ غير متوقع', 'فشل التحميل');
   }
 }
 
@@ -288,12 +508,11 @@ function renderList() {
   `).join('');
 }
 
-// expose function to onclick
 window.playVideo = function(i) { playIndex(i, true); };
 
 async function init() {
   if (!lectureId) {
-    showError('رابط المشغل غير صحيح.');
+    showError('رابط المشغل غير صحيح.', 'خطأ في الرابط');
     return;
   }
   try {
@@ -321,16 +540,43 @@ async function init() {
       $('videoTitle').textContent = 'لا توجد فيديوهات متاحة';
     }
   } catch (e) {
-    if (e.status === 401) showError('انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.');
-    else showError(e.message);
+    if (e.status === 401) showError('انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.', 'انتهت الجلسة');
+    else showError(e.message, 'خطأ');
   }
 }
 
 $('backBtn').onclick = () => history.back();
 $('retryBtn').onclick = () => playIndex(current, true);
 
+// أزرار التحكم الأساسية
+const videoEl = $('video');
+$('pplay').onclick = $('pc').onclick = () => { if(videoEl.paused) videoEl.play(); else videoEl.pause(); };
+videoEl.onplay = () => { $('pplay').innerHTML = '<svg class="f" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/></svg>'; $('pc').innerHTML = '<svg class="f" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/></svg>'; };
+videoEl.onpause = () => { $('pplay').innerHTML = '<svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; $('pc').innerHTML = '<svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; };
+
+videoEl.ontimeupdate = () => {
+  const d = videoEl.duration || 0;
+  const t = videoEl.currentTime || 0;
+  const p = d ? (t/d)*100 : 0;
+  $('pplayed').style.width = p+'%';
+  $('pknob').style.left = p+'%';
+  $('ptime').textContent = fmt(t) + ' / ' + fmt(d);
+};
+$('pseek').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  if(videoEl.duration) videoEl.currentTime = x * videoEl.duration;
+};
+$('pfs').onclick = () => {
+  if (!document.fullscreenElement) $('screen').requestFullscreen();
+  else document.exitFullscreen();
+};
+$('pb').onclick = () => videoEl.currentTime -= 10;
+$('pf').onclick = () => videoEl.currentTime += 10;
+$('pnx').onclick = () => { if(current < videos.length-1) playIndex(current+1, true); };
+
 init();
 })();
 </script>
 </body>
-</html>
+          </html>
