@@ -1,10 +1,5 @@
 /**
  * Coursatk API — protected backend (CommonJS)
- * - Student codes (7-digit) + devices + sessions in Firebase RTDB
- * - Admin panel API (users, permissions, sections, subject IDs)
- * - Stream-Weave key unwrap + AES-128 segment decrypt (server-side)
- * - PLUS legacy proxy endpoints (years, profile, cdn, stream-proxy, heartbeat)
- * - Serves index.html + admin.html + static /public
  */
 const express = require("express");
 const cors = require("cors");
@@ -170,7 +165,7 @@ function now() {
   return Date.now();
 }
 
-// ── URL helpers (from legacy proxy) ──
+// ── URL helpers ──
 function b64urlEncode(value) {
   var buf = Buffer.isBuffer(value) ? value : Buffer.from(String(value));
   return buf
@@ -276,7 +271,7 @@ async function getCoursatkToken() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// In-memory session caches
+// Session caches
 // ═══════════════════════════════════════════════════════════
 const studentSessions = new Map();
 const adminSessions = new Map();
@@ -323,7 +318,7 @@ setInterval(function () {
   }
 }, 60_000).unref();
 
-// ── Student auth middleware ──
+// ── Auth middlewares ──
 async function requireStudent(req, res, next) {
   try {
     const token = getBearer(req);
@@ -585,7 +580,6 @@ function ivFromMediaSequence(seq) {
   return iv;
 }
 
-// ── Upstream helpers (legacy + main) ──
 function browserHeaders(extra) {
   return Object.assign(
     {
@@ -659,7 +653,6 @@ async function upstreamJson(apiPath, options) {
   return data;
 }
 
-// ── Legacy proxyJson (uses runtime token) ──
 async function proxyJson(url, opts) {
   opts = opts || {};
   const tok = await getCoursatkToken();
@@ -778,7 +771,7 @@ app.get("/api/public/code-types", function (_req, res) {
 });
 
 // ═══════════════════════════════════════════════════════════
-// LEGACY PROXY (no student auth — same as old proxy-server)
+// LEGACY PROXY
 // ═══════════════════════════════════════════════════════════
 app.get("/api/years", async function (_req, res) {
   const r = await proxyJson(CONFIG.COURSATK_API + "/user/years");
@@ -1193,16 +1186,34 @@ app.get("/api/subjects/:id", requireStudent, async function (req, res) {
   }
 });
 
+// ✅ تم تعديل هذا الـ Endpoint لضمان إرجاع المدرسين كمصفوفة دائماً
 app.get(
   "/api/subjects/:id/teachers",
   requireStudent,
   async function (req, res) {
     try {
-      res.json(
-        await upstreamJson(
-          "/user/subjects/" + encodeURIComponent(req.params.id) + "/teachers"
-        )
+      const upstreamData = await upstreamJson(
+        "/user/subjects/" + encodeURIComponent(req.params.id) + "/teachers"
       );
+      
+      let teachers = [];
+      const d = upstreamData.data;
+      
+      if (Array.isArray(d)) {
+        teachers = d;
+      } else if (d && Array.isArray(d.teachers)) {
+        teachers = d.teachers;
+      } else if (d && d.id) {
+        teachers = [d];
+      } else if (d && d.data && Array.isArray(d.data)) {
+        teachers = d.data;
+      }
+
+      res.json({
+        success: true,
+        data: teachers,
+        raw: upstreamData.data 
+      });
     } catch (e) {
       jsonError(res, 502, e.message);
     }
