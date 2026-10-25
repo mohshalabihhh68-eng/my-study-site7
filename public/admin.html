@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ar-EG" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة التحكم - ثانوية club</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080d19; --panel: #101a2b; --text: #f4f7ff; --muted: #a1aec5;
+    --blue: #4285ff; --mint: #59e0b3; --red: #ff4757; --line: rgba(160, 183, 220, .15);
+  }
+  * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text); padding: 20px; }
+  
+  /* شاشة تسجيل الدخول */
+  #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 90vh; }
+  .login-box { background: var(--panel); padding: 40px; border-radius: 20px; border: 1px solid var(--line); width: 100%; max-width: 400px; text-align: center; box-shadow: 0 20px 50px #0007; }
+  .login-box h2 { margin-top: 0; color: var(--blue); }
+  input { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: #fff; font-size: 15px; }
+  input:focus { outline: none; border-color: var(--blue); }
+  button { width: 100%; padding: 14px; border-radius: 10px; border: none; background: var(--blue); color: #fff; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
+  button:hover { opacity: 0.9; transform: translateY(-2px); }
+  .error { color: var(--red); font-size: 13px; margin-bottom: 15px; display: none; }
+
+  /* لوحة التحكم */
+  #dashboard-screen { display: none; max-width: 1000px; margin: auto; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; background: var(--panel); padding: 20px; border-radius: 15px; border: 1px solid var(--line); }
+  .header h1 { margin: 0; font-size: 22px; }
+  .btn-logout { background: transparent; border: 1px solid var(--red); color: var(--red); width: auto; padding: 8px 15px; font-size: 14px; }
+  
+  .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .controls input { margin: 0; flex: 1; min-width: 150px; }
+  .controls select { padding: 14px; border-radius: 10px; background: var(--bg); color: #fff; border: 1px solid var(--line); font-family: inherit; }
+  .btn-add { background: var(--mint); color: #000; width: auto; padding: 14px 25px; }
+
+  /* الجدول */
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 15px; overflow: hidden; border: 1px solid var(--line); }
+  th, td { padding: 15px; text-align: right; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { background: #14223a; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .code { font-weight: bold; color: var(--blue); letter-spacing: 1px; }
+  .status { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+  .status.active { background: #59e0b320; color: var(--mint); }
+  .status.expired { background: #ff475720; color: var(--red); }
+  .action-btn { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: bold; margin-left: 5px; }
+  .btn-copy { background: #4285ff30; color: var(--blue); }
+  .btn-del { background: #ff475730; color: var(--red); }
+
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--mint); color: #000; padding: 10px 20px; border-radius: 10px; font-weight: bold; display: none; z-index: 100; }
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast">تم النسخ!</div>
+
+<!-- شاشة تسجيل الدخول -->
+<div id="login-screen">
+  <div class="login-box">
+    <h2>لوحة تحكم ثانوية club</h2>
+    <div class="error" id="login-error"></div>
+    <input type="text" id="username" placeholder="اسم المستخدم (Shalaby)">
+    <input type="password" id="password" placeholder="كلمة المرور">
+    <button onclick="loginAdmin()">تسجيل الدخول</button>
+  </div>
+</div>
+
+<!-- لوحة التحكم -->
+<div id="dashboard-screen">
+  <div class="header">
+    <h1>إدارة الطلاب</h1>
+    <button class="btn-logout" onclick="logout()">تسجيل خروج</button>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="new-name" placeholder="اسم الطالب">
+    <input type="text" id="new-code" placeholder="الكود (9 أرقام) - اختياري" maxlength="9" inputmode="numeric">
+    <select id="new-section">
+      <option value="">بدون شعبة</option>
+      <option value="scientific_sciences">علمي علوم</option>
+      <option value="scientific_math">علمي رياضة</option>
+      <option value="literary">أدبي</option>
+      <option value="azhari">أزهر</option>
+    </select>
+    <button class="btn-add" onclick="addStudent()">إضافة طالب</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>الكود</th>
+        <th>الاسم</th>
+        <th>الحالة</th>
+        <th>تاريخ الانتهاء</th>
+        <th>إجراءات</th>
+      </tr>
+    </thead>
+    <tbody id="students-table">
+      <tr><td colspan="5" style="text-align:center; color:var(--muted);">جاري تحميل البيانات...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const API_URL = '/api'; // السيرفر شغال على نفس الرابط
+  let adminToken = localStorage.getItem('admin_token');
+
+  // التحقق من تسجيل الدخول
+  if (adminToken) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard-screen').style.display = 'block';
+    loadStudents();
+  }
+
+  async function loginAdmin() {
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const errorBox = document.getElementById('login-error');
+
+    if (!username || !password) {
+      errorBox.innerText = 'يرجى إدخال البيانات';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        localStorage.setItem('admin_token', data.data.token);
+        adminToken = data.data.token;
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('dashboard-screen').style.display = 'block';
+        loadStudents();
+      } else {
+        errorBox.innerText = data.message || 'بيانات خطأ';
+        errorBox.style.display = 'block';
+      }
+    } catch (e) {
+      errorBox.innerText = 'خطأ في الاتصال';
+      errorBox.style.display = 'block';
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem('admin_token');
+    window.location.reload();
+  }
+
+  async function loadStudents() {
+    const tbody = document.getElementById('students-table');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">جاري التحميل...</td></tr>';
+    
+    try {
+      const res = await fetch(`${API_URL}/admin/students`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        tbody.innerHTML = '';
+        if (data.data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا يوجد طلاب</td></tr>';
+          return;
+        }
+
+        data.data.forEach(student => {
+          const status = student.status === 'نشط' ? 'active' : 'expired';
+          const expDate = student.expiresAt ? new Date(student.expiresAt).toLocaleDateString('ar-EG') : 'لم يبدأ';
+          
+          tbody.innerHTML += `
+            <tr>
+              <td class="code">${student.code}</td>
+              <td>${student.name}</td>
+              <td><span class="status ${status}">${student.status}</span></td>
+              <td>${expDate}</td>
+              <td>
+                <button class="action-btn btn-copy" onclick="copyCode('${student.code}')">نسخ</button>
+                <button class="action-btn btn-del" onclick="deleteStudent('${student.code}')">حذف</button>
+              </td>
+            </tr>
+          `;
+        });
+      } else {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--red);">${data.message}</td></tr>`;
+      }
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--red);">خطأ في تحميل البيانات</td></tr>';
+    }
+  }
+
+  async function addStudent() {
+    const name = document.getElementById('new-name').value;
+    const code = document.getElementById('new-code').value;
+    const section = document.getElementById('new-section').value;
+
+    if (!name) return alert('يرجى كتابة اسم الطالب');
+
+    try {
+      const res = await fetch(`${API_URL}/admin/students`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ 
+          name, 
+          code: code || undefined, 
+          section: section || null,
+          type: 'month' // باقة الشهر الافتراضية
+        })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`تم إضافة الطالب بنجاح!\nالكود الخاص به: ${data.data.code}`);
+        document.getElementById('new-name').value = '';
+        document.getElementById('new-code').value = '';
+        loadStudents();
+      } else {
+        alert(data.message);
+      }
+    } catch (e) {
+      alert('حدث خطأ في الاتصال');
+    }
+  }
+
+  async function deleteStudent(code) {
+    if (!confirm(`هل أنت متأكد من حذف الطالب صاحب الكود ${code}؟`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/admin/students/${code}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        loadStudents();
+      } else {
+        alert(data.message);
+      }
+    } catch (e) {
+      alert('حدث خطأ');
+    }
+  }
+
+  function copyCode(code) {
+    navigator.clipboard.writeText(code);
+    const toast = document.getElementById('toast');
+    toast.style.display = 'block';
+    setTimeout(() => toast.style.display = 'none', 2000);
+  }
+</script>
+</body>
+</html>
