@@ -1,26 +1,14 @@
 {
-  "name": "coursatk-protected-api",
+  "name": "coursatk-api",
   "version": "1.0.0",
-  "description": "Coursatk protected backend — student codes, admin panel, stream-weave decrypt",
-  "main": "server.js",
+  "type": "module",
+  "main": "server-full.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node server-full.js"
   },
   "dependencies": {
-    "compression": "^1.7.4",
+    "express": "^4.21.0",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "node-fetch": "^2.7.0"
-  },
-  "keywords": [
-    "coursatk",
-    "stream-weave",
-    "proxy",
-    "aes-128"
-  ],
-  "license": "MIT"
+    "compression": "^1.7.4"
+  }
 }
