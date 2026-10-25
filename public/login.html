@@ -2,33 +2,258 @@
 <html lang="ar-EG" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080d19">
 <title>تسجيل الدخول - ثانوية club</title>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-  body { font-family: 'Cairo', sans-serif; background: #080d19; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-  .login-box { background: #101a2b; padding: 40px 30px; border-radius: 20px; border: 1px solid rgba(160,183,220,.15); width: 100%; max-width: 400px; text-align: center; box-shadow: 0 24px 70px #0007; }
-  h2 { margin-top: 0; font-weight: 800; margin-bottom: 10px; }
-  p { color: #a1aec5; font-size: 14px; margin-bottom: 25px; }
-  input { width: 100%; padding: 15px; margin-bottom: 20px; border-radius: 12px; border: 1px solid #4285ff44; background: #080d19; color: #fff; font-family: inherit; font-size: 18px; text-align: center; box-sizing: border-box; letter-spacing: 2px; }
-  input:focus { outline: none; border-color: #4285ff; }
-  button { width: 100%; padding: 15px; border-radius: 12px; border: none; background: linear-gradient(135deg,#4c91ff,#2858df); color: #fff; font-family: inherit; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
-  button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px #2563eb55; }
-  .error { color: #ff6b6b; font-size: 13px; margin-bottom: 15px; display: none; }
+  :root {
+    --bg: #080d19;
+    --panel: #101a2b;
+    --text: #f4f7ff;
+    --muted: #a1aec5;
+    --blue: #4285ff;
+    --blue2: #76a9ff;
+    --mint: #59e0b3;
+    --line: rgba(160, 183, 220, .15);
+    --shadow: 0 24px 70px #0007;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Cairo', system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+  
+  /* خلفية متحركة */
+  body::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 78% 0%, #1e4c9a40, transparent 40%),
+                radial-gradient(ellipse at 5% 48%, #3e76e02a, transparent 35%),
+                linear-gradient(180deg, #080d19, #0a1120 60%, #080d19);
+    z-index: -1;
+  }
+  .orb {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #357dff2d, #42e4bd10);
+    filter: blur(10px);
+    border: 1px solid #6aa0ff24;
+    animation: float 8s ease-in-out infinite;
+    z-index: -1;
+    top: 10%;
+    right: 10%;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-30px) scale(1.05); }
+  }
+
+  .login-container {
+    background: linear-gradient(150deg, #172641ed, #0e1728ed);
+    border: 1px solid #a8c5ff25;
+    border-radius: 28px;
+    padding: 45px 40px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(20px);
+    animation: rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    position: relative;
+    z-index: 1;
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-size: 22px;
+    font-weight: 900;
+    margin-bottom: 5px;
+  }
+  .logo {
+    display: grid;
+    place-items: center;
+    width: 45px;
+    height: 45px;
+    border-radius: 14px;
+    background: linear-gradient(145deg, #5ba0ff, #2454d8);
+    box-shadow: 0 8px 26px #2563eb55;
+    color: white;
+  }
+  .gradient {
+    background: linear-gradient(100deg, #fff 5%, #91bdff 52%, #62e5c1);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 5px;
+    margin-bottom: 30px;
+  }
+
+  .input-group {
+    position: relative;
+    margin-bottom: 20px;
+  }
+  .input-group svg {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    stroke: var(--muted);
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: 0.3s;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 16px 45px 16px 15px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: #080d19;
+    color: #fff;
+    font-family: inherit;
+    font-size: 16px;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 4px #4285ff20;
+  }
+  input[type="text"]:focus + svg {
+    stroke: var(--blue2);
+  }
+  input::placeholder {
+    color: #5c6d8a;
+    letter-spacing: 0;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, #4c91ff, #2858df);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 10px 28px #2563eb38;
+  }
+  .btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 15px 35px #2563eb58;
+  }
+  .btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .btn svg {
+    width: 18px; height: 18px;
+    stroke: #fff; fill: none; stroke-width: 2;
+  }
+
+  .error-box {
+    background: #ff475715;
+    border: 1px solid #ff475740;
+    color: #ff6b6b;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 20px;
+    display: none;
+    animation: shake 0.4s ease;
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  .footer-text {
+    text-align: center;
+    margin-top: 25px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .footer-text a {
+    color: var(--blue2);
+    text-decoration: none;
+    font-weight: 700;
+  }
 </style>
 </head>
 <body>
 
-<div class="login-box">
-  <h2>أهلاً بيك 👋</h2>
-  <p>ادخل الكود المكون من 9 أرقام الخاص بك</p>
-  <div class="error" id="error-msg"></div>
-  <input type="text" id="code-input" placeholder="123456789" maxlength="9" inputmode="numeric">
-  <button onclick="login()" id="btn">دخول للمنصة</button>
+<div class="orb"></div>
+
+<div class="login-container">
+  <div class="brand">
+    <span class="logo">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/>
+      </svg>
+    </span>
+    <span>ثانوية <span class="gradient">club</span></span>
+  </div>
+  <div class="subtitle">أهلاً بيك، يرجى إدخال كود الطالب للمتابعة</div>
+
+  <div class="error-box" id="error-msg"></div>
+
+  <div class="input-group">
+    <input type="text" id="code-input" placeholder="ادخل الكود المكون من 9 أرقام" maxlength="9" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+  </div>
+
+  <button class="btn" id="btn" onclick="login()">
+    دخول للمنصة
+    <svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+  </button>
+
+  <div class="footer-text">
+    تواجه مشكلة؟ <a href="index.html#admins">تواصل مع الإدارة</a>
+  </div>
 </div>
 
 <script>
-  // لو الطالب مسجل دخول قبل كده، يوديه على طول
+  // التحقق من وجود توكن مسبق
   if (localStorage.getItem('student_token')) {
     window.location.href = 'subjects.html';
   }
@@ -39,16 +264,14 @@
     const errMsg = document.getElementById('error-msg');
 
     if (code.length !== 9) {
-      errMsg.textContent = "الكود لازم يكون 9 أرقام";
-      errMsg.style.display = 'block';
+      showError("الكود يجب أن يتكون من 9 أرقام");
       return;
     }
 
-    btn.textContent = 'جاري الدخول...';
+    btn.innerHTML = 'جاري التحقق...';
     btn.disabled = true;
     errMsg.style.display = 'none';
 
-    // deviceId عشوائي بيتحفظ في المتصفح عشان السيرفر يعرف الجهاز
     let deviceId = localStorage.getItem('device_id');
     if (!deviceId) {
       deviceId = 'dev_' + Math.random().toString(36).substring(2, 15);
@@ -59,33 +282,37 @@
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: code,
-          deviceId: deviceId,
-          deviceName: 'Web Browser'
-        })
+        body: JSON.stringify({ code: code, deviceId: deviceId, deviceName: 'Web Browser' })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        // حفظ التوكن في المتصفح
         localStorage.setItem('student_token', data.data.token);
         localStorage.setItem('student_name', data.data.student.name);
-        // التوجه لصفحة المواد
         window.location.href = 'subjects.html';
       } else {
-        errMsg.textContent = data.message || "كود غير صحيح";
-        errMsg.style.display = 'block';
+        showError(data.message || "كود غير صحيح أو منتهي");
+        btn.innerHTML = 'دخول للمنصة <svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>';
+        btn.disabled = false;
       }
     } catch (error) {
-      errMsg.textContent = "حدث خطأ في الاتصال بالسيرفر";
-      errMsg.style.display = 'block';
-    } finally {
-      btn.textContent = 'دخول للمنصة';
+      showError("حدث خطأ في الاتصال بالسيرفر، يرجى المحاولة لاحقاً");
+      btn.innerHTML = 'دخول للمنصة <svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>';
       btn.disabled = false;
     }
   }
+
+  function showError(msg) {
+    const errMsg = document.getElementById('error-msg');
+    errMsg.textContent = msg;
+    errMsg.style.display = 'block';
+  }
+  
+  // تسجيل الدخول بزرار Enter
+  document.getElementById('code-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') login();
+  });
 </script>
 </body>
 </html>
