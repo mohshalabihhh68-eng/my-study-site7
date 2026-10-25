@@ -29,35 +29,26 @@
     <div style="flex:1"></div>
     <button class="btn" id="backBtn">← المواد</button>
   </div></header>
-
   <main class="wrap" id="main">
     <div style="text-align:center;padding:50px;color:var(--muted)">جاري تحميل بياناتك...</div>
   </main>
-
 <script>
 (function(){
 'use strict';
-
 const API_BASE = '';
-const TOKEN_KEY = 'cstk_tok';
+const TOKEN_KEY = 'student_token';
 const token = localStorage.getItem(TOKEN_KEY);
-
 if (!token) { window.location.replace('index.html'); return; }
-
 const $ = id => document.getElementById(id);
 const esc = s => String(s || '');
-
 async function loadProfile() {
   try {
-    const res = await fetch(API_BASE + '/api/profile', {
+    const res = await fetch(API_BASE + '/api/auth/me', {
       headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
     });
     const data = await res.json();
-    
     if (!res.ok || data.success === false) throw new Error(data.message || 'فشل جلب البيانات');
-    
     const me = data.data;
-    
     let html = `
       <div class="hero">
         <div class="avatar">${esc(me.name?.charAt(0) || 'ط')}</div>
@@ -73,16 +64,13 @@ async function loadProfile() {
         <div class="detail"><div class="label">تاريخ الانتهاء</div><div class="value">${me.expiresAt ? new Date(me.expiresAt).toLocaleDateString('ar-EG') : '—'}</div></div>
       </div>
     `;
-    
     $('main').innerHTML = html;
   } catch (e) {
     $('main').innerHTML = `<div style="text-align:center;color:var(--red)">خطأ: ${e.message}</div>`;
   }
 }
-
 $('backBtn').onclick = () => window.location.href = 'subjects.html';
 loadProfile();
-
 })();
 </script>
 </body>
