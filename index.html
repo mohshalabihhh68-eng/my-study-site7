@@ -389,117 +389,32 @@
   }
 
   // ---------- Teachers ----------
-  async function openSubject(id, name) {
-    stack.push(loadSubjects);
-    setContent('<div class="loading">جاري التحميل...</div>');
-    try {
-      const r = await fetch(API + "/api/subjects/" + id + "/teachers", { headers: authHeaders() });
-      const data = await r.json();
-      // upstream shape can vary
-      let teachers = [];
-      if (Array.isArray(data.data)) teachers = data.data;
-      else if (data.data?.teachers) teachers = data.data.teachers;
-      else if (data.data?.id) teachers = [data.data];
-
-      if (!teachers.length) {
-        setContent('<div class="status">مفيش مدرسين</div>');
-        return;
-      }
-      let html = `<p class="header-meta" style="margin-bottom:12px">${esc(name)}</p><div class="list">`;
-      for (const t of teachers) {
-        const tid = t.id || t.teacher_id;
-        const tname = t.name || t.teacher_name || "مدرس";
-        html += `<div class="list-item" onclick="openTeacher(${tid}, '${esc(tname)}')">
-          <div><div class="t">${esc(tname)}</div></div>
-          <span class="chev">‹</span>
-        </div>`;
-      }
-      html += "</div>";
-      setContent(html);
-    } catch (e) {
-      setContent('<div class="status">خطأ في التحميل</div>');
-    }
-  }
-
-  // ---------- Chapters ----------
-  async function openTeacher(id, name) {
-    stack.push(() => openSubject._last && openSubject._last());
-    // keep simple: push generic back via stack already set from subject
-    setContent('<div class="loading">جاري التحميل...</div>');
-    try {
-      const r = await fetch(API + "/api/teachers/" + id + "/chapters", { headers: authHeaders() });
-      const data = await r.json();
-      const chapters = Array.isArray(data.data) ? data.data : (data.data?.chapters || []);
-      if (!chapters.length) {
-        setContent('<div class="status">مفيش فصول</div>');
-        return;
-      }
-      let html = `<p class="header-meta" style="margin-bottom:12px">${esc(name)}</p><div class="list">`;
-      for (const c of chapters) {
-        html += `<div class="list-item" onclick="openChapter(${c.id}, '${esc(c.name || c.title || "فصل")}')">
-          <div><div class="t">${esc(c.name || c.title || "فصل")}</div></div>
-          <span class="chev">‹</span>
-        </div>`;
-      }
-      html += "</div>";
-      // fix back stack
-      stack[stack.length - 1] = () => {
-        // re-fetch subject context is hard; just go subjects for simplicity if deep
-        loadSubjects();
-      };
-      setContent(html);
-      // better back: store teacher open
-      stack[stack.length - 1] = async () => {
-        // noop placeholder - will be fixed by pushing properly
-      };
-    } catch (e) {
-      setContent('<div class="status">خطأ في التحميل</div>');
-    }
-  }
-
-  // Simpler navigation with explicit stack of functions
-  async function openTeacher2(id, name, backFn) {
-    stack.push(backFn);
-    setContent('<div class="loading">جاري التحميل...</div>');
-    try {
-      const r = await fetch(API + "/api/teachers/" + id + "/chapters", { headers: authHeaders() });
-      const data = await r.json();
-      const chapters = Array.isArray(data.data) ? data.data : (data.data?.chapters || []);
-      if (!chapters.length) {
-        setContent('<div class="status">مفيش فصول</div>');
-        return;
-      }
-      let html = `<p class="header-meta" style="margin-bottom:12px">${esc(name)}</p><div class="list">`;
-      for (const c of chapters) {
-        const cname = c.name || c.title || "فصل";
-        html += `<div class="list-item" onclick="openChapter2(${c.id}, '${esc(cname)}', () => openTeacher2(${id}, '${esc(name)}', ${backFn ? 'null' : 'loadSubjects'}))">
-          <div><div class="t">${esc(cname)}</div></div>
-          <span class="chev">‹</span>
-        </div>`;
-      }
-      html += "</div>";
-      setContent(html);
-    } catch {
-      setContent('<div class="status">خطأ في التحميل</div>');
-    }
-  }
-
-  // Rewrite cleaner navigation
   window.openSubject = async function(id, name) {
     stack.push(loadSubjects);
     setContent('<div class="loading">جاري التحميل...</div>');
     try {
       const r = await fetch(API + "/api/subjects/" + id + "/teachers", { headers: authHeaders() });
       const data = await r.json();
+      
+      // فحص شامل لأي شكل من أشكال الرد
       let teachers = [];
-      if (Array.isArray(data.data)) teachers = data.data;
-      else if (data.data?.teachers) teachers = data.data.teachers;
-      else if (data.data?.id) teachers = [data.data];
+      if (Array.isArray(data.data)) {
+        teachers = data.data;
+      } else if (data.data?.teachers) {
+        teachers = data.data.teachers;
+      } else if (data.data?.id) {
+        teachers = [data.data];
+      } else if (data.raw && Array.isArray(data.raw)) {
+        teachers = data.raw;
+      } else if (data.raw && Array.isArray(data.raw.teachers)) {
+        teachers = data.raw.teachers;
+      }
 
       if (!teachers.length) {
-        setContent('<div class="status">مفيش مدرسين</div>');
+        setContent('<div class="status">لا يوجد مدرسين لهذه المادة</div>');
         return;
       }
+      
       let html = `<p class="header-meta" style="margin-bottom:12px">${esc(name)}</p><div class="list">`;
       for (const t of teachers) {
         const tid = t.id || t.teacher_id;
@@ -511,11 +426,12 @@
       }
       html += "</div>";
       setContent(html);
-    } catch {
+    } catch (e) {
       setContent('<div class="status">خطأ في التحميل</div>');
     }
   };
 
+  // ---------- Chapters ----------
   window.openTeacherNav = async function(tid, tname, sid, sname) {
     stack.push(() => openSubject(sid, sname));
     setContent('<div class="loading">جاري التحميل...</div>');
@@ -542,6 +458,7 @@
     }
   };
 
+  // ---------- Lectures ----------
   window.openChapterNav = async function(cid, cname, tid, tname, sid, sname) {
     stack.push(() => openTeacherNav(tid, tname, sid, sname));
     setContent('<div class="loading">جاري التحميل...</div>');
@@ -569,14 +486,13 @@
     }
   };
 
-  // ---------- Lecture content + play ----------
+  // ---------- Play ----------
   window.openLecture = async function(lid, lname) {
     stack.push(() => {}); // will rely on previous
     setContent('<div class="loading">جاري تجهيز المحاضرة...</div>');
     try {
       const r = await fetch(API + "/api/lectures/" + lid + "/content", { headers: authHeaders() });
       const data = await r.json();
-      // find video id
       let videoId = null;
       const d = data.data;
       if (d?.video_id) videoId = d.video_id;
@@ -589,11 +505,7 @@
         videoId = v?.video_id || v?.id;
       }
 
-      if (!videoId) {
-        // try play with lecture id itself
-        videoId = lid;
-      }
-
+      if (!videoId) videoId = lid;
       await playVideo(videoId, lname);
     } catch (e) {
       setContent('<div class="status">مش قادر أحمل المحتوى</div>');
@@ -640,8 +552,6 @@
           }
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        // Safari
-        // native HLS can't set Authorization header easily — use query token fallback if needed
         video.src = manifest + (manifest.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
         video.addEventListener("loadedmetadata", () => {
           document.getElementById("player-sub").textContent = "";
