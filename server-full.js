@@ -1489,7 +1489,7 @@ app.delete("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, r
 });
 
 // ═══════════════════════════════════════════════════════════
-// Admin Panel + Fallback
+// Frontend + Fallback
 // ═══════════════════════════════════════════════════════════
 app.get("/admin", (_req, res) => {
   res.sendFile(path.join(__dirname, "admin.html"));
@@ -1500,7 +1500,11 @@ app.get("/admin.html", (_req, res) => {
 });
 
 app.get("/", (_req, res) => {
-  res.redirect("/admin");
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+app.get("/index.html", (_req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.use((req, res) => {
