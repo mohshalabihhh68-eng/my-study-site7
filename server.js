@@ -1,22 +1,3 @@
-// جرّب Stream-Weave الأول (الأكثر استقراراً مع التشفير)
-try {
-  const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
-  if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-  mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
-} catch (e) { errors.push(e.message); }
-
-// لو Weave فشل، جرّب CDN
-if (!mode) {
-  try {
-    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-    const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 15_000, retries: 1 }));
-    if (!probe.ok) throw new Error(`CDN ${probe.status}`);
-    const masterText = await probe.text();
-    if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
-    mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
-  } catch (e) { errors.push(e.message); }
-}
-
 /**
  * Thanawya World API — Protected Backend
  * VERSION v1.2 — Cleaned (No Earnings, Single Package, Dynamic Env)
@@ -52,7 +33,6 @@ import {
   decodeThId,
   getThanawicaSessionInfo
 } from "./thanawica.js";
-
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
@@ -1305,19 +1285,19 @@ async function buildVideoSource(videoId, clientHeaders) {
   const errors = [];
 
   try {
-    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-    const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 15_000, retries: 1 }));
-    if (!probe.ok) throw new Error(`CDN ${probe.status}`);
-    const masterText = await probe.text();
-    if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
-    mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
+    const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+    if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
+    mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
   } catch (e) { errors.push(e.message); }
 
   if (!mode) {
     try {
-      const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
-      if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-      mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
+      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+      const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 15_000, retries: 1 }));
+      if (!probe.ok) throw new Error(`CDN ${probe.status}`);
+      const masterText = await probe.text();
+      if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
+      mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
     } catch (e) { errors.push(e.message); }
   }
 
