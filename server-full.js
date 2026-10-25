@@ -1489,19 +1489,24 @@ app.delete("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, r
 });
 
 // ═══════════════════════════════════════════════════════════
-// Fallback
+// Admin Panel + Fallback
 // ═══════════════════════════════════════════════════════════
+app.get("/admin", (_req, res) => {
+  res.sendFile(path.join(__dirname, "admin.html"));
+});
+
+app.get("/admin.html", (_req, res) => {
+  res.sendFile(path.join(__dirname, "admin.html"));
+});
+
 app.get("/", (_req, res) => {
-  res.status(403).json({
-    success: false,
-    message: "خطأ: يلزم مصادقة. الوصول المباشر غير مسموح."
-  });
+  res.redirect("/admin");
 });
 
 app.use((req, res) => {
-  res.status(403).json({
+  res.status(404).json({
     success: false,
-    message: "خطأ: يلزم مصادقة أو المسار غير موجود.",
+    message: "المسار غير موجود",
     path: req.path
   });
 });
