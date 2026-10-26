@@ -114,7 +114,7 @@ body {
 }
 .timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
 
-/* 3. شريط التقدم */
+/* شريط التقدم */
 .progress-bar-container {
   position: absolute;
   top: 0;
@@ -132,7 +132,7 @@ body {
   transition: width 1s linear, background 0.3s;
 }
 
-/* 6. تأثير التوهج وحالة الخطر */
+/* حالة الخطر */
 .timer-card.danger { 
   border-color: rgba(239,68,68,0.4); 
   background: linear-gradient(135deg, #2a1419, #121a2b); 
@@ -152,7 +152,7 @@ body {
 .timer-badge::before { content: ''; width: 6px; height: 6px; background: var(--blue2); border-radius: 50%; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
 
-/* 2. الترتيب الديناميكي */
+/* الترتيب الديناميكي */
 .timer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; position: relative; z-index: 2; }
 .timer-grid.layout-3 { grid-template-columns: repeat(3, 1fr); }
 .timer-grid.layout-2 { grid-template-columns: repeat(2, 1fr); max-width: 300px; margin: 0 auto; }
@@ -162,11 +162,11 @@ body {
 .time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; display: inline-block; transition: color 0.3s, text-shadow 0.3s; }
 .time-label { color: var(--muted); font-size: 13px; font-weight: 700; }
 
-/* 1. تأثير النبض على الثواني */
+/* تأثير النبض على الثواني */
 .time-val.tick { animation: tickPulse 0.3s ease; }
 @keyframes tickPulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); color: #fff; } 100% { transform: scale(1); } }
 
-/* 4. شاشة الاشتراك المنتهي */
+/* شاشة الاشتراك المنتهي */
 .expired-screen {
   text-align: center;
   padding: 40px 20px;
@@ -361,7 +361,6 @@ function renderBaseUI(me) {
 
   $('main').innerHTML = html;
 
-  // ربط زر النسخ
   const copyBtn = document.getElementById('copy-code-btn');
   if (copyBtn && me.code) {
     copyBtn.addEventListener('click', async () => {
@@ -377,7 +376,6 @@ function renderBaseUI(me) {
     });
   }
 
-  // زر المشاركة
   const shareBtn = document.getElementById('share-code-btn');
   if (shareBtn && me.code) {
     shareBtn.addEventListener('click', () => {
@@ -391,7 +389,6 @@ function renderBaseUI(me) {
     });
   }
 
-  // زر الخروج
   document.getElementById('logout-btn').addEventListener('click', function() {
     if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
       localStorage.removeItem(TOKEN_KEY);
@@ -400,7 +397,6 @@ function renderBaseUI(me) {
     }
   });
 
-  // بدء العداد
   if (expiresAt) {
     if (countdownInterval) clearInterval(countdownInterval);
     updateCountdown(expiresAt, isDanger);
@@ -408,7 +404,6 @@ function renderBaseUI(me) {
   }
 }
 
-// العرض الفوري من الكاش
 function loadFromCache() {
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
@@ -458,7 +453,6 @@ function updateCountdown(expiresAt, isDanger) {
   
   if (!timerGrid) return;
 
-  // 4. حالة الاشتراك المنتهي
   if (diff <= 0) {
     if (countdownInterval) clearInterval(countdownInterval);
     const container = document.getElementById('timer-container');
@@ -487,18 +481,15 @@ function updateCountdown(expiresAt, isDanger) {
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   const secs = Math.floor((diff % (1000 * 60)) / 1000);
 
-  // 3. شريط التقدم
-  const totalDuration = 30 * 24 * 3600 * 1000; // افتراضي 30 يوم
+  const totalDuration = 30 * 24 * 3600 * 1000;
   const elapsed = Math.max(0, totalDuration - diff);
   const percent = Math.min(100, (elapsed / totalDuration) * 100);
   if (progressFill) progressFill.style.width = percent + '%';
 
-  // 2. العداد الذكي والترتيب الديناميكي
   let layout = 'layout-3';
   let boxes = '';
 
   if (days >= 1) {
-    // أكثر من يوم: أيام، ساعات، دقايق
     layout = 'layout-3';
     boxes = `
       <div class="time-box"><div class="time-val" id="t-days">${days}</div><div class="time-label">أيام</div></div>
@@ -506,7 +497,6 @@ function updateCountdown(expiresAt, isDanger) {
       <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
     `;
   } else if (hours >= 1) {
-    // أقل من يوم: ساعات، دقايق، ثواني
     layout = 'layout-3';
     boxes = `
       <div class="time-box"><div class="time-val" id="t-hours">${hours}</div><div class="time-label">ساعات</div></div>
@@ -515,7 +505,6 @@ function updateCountdown(expiresAt, isDanger) {
     `;
     if (timerCard && !timerCard.classList.contains('danger')) timerCard.classList.add('danger');
   } else {
-    // أقل من ساعة: دقايق، ثواني (مكبرة)
     layout = 'layout-2';
     boxes = `
       <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
@@ -524,13 +513,11 @@ function updateCountdown(expiresAt, isDanger) {
     if (timerCard && !timerCard.classList.contains('danger')) timerCard.classList.add('danger');
   }
 
-  // تحديث التخطيط
   if (currentLayout !== layout) {
     timerGrid.className = 'timer-grid ' + layout;
     timerGrid.innerHTML = boxes;
     currentLayout = layout;
   } else {
-    // تحديث الأرقام
     if (days >= 1) {
       const elDays = document.getElementById('t-days');
       const elHours = document.getElementById('t-hours');
@@ -546,7 +533,6 @@ function updateCountdown(expiresAt, isDanger) {
       if (elMins) elMins.innerText = mins;
       if (elSecs) {
         elSecs.innerText = secs;
-        // 1. تأثير النبض على الثواني
         if (lastRenderedSec !== secs) {
           elSecs.classList.remove('tick');
           void elSecs.offsetWidth;
@@ -570,7 +556,6 @@ function updateCountdown(expiresAt, isDanger) {
     }
   }
 
-  // 6. تأثير التوهج عند الخطر
   if (isDanger && timerCard && !timerCard.classList.contains('danger')) {
     timerCard.classList.add('danger');
     const badge = document.getElementById('status-badge');
@@ -578,7 +563,6 @@ function updateCountdown(expiresAt, isDanger) {
   }
 }
 
-// بدء التشغيل
 const hasCache = loadFromCache();
 loadProfile();
 })();
