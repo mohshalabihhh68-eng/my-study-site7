@@ -34,6 +34,7 @@ import {
   getThanawicaSessionInfo
 } from "./thanawica.js";
 
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
@@ -1165,7 +1166,8 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 // STREAM
 // ═══════════════════════════════════════════════════════════
-const SOURCE_TTL_MS = Number(process.env.SOURCE_TTL_MS || 15 * 60_000);
+// Stream-Weave tokens die quickly; keep source cache short so we re-mint often
+const SOURCE_TTL_MS = Number(process.env.SOURCE_TTL_MS || 3 * 60_000);
 const sourceCache = new Map();
 const SID_TOKEN = "{{SID}}";
 
@@ -1284,12 +1286,14 @@ async function buildVideoSource(videoId, clientHeaders) {
   let mode = null; let streamUrl = null; let sessionToken = null; let resolvedVideoId = videoId; let probeText = null;
   const errors = [];
 
+  // جرّب Stream-Weave الأول (الأكثر استقراراً مع التشفير)
   try {
     const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
     if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
     mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
   } catch (e) { errors.push(e.message); }
 
+  // لو Weave فشل، جرّب CDN
   if (!mode) {
     try {
       const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
@@ -1350,15 +1354,33 @@ function getVideoSource(videoId, clientHeaders) {
   });
 }
 
-async function refreshSource(session) {
+async function refreshSource(session, force = false) {
   try {
-    const id = session.src.reqVideoId;
-    const cur = sourceCache.get(id);
-    if (cur && cur.src !== session.src && now() < cur.exp) { session.src = cur.src; return cur.src; }
+    const id = session.src?.reqVideoId;
+    if (!id) return null;
+    if (!force) {
+      const cur = sourceCache.get(id);
+      if (cur && cur.src !== session.src && now() < cur.exp) {
+        session.src = cur.src;
+        return cur.src;
+      }
+    }
+    // Force rebuild: wipe cache so getVideoSource issues a fresh stream-weave/play token
     sourceCache.delete(id);
+    console.log("[source refresh] rebuilding source for", id, force ? "(forced)" : "");
     const fresh = await getVideoSource(id, null);
-    if (fresh && fresh !== session.src) { session.src = fresh; return fresh; }
-  } catch (e) { console.warn("[source refresh]", e.message); }
+    if (fresh) {
+      session.src = fresh;
+      // Keep the stream session playlist in sync with the new segment URLs + key
+      if (session.id) {
+        streamSessions.set(session.id, session);
+        persistStreamSession(session).catch(() => {});
+      }
+      return fresh;
+    }
+  } catch (e) {
+    console.warn("[source refresh]", e.message);
+  }
   return null;
 }
 
@@ -1499,26 +1521,75 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
   return coalesce("seg:" + key, async () => {
     const hit2 = segGet(key);
     if (hit2) return hit2;
+
+    // Thanawica path
     if (session.src.mode === "thanawica" && typeof session.src._thDecrypt === "function") {
       const encrypted = await thMintAndFetchSegment(meta);
-      if (encrypted.length > CONFIG.MAX_PROXY_BYTES) { const e = new Error("المقطع كبير"); e.status = 413; throw e; }
+      if (encrypted.length > CONFIG.MAX_PROXY_BYTES) {
+        const e = new Error("المقطع كبير");
+        e.status = 413;
+        throw e;
+      }
       const ivHex = meta.iv || (iv ? Buffer.from(iv).toString("hex") : null);
       const plain = await session.src._thDecrypt(encrypted, ivHex);
       segSet(key, plain);
       return plain;
     }
+
+    // First attempt with current source
     let up = await streamFetch(session.src, url, {}, headers);
+    let usedSrc = session.src;
+    let usedUrl = url;
+    let usedIv = iv;
+
+    // On 401/403 the upstream stream token is dead → force full source rebuild
     if ((up.status === 401 || up.status === 403) && Number.isFinite(meta.s)) {
-      const fresh = await refreshSource(session);
-      const fu = fresh && fresh.segs[meta.s - fresh.mediaSeq];
-      if (fu) up = await streamFetch(fresh, fu.u, {}, headers);
+      console.warn("[seg] upstream", up.status, "→ force refresh", usedUrl.slice(0, 80));
+      try { await up.arrayBuffer(); } catch {}
+      const fresh = await refreshSource(session, true);
+      if (fresh && Array.isArray(fresh.segs) && fresh.segs.length) {
+        // Map by index (mediaSeq relative) first, then by absolute sequence
+        let fu = fresh.segs[meta.i];
+        if (!fu && Number.isFinite(meta.s)) {
+          fu = fresh.segs.find((s) => s.s === meta.s) || fresh.segs[meta.s - (fresh.mediaSeq || 0)];
+        }
+        if (!fu && Number.isFinite(meta.i)) fu = fresh.segs[meta.i];
+        if (fu) {
+          usedSrc = fresh;
+          usedUrl = fu.u;
+          usedIv = parseIvHex(fu.iv) || fresh.defaultIv || ivFromMediaSequence(fu.s || meta.s || 0);
+          up = await streamFetch(fresh, fu.u, {}, headers);
+          console.log("[seg] retry after refresh →", up.status);
+        }
+      }
     }
-    if (!up.ok) throw new Error(`Segment HTTP ${up.status}`);
+
+    if (!up.ok) {
+      // One last forced rebuild if still failing
+      if (up.status === 401 || up.status === 403) {
+        console.warn("[seg] still", up.status, "after refresh — giving up");
+      }
+      throw new Error(`Segment HTTP ${up.status}`);
+    }
+
     const encrypted = Buffer.from(await up.arrayBuffer());
-    if (encrypted.length > CONFIG.MAX_PROXY_BYTES) { const e = new Error("المقطع كبير"); e.status = 413; throw e; }
+    if (encrypted.length > CONFIG.MAX_PROXY_BYTES) {
+      const e = new Error("المقطع كبير");
+      e.status = 413;
+      throw e;
+    }
+
     let plain;
-    try { plain = decryptSegment(encrypted, session.src.plainKey, iv); } catch { plain = encrypted; }
+    try {
+      plain = decryptSegment(encrypted, usedSrc.plainKey, usedIv);
+    } catch (decErr) {
+      console.warn("[seg] decrypt failed, serving raw:", decErr.message);
+      plain = encrypted;
+    }
+
+    // Cache under both old and new keys so subsequent hits work
     segSet(key, plain);
+    if (usedUrl !== url) segSet(usedUrl + "|" + (meta.iv || ""), plain);
     return plain;
   });
 }
@@ -1542,7 +1613,7 @@ function prefetchAhead(session, meta, headers) {
 app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   let session;
   try { session = await getStreamSession(req.params.pid); assertStreamOwner(session, req); } catch (e) { return jsonError(res, e.status || 403, e.message || "غير مصرح"); }
-  if (!session.src.plainKey && session.src.mode !== "thanawica") return jsonError(res, 404, "غير متاح");
+  if (!session.src?.plainKey && session.src?.mode !== "thanawica") return jsonError(res, 404, "غير متاح");
   const idx = Number(req.params.idx);
   if (!Number.isFinite(idx) || idx < 0) return jsonError(res, 400, "طلب غير صالح");
   const segs = session.src.segs || [];
@@ -1552,22 +1623,21 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   const isTh = session.src?.mode === "thanawica";
   if (!url || (!isTh && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
   if (isTh && url && !/thanawica\.com/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
-  const meta = { ...sg, u: url, iv: sg.iv, s: sg.s };
+  // Include index so refresh can remap correctly after source rebuild
+  const meta = { ...sg, u: url, iv: sg.iv, s: sg.s, i: idx };
   const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
   try {
-    let plain;
-    if (req.headers.range && !isTh) {
-      const upstream = await streamFetch(session.src, url, { Range: req.headers.range }, req.headers);
-      if (!upstream.ok && upstream.status !== 206) throw new Error(`Segment HTTP ${upstream.status}`);
-      const encrypted = Buffer.from(await upstream.arrayBuffer());
-      if (encrypted.length > CONFIG.MAX_PROXY_BYTES) return jsonError(res, 413, "المقطع كبير");
-      try { plain = decryptSegment(encrypted, session.src.plainKey, iv); } catch { plain = encrypted; }
-    } else plain = await getSegmentPlain(session, meta, url, iv, req.headers);
+    // Always go through getSegmentPlain so 403 → force refresh works for range + normal
+    const plain = await getSegmentPlain(session, meta, url, iv, req.headers);
     res.status(200);
-    res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store" });
+    res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Accept-Ranges": "bytes" });
     res.send(plain);
     if (!req.headers.range) prefetchAhead(session, meta, req.headers);
-  } catch (e) { if (!res.headersSent) jsonError(res, e.status || 502, e.message); else res.end(); }
+  } catch (e) {
+    console.warn("[hls seg]", idx, e.message);
+    if (!res.headersSent) jsonError(res, e.status || 502, e.message);
+    else res.end();
+  }
 });
 
 app.get("/api/stream/manifest/:sessionId", (_req, res) => jsonError(res, 410, "المسار لم يعد متاحًا"));
