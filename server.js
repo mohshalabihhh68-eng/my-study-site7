@@ -1,4 +1,4 @@
-/**
+**
  * Thanawya World API — Protected Backend
  * VERSION v1.7.0 — Full Analytics (Visits + Watch History)
  */
@@ -1169,22 +1169,77 @@ app.get("/api/admin/visits", requireAdmin("students_view"), async (_req, res) =>
 // ==================== سجل المشاهدة ====================
 app.post("/api/track-video", requireStudent, async (req, res) => {
   try {
-    const { videoId, videoTitle, lectureId, lectureName } = req.body;
+    const { videoId, videoTitle, lectureId, lectureName, currentTime, duration, percent } = req.body;
     if (!videoId) return res.status(400).json({ success: false });
     
     const code = req.student.code;
     const nowTime = now();
     
-    const historyKey = `history/${code}/${nowTime}_${Math.random().toString(36).slice(2, 6)}`;
-    await fbSet(historyKey, {
+    // جلب السجل السابق لنفس الفيديو (لو موجود) عشان نحدّثه بدل ما نعمل سجل جديد كل مرة
+    const existing = await fbGet(`history/${code}/${videoId}`);
+    const curTime = Number(currentTime) || 0;
+    const dur = Number(duration) || 0;
+    const pct = Number(percent) || (dur > 0 ? Math.round(curTime / dur * 100) : 0);
+    
+    const record = {
       code: code,
       name: req.student.name,
       videoId: String(videoId),
       videoTitle: videoTitle || "فيديو",
       lectureId: lectureId || null,
       lectureName: lectureName || null,
-      time: nowTime
-    });
+      firstViewedAt: existing?.firstViewedAt || nowTime,
+      lastViewedAt: nowTime,
+      viewCount: (Number(existing?.viewCount) || 0) + 1,
+      maxPercent: Math.max(Number(existing?.maxPercent) || 0, pct),
+      lastCurrentTime: curTime,
+      duration: dur || Number(existing?.duration) || 0,
+      completed: (Math.max(Number(existing?.maxPercent) || 0, pct) >= 90)
+    };
+    
+    await fbSet(`history/${code}/${videoId}`, record);
+    res.json({ success: true });
+  } catch (e) {
+    console.warn("[track-video]", e.message);
+    res.json({ success: false });
+  }
+});
+
+app.get("/api/admin/history", requireAdmin("students_view"), async (_req, res) => {
+  try {
+    const history = (await fbGet("history")) || {};
+    let list = [];
+    for (const [code, videos] of Object.entries(history)) {
+      for (const [videoId, v] of Object.entries(videos || {})) {
+        list.push({ 
+          id: `${code}_${videoId}`, 
+          code, 
+          ...v,
+          time: v.lastViewedAt || v.time || 0
+        });
+      }
+    }
+    list.sort((a, b) => (b.time || 0) - (a.time || 0));
+    res.json({ success: true, data: list });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/admin/history/:code", requireAdmin("students_view"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    const history = (await fbGet(`history/${code}`)) || {};
+    const list = Object.entries(history).map(([videoId, v]) => ({ 
+      id: videoId, 
+      ...v,
+      time: v.lastViewedAt || v.time || 0
+    })).sort((a, b) => (b.time || 0) - (a.time || 0));
+    res.json({ success: true, data: list });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
     
     res.json({ success: true });
   } catch (e) {
