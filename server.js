@@ -1200,14 +1200,28 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   let mediaSeq = 0;
   let currentIv = null;
   let keyFetched = false;
+  let keyIvAttr = "";
   for (const raw of lines) { const t = raw.trim(); if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0; }
+
+  /*
+   * DIRECT_SEGMENTS strategy:
+   * Cloudflare blocks Railway/datacenter IPs on floravon/c-cdn.
+   * So we keep absolute CDN segment URLs (browser fetches with user IP),
+   * and only proxy the AES key through our server.
+   */
+  const DIRECT = process.env.HLS_DIRECT_SEGMENTS !== "0"; // default ON
+  src.directSegments = DIRECT;
+
   let segIndex = 0;
   for (const raw of lines) {
     const line = raw.trim();
     if (line.startsWith("#EXT-X-KEY:")) {
       const uri = line.match(/URI="([^"]+)"/)?.[1];
       const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
-      if (ivHex) currentIv = parseIvHex(ivHex);
+      if (ivHex) {
+        currentIv = parseIvHex(ivHex);
+        keyIvAttr = `IV=${ivHex.startsWith("0x") || ivHex.startsWith("0X") ? ivHex : ("0x" + ivHex)}`;
+      }
       if (uri && !keyFetched) {
         const keyUrl = new URL(uri, baseUrl).href;
         try { src.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
@@ -1218,8 +1232,13 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         else src.plainKey = await unwrapKey(wrapped, src.videoId);
         src.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId}`);
+        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} direct=${DIRECT}`);
       }
+      // Point KEY URI at our server so browser can decrypt CDN segments
+      if (DIRECT) {
+        out.push(`#EXT-X-KEY:METHOD=AES-128,URI="/api/hls/${SID_TOKEN}/key",${keyIvAttr || "IV=0x00000000000000000000000000000000"}`.replace(/,$/, ""));
+      }
+      // if !DIRECT we strip the key line (server decrypts) — old behavior
       continue;
     }
     if (line && !line.startsWith("#")) {
@@ -1228,8 +1247,13 @@ async function buildPlaylist(src, masterText, clientHeaders) {
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
       const ivHex = iv.toString("hex");
-      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
       segs.push({ u: segmentUrl, iv: ivHex, s: seq, i: segIndex });
+      if (DIRECT) {
+        // Browser hits CDN directly — avoids Cloudflare block on Railway IP
+        out.push(segmentUrl);
+      } else {
+        out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      }
       segIndex++;
       continue;
     }
@@ -1484,20 +1508,67 @@ function playlistBodyFromSession(session) {
   const src = session && session.src;
   if (!src) return null;
   let body = null;
-  if (src.playlist && typeof src.playlist === "string") body = src.playlist.split(SID_TOKEN).join(session.id);
-  else if (Array.isArray(src.segs) && src.segs.length) {
+  if (src.playlist && typeof src.playlist === "string") {
+    body = src.playlist.split(SID_TOKEN).join(session.id);
+  } else if (Array.isArray(src.segs) && src.segs.length) {
     const td = Number(src.targetDuration) || 6;
     const lines = ["#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(td))}`, "#EXT-X-PLAYLIST-TYPE:VOD", `#EXT-X-MEDIA-SEQUENCE:${Number(src.mediaSeq) || 0}`];
-    for (let i = 0; i < src.segs.length; i++) { const dur = Number(src.segs[i].dur) || td; lines.push(`#EXTINF:${Number(dur).toFixed(5)},`); lines.push(`/api/hls/${session.id}/seg/${i}`); }
+    if (src.directSegments && src.plainKey) {
+      const ivHex = src.defaultIv ? ("0x" + Buffer.from(src.defaultIv).toString("hex")) : "0x00000000000000000000000000000000";
+      lines.push(`#EXT-X-KEY:METHOD=AES-128,URI="/api/hls/${session.id}/key",IV=${ivHex}`);
+    }
+    for (let i = 0; i < src.segs.length; i++) {
+      const dur = Number(src.segs[i].dur) || td;
+      lines.push(`#EXTINF:${Number(dur).toFixed(5)},`);
+      if (src.directSegments && src.segs[i].u) lines.push(src.segs[i].u);
+      else lines.push(`/api/hls/${session.id}/seg/${i}`);
+    }
     lines.push("#EXT-X-ENDLIST");
     body = lines.join("\n");
   }
   if (!body) return null;
   if (session.streamKey) {
-    body = body.split("\n").map((line) => { const t = line.trim(); if (t && !t.startsWith("#") && t.includes("/api/hls/")) return t.includes("?") ? `${t}&sk=${session.streamKey}` : `${t}?sk=${session.streamKey}`; return line; }).join("\n");
+    // Only append sk to OUR /api/hls/ paths (key + optional seg), never to CDN absolute URLs
+    body = body.split("\n").map((line) => {
+      const t = line.trim();
+      if (!t) return line;
+      if (t.startsWith("#EXT-X-KEY:") && t.includes("/api/hls/")) {
+        return t.replace(/URI="([^"]+)"/, (_, uri) => {
+          const u = uri.includes("?") ? `${uri}&sk=${session.streamKey}` : `${uri}?sk=${session.streamKey}`;
+          return `URI="${u}"`;
+        });
+      }
+      if (!t.startsWith("#") && t.includes("/api/hls/")) {
+        return t.includes("?") ? `${t}&sk=${session.streamKey}` : `${t}?sk=${session.streamKey}`;
+      }
+      return line;
+    }).join("\n");
   }
   return body;
 }
+
+// Serve the unwrapped AES-128 key so the browser can decrypt CDN segments directly
+app.get("/api/hls/:pid/key", requireStudent, async (req, res) => {
+  try {
+    const session = await getStreamSession(req.params.pid);
+    assertStreamOwner(session, req);
+    const key = session.src && session.src.plainKey;
+    if (!key || !Buffer.isBuffer(key) || key.length !== 16) {
+      return jsonError(res, 404, "مفتاح التشفير غير متاح");
+    }
+    res.set({
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "16",
+      "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": req.headers.origin || "*",
+      "Access-Control-Allow-Credentials": "true"
+    });
+    res.status(200).send(key);
+  } catch (e) {
+    console.warn("[hls key]", e.message);
+    return jsonError(res, e.status || 403, e.message || "غير مصرح");
+  }
+});
 
 app.get("/api/hls/:pid/master.m3u8", requireStudent, async (req, res) => {
   try {
