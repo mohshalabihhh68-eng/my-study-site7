@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6.4 — File Proxy: relaxed detection + HTML errors (no more "file-proxy" downloads)
+ * VERSION v1.6.5 — File Proxy: support /api/file-proxy/document.pdf for better mobile preview
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.6.4";
+const APP_VERSION = "v1.6.5";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -2739,11 +2739,17 @@ app.post("/api/heartbeat", async function (req, res) {
 });
 
 // ==================== بروكسي الملفات (معاينة موثوقة للـ PDF والملفات) ====================
-app.get("/api/file-proxy", async (req, res) => {
+// ندعم /api/file-proxy و /api/file-proxy/document.pdf عشان الموبايل يفتح المعاينة
+app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
   try {
     let targetUrl = req.query.url;
     if (!targetUrl || typeof targetUrl !== "string") {
-      return res.status(400).send("Missing URL");
+      return res.status(400).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px}</style></head>
+        <body><div class="box"><h1>رابط الملف ناقص</h1><p>مفيش معامل url</p></div></body></html>`
+      );
     }
     // فك الترميز لو الـ frontend بعت الـ URL مُرمّز مرتين
     try {
@@ -2754,10 +2760,16 @@ app.get("/api/file-proxy", async (req, res) => {
     try {
       parsed = new URL(targetUrl);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return res.status(400).send("Invalid URL protocol");
+        return res.status(400).type("html").send(
+          `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطأ</title></head>
+          <body style="background:#111;color:#eee;text-align:center;padding:40px;font-family:sans-serif"><h1>رابط غير صالح</h1></body></html>`
+        );
       }
     } catch {
-      return res.status(400).send("Invalid URL");
+      return res.status(400).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطأ</title></head>
+        <body style="background:#111;color:#eee;text-align:center;padding:40px;font-family:sans-serif"><h1>رابط غير صالح</h1></body></html>`
+      );
     }
 
     const host = (parsed.hostname || "").toLowerCase();
