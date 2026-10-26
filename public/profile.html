@@ -98,6 +98,10 @@ body {
 .icon-box svg { width: 24px; height: 24px; }
 .status-badge { background: rgba(16, 185, 129, 0.15); color: var(--green); padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
 .status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 8px var(--green); }
+.status-badge.danger { background: rgba(239,68,68,0.15); color: var(--red); }
+.status-badge.danger::before { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.status-badge.warn { background: rgba(245,158,11,0.15); color: var(--amber); }
+.status-badge.warn::before { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 
 /* كارت العداد */
 .timer-card { 
@@ -112,12 +116,31 @@ body {
 }
 .timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
 
+/* شريط التقدم */
+.progress-bar-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255,255,255,0.05);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--blue2);
+  border-radius: 0 4px 4px 0;
+  transition: width 1s linear, background 0.3s;
+}
+
 /* حالة الخطر (الاشتراك قارب ينتهي) */
 .timer-card.danger { border-color: rgba(239,68,68,0.4); background: linear-gradient(135deg, #2a1419, #121a2b); }
 .timer-card.danger .timer-title h2 { color: #fca5a5; }
 .timer-card.danger .timer-badge { background: rgba(239,68,68,0.15); color: #fca5a5; }
 .timer-card.danger .timer-badge::before { background: var(--red); }
 .timer-card.danger .time-val { color: #fca5a5; text-shadow: 0 2px 10px rgba(239,68,68,0.2); }
+.timer-card.danger .progress-bar-fill { background: var(--red); }
 
 .timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; flex-wrap: wrap; gap: 10px; }
 .timer-title { display: flex; flex-direction: column; gap: 5px; text-align: right; }
@@ -126,11 +149,33 @@ body {
 .timer-badge { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .timer-badge::before { content: ''; width: 6px; height: 6px; background: var(--blue2); border-radius: 50%; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
+
 .timer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; position: relative; z-index: 2; }
+.timer-grid.layout-3 { grid-template-columns: repeat(3, 1fr); }
+.timer-grid.layout-2 { grid-template-columns: repeat(2, 1fr); max-width: 300px; margin: 0 auto; }
+
 .time-box { background: var(--card-inner); border: 1px solid rgba(255,255,255,.05); border-radius: 16px; padding: 15px 5px; text-align: center; transition: border-color 0.2s; }
 .time-box:hover { border-color: rgba(59,130,246,0.3); }
-.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; text-shadow: 0 2px 10px rgba(96,165,250,0.2); }
+.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; text-shadow: 0 2px 10px rgba(96,165,250,0.2); display: inline-block; }
 .time-label { color: var(--muted); font-size: 13px; font-weight: 700; }
+.time-val.tick { animation: tickPulse 0.3s ease; }
+@keyframes tickPulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); color: #fff; } 100% { transform: scale(1); } }
+
+/* شاشة الاشتراك المنتهي */
+.expired-screen {
+  text-align: center;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #2a1419, #121a2b);
+  border: 1px solid rgba(239,68,68,0.4);
+  border-radius: 24px;
+  margin-bottom: 20px;
+}
+.expired-screen svg { width: 60px; height: 60px; color: var(--red); margin-bottom: 15px; animation: pulse 2s infinite; }
+.expired-screen h2 { font-size: 24px; font-weight: 900; color: #fca5a5; margin: 0 0 10px; }
+.expired-screen p { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+.btn-renew { display: inline-flex; align-items: center; gap: 8px; background: var(--red); color: #fff; padding: 14px 24px; border-radius: 14px; font-weight: 900; text-decoration: none; transition: transform 0.2s; }
+.btn-renew:hover { transform: translateY(-2px); }
+.btn-renew:active { transform: scale(0.96); }
 
 /* زرار تسجيل الخروج */
 .logout-btn {
@@ -147,48 +192,13 @@ body {
 .logout-btn:active { transform: scale(0.97); }
 .logout-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
-/* زر نسخ الكود */
-.copy-btn {
-  background: transparent; border: none; color: var(--muted); cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 6px; border-radius: 8px; transition: all 0.2s; margin-right: auto;
-}
-.copy-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-.copy-btn:active { transform: scale(0.9); }
-.copy-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.code-wrapper { display: flex; align-items: center; gap: 8px; }
-
-/* الشريط التحذيري */
-.warn-strip {
-  display: none;
-  background: rgba(239,68,68,0.1);
-  border: 1px solid rgba(239,68,68,0.3);
-  color: #fca5a5;
-  padding: 14px 16px;
-  border-radius: 14px;
-  font-size: 13.5px;
-  font-weight: 700;
-  margin-bottom: 20px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  animation: fadeIn 0.4s ease;
-}
-.warn-strip.show { display: flex; }
-.warn-strip a {
-  background: var(--red);
-  color: #fff;
-  padding: 8px 16px;
-  border-radius: 10px;
-  text-decoration: none;
-  font-weight: 800;
-  font-size: 12.5px;
-  transition: transform 0.2s;
-  white-space: nowrap;
-}
-.warn-strip a:hover { transform: translateY(-2px); }
-.warn-strip a:active { transform: scale(0.95); }
+/* أزرار الكود */
+.code-actions { display: flex; gap: 4px; align-items: center; }
+.code-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 6px; border-radius: 8px; transition: all 0.2s; }
+.code-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.code-btn:active { transform: scale(0.9); }
+.code-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.code-btn.success { color: var(--green); }
 
 @media (max-width: 500px) {
   .time-val { font-size: 24px; }
@@ -226,11 +236,13 @@ body {
 
 const API_BASE = '';
 const TOKEN_KEY = 'student_token';
+const CACHE_KEY = 'student_data_cache';
 const TOKEN = localStorage.getItem(TOKEN_KEY);
 if (!TOKEN) { window.location.replace('login.html'); return; }
 
 const $ = id => document.getElementById(id);
 let countdownInterval = null;
+let lastRenderedDiff = null;
 
 function formatArabicDate(ts) {
   if (!ts) return 'غير محدد';
@@ -247,6 +259,160 @@ function getSectionName(sec) {
   return map[sec] || sec || 'غير محدد';
 }
 
+// عرض البيانات الأساسية فوراً من الكاش
+function renderBaseUI(me) {
+  const name = me.name || 'طالب';
+  const firstLetter = name.charAt(0);
+  const expiresAt = me.expiresAt;
+  const createdAt = formatArabicDate(expiresAt ? (expiresAt - 30*24*3600*1000) : Date.now());
+
+  const isDanger = expiresAt && (expiresAt - Date.now() < 3 * 24 * 3600 * 1000);
+
+  let html = `
+    <div class="hero-card">
+      <div class="hero-top">
+        <div class="avatar">${firstLetter}</div>
+        <div class="hero-text">
+          <span class="badge-student">👤 حساب طالب</span>
+          <h1 class="hero-name">${name}</h1>
+          <p class="hero-desc">أهلاً بيك في رحلة نجاحك! هنا كل تفاصيل حسابك عشان تبقى مطمن.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-details">
+      <div class="detail-card">
+        <div class="detail-info">
+          <span class="detail-label">المسار الدراسي</span>
+          <span class="detail-value">${getSectionName(me.section)}</span>
+        </div>
+        <div class="icon-box" style="color:var(--purple)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+      </div>
+
+      <div class="detail-card">
+        <div class="detail-info">
+          <span class="detail-label">كود الطالب</span>
+          <div class="code-actions">
+            <span class="detail-value" style="color:var(--blue2); direction:ltr; margin-left: 4px;">${me.code || '—'}</span>
+            <button class="code-btn" id="copy-code-btn" title="نسخ" aria-label="نسخ">
+              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+            <button class="code-btn" id="share-code-btn" title="مشاركة" aria-label="مشاركة">
+              <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="icon-box" style="color:var(--blue2)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+        </div>
+      </div>
+
+      <div class="detail-card">
+        <div class="detail-info">
+          <span class="detail-label">تاريخ إنشاء الحساب</span>
+          <span class="detail-value">${createdAt}</span>
+        </div>
+        <div class="icon-box" style="color:var(--blue)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+      </div>
+
+      <div class="detail-card">
+        <div class="detail-info">
+          <span class="detail-label">حالة الحساب</span>
+          <span class="status-badge ${isDanger ? 'danger' : ''}" id="status-badge">${isDanger ? 'قارب على الانتهاء' : 'مفعل'}</span>
+        </div>
+        <div class="icon-box" style="color:${isDanger ? 'var(--red)' : 'var(--green)'}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div id="timer-container">
+      <div class="timer-card ${isDanger ? 'danger' : ''}" id="timer-card">
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+        <div class="timer-top">
+          <div class="timer-badge">${isDanger ? 'قارب على الانتهاء' : 'العداد شغال'}</div>
+          <div class="timer-title">
+            <h2>فاضل على اشتراكك</h2>
+            <p>يخلص ${formatArabicDate(expiresAt)} في ${formatArabicTime(expiresAt)}</p>
+          </div>
+        </div>
+        <div class="timer-grid" id="timer-grid"></div>
+      </div>
+    </div>
+
+    <button class="logout-btn" id="logout-btn">
+      <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      تسجيل الخروج من الحساب
+    </button>
+  `;
+
+  $('main').innerHTML = html;
+
+  // ربط زر النسخ
+  const copyBtn = document.getElementById('copy-code-btn');
+  if (copyBtn && me.code) {
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(me.code);
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+        copyBtn.classList.add('success');
+        setTimeout(() => {
+          copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          copyBtn.classList.remove('success');
+        }, 2000);
+      } catch (err) {}
+    });
+  }
+
+  // زر المشاركة
+  const shareBtn = document.getElementById('share-code-btn');
+  if (shareBtn && me.code) {
+    shareBtn.addEventListener('click', () => {
+      const text = `مرحباً، كود الدخول الخاص بي في منصة ثانوية club هو: ${me.code}`;
+      if (navigator.share) {
+        navigator.share({ title: 'كود الدخول', text }).catch(() => {});
+      } else {
+        const url = 'https://wa.me/?text=' + encodeURIComponent(text);
+        window.open(url, '_blank');
+      }
+    });
+  }
+
+  // زر الخروج
+  document.getElementById('logout-btn').addEventListener('click', function() {
+    if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(CACHE_KEY);
+      window.location.href = 'login.html';
+    }
+  });
+
+  // بدء العداد
+  if (expiresAt) {
+    if (countdownInterval) clearInterval(countdownInterval);
+    updateCountdown(expiresAt, isDanger);
+    countdownInterval = setInterval(() => updateCountdown(expiresAt, isDanger), 1000);
+  }
+}
+
+// عرض البيانات من الكاش فوراً (للسرعة)
+function loadFromCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (cached && cached.name) {
+      renderBaseUI(cached);
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
 async function loadProfile() {
   try {
     const res = await fetch(API_BASE + '/api/auth/me', {
@@ -255,6 +421,7 @@ async function loadProfile() {
     
     if (res.status === 401 || res.status === 403) {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(CACHE_KEY);
       window.location.replace('login.html');
       return;
     }
@@ -263,165 +430,153 @@ async function loadProfile() {
     if (!res.ok || data.success === false) throw new Error(data.message || 'فشل جلب البيانات');
     
     const me = data.data;
-    const name = me.name || 'طالب';
-    const firstLetter = name.charAt(0);
-    const expiresAt = me.expiresAt;
-    const createdAt = formatArabicDate(expiresAt ? (expiresAt - 30*24*3600*1000) : Date.now());
-
-    // تحديد حالة الخطر (لو فاضل 3 أيام أو أقل)
-    const isDanger = expiresAt && (expiresAt - Date.now() < 3 * 24 * 3600 * 1000);
-
-    let html = `
-      <!-- الشريط التحذيري للاشتراكات القريبة من الانتهاء -->
-      <div class="warn-strip ${isDanger ? 'show' : ''}" id="warn-strip">
-        <span>⚠️ اشتراكك قارب على الانتهاء! جدد دلوقتي عشان متقطعش مذاكرتك.</span>
-        <a href="https://t.me/S7alaby7" target="_blank" rel="noopener">جدد الآن</a>
-      </div>
-
-      <div class="hero-card">
-        <div class="hero-top">
-          <div class="avatar">${firstLetter}</div>
-          <div class="hero-text">
-            <span class="badge-student">👤 حساب طالب</span>
-            <h1 class="hero-name">${name}</h1>
-            <p class="hero-desc">أهلاً بيك في رحلة نجاحك! هنا كل تفاصيل حسابك عشان تبقى مطمن.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid-details">
-        <div class="detail-card">
-          <div class="detail-info">
-            <span class="detail-label">المسار الدراسي</span>
-            <span class="detail-value">${getSectionName(me.section)}</span>
-          </div>
-          <div class="icon-box" style="color:var(--purple)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-          </div>
-        </div>
-
-        <div class="detail-card">
-          <div class="detail-info">
-            <span class="detail-label">كود الطالب</span>
-            <div class="code-wrapper">
-              <span class="detail-value" style="color:var(--blue2); direction:ltr;">${me.code || '—'}</span>
-              <button class="copy-btn" id="copy-code-btn" title="نسخ الكود" aria-label="نسخ الكود">
-                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              </button>
-            </div>
-          </div>
-          <div class="icon-box" style="color:var(--blue2)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
-          </div>
-        </div>
-
-        <div class="detail-card">
-          <div class="detail-info">
-            <span class="detail-label">تاريخ إنشاء الحساب</span>
-            <span class="detail-value">${createdAt}</span>
-          </div>
-          <div class="icon-box" style="color:var(--blue)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          </div>
-        </div>
-
-        <div class="detail-card">
-          <div class="detail-info">
-            <span class="detail-label">حالة الحساب</span>
-            <span class="status-badge">مفعل</span>
-          </div>
-          <div class="icon-box" style="color:var(--green)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg>
-          </div>
-        </div>
-      </div>
-
-      <div class="timer-card ${isDanger ? 'danger' : ''}" id="timer-card">
-        <div class="timer-top">
-          <div class="timer-badge">${isDanger ? 'قارب على الانتهاء' : 'العداد شغال'}</div>
-          <div class="timer-title">
-            <h2>فاضل على اشتراكك</h2>
-            <p>يخلص ${formatArabicDate(expiresAt)} في ${formatArabicTime(expiresAt)}</p>
-          </div>
-        </div>
-        <div class="timer-grid">
-          <div class="time-box"><div class="time-val" id="t-days">0</div><div class="time-label">أيام</div></div>
-          <div class="time-box"><div class="time-val" id="t-hours">0</div><div class="time-label">ساعات</div></div>
-          <div class="time-box"><div class="time-val" id="t-mins">0</div><div class="time-label">دقايق</div></div>
-          <div class="time-box"><div class="time-val" id="t-secs">0</div><div class="time-label">ثواني</div></div>
-        </div>
-      </div>
-
-      <button class="logout-btn" id="logout-btn">
-        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-        تسجيل الخروج من الحساب
-      </button>
-    `;
-
-    $('main').innerHTML = html;
     
-    // زر النسخ
-    const copyBtn = document.getElementById('copy-code-btn');
-    if (copyBtn && me.code) {
-      copyBtn.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(me.code);
-          copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
-          copyBtn.style.color = 'var(--green)';
-          setTimeout(() => {
-            copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-            copyBtn.style.color = '';
-          }, 2000);
-        } catch (err) {
-          console.error('Copy failed', err);
-        }
-      });
-    }
-
-    // زر الخروج
-    document.getElementById('logout-btn').addEventListener('click', function() {
-      if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
-        localStorage.removeItem(TOKEN_KEY);
-        window.location.href = 'login.html';
-      }
-    });
+    // تحديث الكاش
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(me)); } catch(e) {}
     
-    if (expiresAt) {
-      if (countdownInterval) clearInterval(countdownInterval);
-      updateCountdown(expiresAt, isDanger);
-      countdownInterval = setInterval(() => updateCountdown(expiresAt, isDanger), 1000);
-    }
+    // إعادة الرسم بالبيانات الحديثة
+    if (countdownInterval) clearInterval(countdownInterval);
+    renderBaseUI(me);
 
   } catch (e) {
-    $('main').innerHTML = `<div style="text-align:center; color:var(--red); padding:50px;">خطأ: ${e.message}</div>`;
+    if (!document.getElementById('timer-card')) {
+      $('main').innerHTML = `<div style="text-align:center; color:var(--red); padding:50px;">خطأ: ${e.message}</div>`;
+    }
   }
 }
 
 function updateCountdown(expiresAt, isDanger) {
   const now = Date.now();
   const diff = expiresAt - now;
+  const timerGrid = document.getElementById('timer-grid');
+  const timerCard = document.getElementById('timer-card');
+  const progressFill = document.getElementById('progress-fill');
+  
+  if (!timerGrid) return;
+
+  // الاشتراك انتهى
   if (diff <= 0) {
-    document.getElementById('t-days').innerText = '0';
-    document.getElementById('t-hours').innerText = '0';
-    document.getElementById('t-mins').innerText = '0';
-    document.getElementById('t-secs').innerText = '0';
     if (countdownInterval) clearInterval(countdownInterval);
+    
+    const container = document.getElementById('timer-container');
+    if (container && !document.querySelector('.expired-screen')) {
+      container.innerHTML = `
+        <div class="expired-screen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <h2>انتهى الاشتراك!</h2>
+          <p>اشتراكك خلص. عشان تكمل مذاكرتك، جدد اشتراكك دلوقتي.</p>
+          <a href="https://t.me/S7alaby7" target="_blank" rel="noopener" class="btn-renew">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+            جدد عبر تيليجرام
+          </a>
+        </div>
+      `;
+    }
+    const badge = document.getElementById('status-badge');
+    if (badge) { badge.textContent = 'منتهي'; badge.className = 'status-badge danger'; }
     return;
   }
+
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   const secs = Math.floor((diff % (1000 * 60)) / 1000);
-  const elDays = document.getElementById('t-days');
-  if (elDays) {
-    elDays.innerText = days;
-    document.getElementById('t-hours').innerText = hours;
-    document.getElementById('t-mins').innerText = mins;
-    document.getElementById('t-secs').innerText = secs;
+
+  // حساب نسبة التقدم (بافتراض أن الاشتراك كان 30 يوم = 2,592,000 ثانية)
+  const totalDuration = 30 * 24 * 3600 * 1000;
+  const elapsed = Math.max(0, totalDuration - diff);
+  const percent = Math.min(100, (elapsed / totalDuration) * 100);
+
+  if (progressFill) {
+    progressFill.style.width = percent + '%';
+  }
+
+  // --- العداد الذكي ---
+  let layout = 'layout-4';
+  let boxes = '';
+
+  if (days >= 1) {
+    // أكثر من يوم: أيام، ساعات، دقايق (بدون ثواني)
+    layout = 'layout-3';
+    boxes = `
+      <div class="time-box"><div class="time-val" id="t-days">${days}</div><div class="time-label">أيام</div></div>
+      <div class="time-box"><div class="time-val" id="t-hours">${hours}</div><div class="time-label">ساعات</div></div>
+      <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
+    `;
+  } else if (hours >= 1) {
+    // أقل من يوم: ساعات، دقايق، ثواني
+    layout = 'layout-3';
+    boxes = `
+      <div class="time-box"><div class="time-val" id="t-hours">${hours}</div><div class="time-label">ساعات</div></div>
+      <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
+      <div class="time-box"><div class="time-val" id="t-secs">${secs}</div><div class="time-label">ثواني</div></div>
+    `;
+    if (!timerCard.classList.contains('danger')) timerCard.classList.add('danger');
+  } else {
+    // أقل من ساعة: دقايق، ثواني
+    layout = 'layout-2';
+    boxes = `
+      <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
+      <div class="time-box"><div class="time-val" id="t-secs">${secs}</div><div class="time-label">ثواني</div></div>
+    `;
+    if (!timerCard.classList.contains('danger')) timerCard.classList.add('danger');
+  }
+
+  // إعادة بناء الأرقام فقط لو التخطيط اتغير
+  if (timerGrid.className !== 'timer-grid ' + layout) {
+    timerGrid.className = 'timer-grid ' + layout;
+    timerGrid.innerHTML = boxes;
+  } else {
+    // تحديث الأرقام فقط (عشان نحافظ على الأداء والأنيميشن)
+    if (days >= 1) {
+      document.getElementById('t-days').innerText = days;
+      document.getElementById('t-hours').innerText = hours;
+      document.getElementById('t-mins').innerText = mins;
+    } else if (hours >= 1) {
+      document.getElementById('t-hours').innerText = hours;
+      document.getElementById('t-mins').innerText = mins;
+      const secEl = document.getElementById('t-secs');
+      if (secEl) {
+        secEl.innerText = secs;
+        // تأثير النبضة (Tick) كل ثانية
+        if (lastRenderedDiff !== secs) {
+          secEl.classList.remove('tick');
+          void secEl.offsetWidth;
+          secEl.classList.add('tick');
+          lastRenderedDiff = secs;
+        }
+      }
+    } else {
+      document.getElementById('t-mins').innerText = mins;
+      const secEl = document.getElementById('t-secs');
+      if (secEl) {
+        secEl.innerText = secs;
+        if (lastRenderedDiff !== secs) {
+          secEl.classList.remove('tick');
+          void secEl.offsetWidth;
+          secEl.classList.add('tick');
+          lastRenderedDiff = secs;
+        }
+      }
+    }
+  }
+
+  // التحقق من حالة الخطر لتحديث لون الكارت
+  if (isDanger && timerCard && !timerCard.classList.contains('danger')) {
+    timerCard.classList.add('danger');
+    const badge = document.getElementById('status-badge');
+    if (badge) { badge.textContent = 'قارب على الانتهاء'; badge.className = 'status-badge warn'; }
   }
 }
 
+// --- بدء التشغيل ---
+// محاولة العرض من الكاش أولاً (سرعة فائقة)
+const hasCache = loadFromCache();
+// ثم تحديث البيانات من السيرفر في الخلفية
 loadProfile();
+
 })();
 </script>
 </body>
