@@ -1,4 +1,4 @@
-<!doctype html>
+!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
@@ -1618,8 +1618,22 @@ $('skipBtn').onclick=()=>{
 };
 
 /* ============ تسجيل المشاهدة ============ */
-function trackView(videoId, videoTitle) {
-    if (!token) return;
+let trackViewTimer = 0;
+let lastTracked = { videoId: null, time: 0 };
+
+function trackView(videoId, videoTitle, force) {
+    if (!token || current < 0 || !videos[current]) return;
+    
+    const curTime = Number(video.currentTime) || 0;
+    const dur = Number(video.duration) || 0;
+    
+    // تحديث كل 20 ثانية فقط (إلا لو force)
+    if (!force && lastTracked.videoId === videoId && Math.abs(curTime - lastTracked.time) < 20) {
+        return;
+    }
+    
+    lastTracked = { videoId, time: curTime };
+    
     fetch('/api/track-video', {
         method: 'POST',
         headers: {
@@ -1630,10 +1644,52 @@ function trackView(videoId, videoTitle) {
             videoId: videoId,
             videoTitle: videoTitle,
             lectureId: lectureId,
-            lectureName: document.getElementById('lectureName')?.textContent || ''
+            lectureName: document.getElementById('lectureName')?.textContent || '',
+            currentTime: curTime,
+            duration: dur,
+            percent: dur > 0 ? Math.round(curTime / dur * 100) : 0
         })
     }).catch(() => {});
 }
+
+// تسجيل عند تحميل البيانات الوصفية (المدة متاحة)
+video.addEventListener('loadedmetadata', function() {
+    if (current >= 0 && videos[current]) {
+        trackView(videos[current].id, videos[current].title, true);
+    }
+});
+
+// تسجيل دوري أثناء التشغيل
+video.addEventListener('play', function() {
+    clearInterval(trackViewTimer);
+    trackViewTimer = setInterval(() => {
+        if (!video.paused && current >= 0 && videos[current]) {
+            trackView(videos[current].id, videos[current].title, false);
+        }
+    }, 20000);
+});
+
+// تسجيل عند الإيقاف المؤقت
+video.addEventListener('pause', function() {
+    if (current >= 0 && videos[current]) {
+        trackView(videos[current].id, videos[current].title, true);
+    }
+});
+
+// تسجيل عند الانتهاء
+video.addEventListener('ended', function() {
+    clearInterval(trackViewTimer);
+    if (current >= 0 && videos[current]) {
+        trackView(videos[current].id, videos[current].title, true);
+    }
+});
+
+// تسجيل عند إغلاق الصفحة
+window.addEventListener('pagehide', function() {
+    if (current >= 0 && videos[current]) {
+        trackView(videos[current].id, videos[current].title, true);
+    }
+});
 
 // إضافة استدعاء التسجيل عند بدء التشغيل
 video.addEventListener('play', function onFirstPlay() {
