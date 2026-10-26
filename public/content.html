@@ -12,20 +12,24 @@ body { background: var(--bg); color: var(--ink); font-family: 'Cairo', sans-seri
 button { font: inherit; cursor: pointer; border: none; outline: none; }
 a { text-decoration: none; color: inherit; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-.app-nav { position: sticky; top: 0; z-index: 40; background: rgba(7, 11, 20, .85); backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); }
-.app-nav-in { max-width: 1120px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 16px; cursor: pointer; }
-.brand img { width: 38px; height: 38px; border-radius: 12px; box-shadow: 0 4px 12px rgba(37,99,235,.3); }
-.brand small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 2px; }
-.profile-wrap { position: relative; margin-right: auto; }
-.profile-btn { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 12px 5px 5px; font-weight: 800; font-size: 13px; color: var(--ink); }
-.profile-btn .av { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--blue), var(--blue3)); color: #fff; display: grid; place-items: center; font-weight: 900; font-size: 14px; }
+
+/* Navbar الموحد */
+.app-nav{position:sticky;top:0;z-index:40;background:rgba(7,11,20,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer}
+.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#5ba0ff,#2454d8);box-shadow:0 8px 26px #2563eb55;color:white}
+.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
+.profile-wrap{position:relative;margin-right:auto}
+.profile-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px 5px 5px;font-weight:800;font-size:13px;color:var(--ink);}
+.profile-btn .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue3));color:#fff;display:grid;place-items:center;font-weight:900;font-size:14px}
 .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 90px; }
 
-/* زرار الرجوع الموحد */
-.back-btn { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, var(--blue), var(--blue3)); color: #fff; border: 0; border-radius: 12px; padding: 10px 18px; font-weight: 800; font-size: 14px; cursor: pointer; margin-bottom: 24px; transition: all .2s ease; box-shadow: 0 4px 12px rgba(37,99,235,.3); }
-.back-btn:hover { transform: translateX(4px); box-shadow: 0 6px 16px rgba(37,99,235,.5); filter: brightness(1.1); }
-.back-btn svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2.5; fill: none; }
+/* زرار الرجوع (زي الصورة) */
+.header-action { display: flex; justify-content: flex-start; margin-bottom: 20px; }
+.back-btn { display: inline-flex; align-items: center; gap: 10px; background: #111a2b; border: 1px solid rgba(255,255,255,0.05); color: #fff; border-radius: 14px; padding: 10px 20px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+.back-btn:hover { background: #1a253a; }
+.back-btn svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
 .top-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; animation: fadeUp .4s ease both; flex-wrap: wrap; gap: 16px;}
 .header-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; width: 100%; justify-content: flex-end; min-height: 30px;}
@@ -74,7 +78,12 @@ a { text-decoration: none; color: inherit; }
 <body>
 <header class="app-nav">
   <div class="app-nav-in">
-    <div class="brand" id="brand-home"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563eb'/%3E%3Cpath d='M32 14 8 26l24 12 24-12z' fill='%23fff'/%3E%3C/svg%3E" alt="Logo"><div>ثانوية club<small>منصة الثانوية العامة</small></div></div>
+    <div class="brand" onclick="window.location.href='index.html'">
+      <span class="logo">
+        <svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg>
+      </span>
+      <span>ثانوية <span style="color:var(--blue2)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
+    </div>
     <div class="profile-wrap"><button class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
   </div>
 </header>
@@ -128,10 +137,12 @@ a { text-decoration: none; color: inherit; }
       if (subjectName) tagsHtml += `<span class="tag">${esc(subjectName)}</span>`;
 
       let html = `
-      <button class="back-btn" onclick="history.back()">
-        <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        رجوع للمحاضرات
-      </button>
+      <div class="header-action">
+        <button class="back-btn" onclick="history.back()">
+          <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          رجوع للفصل
+        </button>
+      </div>
       <div class="top-header">
         <div style="display:flex; flex-direction: column; gap: 16px; align-items: flex-start; width: 100%;">
           <div class="header-tags">${tagsHtml}</div>
@@ -178,7 +189,6 @@ a { text-decoration: none; color: inherit; }
     } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
   }
   async function loadProfile() { try { const me = await api('/api/auth/me'); if(me) { $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); } } catch (e) {} }
-  $('brand-home').onclick = () => window.location.href = 'index.html';
   load(); loadProfile();
 })();
 </script>
