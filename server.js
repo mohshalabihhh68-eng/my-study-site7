@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6 — Robust File Proxy (in-memory + correct headers for reliable PDF preview)
+ * VERSION v1.6.1 — File Proxy: auth + fetchT/relay + smarter PDF detection
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.6";
+const APP_VERSION = "v1.6.1";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -2741,12 +2741,15 @@ app.post("/api/heartbeat", async function (req, res) {
 // ==================== بروكسي الملفات (معاينة موثوقة للـ PDF والملفات) ====================
 app.get("/api/file-proxy", async (req, res) => {
   try {
-    const targetUrl = req.query.url;
+    let targetUrl = req.query.url;
     if (!targetUrl || typeof targetUrl !== "string") {
       return res.status(400).send("Missing URL");
     }
+    // فك الترميز لو الـ frontend بعت الـ URL مُرمّز مرتين
+    try {
+      if (targetUrl.includes("%")) targetUrl = decodeURIComponent(targetUrl);
+    } catch {}
 
-    // منع SSRF بسيط: فقط http/https
     let parsed;
     try {
       parsed = new URL(targetUrl);
@@ -2757,23 +2760,51 @@ app.get("/api/file-proxy", async (req, res) => {
       return res.status(400).send("Invalid URL");
     }
 
-    const headers = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Referer": "https://coursatk.online/",
-      "Origin": "https://coursatk.online",
-      "Accept": "application/pdf,application/octet-stream,image/*,*/*;q=0.8"
-    };
+    const host = (parsed.hostname || "").toLowerCase();
+    const needsCoursatkAuth =
+      host.includes("coursatk") ||
+      host.includes("stream-weave") ||
+      host.includes("floravon") ||
+      host.includes("c-cdn") ||
+      host.includes("thanawica") ||
+      CONFIG.STREAM_HOSTS.some((h) => host === h || host.endsWith("." + h));
 
-    // دعم Range لو المتصفح طلب جزء من الملف (مفيد لبعض عارضات PDF)
-    if (req.headers.range) {
-      headers.Range = req.headers.range;
+    const tok = needsCoursatkAuth ? await getCoursatkToken() : "";
+
+    const baseHeaders = {
+      "User-Agent": CONFIG.STREAM_UA || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Referer": CONFIG.STREAM_REFERER || "https://coursatk.online/",
+      "Origin": CONFIG.STREAM_ORIGIN || "https://coursatk.online",
+      "Accept": "application/pdf,application/octet-stream,image/*,*/*;q=0.8",
+      "Accept-Language": "ar,en;q=0.9"
+    };
+    if (tok) baseHeaders.Authorization = `Bearer ${tok}`;
+    if (req.headers.range) baseHeaders.Range = req.headers.range;
+
+    // نستخدم fetchT عشان يدعم الـ proxy / relay ويتعامل مع Cloudflare
+    let upstream;
+    try {
+      upstream = await upstreamSlot(() =>
+        fetchT(targetUrl, { headers: baseHeaders, redirect: "follow" }, { timeout: 50_000, retries: 1 })
+      );
+    } catch (fetchErr) {
+      console.error("[file-proxy] fetch failed:", fetchErr.message, String(targetUrl).slice(0, 100));
+      return res.status(502).send("Error fetching file: " + (fetchErr.message || "network"));
     }
 
-    const upstream = await fetch(targetUrl, {
-      headers,
-      redirect: "follow",
-      signal: AbortSignal.timeout(45_000)
-    });
+    if (!upstream.ok) {
+      // جرب مرة تانية بدون Authorization لو فشلت (بعض الروابط عامة)
+      if (tok && (upstream.status === 401 || upstream.status === 403)) {
+        try { await upstream.arrayBuffer(); } catch {}
+        const noAuthHeaders = { ...baseHeaders };
+        delete noAuthHeaders.Authorization;
+        try {
+          upstream = await upstreamSlot(() =>
+            fetchT(targetUrl, { headers: noAuthHeaders, redirect: "follow" }, { timeout: 40_000, retries: 0 })
+          );
+        } catch {}
+      }
+    }
 
     if (!upstream.ok) {
       console.error("[file-proxy] upstream", upstream.status, String(targetUrl).slice(0, 120));
@@ -2786,38 +2817,51 @@ app.get("/api/file-proxy", async (req, res) => {
       return res.status(502).send("Empty file from upstream");
     }
 
+    // كشف لو الـ upstream رجّع صفحة خطأ HTML رغم الـ 200
+    const headText = buffer.slice(0, 400).toString("utf8").toLowerCase();
+    const looksLikeHtmlError =
+      (headText.includes("<!doctype") || headText.includes("<html") || headText.includes("<head")) &&
+      (headText.includes("cloudflare") || headText.includes("access denied") || headText.includes("forbidden") ||
+       headText.includes("unauthorized") || headText.includes("error") || headText.includes("login") ||
+       headText.includes("captcha") || buffer.length < 2000);
+
+    if (looksLikeHtmlError) {
+      console.error("[file-proxy] got HTML error page instead of file:", String(targetUrl).slice(0, 100));
+      return res.status(502).send("Upstream returned an error page instead of the file");
+    }
+
     // تحديد Content-Type بشكل ذكي
     let contentType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
     const magic = buffer.slice(0, 8).toString("ascii");
-    if (
-      magic.startsWith("%PDF-") ||
-      contentType.includes("text/html") ||
-      (contentType.includes("application/octet-stream") && String(targetUrl).toLowerCase().includes(".pdf"))
-    ) {
+    const urlLower = String(targetUrl).toLowerCase();
+
+    if (magic.startsWith("%PDF-")) {
       contentType = "application/pdf";
+    } else if (contentType.includes("text/html") || contentType.includes("text/plain")) {
+      // upstream أحيانًا يرجع text/html أو text/plain للـ PDF
+      if (magic.startsWith("%PDF-") || urlLower.includes(".pdf")) contentType = "application/pdf";
     } else if (!contentType || contentType === "application/octet-stream") {
-      // fallback حسب الامتداد
-      const lower = String(targetUrl).toLowerCase();
-      if (lower.includes(".pdf")) contentType = "application/pdf";
-      else if (lower.match(/\.(jpe?g)$/)) contentType = "image/jpeg";
-      else if (lower.includes(".png")) contentType = "image/png";
-      else if (lower.includes(".webp")) contentType = "image/webp";
+      if (urlLower.includes(".pdf") || magic.startsWith("%PDF-")) contentType = "application/pdf";
+      else if (urlLower.match(/\.(jpe?g)(\?|$)/)) contentType = "image/jpeg";
+      else if (urlLower.match(/\.png(\?|$)/)) contentType = "image/png";
+      else if (urlLower.match(/\.webp(\?|$)/)) contentType = "image/webp";
+      else if (urlLower.match(/\.(mp4|webm)(\?|$)/)) contentType = urlLower.includes("webm") ? "video/webm" : "video/mp4";
       else contentType = "application/octet-stream";
     }
 
     // هيدرز ضرورية لمعاينة PDF سليمة في المتصفح والموبايل
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Length", String(buffer.length));
-    res.setHeader("Content-Disposition", contentType === "application/pdf"
-      ? 'inline; filename="document.pdf"'
-      : 'inline');
+    res.setHeader(
+      "Content-Disposition",
+      contentType === "application/pdf" ? 'inline; filename="document.pdf"' : "inline"
+    );
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Accept-Ranges");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Accept-Ranges, Content-Range");
     res.setHeader("Cache-Control", "private, max-age=1800");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Accept-Ranges", "bytes");
 
-    // لو فيه Content-Range من الـ upstream (Range request)
     const cr = upstream.headers.get("content-range");
     if (cr) {
       res.setHeader("Content-Range", cr);
