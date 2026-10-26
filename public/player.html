@@ -1,4 +1,4 @@
-!doctype html>
+<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
@@ -50,7 +50,7 @@ img{display:block;max-width:100%}
 /* طبقة اللمس */
 .ptap{position:absolute;inset:0;z-index:2;background:transparent;-webkit-touch-callout:none}
 
-/* إظهار / إخفاء الواجهة (الحاويات نفسها مش بتاخد لمس، الأزرار بس) */
+/* إظهار / إخفاء الواجهة */
 .ptop,.pcenter,.pctrl{position:absolute;opacity:0;transition:opacity .22s;pointer-events:none}
 .screen.show-ui .ptop,.screen.show-ui .pcenter,.screen.show-ui .pctrl{opacity:1}
 .screen.show-ui .ptop>*,.screen.show-ui .pcenter>*,.screen.show-ui .pctrl>*{pointer-events:auto}
@@ -61,7 +61,7 @@ img{display:block;max-width:100%}
 .ptitle{flex:1;min-width:0;color:#fff;font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .plive{font-size:10px;font-weight:900;background:#3b82f633;color:#93c5fd;border-radius:99px;padding:4px 9px;flex:none}
 
-/* الأزرار الدائرية - مقاس موحّد */
+/* الأزرار الدائرية */
 .ib{--ibs:40px;width:var(--ibs);height:var(--ibs);flex:none;border:0;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center;position:relative;transition:transform .15s,background .15s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .ib:hover{background:#ffffff2e}
 .ib:active{transform:scale(.92)}
@@ -149,7 +149,7 @@ img{display:block;max-width:100%}
 .holdb.show{display:inline-flex}
 .holdb svg{width:16px;height:16px;stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
-/* توست داخل المشغّل (بيظهر حتى في ملء الشاشة) */
+/* توست */
 .toast{position:absolute;top:16%;left:50%;transform:translate(-50%,-10px);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;background:#0b1220ee;border:1px solid #ffffff22;color:#fff;padding:7px 14px;border-radius:99px;z-index:25;font-size:12px;font-weight:800;box-shadow:0 8px 28px #0008;max-width:calc(100% - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
@@ -245,7 +245,6 @@ img{display:block;max-width:100%}
   .itemtitle{font-size:11px}
   .stat b{font-size:16px}
   .stat{padding:10px 6px}
-  /* المشغّل */
   .ptop{padding:8px 10px 22px;gap:8px}
   .ptitle{font-size:12px}
   .ib{--ibs:36px}
@@ -264,7 +263,6 @@ img{display:block;max-width:100%}
   .plive{display:none}
   .pill{min-width:40px;height:28px;padding:0 8px;font-size:12px;margin:0 2px}
 }
-
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
@@ -272,7 +270,6 @@ img{display:block;max-width:100%}
 </head>
 <body>
 
-<!-- ============ HEADER ============ -->
 <header class="top">
   <div class="topin">
     <div class="brand">
@@ -292,42 +289,31 @@ img{display:block;max-width:100%}
   </div>
 </header>
 
-<!-- ============ MAIN ============ -->
 <main class="wrap">
   <div class="crumb" id="crumb">المحاضرات / جاري تجهيز المشغل…</div>
 
   <div class="layout">
-    <!-- PLAYER -->
     <section class="main">
       <article class="player-card">
         <div class="screen paused" id="screen">
           <video id="video" playsinline webkit-playsinline preload="metadata" controlslist="nodownload noplaybackrate" oncontextmenu="return false"></video>
-
-          <!-- طبقة اللمس -->
           <div class="ptap" id="ptap"></div>
-
-          <!-- تأثيرات -->
           <div class="fx l" id="fxl"></div>
           <div class="fx r" id="fxr"></div>
           <div class="holdb" id="holdb"><svg viewBox="0 0 24 24"><path d="m5 6 6 6-6 6M13 6l6 6-6 6"/></svg><span>سرعة 2×</span></div>
 
-          <!-- الشريط العلوي -->
           <div class="ptop">
-            <button class="ib" id="pback" type="button" aria-label="رجوع">
-              <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-            </button>
+            <button class="ib" id="pback" type="button" aria-label="رجوع"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
             <div class="ptitle" id="ptitle"></div>
             <span class="plive">ثانوية club</span>
           </div>
 
-          <!-- أزرار المنتصف (للموبايل) -->
           <div class="pcenter">
             <button class="ib sk" id="pb" type="button" aria-label="رجوع 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 0 6 2.5"/><path d="M15.5 1.2 12 4l3.5 2.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
             <button class="bigplay" id="pc" type="button" aria-label="تشغيل"><svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></button>
             <button class="ib sk" id="pf" type="button" aria-label="تقديم 10 ثواني"><svg viewBox="0 0 24 24"><path d="M12 4a8.5 8.5 0 1 1-6 2.5"/><path d="M8.5 1.2 12 4 8.5 6.8"/><text x="12" y="14.6" text-anchor="middle" font-size="7.4" font-weight="900" font-family="Cairo,sans-serif" fill="currentColor" stroke="none">10</text></svg></button>
           </div>
 
-          <!-- الشريط السفلي -->
           <div class="pctrl">
             <div class="seekwrap" id="pseek" tabindex="0" role="slider" aria-label="تقدم الفيديو" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
               <div class="rail"><i id="pbuf"></i><i id="pplayed"></i></div>
@@ -350,19 +336,14 @@ img{display:block;max-width:100%}
             </div>
           </div>
 
-          <!-- القائمة العائمة -->
           <div class="pmenu" id="pmenu"></div>
-
-          <!-- توست -->
           <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-          <!-- Loading -->
           <div class="loading show" id="loading">
             <div class="spin"></div>
             <span id="loadText">جاري تحميل المحاضرة…</span>
           </div>
 
-          <!-- Error -->
           <div class="error" id="error">
             <div class="eic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.1"/></svg></div>
             <b id="errorTitle">مش قادر أشغّل الفيديو</b>
@@ -375,7 +356,6 @@ img{display:block;max-width:100%}
         </div>
       </article>
 
-      <!-- Info -->
       <div class="titlebox">
         <div class="eyebrow" id="lectureName">محتوى المحاضرة</div>
         <h1 id="videoTitle">جاري تجهيز الفيديو…</h1>
@@ -396,7 +376,6 @@ img{display:block;max-width:100%}
       </div>
     </section>
 
-    <!-- PLAYLIST -->
     <aside class="panel">
       <div class="panel-head">
         <div class="panel-heading">
@@ -428,21 +407,25 @@ img{display:block;max-width:100%}
   </div>
 </main>
 
-
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <script>
 (function(){
 'use strict';
 
-/* ============ CONFIG ============ */
-// نفس الـ origin (server.js) عشان /api/stream و /api/video تشتغل
 const API = '';
 const token = localStorage.getItem('student_token') || localStorage.getItem('cstk_tok') || '';
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
 const initialVideoId = qs.get('videoId');
 
-/* Stream-Weave crypto + playlist helpers (من app.js) */
+// تسجيل فتح الموقع (الزيارة)
+if (token) {
+  fetch('/api/auth/track', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token }
+  }).catch(() => {});
+}
+
 let cryptoUtils = null;
 let currentKeyBlobUrl = null;
 let currentPlaylistBlobUrl = null;
@@ -520,7 +503,6 @@ function resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) {
 
   var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
 
-  // فك /api/cdn?u=... لو موجود
   try {
     if (uri.indexOf('/api/cdn') === 0 || (origin && uri.indexOf(origin + '/api/cdn') === 0)) {
       var cu = new URL(uri, origin || 'https://localhost');
@@ -529,12 +511,9 @@ function resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) {
     }
   } catch (e) {}
 
-  // مهم: روابط /api/stream لازم تكون absolute
-  // لأن الـ playlist بيتحمّل من blob: URL → المسار النسبي بيتحوّل لـ blob:https:/api/...
   if (uri.indexOf('/api/stream') === 0) return origin + uri;
   if (origin && uri.indexOf(origin + '/api/stream') === 0) return uri;
 
-  // روابط CDN الخارجية → مسار Stream-Weave عبر /api/stream (absolute)
   if (/^https?:\/\//i.test(uri)) {
     try {
       var pu = new URL(uri);
@@ -577,14 +556,12 @@ function rewritePlaylist(text, streamToken, keyBlobUrl, variantBasePath, variant
   }).join('\n');
 }
 
-// تحميل الـ crypto من الأول
 loadPlayerScript().then(function (c) { cryptoUtils = c; }).catch(function () {});
 
 const $=id=>document.getElementById(id);
 const video=$('video');
 const screenEl=$('screen');
 
-/* تفضيلات المشغّل (بتتحفظ على الجهاز) */
 const PREF_KEY='cstk_player_pref';
 function readPref(){try{return JSON.parse(localStorage.getItem(PREF_KEY)||'{}')||{}}catch(e){return {}}}
 let prefs=Object.assign({rate:1,autonext:true,volume:1,muted:false},readPref());
@@ -593,7 +570,6 @@ function savePref(){try{localStorage.setItem(PREF_KEY,JSON.stringify(prefs))}cat
 let videos=[],current=-1,hls=null,lastSaved=0,toastTimer=0,ready=false;
 let lectureTitle='المحاضرة',listFilter='all',listQuery='',pendingRestore=-1;
 
-/* ============ HELPERS ============ */
 const storeKey=id=>'cstk_w_'+String(id);
 function readProgress(id){try{return JSON.parse(localStorage.getItem(storeKey(id))||'null')}catch(e){return null}}
 function saveProgress(){
@@ -660,14 +636,12 @@ async function api(path,opts={}){
     if(r.status===401||r.status===403){er.kind='auth';er.message='جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.'}
     throw er;
   }
-  // unwrap data if present (نفس سلوك app.js)
   return (d && d.data !== undefined) ? d.data : d;
 }
 function esc(s){
   return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-/* ============ ICONS ============ */
 const SVG_PLAY='<svg class="f" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>';
 const SVG_PAUSE='<svg class="f" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.8" height="14" rx="1"/><rect x="13.7" y="5" width="3.8" height="14" rx="1"/></svg>';
 const SVG_REPLAY='<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
@@ -677,7 +651,6 @@ const SVG_VOL_OFF='<svg viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4z"/><pa
 const SVG_FS_ON='<svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/></svg>';
 const SVG_FS_OFF='<svg viewBox="0 0 24 24"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></svg>';
 
-/* ============ RENDER STATS ============ */
 function renderStats(){
   const done=videos.filter(v=>{const p=readProgress(v.id);return p&&(p.watched||p.percent>=90)}).length;
   const total=videos.length,remaining=total-done;
@@ -690,7 +663,6 @@ function renderStats(){
   $('listSub').textContent=`${total} فيديو · ${done} مكتمل · ${remaining} متبقي`;
 }
 
-/* ============ RENDER LIST ============ */
 function renderList(){
   const list=$('videoList');
   if(!videos.length){
@@ -728,7 +700,6 @@ function renderList(){
   });
 }
 
-/* ============ PLAYER STATE ============ */
 const RATES=[.5,.75,1,1.25,1.5,1.75,2,2.5,3];
 let rate=RATES.includes(+prefs.rate)?+prefs.rate:1;
 const rateLabel=x=>x+'×';
@@ -739,7 +710,6 @@ const tap={t:0,side:'',timer:0,seekUntil:0};
 const seek=$('pseek');
 const isOpen=()=>$('pmenu').classList.contains('open');
 
-/* ============ PLAYER UI ============ */
 function showUI(pin){
   if(!screenEl.classList.contains('show-ui')){screenEl.classList.add('show-ui');paintProgress()}
   clearTimeout(uiTimer);
@@ -766,7 +736,6 @@ function seekBy(d){
   return true;
 }
 
-/* ---- رسم التقدم ---- */
 function paintProgress(){
   const d=Number(video.duration)||0;
   const t=scrub?scrub.t:(Number(video.currentTime)||0);
@@ -814,7 +783,6 @@ async function updateWakeLock(){
 }
 document.addEventListener('visibilitychange',updateWakeLock);
 
-/* ---- الصوت ---- */
 function syncVolume(){
   const off=video.muted||video.volume===0;
   $('pmute').innerHTML=off?SVG_VOL_OFF:(video.volume<.5?SVG_VOL_LOW:SVG_VOL_ON);
@@ -841,7 +809,6 @@ $('pmute').onclick=e=>{
   showUI();
 };
 
-/* ---- السرعة ---- */
 function applyRate(){video.defaultPlaybackRate=rate;video.playbackRate=rate}
 function setRate(x,quiet){
   rate=x;applyRate();
@@ -855,7 +822,6 @@ function stepRate(dir){
   setRate(RATES[i]);
 }
 
-/* ---- القوائم (السرعة / الجودة / الإعدادات) ---- */
 function qualityLevels(){
   if(!hls||!hls.levels||hls.levels.length<2)return null;
   return hls.levels.map((l,i)=>({i,h:l.height||0,b:l.bitrate||0})).sort((a,b)=>(b.h-a.h)||(b.b-a.b));
@@ -927,7 +893,6 @@ document.addEventListener('pointerdown',e=>{
   if(isOpen()&&!$('pmenu').contains(e.target)&&!$('pset').contains(e.target)&&!$('pspeed').contains(e.target))closeMenu();
 });
 
-/* ============ PLAY VIDEO ============ */
 function cleanup(){
   endHold();
   closeMenu(true);
@@ -978,24 +943,17 @@ async function playIndex(i,autoplay){
   updateMediaSession();
 
   try{
-    /* ═══════════════════════════════════════════════════════
-       المسار الجديد (السيرفر v1.2+): POST /api/play/:id
-       يرجع play_url (HLS جاهز) أو youtube أو mp4
-       ═══════════════════════════════════════════════════════ */
     let playData = null;
     try {
       playData = await api('/api/play/' + encodeURIComponent(item.id), { method: 'POST' });
     } catch (e1) {
-      // لو الـ endpoint الجديد مش موجود، نكمّل بالمسار القديم
       if (!(e1.status === 404 || e1.status === 403 || /غير موجود|not found/i.test(e1.message||''))) {
-        // أخطاء auth/network نرميها
         if (e1.kind === 'auth' || e1.kind === 'network') throw e1;
       }
       playData = null;
     }
     if (my !== playToken) return;
 
-    // YouTube
     if (playData && (playData.type === 'youtube' || playData.youtube_url)) {
       const yt = playData.youtube_url || playData.url;
       setLoading(false);
@@ -1004,7 +962,6 @@ async function playIndex(i,autoplay){
       return;
     }
 
-    // MP4 مباشر
     if (playData && (playData.type === 'mp4' || playData.mp4_url)) {
       const mp4 = playData.mp4_url || playData.play_url || playData.url;
       setLoading(false);
@@ -1014,7 +971,6 @@ async function playIndex(i,autoplay){
       return;
     }
 
-    // HLS جاهز من السيرفر الجديد
     if (playData && playData.play_url) {
       let playUrl = playData.play_url;
       if (playUrl.startsWith('/')) playUrl = location.origin + playUrl;
@@ -1022,9 +978,6 @@ async function playIndex(i,autoplay){
       return;
     }
 
-    /* ═══════════════════════════════════════════════════════
-       المسار القديم (stream-weave عبر /api/video/:id/play)
-       ═══════════════════════════════════════════════════════ */
     setLoading(true,'جاري فتح الجلسة (المسار القديم)…');
     const session = await api('/api/video/' + encodeURIComponent(item.id) + '/play', {method:'POST'});
     if(my!==playToken)return;
@@ -1036,7 +989,6 @@ async function playIndex(i,autoplay){
     const swVideoId = s.video_id || s.sw_video_id;
     const hbUrl = s.heartbeat_url;
 
-    // لو السيرفر الجديد رجّع play_url جوه data القديمة
     if (!streamToken && (s.play_url || session.play_url)) {
       let playUrl = s.play_url || session.play_url;
       if (playUrl.startsWith('/')) playUrl = location.origin + playUrl;
@@ -1048,12 +1000,10 @@ async function playIndex(i,autoplay){
       throw new Error('الجلسة ناقصة (مفيش token أو video_id أو play_url)');
     }
 
-    // 2) تحميل أدوات فك التشفير
     setLoading(true,'تحميل أدوات فك التشفير…');
     if(!cryptoUtils) cryptoUtils = await loadPlayerScript();
     if(my!==playToken)return;
 
-    // 3) جلب master.m3u8
     setLoading(true,'جلب قائمة التشغيل…');
     const masterUrl =
       '/api/stream?path=' +
@@ -1096,7 +1046,6 @@ async function playIndex(i,autoplay){
     const variantText = await variantRes.text();
     if(my!==playToken)return;
 
-    // 4) استخراج مسار المفتاح + IV
     setLoading(true,'فك المفتاح…');
     const keyLine = variantText.split('\n').find(l=>l.indexOf('EXT-X-KEY')!==-1);
     let keyPath = 'videos/' + swVideoId + '/key';
@@ -1125,13 +1074,11 @@ async function playIndex(i,autoplay){
     const keyBuf = await keyRes.arrayBuffer();
     if(my!==playToken)return;
 
-    // فك المفتاح
     let plainKey;
     try {
       const dec = await cryptoUtils.decryptPlaybackKey(new Uint8Array(keyBuf), String(swVideoId));
       plainKey = dec && dec.key ? dec.key : dec;
     } catch (ke) {
-      // لو المفتاح أصلاً 16 بايت plain
       if (keyBuf.byteLength === 16) plainKey = new Uint8Array(keyBuf);
       else throw new Error('فشل فك مفتاح التشفير: ' + (ke.message || ke));
     }
@@ -1141,12 +1088,10 @@ async function playIndex(i,autoplay){
     const keyBlob = new Blob([keyBytes], { type: 'application/octet-stream' });
     currentKeyBlobUrl = URL.createObjectURL(keyBlob);
 
-    // 5) rewrite playlist → CDN segments absolute + key blob
     const fixedVariant = rewritePlaylist(variantText, streamToken, currentKeyBlobUrl, variantBasePath, variantFileUrl);
     const playlistBlob = new Blob([fixedVariant], {type:'application/vnd.apple.mpegurl'});
     currentPlaylistBlobUrl = URL.createObjectURL(playlistBlob);
 
-    // heartbeat
     if (hbUrl && streamToken) {
       clearInterval(hbTimer);
       hbTimer = setInterval(function(){
@@ -1184,7 +1129,6 @@ async function playIndex(i,autoplay){
   }
 }
 
-/** تشغيل HLS من رابط جاهز (السيرفر الجديد) مع إرسال التوكن */
 async function startHls(playUrl, my, autoplay, item){
   setLoading(true,'تحميل الفيديو…');
   const saved = readProgress(item.id) || {};
@@ -1208,7 +1152,6 @@ async function startHls(playUrl, my, autoplay, item){
 function attachHlsSource(srcUrl, my, autoplay, resumeAt){
   return new Promise(function(resolve, reject){
     if(!(window.Hls && Hls.isSupported())){
-      // native HLS (Safari)
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = srcUrl;
         setLoading(false);
@@ -1230,7 +1173,6 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
       startPosition: (resumeAt && resumeAt > 0) ? resumeAt : -1,
       xhrSetup: function(xhr, url){
         try {
-          // ابعت توكن الجلسة لطلبات الـ playlist والمفتاح على نفس الدومين
           if (token && url && (url.indexOf(location.origin) === 0 || url.charAt(0) === '/' || url.indexOf('/api/') !== -1)) {
             xhr.setRequestHeader('Authorization', 'Bearer ' + token);
           }
@@ -1287,16 +1229,13 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
   });
 }
 
-/* ============ INIT ============ */
 async function init(){
-  // مع السيرفر المحلي (server.js) التوكن موجود على السيرفر؛ الـ token المحلي اختياري
   if(!lectureId){
     showError('رابط المشغل ناقصه رقم المحاضرة. افتح الفيديو من صفحة المواد.','رابط ناقص','leave');
     return;
   }
   try{
     const r=await api('/api/lectures/'+encodeURIComponent(lectureId)+'/content');
-    // api() بتفك .data بالفعل — متاخدش r.data تاني
     const d = (r && (r.videos || r.lecture)) ? r : (r && r.data) ? r.data : (r || {});
     videos=(d.videos||[]).map((v,i)=>({
       id:v.id,
@@ -1325,7 +1264,6 @@ async function init(){
   }
 }
 
-/* ============ SEEK BAR (السحب يعاين، والتثبيت عند الإفلات) ============ */
 function fracAt(e){
   const r=seek.getBoundingClientRect();
   return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
@@ -1378,14 +1316,12 @@ seek.addEventListener('keydown',e=>{
   showUI();
 });
 
-/* ============ BUTTONS ============ */
 $('pplay').onclick=e=>{e.stopPropagation();togglePlay()};
 $('pc').onclick=e=>{e.stopPropagation();togglePlay()};
 $('pb').onclick=e=>{e.stopPropagation();seekBy(-10);showUI()};
 $('pf').onclick=e=>{e.stopPropagation();seekBy(10);showUI()};
 $('pnx').onclick=e=>{e.stopPropagation();if(current<videos.length-1)playIndex(current+1,true)};
 
-/* PiP */
 if(!(document.pictureInPictureEnabled&&video.requestPictureInPicture))$('ppip').style.display='none';
 $('ppip').onclick=async e=>{
   e.stopPropagation();
@@ -1398,7 +1334,6 @@ $('ppip').onclick=async e=>{
 video.addEventListener('enterpictureinpicture',()=>$('ppip').classList.add('active'));
 video.addEventListener('leavepictureinpicture',()=>$('ppip').classList.remove('active'));
 
-/* Fullscreen */
 const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement;
 function toggleFs(){
   if(fsEl()){(document.exitFullscreen||document.webkitExitFullscreen)?.call(document);return}
@@ -1419,7 +1354,6 @@ function onFsChange(){
 ['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,onFsChange));
 $('pfs').onclick=e=>{e.stopPropagation();toggleFs()};
 
-/* Back */
 const goBack=()=>{
   if(history.length>1)history.back();
   else location.href='subjects.html';
@@ -1427,7 +1361,6 @@ const goBack=()=>{
 $('pback').onclick=e=>{e.stopPropagation();goBack()};
 $('backBtn').onclick=goBack;
 
-/* ============ الضغط المطوّل = سرعة 2× (زي يوتيوب) ============ */
 function startHold(e){
   if(e.pointerType==='mouse'&&e.button!==0)return;
   hold.x=e.clientX;hold.y=e.clientY;
@@ -1459,7 +1392,6 @@ ptap.addEventListener('pointermove',e=>{
 window.addEventListener('blur',endHold);
 ptap.addEventListener('contextmenu',e=>e.preventDefault());
 
-/* ============ اللمس والماوس على الشاشة ============ */
 const DOUBLE_TAP_DELAY=280;
 let fxAcc=0,fxAt=0,fxSide='';
 function flashFx(side){
@@ -1477,12 +1409,10 @@ ptap.addEventListener('click',e=>{
   const now=Date.now();
   if(now-hold.endedAt<400||now-menuClosedAt<400)return;
   if(lastPtype==='mouse'){
-    // ماوس: كليك = تشغيل/إيقاف، دبل كليك = ملء الشاشة
     clearTimeout(tap.timer);
     tap.timer=setTimeout(togglePlay,220);
     return;
   }
-  // لمس: ضغطة = إظهار/إخفاء الأزرار، ضغطتين = تقديم/رجوع 10 ثواني
   const r=screenEl.getBoundingClientRect();
   const side=(e.clientX-r.left)<r.width/2?'left':'right';
   if(now<tap.seekUntil&&tap.side===side){
@@ -1506,7 +1436,6 @@ screenEl.addEventListener('pointerleave',e=>{
   if(e.pointerType==='mouse'&&!video.paused&&!isOpen()&&!scrub)hideUI();
 });
 
-/* ============ VIDEO EVENTS ============ */
 ['loadedmetadata','resize'].forEach(ev=>video.addEventListener(ev,()=>{if(isOpen()&&menuView==='main')renderMenu()}));
 ['progress','loadedmetadata','durationchange','seeked'].forEach(ev=>video.addEventListener(ev,()=>{paintBuffered();paintProgress()}));
 video.addEventListener('timeupdate',()=>{
@@ -1519,7 +1448,7 @@ video.addEventListener('pause',()=>{saveProgress();showUI(true)});
 video.addEventListener('waiting',()=>{if(!$('error').classList.contains('show'))setLoading(true,'',true)});
 ['playing','canplay'].forEach(ev=>video.addEventListener(ev,()=>{if(!$('error').classList.contains('show'))setLoading(false)}));
 video.addEventListener('error',()=>{
-  if(hls||!video.error||!video.currentSrc)return;     // لو HLS شغال هو اللي بيتعامل مع الأخطاء
+  if(hls||!video.error||!video.currentSrc)return;
   const code=video.error.code;
   const msg=code===2?'مشكلة في الاتصال أثناء تحميل الفيديو.':
     code===3?'تعذّر فك ترميز الفيديو.':
@@ -1545,7 +1474,6 @@ window.addEventListener('online',()=>{
   else showToast('النت رجع');
 });
 
-/* ============ MEDIA SESSION (أزرار الإشعارات / شاشة القفل) ============ */
 if('mediaSession' in navigator){
   const ms=(a,f)=>{try{navigator.mediaSession.setActionHandler(a,f)}catch(e){}};
   ms('play',()=>video.play().catch(()=>{}));
@@ -1557,14 +1485,13 @@ if('mediaSession' in navigator){
   ms('seekto',d=>{if(d&&Number.isFinite(d.seekTime))video.currentTime=d.seekTime});
 }
 
-/* ============ KEYBOARD (بالـ code عشان تشتغل مع الكيبورد العربي) ============ */
 document.addEventListener('keydown',e=>{
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   const tag=(e.target.tagName||'').toLowerCase();
   if(tag==='input'||tag==='textarea'||tag==='select')return;
   const c=e.code;
   if(c==='Escape'){closeMenu();return}
-  if((c==='Space'||c==='Enter')&&tag==='button')return;   // خلّي الزرار يشتغل بنفسه
+  if((c==='Space'||c==='Enter')&&tag==='button')return;
   if(c==='Space'||c==='KeyK'){e.preventDefault();togglePlay()}
   else if(c==='ArrowLeft'){e.preventDefault();seekBy(-5);showUI()}
   else if(c==='ArrowRight'){e.preventDefault();seekBy(5);showUI()}
@@ -1584,13 +1511,11 @@ document.addEventListener('keydown',e=>{
   else if(/^(Digit|Numpad)[0-9]$/.test(c)&&video.duration>0){e.preventDefault();video.currentTime=video.duration*(+c.slice(-1))/10;showUI()}
 });
 
-/* ============ حالة البداية ============ */
 setRate(rate,true);
 syncVolume();
 syncPlayState();
 $('pfs').innerHTML=SVG_FS_ON;
 
-/* ============ SEARCH & FILTER ============ */
 $('videoSearch').addEventListener('input',e=>{
   listQuery=e.target.value;
   renderList();
@@ -1603,11 +1528,9 @@ document.querySelectorAll('[data-filter]').forEach(b=>{
   });
 });
 
-/* ============ PREV/NEXT ============ */
 $('prevBtn').onclick=()=>{if(current>0)playIndex(current-1,true)};
 $('nextBtn').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)};
 
-/* Retry / Skip */
 $('retryBtn').onclick=()=>{
   if(errAction==='leave'){location.href='subjects.html';return}
   hideError();
@@ -1627,7 +1550,6 @@ function trackView(videoId, videoTitle, force) {
     const curTime = Number(video.currentTime) || 0;
     const dur = Number(video.duration) || 0;
     
-    // تحديث كل 20 ثانية فقط (إلا لو force)
     if (!force && lastTracked.videoId === videoId && Math.abs(curTime - lastTracked.time) < 20) {
         return;
     }
@@ -1652,14 +1574,12 @@ function trackView(videoId, videoTitle, force) {
     }).catch(() => {});
 }
 
-// تسجيل عند تحميل البيانات الوصفية (المدة متاحة)
 video.addEventListener('loadedmetadata', function() {
     if (current >= 0 && videos[current]) {
         trackView(videos[current].id, videos[current].title, true);
     }
 });
 
-// تسجيل دوري أثناء التشغيل
 video.addEventListener('play', function() {
     clearInterval(trackViewTimer);
     trackViewTimer = setInterval(() => {
@@ -1669,14 +1589,12 @@ video.addEventListener('play', function() {
     }, 20000);
 });
 
-// تسجيل عند الإيقاف المؤقت
 video.addEventListener('pause', function() {
     if (current >= 0 && videos[current]) {
         trackView(videos[current].id, videos[current].title, true);
     }
 });
 
-// تسجيل عند الانتهاء
 video.addEventListener('ended', function() {
     clearInterval(trackViewTimer);
     if (current >= 0 && videos[current]) {
@@ -1684,25 +1602,15 @@ video.addEventListener('ended', function() {
     }
 });
 
-// تسجيل عند إغلاق الصفحة
 window.addEventListener('pagehide', function() {
     if (current >= 0 && videos[current]) {
         trackView(videos[current].id, videos[current].title, true);
     }
 });
 
-// إضافة استدعاء التسجيل عند بدء التشغيل
-video.addEventListener('play', function onFirstPlay() {
-    if (current >= 0 && videos[current]) {
-        trackView(videos[current].id, videos[current].title);
-    }
-    video.removeEventListener('play', onFirstPlay);
-});
-
-/* ============ START ============ */
 init();
 
 })();
 </script>
 </body>
-                              </html>
+</html>
