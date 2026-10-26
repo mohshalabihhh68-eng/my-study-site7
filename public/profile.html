@@ -100,8 +100,6 @@ body {
 .status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 8px var(--green); }
 .status-badge.danger { background: rgba(239,68,68,0.15); color: var(--red); }
 .status-badge.danger::before { background: var(--red); box-shadow: 0 0 8px var(--red); }
-.status-badge.warn { background: rgba(245,158,11,0.15); color: var(--amber); }
-.status-badge.warn::before { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 
 /* كارت العداد */
 .timer-card { 
@@ -112,11 +110,11 @@ body {
   position: relative; 
   overflow: hidden; 
   margin-bottom: 20px;
-  transition: border-color 0.3s, background 0.3s;
+  transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
 }
 .timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
 
-/* شريط التقدم */
+/* 3. شريط التقدم */
 .progress-bar-container {
   position: absolute;
   top: 0;
@@ -134,12 +132,16 @@ body {
   transition: width 1s linear, background 0.3s;
 }
 
-/* حالة الخطر (الاشتراك قارب ينتهي) */
-.timer-card.danger { border-color: rgba(239,68,68,0.4); background: linear-gradient(135deg, #2a1419, #121a2b); }
+/* 6. تأثير التوهج وحالة الخطر */
+.timer-card.danger { 
+  border-color: rgba(239,68,68,0.4); 
+  background: linear-gradient(135deg, #2a1419, #121a2b); 
+  box-shadow: 0 0 20px rgba(239,68,68,0.1);
+}
 .timer-card.danger .timer-title h2 { color: #fca5a5; }
 .timer-card.danger .timer-badge { background: rgba(239,68,68,0.15); color: #fca5a5; }
 .timer-card.danger .timer-badge::before { background: var(--red); }
-.timer-card.danger .time-val { color: #fca5a5; text-shadow: 0 2px 10px rgba(239,68,68,0.2); }
+.timer-card.danger .time-val { color: #fca5a5; text-shadow: 0 0 15px rgba(239,68,68,0.5); }
 .timer-card.danger .progress-bar-fill { background: var(--red); }
 
 .timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; flex-wrap: wrap; gap: 10px; }
@@ -150,18 +152,21 @@ body {
 .timer-badge::before { content: ''; width: 6px; height: 6px; background: var(--blue2); border-radius: 50%; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
 
-.timer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; position: relative; z-index: 2; }
+/* 2. الترتيب الديناميكي */
+.timer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; position: relative; z-index: 2; }
 .timer-grid.layout-3 { grid-template-columns: repeat(3, 1fr); }
 .timer-grid.layout-2 { grid-template-columns: repeat(2, 1fr); max-width: 300px; margin: 0 auto; }
 
 .time-box { background: var(--card-inner); border: 1px solid rgba(255,255,255,.05); border-radius: 16px; padding: 15px 5px; text-align: center; transition: border-color 0.2s; }
 .time-box:hover { border-color: rgba(59,130,246,0.3); }
-.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; text-shadow: 0 2px 10px rgba(96,165,250,0.2); display: inline-block; }
+.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; display: inline-block; transition: color 0.3s, text-shadow 0.3s; }
 .time-label { color: var(--muted); font-size: 13px; font-weight: 700; }
-.time-val.tick { animation: tickPulse 0.3s ease; }
-@keyframes tickPulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); color: #fff; } 100% { transform: scale(1); } }
 
-/* شاشة الاشتراك المنتهي */
+/* 1. تأثير النبض على الثواني */
+.time-val.tick { animation: tickPulse 0.3s ease; }
+@keyframes tickPulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); color: #fff; } 100% { transform: scale(1); } }
+
+/* 4. شاشة الاشتراك المنتهي */
 .expired-screen {
   text-align: center;
   padding: 40px 20px;
@@ -169,6 +174,8 @@ body {
   border: 1px solid rgba(239,68,68,0.4);
   border-radius: 24px;
   margin-bottom: 20px;
+  box-shadow: 0 0 30px rgba(239,68,68,0.15);
+  animation: fadeIn 0.5s ease;
 }
 .expired-screen svg { width: 60px; height: 60px; color: var(--red); margin-bottom: 15px; animation: pulse 2s infinite; }
 .expired-screen h2 { font-size: 24px; font-weight: 900; color: #fca5a5; margin: 0 0 10px; }
@@ -242,7 +249,8 @@ if (!TOKEN) { window.location.replace('login.html'); return; }
 
 const $ = id => document.getElementById(id);
 let countdownInterval = null;
-let lastRenderedDiff = null;
+let lastRenderedSec = null;
+let currentLayout = null;
 
 function formatArabicDate(ts) {
   if (!ts) return 'غير محدد';
@@ -259,7 +267,6 @@ function getSectionName(sec) {
   return map[sec] || sec || 'غير محدد';
 }
 
-// عرض البيانات الأساسية فوراً من الكاش
 function renderBaseUI(me) {
   const name = me.name || 'طالب';
   const firstLetter = name.charAt(0);
@@ -401,7 +408,7 @@ function renderBaseUI(me) {
   }
 }
 
-// عرض البيانات من الكاش فوراً (للسرعة)
+// العرض الفوري من الكاش
 function loadFromCache() {
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
@@ -430,11 +437,8 @@ async function loadProfile() {
     if (!res.ok || data.success === false) throw new Error(data.message || 'فشل جلب البيانات');
     
     const me = data.data;
-    
-    // تحديث الكاش
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(me)); } catch(e) {}
     
-    // إعادة الرسم بالبيانات الحديثة
     if (countdownInterval) clearInterval(countdownInterval);
     renderBaseUI(me);
 
@@ -454,10 +458,9 @@ function updateCountdown(expiresAt, isDanger) {
   
   if (!timerGrid) return;
 
-  // الاشتراك انتهى
+  // 4. حالة الاشتراك المنتهي
   if (diff <= 0) {
     if (countdownInterval) clearInterval(countdownInterval);
-    
     const container = document.getElementById('timer-container');
     if (container && !document.querySelector('.expired-screen')) {
       container.innerHTML = `
@@ -484,21 +487,18 @@ function updateCountdown(expiresAt, isDanger) {
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   const secs = Math.floor((diff % (1000 * 60)) / 1000);
 
-  // حساب نسبة التقدم (بافتراض أن الاشتراك كان 30 يوم = 2,592,000 ثانية)
-  const totalDuration = 30 * 24 * 3600 * 1000;
+  // 3. شريط التقدم
+  const totalDuration = 30 * 24 * 3600 * 1000; // افتراضي 30 يوم
   const elapsed = Math.max(0, totalDuration - diff);
   const percent = Math.min(100, (elapsed / totalDuration) * 100);
+  if (progressFill) progressFill.style.width = percent + '%';
 
-  if (progressFill) {
-    progressFill.style.width = percent + '%';
-  }
-
-  // --- العداد الذكي ---
-  let layout = 'layout-4';
+  // 2. العداد الذكي والترتيب الديناميكي
+  let layout = 'layout-3';
   let boxes = '';
 
   if (days >= 1) {
-    // أكثر من يوم: أيام، ساعات، دقايق (بدون ثواني)
+    // أكثر من يوم: أيام، ساعات، دقايق
     layout = 'layout-3';
     boxes = `
       <div class="time-box"><div class="time-val" id="t-days">${days}</div><div class="time-label">أيام</div></div>
@@ -513,70 +513,74 @@ function updateCountdown(expiresAt, isDanger) {
       <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
       <div class="time-box"><div class="time-val" id="t-secs">${secs}</div><div class="time-label">ثواني</div></div>
     `;
-    if (!timerCard.classList.contains('danger')) timerCard.classList.add('danger');
+    if (timerCard && !timerCard.classList.contains('danger')) timerCard.classList.add('danger');
   } else {
-    // أقل من ساعة: دقايق، ثواني
+    // أقل من ساعة: دقايق، ثواني (مكبرة)
     layout = 'layout-2';
     boxes = `
       <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
       <div class="time-box"><div class="time-val" id="t-secs">${secs}</div><div class="time-label">ثواني</div></div>
     `;
-    if (!timerCard.classList.contains('danger')) timerCard.classList.add('danger');
+    if (timerCard && !timerCard.classList.contains('danger')) timerCard.classList.add('danger');
   }
 
-  // إعادة بناء الأرقام فقط لو التخطيط اتغير
-  if (timerGrid.className !== 'timer-grid ' + layout) {
+  // تحديث التخطيط
+  if (currentLayout !== layout) {
     timerGrid.className = 'timer-grid ' + layout;
     timerGrid.innerHTML = boxes;
+    currentLayout = layout;
   } else {
-    // تحديث الأرقام فقط (عشان نحافظ على الأداء والأنيميشن)
+    // تحديث الأرقام
     if (days >= 1) {
-      document.getElementById('t-days').innerText = days;
-      document.getElementById('t-hours').innerText = hours;
-      document.getElementById('t-mins').innerText = mins;
+      const elDays = document.getElementById('t-days');
+      const elHours = document.getElementById('t-hours');
+      const elMins = document.getElementById('t-mins');
+      if (elDays) elDays.innerText = days;
+      if (elHours) elHours.innerText = hours;
+      if (elMins) elMins.innerText = mins;
     } else if (hours >= 1) {
-      document.getElementById('t-hours').innerText = hours;
-      document.getElementById('t-mins').innerText = mins;
-      const secEl = document.getElementById('t-secs');
-      if (secEl) {
-        secEl.innerText = secs;
-        // تأثير النبضة (Tick) كل ثانية
-        if (lastRenderedDiff !== secs) {
-          secEl.classList.remove('tick');
-          void secEl.offsetWidth;
-          secEl.classList.add('tick');
-          lastRenderedDiff = secs;
+      const elHours = document.getElementById('t-hours');
+      const elMins = document.getElementById('t-mins');
+      const elSecs = document.getElementById('t-secs');
+      if (elHours) elHours.innerText = hours;
+      if (elMins) elMins.innerText = mins;
+      if (elSecs) {
+        elSecs.innerText = secs;
+        // 1. تأثير النبض على الثواني
+        if (lastRenderedSec !== secs) {
+          elSecs.classList.remove('tick');
+          void elSecs.offsetWidth;
+          elSecs.classList.add('tick');
+          lastRenderedSec = secs;
         }
       }
     } else {
-      document.getElementById('t-mins').innerText = mins;
-      const secEl = document.getElementById('t-secs');
-      if (secEl) {
-        secEl.innerText = secs;
-        if (lastRenderedDiff !== secs) {
-          secEl.classList.remove('tick');
-          void secEl.offsetWidth;
-          secEl.classList.add('tick');
-          lastRenderedDiff = secs;
+      const elMins = document.getElementById('t-mins');
+      const elSecs = document.getElementById('t-secs');
+      if (elMins) elMins.innerText = mins;
+      if (elSecs) {
+        elSecs.innerText = secs;
+        if (lastRenderedSec !== secs) {
+          elSecs.classList.remove('tick');
+          void elSecs.offsetWidth;
+          elSecs.classList.add('tick');
+          lastRenderedSec = secs;
         }
       }
     }
   }
 
-  // التحقق من حالة الخطر لتحديث لون الكارت
+  // 6. تأثير التوهج عند الخطر
   if (isDanger && timerCard && !timerCard.classList.contains('danger')) {
     timerCard.classList.add('danger');
     const badge = document.getElementById('status-badge');
-    if (badge) { badge.textContent = 'قارب على الانتهاء'; badge.className = 'status-badge warn'; }
+    if (badge) { badge.textContent = 'قارب على الانتهاء'; badge.className = 'status-badge danger'; }
   }
 }
 
-// --- بدء التشغيل ---
-// محاولة العرض من الكاش أولاً (سرعة فائقة)
+// بدء التشغيل
 const hasCache = loadFromCache();
-// ثم تحديث البيانات من السيرفر في الخلفية
 loadProfile();
-
 })();
 </script>
 </body>
