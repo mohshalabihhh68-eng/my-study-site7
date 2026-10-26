@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.3 — CF bypass helpers (proxy/relay) + direct CDN segments
+ * VERSION v1.5 — Robust File Proxy (Saves to disk for perfect PDF preview)
  */
 import express from "express";
 import cors from "cors";
@@ -11,7 +11,6 @@ import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-// undici is bundled with Node 18+; fall back gracefully if missing
 let ProxyAgent = null;
 let undiciFetch = null;
 try {
@@ -21,6 +20,7 @@ try {
 } catch {
   console.warn("[API] undici not available — UPSTREAM_PROXY disabled");
 }
+
 import {
   thanawicaLogin,
   thSubjectsForYear,
@@ -41,16 +41,13 @@ import {
   getThanawicaSessionInfo
 } from "./thanawica.js";
 
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
-try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.3";
+const TEMP_DIR = path.join(DATA_DIR, "temp_files");
+try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
+const APP_VERSION = "v1.5";
 
-// ═══════════════════════════════════════════════════════════
-// Crash guards
-// ═══════════════════════════════════════════════════════════
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
 
@@ -87,12 +84,10 @@ app.use(
   })
 );
 
-// تقديم ملفات الموقع (صفحة الطالب ولوحة الأدمن) من فولدر public
 app.use(express.static(path.join(__dirname, "public")));
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ── Upstream transport (proxy / relay / direct) ──────────────────────────
 const UPSTREAM_PROXY = (process.env.UPSTREAM_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "").trim();
 const UPSTREAM_RELAY_URL = (process.env.UPSTREAM_RELAY_URL || "").trim().replace(/\/$/, "");
 let proxyAgent = null;
@@ -192,7 +187,6 @@ async function fetchT(url, opts = {}, { timeout = 15_000, retries = 0, retryOn =
         if (tryRelay) r = await relayFetch(url, opts, timeout);
         else throw e;
       }
-      // On CF block, optionally fall back to relay once
       if (tryRelay && (r.status === 403 || r.status === 503)) {
         const peek = await r.clone().text().catch(() => "");
         if (isCloudflareBlock(r.status, peek)) {
@@ -278,9 +272,6 @@ function segSet(k, buf) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// Rate limit & Login Lock
-// ═══════════════════════════════════════════════════════════
 const rateBuckets = new Map();
 const banBuckets = new Map();
 
@@ -393,9 +384,6 @@ setInterval(() => {
   for (const [k, row] of loginFails) if (row.lockedUntil && t > row.lockedUntil + 60_000) loginFails.delete(k);
 }, 60_000).unref();
 
-// ═══════════════════════════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════════════════════════
 const CONFIG = {
   PORT: Number(process.env.PORT || 3000),
   COURSATK_API: "https://api.coursatk.online/api/v1",
@@ -438,9 +426,6 @@ const CONFIG = {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// Runtime config
-// ═══════════════════════════════════════════════════════════
 const RUNTIME_PATH = path.join(__dirname, "data", "runtime.json");
 
 const runtime = {
@@ -996,7 +981,6 @@ async function upstreamJsonRaw(apiPath, options = {}) {
   const url = `${CONFIG.COURSATK_API}${apiPath}`;
   let lastErr = null;
 
-  // Try several UA profiles + proxy/relay via fetchT
   for (let p = 0; p < UA_PROFILES.length; p++) {
     try {
       const headers = await upstreamHeaders(options.headers || {}, p);
@@ -1007,7 +991,6 @@ async function upstreamJsonRaw(apiPath, options = {}) {
       if (isCloudflareBlock(r.status, text)) {
         lastErr = new Error("Cloudflare حاجب IP السيرفر على Coursatk — استخدم UPSTREAM_PROXY أو UPSTREAM_RELAY_URL");
         console.warn("[upstream] CF block", apiPath, "profile", p);
-        // try next profile / eventually relay inside fetchT
         if (p < UA_PROFILES.length - 1) continue;
         throw lastErr;
       }
@@ -1017,14 +1000,12 @@ async function upstreamJsonRaw(apiPath, options = {}) {
       } catch {
         lastErr = new Error(`Upstream non-JSON (${r.status})`);
         if (r.status === 403 || r.status === 401) {
-          // try next profile
           if (p < UA_PROFILES.length - 1) continue;
         }
         throw lastErr;
       }
       if (!r.ok) {
         const msg = data?.error || data?.message || `Upstream HTTP ${r.status}`;
-        // Expired subscription style errors — don't retry profiles
         if (/اشتراك|انته|expired|token/i.test(String(msg))) throw new Error(msg);
         lastErr = new Error(msg);
         if (r.status === 403 && p < UA_PROFILES.length - 1) continue;
@@ -1044,7 +1025,7 @@ async function upstreamJsonRaw(apiPath, options = {}) {
 }
 
 const upCache = new Map();
-const UP_STALE_MS = 2 * 60 * 60_000; // keep stale longer when CF is blocking
+const UP_STALE_MS = 2 * 60 * 60_000; 
 function upTtl(apiPath) { return /\/lectures\/[^/]+\/content/.test(apiPath) ? 120_000 : 300_000; }
 async function upstreamJson(apiPath, options = {}) {
   const isGet = !options.method || String(options.method).toUpperCase() === "GET";
@@ -1093,7 +1074,6 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 25_000, retries: hasRange ? 0 : 1 }));
 }
 
-// Global Rate Limits
 app.use(rateLimit({ max: 1500, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
 app.use("/api/stream/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
 app.use("/api/hls/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
@@ -1136,9 +1116,6 @@ app.get("/api/public/site", rateLimit({ max: 120, windowMs: 60_000, scope: "publ
   res.json({ success: true, data: { siteName: runtime.siteName || "ثانوية World", packages, agents, firebaseConfigured: Boolean(getFirebaseUrl()), tokenConfigured: Boolean(getCoursatkTokenSync()) } });
 });
 
-// ═══════════════════════════════════════════════════════════
-// STUDENT AUTH
-// ═══════════════════════════════════════════════════════════
 app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "student-login", banAfter: 3, banMs: 15 * 60_000 }), async (req, res) => {
   try {
     const code = String(req.body?.code || "").trim();
@@ -1227,9 +1204,6 @@ app.get("/api/auth/me", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// CATALOG
-// ═══════════════════════════════════════════════════════════
 app.get("/api/config", requireStudent, async (req, res) => {
   const yearOverride = req.query.year != null ? req.query.year : null;
   let yearId = yearOverride != null ? resolveYearId(yearOverride) : CONFIG.DEFAULT_YEAR_ID;
@@ -1336,10 +1310,6 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// STREAM
-// ═══════════════════════════════════════════════════════════
-// Stream-Weave tokens die quickly; keep source cache short so we re-mint often
 const SOURCE_TTL_MS = Number(process.env.SOURCE_TTL_MS || 3 * 60_000);
 const sourceCache = new Map();
 const SID_TOKEN = "{{SID}}";
@@ -1376,18 +1346,11 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   let keyIvAttr = "";
   for (const raw of lines) { const t = raw.trim(); if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0; }
 
-  /*
-   * Cloudflare blocks floravon/c-cdn from Railway IPs, BUT
-   * api.stream-weave.com segment paths work fine.
-   * Convert CDN URLs → https://api.stream-weave.com/api/v1/videos/{id}/stream/{quality}/{file}
-   * and proxy+decrypt on our server (browser only sees /api/hls/.../seg/N).
-   */
   src.directSegments = false;
 
   function toWeaveSegUrl(absUrl, fallbackVideoId) {
     try {
       const u = new URL(absUrl);
-      // already stream-weave
       if (/stream-weave\.com$/i.test(u.hostname) || u.hostname.endsWith(".stream-weave.com")) {
         return u.href.split("?")[0];
       }
@@ -1401,7 +1364,6 @@ async function buildPlaylist(src, masterText, clientHeaders) {
           return `https://api.stream-weave.com/api/v1/videos/${vid}/stream/${quality}/${fname}`;
         }
       }
-      // relative under stream path
       if (fallbackVideoId && /\.(ts|m4s|woff2|cmfv|cmfa)(\?|$)/i.test(u.pathname)) {
         const fname = parts[parts.length - 1].split("?")[0];
         const quality = parts[parts.length - 2] || "600";
@@ -1423,7 +1385,6 @@ async function buildPlaylist(src, masterText, clientHeaders) {
       }
       if (uri && !keyFetched) {
         let keyUrl = new URL(uri, baseUrl).href;
-        // Prefer stream-weave key path
         try {
           if (!/stream-weave\.com/i.test(keyUrl) && src.videoId) {
             keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/key`;
@@ -1440,7 +1401,6 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         keyFetched = true;
         console.log(`[key] ${src.mode || "weave"} for ${src.videoId} via stream-weave API`);
       }
-      // Server decrypts — strip key line from playlist
       continue;
     }
     if (line && !line.startsWith("#")) {
@@ -1509,14 +1469,12 @@ async function buildVideoSource(videoId, clientHeaders) {
   let mode = null; let streamUrl = null; let sessionToken = null; let resolvedVideoId = videoId; let probeText = null;
   const errors = [];
 
-  // جرّب Stream-Weave الأول (الأكثر استقراراً مع التشفير)
   try {
     const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
     if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
     mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
   } catch (e) { errors.push(e.message); }
 
-  // لو Weave فشل، جرّب CDN
   if (!mode) {
     try {
       const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
@@ -1588,13 +1546,11 @@ async function refreshSource(session, force = false) {
         return cur.src;
       }
     }
-    // Force rebuild: wipe cache so getVideoSource issues a fresh stream-weave/play token
     sourceCache.delete(id);
     console.log("[source refresh] rebuilding source for", id, force ? "(forced)" : "");
     const fresh = await getVideoSource(id, null);
     if (fresh) {
       session.src = fresh;
-      // Keep the stream session playlist in sync with the new segment URLs + key
       if (session.id) {
         streamSessions.set(session.id, session);
         persistStreamSession(session).catch(() => {});
@@ -1654,7 +1610,6 @@ async function persistStreamSession(session) {
             targetDuration: src.targetDuration || 6,
             segs: src.segs || [],
             mp4Url: src.mp4Url || null,
-            // CRITICAL: without these, master falls back to /api/hls/seg (CF-blocked)
             directSegments: src.directSegments !== false,
             playlist: typeof src.playlist === "string" ? src.playlist : null,
             streamUrl: src.streamUrl || null,
@@ -1681,7 +1636,6 @@ function reviveStreamSrc(src) {
       out.defaultIv = Buffer.from(out.defaultIv, "hex");
     } catch {}
   }
-  // Default to direct segments when segs look like absolute CDN URLs
   if (out.directSegments == null) {
     const sample = Array.isArray(out.segs) && out.segs[0] && out.segs[0].u;
     out.directSegments = typeof sample === "string" && /^https?:\/\//i.test(sample);
@@ -1774,7 +1728,6 @@ function playlistBodyFromSession(session) {
   }
   if (!body) return null;
   if (session.streamKey) {
-    // Only append sk to OUR /api/hls/ paths (key + optional seg), never to CDN absolute URLs
     body = body.split("\n").map((line) => {
       const t = line.trim();
       if (!t) return line;
@@ -1793,7 +1746,6 @@ function playlistBodyFromSession(session) {
   return body;
 }
 
-// Serve the unwrapped AES-128 key so the browser can decrypt CDN segments directly
 app.get("/api/hls/:pid/key", requireStudent, async (req, res) => {
   try {
     const session = await getStreamSession(req.params.pid);
@@ -1839,7 +1791,6 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
     const hit2 = segGet(key);
     if (hit2) return hit2;
 
-    // Thanawica path
     if (session.src.mode === "thanawica" && typeof session.src._thDecrypt === "function") {
       const encrypted = await thMintAndFetchSegment(meta);
       if (encrypted.length > CONFIG.MAX_PROXY_BYTES) {
@@ -1853,19 +1804,16 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
       return plain;
     }
 
-    // First attempt with current source
     let up = await streamFetch(session.src, url, {}, headers);
     let usedSrc = session.src;
     let usedUrl = url;
     let usedIv = iv;
 
-    // On 401/403 the upstream stream token is dead → force full source rebuild
     if ((up.status === 401 || up.status === 403) && Number.isFinite(meta.s)) {
       console.warn("[seg] upstream", up.status, "→ force refresh", usedUrl.slice(0, 80));
       try { await up.arrayBuffer(); } catch {}
       const fresh = await refreshSource(session, true);
       if (fresh && Array.isArray(fresh.segs) && fresh.segs.length) {
-        // Map by index (mediaSeq relative) first, then by absolute sequence
         let fu = fresh.segs[meta.i];
         if (!fu && Number.isFinite(meta.s)) {
           fu = fresh.segs.find((s) => s.s === meta.s) || fresh.segs[meta.s - (fresh.mediaSeq || 0)];
@@ -1882,7 +1830,6 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
     }
 
     if (!up.ok) {
-      // One last forced rebuild if still failing
       if (up.status === 401 || up.status === 403) {
         console.warn("[seg] still", up.status, "after refresh — giving up");
       }
@@ -1904,7 +1851,6 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
       plain = encrypted;
     }
 
-    // Cache under both old and new keys so subsequent hits work
     segSet(key, plain);
     if (usedUrl !== url) segSet(usedUrl + "|" + (meta.iv || ""), plain);
     return plain;
@@ -1940,11 +1886,9 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   const isTh = session.src?.mode === "thanawica";
   if (!url || (!isTh && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
   if (isTh && url && !/thanawica\.com/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
-  // Include index so refresh can remap correctly after source rebuild
   const meta = { ...sg, u: url, iv: sg.iv, s: sg.s, i: idx };
   const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
   try {
-    // Always go through getSegmentPlain so 403 → force refresh works for range + normal
     const plain = await getSegmentPlain(session, meta, url, iv, req.headers);
     res.status(200);
     res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Accept-Ranges": "bytes" });
@@ -1960,9 +1904,6 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
 app.get("/api/stream/manifest/:sessionId", (_req, res) => jsonError(res, 410, "المسار لم يعد متاحًا"));
 app.get("/api/stream/segment/:sessionId/:encoded", (_req, res) => jsonError(res, 410, "المسار لم يعد متاحًا"));
 
-// ═══════════════════════════════════════════════════════════
-// ADMIN AUTH
-// ═══════════════════════════════════════════════════════════
 app.post("/api/admin/login", rateLimit({ max: 10, windowMs: 60_000, scope: "admin-login", banAfter: 3, banMs: 15 * 60_000 }), async (req, res) => {
   try {
     const username = String(req.body?.username || "").trim();
@@ -2019,7 +1960,6 @@ app.get("/api/admin/me", requireAdmin(null), (req, res) => {
   res.json({ success: true, data: { username: req.admin.username, permissions: req.admin.permissions || {}, bootstrap: !!req.admin.bootstrap, isOwner: false } });
 });
 
-// Admin Config
 app.get("/api/admin/maintenance", requireAdmin(null), requireBootstrap, async (_req, res) => {
   res.json({ success: true, data: { mode: maintenance.mode, message: maintenance.message, updatedAt: maintenance.updatedAt, updatedBy: maintenance.updatedBy } });
 });
@@ -2054,7 +1994,6 @@ app.put("/api/admin/config/token", requireAdmin("admins_manage"), async (req, re
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// Admin Students
 app.get("/api/admin/students", requireAdmin("students_view"), async (_req, res) => {
   try {
     const all = (await fbGet("students")) || {};
@@ -2214,7 +2153,6 @@ app.delete("/api/admin/students/:code/devices/:deviceId", requireAdmin("devices_
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// Admin Runtime
 app.get("/api/admin/runtime", requireAdmin("admins_manage"), async (_req, res) => {
   res.json({ success: true, data: { firebaseUrl: runtime.firebaseUrl || "", storageBucket: runtime.storageBucket || getStorageBucket(), firebaseConfigured: Boolean(getFirebaseUrl()), coursatkTokenSet: Boolean(getCoursatkTokenSync()), coursatkTokenMasked: getCoursatkTokenSync() ? getCoursatkTokenSync().slice(0, 12) + "…" + getCoursatkTokenSync().slice(-6) : "", siteName: runtime.siteName, packages: runtime.packages || [], agents: runtime.agents || [] } });
 });
@@ -2251,7 +2189,6 @@ app.put("/api/admin/agents", requireAdmin("sections_manage"), async (req, res) =
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// Admin Sections
 app.get("/api/admin/sections", requireAdmin("sections_manage"), async (_req, res) => {
   try { const all = (await fbGet("sections")) || {}; const list = Object.entries(all).map(([id, s]) => ({ id, ...s })); res.json({ success: true, data: list }); } catch (e) { jsonError(res, 500, e.message); }
 });
@@ -2272,7 +2209,6 @@ app.delete("/api/admin/sections/:id", requireAdmin("sections_manage"), async (re
   try { await fbDelete(`sections/${req.params.id}`); res.json({ success: true }); } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// Admin Admins
 app.get("/api/admin/admins", requireAdmin("admins_manage"), async (_req, res) => {
   try {
     const all = (await fbGet("admins")) || {};
@@ -2316,9 +2252,6 @@ app.delete("/api/admin/admins/:id", requireAdmin("admins_manage"), async (req, r
   try { if (req.params.id === "bootstrap") return jsonError(res, 400, "لا يمكن حذف الأدمن الأساسي"); await fbDelete(`admins/${req.params.id}`); res.json({ success: true }); } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ═══════════════════════════════════════════════════════════
-// MESSAGING & MEDIA
-// ═══════════════════════════════════════════════════════════
 function makeMsgId() { return "m_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8); }
 function studentCode(req) { const c = String(req.student?.code || req.session?.code || "").trim(); if (!/^\d{7,12}$/.test(c)) return null; return c; }
 
@@ -2646,7 +2579,6 @@ app.get("/api/media/:code/:file", async (req, res) => {
   } catch (e) { jsonError(res, 500, e.message); }
 });
 
-// ==================== دعم Stream-Weave ====================
 const SW = "https://api.stream-weave.com";
 
 function b64urlEncode(value) {
@@ -2806,30 +2738,37 @@ app.post("/api/heartbeat", async function (req, res) {
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-// ==================== بروكسي للملفات ====================
+// ==================== بروكسي الملفات (يحفظ الملف ثم يبعته) ====================
 app.get("/api/file-proxy", async (req, res) => {
   try {
     const targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).send("Missing URL");
-    
-    const upstream = await fetch(targetUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://coursatk.online/",
-        "Origin": "https://coursatk.online"
-      }
-    });
+
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Referer": "https://coursatk.online/",
+      "Origin": "https://coursatk.online",
+      "Accept": "*/*"
+    };
+
+    const upstream = await fetch(targetUrl, { headers });
     if (!upstream.ok) throw new Error("HTTP " + upstream.status);
-    
-    const contentType = upstream.headers.get("content-type") || "application/pdf";
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", "inline");
-    
+
     const buffer = Buffer.from(await upstream.arrayBuffer());
-    res.send(buffer);
+    let contentType = upstream.headers.get("content-type") || "application/pdf";
+    if (contentType.includes("text/html")) contentType = "application/pdf";
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Accept-Ranges", "none"); // يجبر المتصفح على معاينة الملف كامل
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    
+    res.status(200).send(buffer);
   } catch (e) {
     console.error("File proxy error:", e.message);
-    res.status(502).send("Error fetching file");
+    if (!res.headersSent) res.status(502).send("Error fetching file: " + e.message);
+    else res.end();
   }
 });
 
