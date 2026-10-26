@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6.3 — File Proxy: minimal reliable headers for mobile PDF preview
+ * VERSION v1.6.4 — File Proxy: relaxed detection + HTML errors (no more "file-proxy" downloads)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.6.3";
+const APP_VERSION = "v1.6.4";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -2789,7 +2789,12 @@ app.get("/api/file-proxy", async (req, res) => {
       );
     } catch (fetchErr) {
       console.error("[file-proxy] fetch failed:", fetchErr.message, String(targetUrl).slice(0, 100));
-      return res.status(502).send("Error fetching file: " + (fetchErr.message || "network"));
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
+        <body><div class="box"><h1>فشل الاتصال بالمصدر</h1><p>${String(fetchErr.message || "network").replace(/[<>&]/g, "")}</p></div></body></html>`
+      );
     }
 
     if (!upstream.ok) {
@@ -2808,13 +2813,24 @@ app.get("/api/file-proxy", async (req, res) => {
 
     if (!upstream.ok) {
       console.error("[file-proxy] upstream", upstream.status, String(targetUrl).slice(0, 120));
-      return res.status(upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502)
-        .send("Error fetching file: HTTP " + upstream.status);
+      const code = upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502;
+      return res.status(code).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
+        <body><div class="box"><h1>تعذر جلب الملف</h1><p>كود الخطأ: ${code}</p>
+        <p style="margin-top:12px;font-size:12px;opacity:.5">الملف غير متاح حاليًا من المصدر</p></div></body></html>`
+      );
     }
 
     const buffer = Buffer.from(await upstream.arrayBuffer());
     if (!buffer.length) {
-      return res.status(502).send("Empty file from upstream");
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px}</style></head>
+        <body><div class="box"><h1>الملف فاضي</h1></div></body></html>`
+      );
     }
 
     // كشف لو الـ upstream رجّع صفحة خطأ HTML رغم الـ 200
@@ -2827,44 +2843,43 @@ app.get("/api/file-proxy", async (req, res) => {
 
     if (looksLikeHtmlError) {
       console.error("[file-proxy] got HTML error page instead of file:", String(targetUrl).slice(0, 100));
-      return res.status(502).send("Upstream returned an error page instead of the file");
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
+        <body><div class="box"><h1>المصدر رفض الطلب</h1><p>السيرفر المصدر رجّع صفحة خطأ بدل الملف</p></div></body></html>`
+      );
     }
 
-    // تحديد Content-Type بشكل صارم (مهم جدًا للمعاينة)
+    // تحديد Content-Type (مرن أكتر)
     let contentType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-    const magic = buffer.slice(0, 8).toString("latin1"); // latin1 عشان الـ bytes تفضل زي ما هي
+    const head = buffer.slice(0, 1024).toString("latin1");
     const urlLower = String(targetUrl).toLowerCase();
-    const isReallyPdf = magic.startsWith("%PDF-");
+    const isReallyPdf = head.includes("%PDF-");
 
     if (isReallyPdf) {
       contentType = "application/pdf";
-    } else if (contentType.includes("pdf")) {
-      // upstream قال PDF بس الملف مش PDF حقيقي → نرفضه أحسن من معاينة فاسدة
-      console.error("[file-proxy] claimed PDF but magic mismatch:", magic.slice(0, 8), String(targetUrl).slice(0, 80));
-      return res.status(502).send("File is not a valid PDF");
-    } else if (!contentType || contentType === "application/octet-stream" || contentType.includes("text/html") || contentType.includes("text/plain")) {
-      if (urlLower.includes(".pdf")) {
-        // الرابط بيقول PDF بس المحتوى مش PDF
-        console.error("[file-proxy] URL says PDF but content is not:", magic.slice(0, 20));
-        return res.status(502).send("File content is not a valid PDF");
-      }
-      if (urlLower.match(/\.(jpe?g)(\?|$)/) || magic.startsWith("\xFF\xD8\xFF")) contentType = "image/jpeg";
-      else if (urlLower.match(/\.png(\?|$)/) || magic.startsWith("\x89PNG")) contentType = "image/png";
-      else if (urlLower.match(/\.webp(\?|$)/)) contentType = "image/webp";
-      else contentType = "application/octet-stream";
+    } else if (urlLower.match(/\.(jpe?g)(\?|$)/) || head.startsWith("\xFF\xD8\xFF")) {
+      contentType = "image/jpeg";
+    } else if (urlLower.match(/\.png(\?|$)/) || head.startsWith("\x89PNG")) {
+      contentType = "image/png";
+    } else if (urlLower.match(/\.webp(\?|$)/) || head.startsWith("RIFF")) {
+      contentType = "image/webp";
+    } else if (urlLower.includes(".pdf") || contentType.includes("pdf")) {
+      // الرابط أو السيرفر بيقول PDF حتى لو الـ magic مش واضح — نحاول نفتحه كـ PDF
+      contentType = "application/pdf";
+    } else if (!contentType || contentType === "application/octet-stream" || contentType.includes("text/")) {
+      contentType = "application/octet-stream";
     }
 
-    // ——— هيدرز بسيطة وثابتة تخلي الموبايل يفتح المعاينة ———
-    // لو الـ Content-Disposition مش مظبوط المتصفح بيسمي الملف "file-proxy" وبيحمله
-
-    const finalType = contentType === "application/pdf" ? "application/pdf" : contentType;
-
+    // هيدرز بسيطة زي الملف الشغال بالظبط
     res.status(200);
-    res.setHeader("Content-Type", finalType);
+    res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Length", String(buffer.length));
-    res.setHeader("Content-Disposition", finalType === "application/pdf"
-      ? 'inline; filename="document.pdf"'
-      : "inline");
+    res.setHeader(
+      "Content-Disposition",
+      contentType === "application/pdf" ? 'inline; filename="document.pdf"' : "inline"
+    );
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "no-store, no-transform");
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -2875,7 +2890,14 @@ app.get("/api/file-proxy", async (req, res) => {
   } catch (e) {
     console.error("[file-proxy] error:", e.message);
     if (!res.headersSent) {
-      res.status(502).type("text/plain").send("Error fetching file: " + (e.message || "unknown"));
+      // صفحة HTML واضحة بدل نص يتحمّل باسم file-proxy
+      res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px;line-height:1.5}</style></head>
+        <body><div class="box"><h1>تعذر فتح الملف</h1><p>${String(e.message || "unknown").replace(/[<>&]/g, "")}</p>
+        <p style="margin-top:16px;font-size:12px;opacity:.5">جرّب تاني أو استخدم زر التحميل</p></div></body></html>`
+      );
     } else {
       res.end();
     }
