@@ -2845,8 +2845,13 @@ app.get("/api/file-proxy", async (req, res) => {
     // ابعت الرد بنفس حالة السيرفر الأصلي (200 أو 206)
     res.status(upstream.status);
 
-    const buffer = Buffer.from(await upstream.arrayBuffer());
-    res.send(buffer);
+    if (upstream.body) {
+      // استخدام stream تمرير الملف مباشرة للمتصفح (يدعم الملفات الكبيرة)
+      const { Readable } = await import("node:stream");
+      Readable.fromWeb(upstream.body).pipe(res);
+    } else {
+      res.end();
+    }
   } catch (e) {
     console.error("File proxy error:", e.message);
     if (!res.headersSent) res.status(502).send("Error fetching file");
