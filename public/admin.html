@@ -188,6 +188,10 @@
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       إضافة طالب
     </button>
+    <button class="btn-add-main" onclick="showVisits()" style="background:var(--purple); color:#fff;">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      زوار الموقع
+    </button>
   </div>
 
   <!-- جدول الطلاب -->
@@ -642,6 +646,65 @@
     t.innerText = msg;
     t.style.display = 'block';
     setTimeout(() => t.style.display = 'none', 2500);
+  }
+
+  // عرض الزوار
+  async function showVisits() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'visits-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="modal">
+        <div class="modal-header">
+          <h2>زوار الموقع</h2>
+          <button class="btn-icon" onclick="document.getElementById('visits-modal').remove()" style="width:auto;background:none"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body" id="visits-content" style="max-height:60vh; overflow-y:auto;">
+          <p style="text-align:center;color:var(--muted)">جاري التحميل...</p>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    try {
+      const res = await fetch('/api/admin/visits', {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      const data = await res.json();
+      const content = document.getElementById('visits-content');
+
+      if (data.success) {
+        if (data.data.length === 0) {
+          content.innerHTML = '<p style="text-align:center;color:var(--muted)">لا يوجد زوار حتى الآن.</p>';
+          return;
+        }
+
+        content.innerHTML = data.data.map(v => {
+          const date = new Date(v.time).toLocaleString('ar-EG');
+          let device = 'جهاز غير معروف';
+          if (/android/i.test(v.userAgent)) device = 'أندرويد';
+          else if (/iphone|ipad/i.test(v.userAgent)) device = 'آيفون / آيباد';
+          else if (/windows/i.test(v.userAgent)) device = 'ويندوز';
+          else if (/mac/i.test(v.userAgent)) device = 'ماك';
+          else if (/linux/i.test(v.userAgent)) device = 'لينكس';
+
+          return `
+            <div class="device-item" style="flex-direction:row;">
+              <div>
+                <strong style="font-size:13px;">${device}</strong>
+                <span style="display:block;">IP: ${v.ip}</span>
+                <span style="display:block;">${date}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        content.innerHTML = '<p style="text-align:center;color:var(--red)">خطأ في التحميل</p>';
+      }
+    } catch(e) {
+      document.getElementById('visits-content').innerHTML = '<p style="text-align:center;color:var(--red)">خطأ في الاتصال</p>';
+    }
   }
 </script>
 </body>
