@@ -7,12 +7,11 @@
 <title>المواد | ثانوية club</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--red:#ef4444}
+:root{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh}
-button,input{font:inherit;outline:none;border:none}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;background-image:radial-gradient(circle at top right, rgba(59,130,246,0.05), transparent 40%)}
+button{font:inherit;cursor:pointer;outline:none;border:none}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
-@keyframes spin{to{transform:rotate(360deg)}}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 
 /* Navbar */
@@ -31,23 +30,45 @@ button,input{font:inherit;outline:none;border:none}
 .wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
 
 /* رأس الصفحة */
-.page-head{margin-bottom:28px;animation:fadeUp .4s ease}
+.page-head{margin-bottom:24px;animation:fadeUp .4s ease}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);color:var(--blue2);border:1px solid rgba(59,130,246,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
-.page-head h1{margin:0;font-size:28px;font-weight:900;display:flex;align-items:center;gap:10px}
-.page-head h1 .count{font-size:14px;background:rgba(59,130,246,.15);color:var(--blue2);padding:4px 12px;border-radius:99px;font-weight:900}
-.page-head p{margin:8px 0 0;color:var(--muted);font-size:14px}
+.greeting{margin:0;font-size:26px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.greeting span{font-size:14px;font-weight:700;color:var(--muted)}
+.page-head p{margin:8px 0 0;color:var(--muted);font-size:14px;display:flex;align-items:center;gap:8px}
+.page-head h1 .count{font-size:13px;background:rgba(59,130,246,.15);color:var(--blue2);padding:3px 10px;border-radius:99px;font-weight:900}
+
+/* كارت الاستكمال */
+.continue-card{background:linear-gradient(135deg, #142543, #0d1524);border:1px solid rgba(59,130,246,0.2);border-radius:20px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:15px;box-shadow:0 10px 30px rgba(0,0,0,.2);animation:fadeUp .45s ease;position:relative;overflow:hidden}
+.continue-card::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px);background-size:20px 20px;pointer-events:none}
+.cc-info{display:flex;align-items:center;gap:15px;z-index:2;min-width:0}
+.cc-icon{width:48px;height:48px;border-radius:14px;background:rgba(59,130,246,.15);color:var(--blue2);display:grid;place-items:center;flex-shrink:0}
+.cc-icon svg{width:24px;height:24px;fill:currentColor}
+.cc-texts{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cc-lbl{font-size:12px;color:var(--muted);font-weight:700}
+.cc-title{font-size:16px;font-weight:900;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+.cc-btn{background:var(--blue);color:#fff;padding:10px 18px;border-radius:12px;font-weight:900;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:.2s;z-index:2;white-space:nowrap;flex-shrink:0}
+.cc-btn:hover{background:var(--blue3);transform:translateY(-2px);box-shadow:0 8px 20px rgba(37,99,235,.3)}
+.cc-btn:active{transform:scale(.96)}
+.cc-btn svg{width:16px;height:16px;fill:currentColor}
 
 /* شبكة المواد */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:all .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;cursor:default;}
 .card:hover{transform:translateY(-8px);border-color:rgba(59,130,246,.5);box-shadow:0 20px 40px rgba(0,0,0,.4),0 0 20px rgba(59,130,246,.1)}
+/* الشريط الجانبي */
+.card::after{content:'';position:absolute;right:0;top:20%;bottom:20%;width:4px;background:var(--blue);border-radius:4px 0 0 4px;opacity:0;transform:scaleY(0);transition:all .3s ease;z-index:5}
+.card:hover::after{opacity:1;transform:scaleY(1)}
+/* للموبايل (اللمس) نخلي الشريط يظهر لما تدوس */
+.card:active::after{opacity:1;transform:scaleY(1)}
+
 .card-img{width:100%;aspect-ratio:16/10;background:#101b31;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;position:relative;pointer-events:none;}
 .card-img img{width:100%;height:115%;object-fit:cover;object-position:center bottom;transform:translateY(0);transition:transform .4s ease;}
 .card:hover .card-img img{transform:scale(1.05)}
+.card-img .ph{position:absolute;inset:0;display:none;place-items:center;background:linear-gradient(135deg,#1e3a8a20,#1e40af10);color:var(--blue2)}
 .card-body{padding:20px;display:flex;flex-direction:column;flex:1;position:relative;background:var(--card);z-index:3}
 .card-body h3{margin:0;font-size:18px;font-weight:900;margin-bottom:4px}
 .card-body .sub{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px}
-.action-btn{width:100%;padding:12px;border:0;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue3));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(37,99,235,.2);}
+.action-btn{width:100%;padding:12px;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue3));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(37,99,235,.2);}
 .action-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(37,99,235,.4);filter:brightness(1.1)}
 .action-btn:active{transform:translateY(0) scale(0.97)}
 .action-btn svg{width:16px;height:16px;fill:currentColor;transition:transform .2s}
@@ -67,7 +88,13 @@ button,input{font:inherit;outline:none;border:none}
 .empty-state svg{width:60px;height:60px;margin-bottom:15px;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5}
 .empty-state h3{color:var(--ink);font-size:18px;font-weight:900;margin:0 0 8px}
 
-@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.page-head h1{font-size:22px}}
+@media(max-width:700px){
+  .continue-card{flex-direction:column;align-items:stretch;gap:12px;text-align:center;padding:20px}
+  .cc-info{flex-direction:column;gap:10px}
+  .cc-texts{align-items:center}
+  .cc-btn{justify-content:center;width:100%}
+}
+@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.greeting{font-size:20px}}
 </style>
 </head>
 <body>
@@ -84,12 +111,29 @@ button,input{font:inherit;outline:none;border:none}
   <main class="wrap" id="main">
     <div class="page-head">
       <div class="badge">المواد الدراسية</div>
-      <h1>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></h1>
-      <p>اختار المادة لعرض المدرسين</p>
+      <h1 class="greeting" id="greeting">جاري التحميل...</h1>
+      <p>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></p>
     </div>
+
+    <!-- كارت استكمال المذاكرة -->
+    <div class="continue-card" id="continue-card" style="display: none;">
+      <div class="cc-info">
+        <div class="cc-icon">
+          <svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>
+        </div>
+        <div class="cc-texts">
+          <span class="cc-lbl">آخر ما كنت بتذاكره</span>
+          <h3 class="cc-title" id="cc-title">—</h3>
+        </div>
+      </div>
+      <button class="cc-btn" id="cc-btn" type="button">
+        كمّل المذاكرة
+        <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+
     <div class="grid" id="subjects-grid">
       <!-- Skeleton Loaders -->
-      <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
@@ -115,7 +159,51 @@ const api = async (path, opts = {}) => {
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+// الترحيب الذكي
+function setGreeting(name) {
+  const hour = new Date().getHours();
+  let greet = "صباح الخير";
+  let icon = "🌅";
+  // بعد الساعة 6 مساءً يعتبر مساءً
+  if (hour >= 18 || hour < 4) {
+    greet = "مساء الخير";
+    icon = "🌙";
+  }
+  $('greeting').innerHTML = `${icon} ${greet} يا <span style="color:var(--blue2)">${esc(name)}</span>`;
+}
+
+// البحث عن آخر فيديو تمت مشاهدته
+function loadContinueCard() {
+  let lastVideo = null;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('cstk_w_')) {
+        const data = JSON.parse(localStorage.getItem(key));
+        if (data && data.videoId && data.updatedAt) {
+          if (!lastVideo || data.updatedAt > lastVideo.updatedAt) {
+            lastVideo = data;
+          }
+        }
+      }
+    }
+  } catch(e) {}
+
+  if (lastVideo) {
+    $('cc-title').textContent = lastVideo.title || 'فيديو بدون عنوان';
+    $('continue-card').style.display = 'flex';
+    
+    // عند الضغط على زر الكمال
+    $('cc-btn').onclick = () => {
+      // بنوجهه للمشغل على طول
+      window.location.href = `player.html?videoId=${encodeURIComponent(lastVideo.videoId)}&lectureId=${encodeURIComponent(lastVideo.lectureId || '')}`;
+    };
+  }
+}
+
 async function load() {
+  loadContinueCard();
+
   try {
     const subjects = await api('/api/subjects/' + subjectId);
     
@@ -128,7 +216,6 @@ async function load() {
       return; 
     }
 
-    // عرض عدد المواد
     const countEl = $('subject-count');
     countEl.textContent = subjects.length;
     countEl.style.display = 'inline-block';
@@ -165,6 +252,7 @@ async function loadProfile() {
     if(me) { 
       $('nav-name').textContent = me.name || 'طالب'; 
       $('nav-av').textContent = (me.name || 'ط').charAt(0); 
+      setGreeting(me.name || 'طالب');
     } 
   } catch (e) {} 
 }
@@ -173,4 +261,4 @@ load(); loadProfile();
 })();
 </script>
 </body>
-  </html>
+</html>
