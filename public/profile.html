@@ -3,594 +3,282 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b14">
 <title>ملفي الشخصي | ثانوية club</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg: #070b14;
-  --card: #121a2b;
-  --card-inner: #0b111d;
-  --text: #f4f7ff;
-  --muted: #8b9bb8;
-  --blue: #3b82f6;
-  --blue2: #60a5fa;
-  --blue3: #2563eb;
-  --green: #10b981;
-  --purple: #8b5cf6;
-  --red: #ef4444;
-  --amber: #f59e0b;
-  --line: rgba(148, 163, 184, .12);
-}
-* { box-sizing: border-box; font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
-html { scroll-behavior: smooth; }
-body { 
-  margin: 0; 
-  background: var(--bg); 
-  color: var(--text); 
-  min-height: 100vh; 
-  padding-bottom: 40px; 
-  background-image: radial-gradient(circle at top right, rgba(59,130,246,0.08), transparent 40%);
-}
+:root{--bg:#070b14;--card:#121a2b;--inner:#0b111d;--text:#f4f7ff;--muted:#8b9bb8;--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--purple:#8b5cf6;--red:#ef4444;--line:rgba(148,163,184,.12)}
+*{box-sizing:border-box;font-family:'Cairo',sans-serif;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:40px;background-image:radial-gradient(circle at top right,rgba(59,130,246,0.08),transparent 40%)}
 
 /* Navbar */
-.top { position: sticky; top: 0; z-index: 100; background: rgba(7, 11, 20, .88); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 16px; cursor: pointer; }
-.brand .logo { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; background: linear-gradient(145deg, #5ba0ff, #2454d8); box-shadow: 0 8px 26px #2563eb55; color: white; transition: transform 0.3s; }
-.brand:hover .logo { transform: scale(1.05) rotate(-3deg); }
-.brand .logo svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.brand small { display: block; font-size: 10px; font-weight: 600; color: var(--muted); margin-top: -3px; }
-.btn-back { background: rgba(255,255,255,.05); border: 1px solid var(--line); color: #fff; padding: 8px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; text-decoration: none; font-size: 13px; transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.btn-back:hover { background: rgba(255,255,255,.1); transform: translateY(-2px); }
-.btn-back:active { transform: scale(0.96); }
+.top{position:sticky;top:0;z-index:100;background:rgba(7,11,20,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer}
+.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#5ba0ff,#2454d8);box-shadow:0 8px 26px #2563eb55;color:white}
+.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8}
+.brand small{display:block;font-size:10px;color:var(--muted);margin-top:-3px}
+.btn-back{background:rgba(255,255,255,.05);border:1px solid var(--line);color:#fff;padding:8px 16px;border-radius:10px;font-weight:700;text-decoration:none;font-size:13px;transition:.2s}
+.btn-back:active{transform:scale(.96)}
 
-.wrap { max-width: 800px; margin: 0 auto; padding: 20px 16px; animation: fadeIn 0.6s ease both; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.wrap{max-width:800px;margin:0 auto;padding:20px 16px;animation:fadeIn .6s ease both}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
-/* هيكل التحميل */
-.loading-skeleton { display: flex; flex-direction: column; gap: 15px; }
-.sk-card { background: var(--card); border-radius: 24px; height: 120px; animation: pulseSk 1.5s infinite ease-in-out; }
-@keyframes pulseSk { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+/* Cards */
+.hero-card{background:linear-gradient(135deg,#142543,#0d1524);border:1px solid rgba(59,130,246,.15);border-radius:24px;padding:30px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 10px 30px rgba(0,0,0,.2);position:relative;overflow:hidden}
+.hero-card::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px);background-size:20px 20px;pointer-events:none}
+.hero-text{display:flex;flex-direction:column;gap:8px;text-align:right}
+.badge-student{background:rgba(59,130,246,.15);color:var(--blue2);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:800;margin-right:auto}
+.hero-name{font-size:32px;font-weight:900;margin:0}
+.hero-desc{color:var(--muted);font-size:14px;font-weight:600;margin:0}
+.avatar{width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,var(--blue),var(--blue3));display:grid;place-items:center;font-size:32px;font-weight:900;color:#fff;box-shadow:0 10px 30px rgba(59,130,246,.3);border:2px solid rgba(255,255,255,.1);flex-shrink:0}
 
-/* الكارت الرئيسي */
-.hero-card {
-  background: linear-gradient(135deg, #142543, #0d1524);
-  border: 1px solid rgba(59, 130, 246, 0.15);
-  border-radius: 24px;
-  padding: 30px;
-  position: relative;
-  overflow: hidden;
-  margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-}
-.hero-card::before {
-  content: ''; position: absolute; inset: 0;
-  background-image: radial-gradient(circle, rgba(255,255,255,.03) 1px, transparent 1px);
-  background-size: 20px 20px; pointer-events: none;
-}
-.hero-top { display: flex; justify-content: space-between; align-items: flex-start; }
-.hero-text { display: flex; flex-direction: column; gap: 8px; text-align: right; }
-.badge-student { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; width: fit-content; margin-right: auto; }
-.hero-name { font-size: 32px; font-weight: 900; margin: 0; color: #fff; }
-.hero-desc { color: var(--muted); font-size: 14px; font-weight: 600; margin: 0; }
-.avatar {
-  width: 80px; height: 80px; border-radius: 24px;
-  background: linear-gradient(135deg, var(--blue), var(--blue3));
-  display: grid; place-items: center; font-size: 32px; font-weight: 900; color: #fff;
-  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
-  flex-shrink: 0;
-  border: 2px solid rgba(255,255,255,0.1);
-}
+.grid-details{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px}
+@media(max-width:600px){.grid-details{grid-template-columns:1fr}}
+.detail-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;display:flex;align-items:center;justify-content:space-between;transition:transform .25s,border-color .25s}
+.detail-card:hover{transform:translateY(-3px);border-color:rgba(59,130,246,.3)}
+.detail-info{display:flex;flex-direction:column;gap:5px;text-align:right;min-width:0}
+.detail-label{color:var(--muted);font-size:13px;font-weight:700}
+.detail-value{font-size:18px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icon-box{width:50px;height:50px;border-radius:16px;display:grid;place-items:center;background:rgba(255,255,255,.03);flex-shrink:0}
+.icon-box svg{width:24px;height:24px}
+.status-badge{background:rgba(16,185,129,.15);color:var(--green);padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;display:inline-flex;align-items:center;gap:6px}
+.status-badge::before{content:'';width:6px;height:6px;background:var(--green);border-radius:50%}
+.status-badge.danger{background:rgba(239,68,68,.15);color:var(--red)}
+.status-badge.danger::before{background:var(--red)}
 
-/* كروت التفاصيل */
-.grid-details { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-@media (max-width: 600px) { .grid-details { grid-template-columns: 1fr; } }
-.detail-card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; align-items: center; justify-content: space-between; transition: transform 0.25s, border-color 0.25s; }
-.detail-card:hover { transform: translateY(-3px); border-color: rgba(59,130,246,0.3); }
-.detail-info { display: flex; flex-direction: column; gap: 5px; text-align: right; min-width: 0; }
-.detail-label { color: var(--muted); font-size: 13px; font-weight: 700; }
-.detail-value { font-size: 18px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.icon-box { width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; background: rgba(255,255,255,.03); flex-shrink: 0; transition: background 0.2s; }
-.detail-card:hover .icon-box { background: rgba(255,255,255,.08); }
-.icon-box svg { width: 24px; height: 24px; }
-.status-badge { background: rgba(16, 185, 129, 0.15); color: var(--green); padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
-.status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 8px var(--green); }
-.status-badge.danger { background: rgba(239,68,68,0.15); color: var(--red); }
-.status-badge.danger::before { background: var(--red); box-shadow: 0 0 8px var(--red); }
+/* Timer */
+.timer-card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px 20px;position:relative;overflow:hidden;margin-bottom:20px;transition:.3s}
+.progress-bar-container{position:absolute;top:0;left:0;right:0;height:4px;background:rgba(255,255,255,.05);overflow:hidden}
+.progress-bar-fill{height:100%;width:0%;background:var(--blue2);transition:width 1s linear,background .3s}
+.timer-card.danger{border-color:rgba(239,68,68,.4);background:linear-gradient(135deg,#2a1419,#121a2b);box-shadow:0 0 20px rgba(239,68,68,.1)}
+.timer-card.danger .timer-title h2{color:#fca5a5}
+.timer-card.danger .time-val{color:#fca5a5;text-shadow:0 0 15px rgba(239,68,68,.5)}
+.timer-card.danger .progress-bar-fill{background:var(--red)}
+.timer-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.timer-title h2{margin:0;font-size:22px;font-weight:900}
+.timer-title p{margin:0;color:var(--muted);font-size:13px}
+.timer-badge{background:rgba(59,130,246,.15);color:var(--blue2);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px}
+.timer-badge::before{content:'';width:6px;height:6px;background:var(--blue2);border-radius:50%;animation:pulse 1.5s infinite}
+@keyframes pulse{50%{opacity:.3}}
 
-/* كارت العداد */
-.timer-card { 
-  background: var(--card); 
-  border: 1px solid var(--line); 
-  border-radius: 24px; 
-  padding: 30px 20px; 
-  position: relative; 
-  overflow: hidden; 
-  margin-bottom: 20px;
-  transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
-}
-.timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
+/* Timer Grid & Boxes */
+.timer-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.timer-grid.layout-2{grid-template-columns:repeat(2,1fr);max-width:300px;margin:0 auto}
+.time-box{background:var(--inner);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:15px 5px;text-align:center;box-shadow:inset 0 2px 10px rgba(0,0,0,.2)}
+.time-val{font-size:32px;font-weight:900;color:var(--blue2);line-height:1;margin-bottom:8px;display:inline-block;font-variant-numeric:tabular-nums}
+.time-label{color:var(--muted);font-size:13px;font-weight:700}
+.time-val.tick{animation:tickPulse .4s ease-out}
+@keyframes tickPulse{30%{transform:scale(1.08);color:#fff;text-shadow:0 0 12px var(--blue2)}}
 
-/* شريط التقدم */
-.progress-bar-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: rgba(255,255,255,0.05);
-  overflow: hidden;
-}
-.progress-bar-fill {
-  height: 100%;
-  width: 0%;
-  background: var(--blue2);
-  border-radius: 0 4px 4px 0;
-  transition: width 1s linear, background 0.3s;
-}
-
-/* حالة الخطر */
-.timer-card.danger { 
-  border-color: rgba(239,68,68,0.4); 
-  background: linear-gradient(135deg, #2a1419, #121a2b); 
-  box-shadow: 0 0 20px rgba(239,68,68,0.1);
-}
-.timer-card.danger .timer-title h2 { color: #fca5a5; }
-.timer-card.danger .timer-badge { background: rgba(239,68,68,0.15); color: #fca5a5; }
-.timer-card.danger .timer-badge::before { background: var(--red); }
-.timer-card.danger .time-val { color: #fca5a5; text-shadow: 0 0 15px rgba(239,68,68,0.5); }
-.timer-card.danger .progress-bar-fill { background: var(--red); }
-
-.timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; flex-wrap: wrap; gap: 10px; }
-.timer-title { display: flex; flex-direction: column; gap: 5px; text-align: right; }
-.timer-title h2 { margin: 0; font-size: 22px; font-weight: 900; }
-.timer-title p { margin: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
-.timer-badge { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.timer-badge::before { content: ''; width: 6px; height: 6px; background: var(--blue2); border-radius: 50%; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
-
-/* الترتيب الديناميكي */
-.timer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; position: relative; z-index: 2; }
-.timer-grid.layout-3 { grid-template-columns: repeat(3, 1fr); }
-.timer-grid.layout-2 { grid-template-columns: repeat(2, 1fr); max-width: 300px; margin: 0 auto; }
-
-/* تحسين شكل المربعات (UI) */
-.time-box { 
-  background: var(--card-inner); 
-  border: 1px solid rgba(255,255,255,.05); 
-  border-radius: 16px; 
-  padding: 15px 5px; 
-  text-align: center; 
-  transition: border-color 0.2s, box-shadow 0.2s;
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.2); /* إحساس بالعمق */
-}
-.time-box:hover { 
-  border-color: rgba(59,130,246,0.3); 
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.2), 0 0 15px rgba(59,130,246,0.1); /* توهج خفيف عند اللمس */
-}
-
-.time-val { 
-  font-size: 32px; 
-  font-weight: 900; 
-  color: var(--blue2); 
-  line-height: 1; 
-  margin-bottom: 8px; 
-  display: inline-block; 
-  transition: color 0.3s, text-shadow 0.3s;
-  font-variant-numeric: tabular-nums; /* يمنع رجفة الأرقام */
-}
-
-.time-label { color: var(--muted); font-size: 13px; font-weight: 700; }
-
-/* تحسين تأثير النبض على الثواني (أكثر سلاسة) */
-.time-val.tick { animation: tickPulse 0.4s ease-out; }
-@keyframes tickPulse { 
-  0% { transform: scale(1); color: var(--blue2); text-shadow: none; } 
-  30% { transform: scale(1.08); color: #ffffff; text-shadow: 0 0 12px var(--blue2); } 
-  100% { transform: scale(1); color: var(--blue2); text-shadow: none; } 
-}
-
-/* شاشة الاشتراك المنتهي */
-.expired-screen {
-  text-align: center;
-  padding: 40px 20px;
-  background: linear-gradient(135deg, #2a1419, #121a2b);
-  border: 1px solid rgba(239,68,68,0.4);
-  border-radius: 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 0 30px rgba(239,68,68,0.15);
-  animation: fadeIn 0.5s ease;
-}
-.expired-screen svg { width: 60px; height: 60px; color: var(--red); margin-bottom: 15px; animation: pulse 2s infinite; }
-.expired-screen h2 { font-size: 24px; font-weight: 900; color: #fca5a5; margin: 0 0 10px; }
-.expired-screen p { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
-.btn-renew { display: inline-flex; align-items: center; gap: 8px; background: var(--red); color: #fff; padding: 14px 24px; border-radius: 14px; font-weight: 900; text-decoration: none; transition: transform 0.2s; }
-.btn-renew:hover { transform: translateY(-2px); }
-.btn-renew:active { transform: scale(0.96); }
-
-/* زرار تسجيل الخروج */
-.logout-btn {
-  width: 100%; padding: 16px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: var(--red);
-  border-radius: 16px;
-  font-size: 16px; font-weight: 900;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  cursor: pointer; transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); font-family: inherit;
-}
-.logout-btn:hover { background: rgba(239, 68, 68, 0.2); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(239,68,68,0.15); }
-.logout-btn:active { transform: scale(0.97); }
-.logout-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-
-/* أزرار الكود */
-.code-actions { display: flex; gap: 4px; align-items: center; }
-.code-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 6px; border-radius: 8px; transition: all 0.2s; }
-.code-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-.code-btn:active { transform: scale(0.9); }
-.code-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.code-btn.success { color: var(--green); }
-
-@media (max-width: 500px) {
-  .time-val { font-size: 24px; }
-  .timer-grid { gap: 6px; }
-  .time-box { padding: 10px 2px; border-radius: 12px; }
-  .hero-name { font-size: 26px; }
-  .avatar { width: 60px; height: 60px; font-size: 24px; border-radius: 18px; }
-  .timer-title h2 { font-size: 18px; }
-}
+/* Expired & Logout */
+.expired-screen{text-align:center;padding:40px 20px;background:linear-gradient(135deg,#2a1419,#121a2b);border:1px solid rgba(239,68,68,.4);border-radius:24px}
+.expired-screen h2{color:#fca5a5;margin:0 0 10px}
+.btn-renew{display:inline-block;background:var(--red);color:#fff;padding:14px 24px;border-radius:14px;font-weight:900;text-decoration:none;margin-top:15px}
+.logout-btn{width:100%;padding:16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:16px;font-size:16px;font-weight:900;display:flex;justify-content:center;gap:8px;cursor:pointer;transition:.2s}
+.logout-btn:active{transform:scale(.97)}
+.code-actions{display:flex;gap:4px;align-items:center}
+.code-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px}
+.code-btn.success{color:var(--green)}
 </style>
 </head>
 <body>
 
 <header class="top">
   <div class="brand" onclick="window.location.href='index.html'">
-    <span class="logo">
-      <svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg>
-    </span>
+    <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
     <span>ثانوية <span style="color:var(--blue2)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <a href="subjects.html" class="btn-back">← المواد</a>
 </header>
 
 <main class="wrap" id="main">
-  <div class="loading-skeleton">
-    <div class="sk-card"></div>
-    <div class="sk-card" style="height: 100px;"></div>
-    <div class="sk-card" style="height: 200px;"></div>
-  </div>
+  <div style="text-align:center;padding:50px;color:var(--muted)">جاري التحميل...</div>
 </main>
 
 <script>
 (function(){
-'use strict';
-
-const API_BASE = '';
-const TOKEN_KEY = 'student_token';
-const CACHE_KEY = 'student_data_cache';
-const TOKEN = localStorage.getItem(TOKEN_KEY);
+const TOKEN = localStorage.getItem('student_token');
 if (!TOKEN) { window.location.replace('login.html'); return; }
 
-const $ = id => document.getElementById(id);
-let countdownInterval = null;
-let lastRenderedSec = null;
-let currentLayout = null;
+let timerInt = null, lastSec = null, curLayout = null;
 
-function formatArabicDate(ts) {
-  if (!ts) return 'غير محدد';
-  const d = new Date(ts);
-  return new Intl.DateTimeFormat('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }).format(d);
-}
-function formatArabicTime(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  return new Intl.DateTimeFormat('ar-EG', { hour: 'numeric', minute: '2-digit', hour12: true }).format(d);
-}
-function getSectionName(sec) {
-  const map = { scientific_sciences: 'علمي علوم', scientific_math: 'علمي رياضة', literary: 'أدبي', azhari: 'أزهر' };
-  return map[sec] || sec || 'غير محدد';
-}
+function fmtDate(ts) { return new Date(ts).toLocaleDateString('ar-EG', { day:'numeric', month:'long', year:'numeric' }); }
+function fmtTime(ts) { return new Date(ts).toLocaleTimeString('ar-EG', { hour:'numeric', minute:'2-digit' }); }
+function getSecName(sec) { const m={scientific_sciences:'علمي علوم',scientific_math:'علمي رياضة',literary:'أدبي',azhari:'أزهر'}; return m[sec]||sec||'غير محدد'; }
 
-function renderBaseUI(me) {
+function renderUI(me) {
   const name = me.name || 'طالب';
-  const firstLetter = name.charAt(0);
-  const expiresAt = me.expiresAt;
-  const createdAt = formatArabicDate(expiresAt ? (expiresAt - 30*24*3600*1000) : Date.now());
+  const exp = me.expiresAt;
+  const isDanger = exp && (exp - Date.now() < 3*24*3600*1000);
+  const created = fmtDate(exp ? exp - 30*24*3600*1000 : Date.now());
 
-  const isDanger = expiresAt && (expiresAt - Date.now() < 3 * 24 * 3600 * 1000);
-
-  let html = `
+  document.getElementById('main').innerHTML = `
     <div class="hero-card">
-      <div class="hero-top">
-        <div class="avatar">${firstLetter}</div>
-        <div class="hero-text">
-          <span class="badge-student">👤 حساب طالب</span>
-          <h1 class="hero-name">${name}</h1>
-          <p class="hero-desc">أهلاً بيك في رحلة نجاحك! هنا كل تفاصيل حسابك عشان تبقى مطمن.</p>
-        </div>
+      <div class="hero-text">
+        <span class="badge-student">👤 حساب طالب</span>
+        <h1 class="hero-name">${name}</h1>
+        <p class="hero-desc">أهلاً بيك! هنا تفاصيل حسابك.</p>
       </div>
+      <div class="avatar">${name.charAt(0)}</div>
     </div>
 
     <div class="grid-details">
       <div class="detail-card">
-        <div class="detail-info">
-          <span class="detail-label">المسار الدراسي</span>
-          <span class="detail-value">${getSectionName(me.section)}</span>
-        </div>
-        <div class="icon-box" style="color:var(--purple)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        </div>
+        <div class="detail-info"><span class="detail-label">المسار</span><span class="detail-value">${getSecName(me.section)}</span></div>
+        <div class="icon-box" style="color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
       </div>
-
       <div class="detail-card">
         <div class="detail-info">
           <span class="detail-label">كود الطالب</span>
           <div class="code-actions">
-            <span class="detail-value" style="color:var(--blue2); direction:ltr; margin-left: 4px;">${me.code || '—'}</span>
-            <button class="code-btn" id="copy-code-btn" title="نسخ" aria-label="نسخ">
-              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-            <button class="code-btn" id="share-code-btn" title="مشاركة" aria-label="مشاركة">
-              <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <span class="detail-value" style="color:var(--blue2)">${me.code||'—'}</span>
+            <button class="code-btn" onclick="navigator.clipboard.writeText('${me.code}');this.innerHTML='<span style=color:var(--green)>✓</span>';setTimeout(()=>this.innerHTML='<svg width=16 height=16 viewBox=\\'0 0 24 24\\' fill=none stroke=currentColor stroke-width=2><rect x=9 y=9 width=13 height=13 rx=2/><path d=\\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\\'/></svg>',2000)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
           </div>
         </div>
-        <div class="icon-box" style="color:var(--blue2)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
-        </div>
+        <div class="icon-box" style="color:var(--blue2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg></div>
       </div>
-
       <div class="detail-card">
-        <div class="detail-info">
-          <span class="detail-label">تاريخ إنشاء الحساب</span>
-          <span class="detail-value">${createdAt}</span>
-        </div>
-        <div class="icon-box" style="color:var(--blue)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        </div>
+        <div class="detail-info"><span class="detail-label">تاريخ الإنشاء</span><span class="detail-value">${created}</span></div>
+        <div class="icon-box" style="color:var(--blue)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
       </div>
-
       <div class="detail-card">
-        <div class="detail-info">
-          <span class="detail-label">حالة الحساب</span>
-          <span class="status-badge ${isDanger ? 'danger' : ''}" id="status-badge">${isDanger ? 'قارب على الانتهاء' : 'مفعل'}</span>
-        </div>
-        <div class="icon-box" style="color:${isDanger ? 'var(--red)' : 'var(--green)'}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg>
-        </div>
+        <div class="detail-info"><span class="detail-label">الحالة</span><span class="status-badge ${isDanger?'danger':''}" id="status-badge">${isDanger?'قارب على الانتهاء':'مفعل'}</span></div>
+        <div class="icon-box" style="color:${isDanger?'var(--red)':'var(--green)'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg></div>
       </div>
     </div>
 
     <div id="timer-container">
-      <div class="timer-card ${isDanger ? 'danger' : ''}" id="timer-card">
-        <div class="progress-bar-container">
-          <div class="progress-bar-fill" id="progress-fill"></div>
-        </div>
+      <div class="timer-card ${isDanger?'danger':''}" id="timer-card">
+        <div class="progress-bar-container"><div class="progress-bar-fill" id="progress-fill"></div></div>
         <div class="timer-top">
-          <div class="timer-badge">${isDanger ? 'قارب على الانتهاء' : 'العداد شغال'}</div>
+          <div class="timer-badge">${isDanger?'قارب على الانتهاء':'العداد شغال'}</div>
           <div class="timer-title">
             <h2>فاضل على اشتراكك</h2>
-            <p>يخلص ${formatArabicDate(expiresAt)} في ${formatArabicTime(expiresAt)}</p>
+            <p>يخلص ${fmtDate(exp)} في ${fmtTime(exp)}</p>
           </div>
         </div>
         <div class="timer-grid" id="timer-grid"></div>
       </div>
     </div>
 
-    <button class="logout-btn" id="logout-btn">
-      <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-      تسجيل الخروج من الحساب
+    <button class="logout-btn" onclick="if(confirm('تسجيل الخروج؟')){localStorage.clear();window.location.href='login.html'}">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      تسجيل الخروج
     </button>
   `;
 
-  $('main').innerHTML = html;
-
-  const copyBtn = document.getElementById('copy-code-btn');
-  if (copyBtn && me.code) {
-    copyBtn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(me.code);
-        copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
-        copyBtn.classList.add('success');
-        setTimeout(() => {
-          copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-          copyBtn.classList.remove('success');
-        }, 2000);
-      } catch (err) {}
-    });
-  }
-
-  const shareBtn = document.getElementById('share-code-btn');
-  if (shareBtn && me.code) {
-    shareBtn.addEventListener('click', () => {
-      const text = `مرحباً، كود الدخول الخاص بي في منصة ثانوية club هو: ${me.code}`;
-      if (navigator.share) {
-        navigator.share({ title: 'كود الدخول', text }).catch(() => {});
-      } else {
-        const url = 'https://wa.me/?text=' + encodeURIComponent(text);
-        window.open(url, '_blank');
-      }
-    });
-  }
-
-  document.getElementById('logout-btn').addEventListener('click', function() {
-    if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(CACHE_KEY);
-      window.location.href = 'login.html';
-    }
-  });
-
-  if (expiresAt) {
-    if (countdownInterval) clearInterval(countdownInterval);
-    updateCountdown(expiresAt, isDanger);
-    countdownInterval = setInterval(() => updateCountdown(expiresAt, isDanger), 1000);
+  if (exp) {
+    if (timerInt) clearInterval(timerInt);
+    tickTimer(exp, isDanger);
+    timerInt = setInterval(() => tickTimer(exp, isDanger), 1000);
   }
 }
 
-function loadFromCache() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-    if (cached && cached.name) {
-      renderBaseUI(cached);
-      return true;
+function tickTimer(exp, isDanger) {
+  const diff = exp - Date.now();
+  const grid = document.getElementById('timer-grid');
+  const card = document.getElementById('timer-card');
+  const fill = document.getElementById('progress-fill');
+  if (!grid) return;
+
+  if (diff <= 0) {
+    clearInterval(timerInt);
+    document.getElementById('timer-container').innerHTML = `
+      <div class="expired-screen">
+        <h2>انتهى الاشتراك!</h2>
+        <p>جدد اشتراكك عشان تكمل مذاكرتك.</p>
+        <a href="https://t.me/S7alaby7" target="_blank" class="btn-renew">جدد عبر تيليجرام</a>
+      </div>
+    `;
+    return;
+  }
+
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+
+  const total = 30 * 86400000;
+  const percent = Math.min(100, (Math.max(0, total - diff) / total) * 100);
+  if (fill) fill.style.width = percent + '%';
+
+  let layout, html;
+  if (d >= 1) {
+    layout = 'layout-3';
+    html = `
+      <div class="time-box"><div class="time-val" id="t-days">${d}</div><div class="time-label">أيام</div></div>
+      <div class="time-box"><div class="time-val" id="t-hours">${h}</div><div class="time-label">ساعات</div></div>
+      <div class="time-box"><div class="time-val" id="t-mins">${m}</div><div class="time-label">دقايق</div></div>
+    `;
+  } else if (h >= 1) {
+    layout = 'layout-3';
+    html = `
+      <div class="time-box"><div class="time-val" id="t-hours">${h}</div><div class="time-label">ساعات</div></div>
+      <div class="time-box"><div class="time-val" id="t-mins">${m}</div><div class="time-label">دقايق</div></div>
+      <div class="time-box"><div class="time-val" id="t-secs">${s}</div><div class="time-label">ثواني</div></div>
+    `;
+    if (card) card.classList.add('danger');
+  } else {
+    layout = 'layout-2';
+    html = `
+      <div class="time-box"><div class="time-val" id="t-mins">${m}</div><div class="time-label">دقايق</div></div>
+      <div class="time-box"><div class="time-val" id="t-secs">${s}</div><div class="time-label">ثواني</div></div>
+    `;
+    if (card) card.classList.add('danger');
+  }
+
+  if (curLayout !== layout) {
+    grid.className = 'timer-grid ' + layout;
+    grid.innerHTML = html;
+    curLayout = layout;
+  } else {
+    if (d >= 1) {
+      document.getElementById('t-days').innerText = d;
+      document.getElementById('t-hours').innerText = h;
+      document.getElementById('t-mins').innerText = m;
+    } else if (h >= 1) {
+      document.getElementById('t-hours').innerText = h;
+      document.getElementById('t-mins').innerText = m;
+      const secEl = document.getElementById('t-secs');
+      secEl.innerText = s;
+      if (lastSec !== s) {
+        secEl.classList.remove('tick');
+        void secEl.offsetWidth;
+        secEl.classList.add('tick');
+        lastSec = s;
+      }
+    } else {
+      document.getElementById('t-mins').innerText = m;
+      const secEl = document.getElementById('t-secs');
+      secEl.innerText = s;
+      if (lastSec !== s) {
+        secEl.classList.remove('tick');
+        void secEl.offsetWidth;
+        secEl.classList.add('tick');
+        lastSec = s;
+      }
     }
-  } catch(e) {}
-  return false;
+  }
 }
 
 async function loadProfile() {
   try {
-    const res = await fetch(API_BASE + '/api/auth/me', {
-      headers: { 'Authorization': 'Bearer ' + TOKEN, 'Accept': 'application/json' }
-    });
-    
-    if (res.status === 401 || res.status === 403) {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(CACHE_KEY);
-      window.location.replace('login.html');
-      return;
-    }
-
+    const res = await fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    if (res.status === 401 || res.status === 403) { localStorage.clear(); window.location.replace('login.html'); return; }
     const data = await res.json();
-    if (!res.ok || data.success === false) throw new Error(data.message || 'فشل جلب البيانات');
-    
-    const me = data.data;
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify(me)); } catch(e) {}
-    
-    if (countdownInterval) clearInterval(countdownInterval);
-    renderBaseUI(me);
-
+    if (!res.ok || !data.success) throw new Error(data.message || 'خطأ');
+    localStorage.setItem('student_data_cache', JSON.stringify(data.data));
+    renderUI(data.data);
   } catch (e) {
-    if (!document.getElementById('timer-card')) {
-      $('main').innerHTML = `<div style="text-align:center; color:var(--red); padding:50px;">خطأ: ${e.message}</div>`;
-    }
+    document.getElementById('main').innerHTML = '<div style="text-align:center;color:red;padding:50px;">خطأ: ' + e.message + '</div>';
   }
 }
 
-function updateCountdown(expiresAt, isDanger) {
-  const now = Date.now();
-  const diff = expiresAt - now;
-  const timerGrid = document.getElementById('timer-grid');
-  const timerCard = document.getElementById('timer-card');
-  const progressFill = document.getElementById('progress-fill');
-  
-  if (!timerGrid) return;
-
-  if (diff <= 0) {
-    if (countdownInterval) clearInterval(countdownInterval);
-    const container = document.getElementById('timer-container');
-    if (container && !document.querySelector('.expired-screen')) {
-      container.innerHTML = `
-        <div class="expired-screen">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          <h2>انتهى الاشتراك!</h2>
-          <p>اشتراكك خلص. عشان تكمل مذاكرتك، جدد اشتراكك دلوقتي.</p>
-          <a href="https://t.me/S7alaby7" target="_blank" rel="noopener" class="btn-renew">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-            جدد عبر تيليجرام
-          </a>
-        </div>
-      `;
-    }
-    const badge = document.getElementById('status-badge');
-    if (badge) { badge.textContent = 'منتهي'; badge.className = 'status-badge danger'; }
-    return;
-  }
-
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const secs = Math.floor((diff % (1000 * 60)) / 1000);
-
-  const totalDuration = 30 * 24 * 3600 * 1000;
-  const elapsed = Math.max(0, totalDuration - diff);
-  const percent = Math.min(100, (elapsed / totalDuration) * 100);
-  if (progressFill) progressFill.style.width = percent + '%';
-
-  let layout = 'layout-3';
-  let boxes = '';
-
-  if (days >= 1) {
-    layout = 'layout-3';
-    boxes = `
-      <div class="time-box"><div class="time-val" id="t-days">${days}</div><div class="time-label">أيام</div></div>
-      <div class="time-box"><div class="time-val" id="t-hours">${hours}</div><div class="time-label">ساعات</div></div>
-      <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
-    `;
-  } else if (hours >= 1) {
-    layout = 'layout-3';
-    boxes = `
-      <div class="time-box"><div class="time-val" id="t-hours">${hours}</div><div class="time-label">ساعات</div></div>
-      <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
-      <div class="time-box"><div class="time-val" id="t-secs">${secs}</div><div class="time-label">ثواني</div></div>
-    `;
-    if (timerCard && !timerCard.classList.contains('danger')) timerCard.classList.add('danger');
-  } else {
-    layout = 'layout-2';
-    boxes = `
-      <div class="time-box"><div class="time-val" id="t-mins">${mins}</div><div class="time-label">دقايق</div></div>
-      <div class="time-box"><div class="time-val" id="t-secs">${secs}</div><div class="time-label">ثواني</div></div>
-    `;
-    if (timerCard && !timerCard.classList.contains('danger')) timerCard.classList.add('danger');
-  }
-
-  if (currentLayout !== layout) {
-    timerGrid.className = 'timer-grid ' + layout;
-    timerGrid.innerHTML = boxes;
-    currentLayout = layout;
-  } else {
-    if (days >= 1) {
-      const elDays = document.getElementById('t-days');
-      const elHours = document.getElementById('t-hours');
-      const elMins = document.getElementById('t-mins');
-      if (elDays) elDays.innerText = days;
-      if (elHours) elHours.innerText = hours;
-      if (elMins) elMins.innerText = mins;
-    } else if (hours >= 1) {
-      const elHours = document.getElementById('t-hours');
-      const elMins = document.getElementById('t-mins');
-      const elSecs = document.getElementById('t-secs');
-      if (elHours) elHours.innerText = hours;
-      if (elMins) elMins.innerText = mins;
-      if (elSecs) {
-        elSecs.innerText = secs;
-        if (lastRenderedSec !== secs) {
-          elSecs.classList.remove('tick');
-          void elSecs.offsetWidth;
-          elSecs.classList.add('tick');
-          lastRenderedSec = secs;
-        }
-      }
-    } else {
-      const elMins = document.getElementById('t-mins');
-      const elSecs = document.getElementById('t-secs');
-      if (elMins) elMins.innerText = mins;
-      if (elSecs) {
-        elSecs.innerText = secs;
-        if (lastRenderedSec !== secs) {
-          elSecs.classList.remove('tick');
-          void elSecs.offsetWidth;
-          elSecs.classList.add('tick');
-          lastRenderedSec = secs;
-        }
-      }
-    }
-  }
-
-  if (isDanger && timerCard && !timerCard.classList.contains('danger')) {
-    timerCard.classList.add('danger');
-    const badge = document.getElementById('status-badge');
-    if (badge) { badge.textContent = 'قارب على الانتهاء'; badge.className = 'status-badge danger'; }
-  }
-}
-
-const hasCache = loadFromCache();
+try {
+  const cached = JSON.parse(localStorage.getItem('student_data_cache') || 'null');
+  if (cached && cached.name) renderUI(cached);
+} catch(e) {}
 loadProfile();
 })();
 </script>
