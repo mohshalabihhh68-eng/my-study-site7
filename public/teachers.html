@@ -58,10 +58,6 @@ button{font:inherit;cursor:pointer; outline: none;}
   </div></header>
 
   <main class="wrap" id="main">
-    <button class="back-btn" onclick="window.location.href='subjects.html'">
-      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      رجوع للمواد
-    </button>
     <div class="loading"><div class="spinner"></div><p>جاري تحميل المدرسين...</p></div>
   </main>
 
@@ -92,7 +88,12 @@ async function load() {
     const teachers = data.teachers || data || [];
     if (!teachers.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>'; return; }
     
+    // بناء الزرار والهيدر
     let html = `
+    <button class="back-btn" onclick="window.location.href='subjects.html'">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      رجوع للمواد
+    </button>
     <div class="page-head">
       <div class="badge">المدرسين</div>
       <h1>اختر المدرس</h1>
@@ -116,12 +117,7 @@ async function load() {
         </div>
       </div>`;
     });
-    html += '</div>'; 
-    
-    // إعادة بناء الصفحة مع الحفاظ على زرار الرجوع
-    const backBtnHTML = `<button class="back-btn" onclick="window.location.href='subjects.html'"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> رجوع للمواد</button>`;
-    $('main').innerHTML = backBtnHTML + html;
-    
+    html += '</div>'; $('main').innerHTML = html;
   } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
 }
 
