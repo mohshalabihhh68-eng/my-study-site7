@@ -1,11 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.3 — CF bypass helpers (proxy/relay) + direct CDN segments
- * - Student codes (9-digit) + devices + sessions in Firebase RTDB
- * - Admin panel API (users, permissions, sections, subject IDs)
- * - Stream-Weave key unwrap; browser decrypts CDN segments (avoids CF on Railway IP)
- * - UPSTREAM_PROXY / UPSTREAM_RELAY_URL to bypass Cloudflare IP blocks
- * - All student/catalog/stream routes require valid session token
+ * VERSION v1.4 — Added file proxy (hides upstream URLs)
  */
 import express from "express";
 import cors from "cors";
@@ -51,7 +46,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.3";
+const APP_VERSION = "v1.4";
 
 // ═══════════════════════════════════════════════════════════
 // Crash guards
@@ -2809,6 +2804,33 @@ app.post("/api/heartbeat", async function (req, res) {
     var text = await upstream.text();
     res.status(upstream.status).type("json").send(text);
   } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+// ==================== بروكسي للملفات ====================
+app.get("/api/file-proxy", async (req, res) => {
+  try {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).send("Missing URL");
+    if (!targetUrl.includes("coursatk") && !targetUrl.includes("thanawica")) {
+      return res.status(403).send("Not allowed");
+    }
+    const upstream = await fetch(targetUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://coursatk.online/",
+        "Origin": "https://coursatk.online"
+      }
+    });
+    if (!upstream.ok) throw new Error("HTTP " + upstream.status);
+    const contentType = upstream.headers.get("content-type") || "application/pdf";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", "inline");
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.send(buffer);
+  } catch (e) {
+    console.error("File proxy error:", e.message);
+    res.status(502).send("Error fetching file");
+  }
 });
 
 app.get("/", (req, res) => {
