@@ -13,6 +13,13 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif
 button{font:inherit;cursor:pointer;outline:none;border:none}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+
+/* Toast Notification */
+#toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { background: var(--card); color: var(--ink); padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,.4); border: 1px solid var(--line); animation: slideDown 0.3s ease; display: flex; align-items: center; gap: 10px; }
+.toast.err { border-color: rgba(239,68,68,.3); color: #fca5a5; }
+.toast.ok { border-color: rgba(16,185,129,.3); color: var(--green); }
 
 /* Navbar */
 .app-nav{position:sticky;top:0;z-index:40;background:rgba(7,11,20,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
@@ -32,12 +39,14 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 /* رأس الصفحة */
 .page-head{margin-bottom:24px;animation:fadeUp .4s ease}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);color:var(--blue2);border:1px solid rgba(59,130,246,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
+/* كبرنا الترحيب هنا */
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.name-span{font-size: 16px; color: var(--blue2); font-weight: 800;} /* تصغير اسم الطالب */
+/* كبرنا الاسم هنا */
+.name-span{font-size: 20px; color: var(--blue2); font-weight: 900;} 
 .page-head p{margin:8px 0 0;color:var(--muted);font-size:14px;display:flex;align-items:center;gap:8px}
 .page-head h1 .count{font-size:13px;background:rgba(59,130,246,.15);color:var(--blue2);padding:3px 10px;border-radius:99px;font-weight:900}
 
-/* كارت الاستكمال (آخر حاجة ذاكرتها) */
+/* كارت الاستكمال */
 .continue-card{background:linear-gradient(135deg, rgba(59,130,246,0.15), rgba(13,21,36,0.95));border:1px solid rgba(59,130,246,0.3);border-radius:20px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:15px;box-shadow:0 10px 30px rgba(0,0,0,.3);animation:fadeUp .45s ease;position:relative;overflow:hidden}
 .continue-card::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,.03) 1px,transparent 1px);background-size:20px 20px;pointer-events:none}
 .cc-info{display:flex;align-items:center;gap:15px;z-index:2;min-width:0}
@@ -45,7 +54,8 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .cc-icon svg{width:24px;height:24px;fill:currentColor;margin-right:2px}
 .cc-texts{display:flex;flex-direction:column;gap:4px;min-width:0}
 .cc-lbl{font-size:12px;color:var(--blue2);font-weight:800;display:flex;align-items:center;gap:5px}
-.cc-title{font-size:16px;font-weight:900;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+/* كبرنا عنوان الفيديو هنا */
+.cc-title{font-size:18px;font-weight:900;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
 .cc-btn{background:linear-gradient(135deg, var(--blue), var(--blue3));color:#fff;padding:10px 18px;border-radius:12px;font-weight:900;font-size:13px;display:inline-flex;align-items:center;gap:6px;transition:.2s;z-index:2;white-space:nowrap;flex-shrink:0;box-shadow:0 6px 15px rgba(37,99,235,.2)}
 .cc-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(37,99,235,.4)}
 .cc-btn:active{transform:scale(.96)}
@@ -91,10 +101,13 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
   .cc-texts{align-items:center}
   .cc-btn{justify-content:center;width:100%}
 }
-@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.greeting{font-size:20px}}
+@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.greeting{font-size:22px}}
 </style>
 </head>
 <body>
+
+<div id="toast-container"></div>
+
   <header class="app-nav"><div class="app-nav-in">
     <div class="brand" onclick="window.location.href='index.html'">
       <span class="logo">
@@ -112,7 +125,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
       <p>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></p>
     </div>
 
-    <!-- كارت استكمال المذاكرة -->
     <div class="continue-card" id="continue-card" style="display: none;">
       <div class="cc-info">
         <div class="cc-icon">
@@ -130,7 +142,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
     </div>
 
     <div class="grid" id="subjects-grid">
-      <!-- Skeleton Loaders -->
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
@@ -145,6 +156,15 @@ const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
 
+function showToast(msg, type = 'err') {
+  const container = $('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.innerHTML = msg;
+  container.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
 const api = async (path, opts = {}) => {
   const headers = { Accept: 'application/json', ...opts.headers };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -156,7 +176,6 @@ const api = async (path, opts = {}) => {
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// الترحيب الذكي
 function setGreeting(name) {
   const hour = new Date().getHours();
   let greet = "صباح الخير";
@@ -165,11 +184,9 @@ function setGreeting(name) {
     greet = "مساء الخير";
     icon = "🌙";
   }
-  // الاسم هنا بقى في span بحجم أصغر ولون مميز
   $('greeting').innerHTML = `${icon} ${greet} يا <span class="name-span">${esc(name)}</span>`;
 }
 
-// البحث عن آخر فيديو تمت مشاهدته
 function loadContinueCard() {
   let lastVideo = null;
   try {
@@ -190,14 +207,11 @@ function loadContinueCard() {
     $('cc-title').textContent = lastVideo.title || 'فيديو بدون عنوان';
     $('continue-card').style.display = 'flex';
     
-    // عند الضغط على زر الكمال
     $('cc-btn').onclick = () => {
-      // بنتأكد إن رقم المحاضرة موجود عشان المشغل ميديناش Error
       if (lastVideo.lectureId) {
         window.location.href = `player.html?videoId=${encodeURIComponent(lastVideo.videoId)}&lectureId=${encodeURIComponent(lastVideo.lectureId)}`;
       } else {
-        // لو لسه متحفظش (بسبب الكاش القديم) بنبلغه يفتح من المادة
-        alert('عشان تكمل الفيديو ده، ياريت تفتحه من المادة نفسها مرة واحدة عشان نحفظ التقدم.');
+        showToast('افتح الفيديو من المادة مرة واحدة عشان نقدر نحفظ تقدمك بعد كده.');
       }
     };
   }
