@@ -62,10 +62,6 @@ button{font:inherit;cursor:pointer; outline: none;}
   </div></header>
 
   <main class="wrap" id="main">
-    <button class="back-btn" onclick="history.back()">
-      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      رجوع للمدرسين
-    </button>
     <div class="loading"><div class="spinner"></div><p>جاري تحميل الفصول...</p></div>
   </main>
 
@@ -97,6 +93,10 @@ async function load() {
     if (!chapters || !chapters.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد فصول متاحة.</div>'; return; }
     
     let html = `
+    <button class="back-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      رجوع للمدرسين
+    </button>
     <div class="page-head">
       <div class="badge">الفصول</div>
       <h1>الفصول المتاحة</h1>
@@ -130,11 +130,7 @@ async function load() {
         </button>
       </div>`;
     });
-    html += '</div>'; 
-    
-    const backBtnHTML = `<button class="back-btn" onclick="history.back()"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> رجوع للمدرسين</button>`;
-    $('main').innerHTML = backBtnHTML + html;
-    
+    html += '</div>'; $('main').innerHTML = html;
   } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
 }
 
