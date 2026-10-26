@@ -435,7 +435,6 @@ body.vpaused .eq i{animation-play-state:paused}
   <div class="crumb" id="crumb">المحاضرات / جاري تجهيز المشغل…</div>
 
   <div class="layout">
-    <!-- PLAYER -->
     <section class="main">
       <article class="player-card">
         <div class="screen paused" id="screen">
@@ -582,11 +581,145 @@ body.vpaused .eq i{animation-play-state:paused}
 (function(){
 'use strict';
 
-const API='';
-const token=localStorage.getItem('student_token')||localStorage.getItem('cstk_tok')||'';
-const qs=new URLSearchParams(location.search);
-const lectureId=qs.get('lectureId');
-const initialVideoId=qs.get('videoId');
+/* ============ CONFIG ============ */
+const API = ''; // السيرفر على نفس الدومين
+const token = localStorage.getItem('student_token') || localStorage.getItem('cstk_tok') || '';
+const qs = new URLSearchParams(location.search);
+const lectureId = qs.get('lectureId');
+const initialVideoId = qs.get('videoId');
+
+/* Stream-Weave crypto + playlist helpers */
+let cryptoUtils = null;
+let currentKeyBlobUrl = null;
+let currentPlaylistBlobUrl = null;
+let hbTimer = null;
+
+function findCrypto() {
+  if (window.DecryptionUtils && typeof window.DecryptionUtils.decryptPlaybackKey === 'function') {
+    return window.DecryptionUtils;
+  }
+  var names = Object.getOwnPropertyNames(window);
+  for (var i = 0; i < names.length; i++) {
+    try {
+      var obj = window[names[i]];
+      if (obj && typeof obj === 'object' && typeof obj.decryptPlaybackKey === 'function') {
+        return obj;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function loadPlayerScript() {
+  return new Promise(function (resolve, reject) {
+    if (findCrypto()) return resolve(findCrypto());
+    var existing = document.querySelector('script[src*="player.stream-weave.com"]');
+    if (existing) {
+      var tries = 0;
+      var t = setInterval(function () {
+        var c = findCrypto();
+        if (c) { clearInterval(t); resolve(c); }
+        else if (++tries > 40) { clearInterval(t); reject(new Error('timeout crypto')); }
+      }, 150);
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = 'https://player.stream-weave.com/assets/player.js?v=1.1.1';
+    s.onload = function () {
+      var tries = 0;
+      var t = setInterval(function () {
+        var c = findCrypto();
+        if (c) { clearInterval(t); resolve(c); }
+        else if (++tries > 40) { clearInterval(t); reject(new Error('crypto not found')); }
+      }, 150);
+    };
+    s.onerror = function () { reject(new Error('failed to load player.js')); };
+    document.head.appendChild(s);
+  });
+}
+
+function toB64url(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+function fromB64url(value) {
+  var s = String(value).replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  return decodeURIComponent(escape(atob(s)));
+}
+function joinRel(base, rel) {
+  var q = '', relPath = String(rel);
+  var qi = relPath.indexOf('?');
+  if (qi !== -1) { q = relPath.slice(qi); relPath = relPath.slice(0, qi); }
+  var stack = String(base || '').split('/');
+  if (stack.length && stack[stack.length - 1] !== '' && /\.[a-z0-9]+$/i.test(stack[stack.length - 1])) stack.pop();
+  if (stack.length && stack[stack.length - 1] === '') stack.pop();
+  relPath.split('/').forEach(function (part) {
+    if (!part || part === '.') return;
+    if (part === '..') stack.pop();
+    else stack.push(part);
+  });
+  return stack.join('/') + q;
+}
+function resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) {
+  if (/^(blob:|data:)/i.test(uri)) return uri;
+
+  var origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
+
+  try {
+    if (uri.indexOf('/api/cdn') === 0 || (origin && uri.indexOf(origin + '/api/cdn') === 0)) {
+      var cu = new URL(uri, origin || 'https://localhost');
+      var enc = cu.searchParams.get('u') || cu.searchParams.get('url');
+      if (enc) uri = fromB64url(enc);
+    }
+  } catch (e) {}
+
+  if (uri.indexOf('/api/stream') === 0) return origin + uri;
+  if (origin && uri.indexOf(origin + '/api/stream') === 0) return uri;
+
+  if (/^https?:\/\//i.test(uri)) {
+    try {
+      var pu = new URL(uri);
+      var parts = pu.pathname.split('/').filter(Boolean);
+      var vi = parts.indexOf('videos');
+      if (vi >= 0 && parts.length >= vi + 3) {
+        var vid = parts[vi + 1];
+        var quality = parts[vi + 2];
+        var fname = (parts[vi + 3] || '').split('?')[0];
+        if (vid && quality && fname) {
+          var swPath = 'videos/' + vid + '/stream/' + quality + '/' + fname;
+          return origin + '/api/stream?path=' + encodeURIComponent(swPath) + '&t=' + encodeURIComponent(streamToken);
+        }
+      }
+    } catch (e) {}
+    return uri;
+  }
+
+  if (variantFileUrl) {
+    try {
+      var abs = new URL(uri, variantFileUrl).href;
+      if (/^https?:\/\//i.test(abs)) return resolveMedia(abs, variantBasePath, streamToken, null);
+    } catch (e) {}
+  }
+  return origin + '/api/stream?path=' + encodeURIComponent(joinRel(variantBasePath || '', uri)) + '&t=' + encodeURIComponent(streamToken);
+}
+function rewritePlaylist(text, streamToken, keyBlobUrl, variantBasePath, variantFileUrl) {
+  return text.split('\n').map(function (line) {
+    var s = line.trim();
+    if (!s) return line;
+    if (s.charAt(0) === '#') {
+      if (s.indexOf('#EXT-X-KEY:') === 0 && keyBlobUrl) {
+        return s.replace(/URI="[^"]+"/, 'URI="' + keyBlobUrl + '"');
+      }
+      return s.replace(/URI="([^"]+)"/g, function (_m, uri) {
+        return 'URI="' + resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) + '"';
+      });
+    }
+    return resolveMedia(s, variantBasePath, streamToken, variantFileUrl);
+  }).join('\n');
+}
+
+loadPlayerScript().then(function (c) { cryptoUtils = c; }).catch(function () {});
 
 const $=id=>document.getElementById(id);
 const video=$('video');
@@ -663,7 +796,7 @@ async function api(path,opts={}){
   const headers={Accept:'application/json',...(opts.headers||{})};
   if(token)headers.Authorization='Bearer '+token;
   let r;
-  try{r=await fetch(API+path,{method:opts.method||'GET',headers,body:opts.body,cache:'no-store'})}
+  try{r=await fetch(API+path,{method:opts.method||'GET',headers,body:opts.body,cache:'no-store',credentials:'include'})}
   catch(e){const er=new Error('مفيش اتصال بالسيرفر. اتأكد من النت وجرّب تاني.');er.kind='network';throw er}
   let d={};try{d=await r.json()}catch(e){}
   if(!r.ok){
@@ -672,7 +805,7 @@ async function api(path,opts={}){
     if(r.status===401||r.status===403){er.kind='auth';er.message='جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.'}
     throw er;
   }
-  return d;
+  return (d && d.data !== undefined) ? d.data : d;
 }
 function esc(s){
   return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2246,9 +2379,10 @@ async function runDl(){
 window.addEventListener('online',()=>{if(dl.st==='error'&&dl.netErr)resumeDl()});
 window.addEventListener('beforeunload',e=>{if(isActive()){e.preventDefault();e.returnValue=''}});
 
+/* ============ START ============ */
 init();
 
 })();
 </script>
 </body>
-                                                                                                  </html>
+              </html>
