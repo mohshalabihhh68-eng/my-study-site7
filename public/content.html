@@ -12,6 +12,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Cairo', sans-seri
 button { font: inherit; cursor: pointer; border: none; outline: none; }
 a { text-decoration: none; color: inherit; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Navbar الموحد */
 .app-nav{position:sticky;top:0;z-index:40;background:rgba(7,11,20,.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
@@ -31,6 +32,7 @@ a { text-decoration: none; color: inherit; }
 .back-btn:hover { background: #1a253a; }
 .back-btn svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
+/* العناوين والتاجات */
 .top-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; animation: fadeUp .4s ease both; flex-wrap: wrap; gap: 16px;}
 .header-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; width: 100%; justify-content: flex-end; min-height: 30px;}
 .tag { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; color: #d1d5db; display: inline-flex; align-items: center; gap: 6px; }
@@ -38,12 +40,16 @@ a { text-decoration: none; color: inherit; }
 .tag svg { width: 14px; height: 14px; fill: currentColor; }
 .page-title { font-size: clamp(24px, 4vw, 32px); font-weight: 900; display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: var(--ink);}
 .page-subtitle { color: var(--muted); font-size: 14px; font-weight: 600; }
+
+/* الكروت */
 .section-box { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 24px; margin-bottom: 24px; animation: fadeUp .5s ease both;}
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
 .section-title { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 900; color: var(--ink); }
 .section-title-icon { width: 44px; height: 44px; border-radius: 14px; background: rgba(59,130,246,.12); color: var(--blue2); display: grid; place-items: center; }
 .section-title-icon svg { width: 24px; height: 24px; }
 .section-subtitle { font-size: 13px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+
+/* الفيديوهات */
 .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
 .video-card { background: #0d1424; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; transition: all .3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; display: flex; flex-direction: column;}
 .video-card:hover { transform: translateY(-5px); border-color: rgba(59,130,246,.4); box-shadow: 0 15px 35px rgba(0,0,0,.4); }
@@ -61,6 +67,8 @@ a { text-decoration: none; color: inherit; }
 .action-btn { width: 100%; padding: 12px; border-radius: 12px; background: var(--blue); color: #fff; font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all .2s ease; }
 .action-btn:hover { background: var(--blue2); box-shadow: 0 4px 15px rgba(59,130,246,.4); }
 .action-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* الملفات */
 .file-list { display: flex; flex-direction: column; gap: 12px; }
 .file-item { display: flex; align-items: center; justify-content: space-between; background: #0d1424; border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; transition: all .2s ease; }
 .file-item:hover { border-color: rgba(59,130,246,.4); background: var(--card-hover); }
@@ -69,13 +77,15 @@ a { text-decoration: none; color: inherit; }
 .file-text { font-size: 15px; font-weight: 700; color: var(--ink); }
 .file-btn { background: rgba(59,130,246,.1); color: var(--blue2); border: 1px solid rgba(59,130,246,.3); border-radius: 10px; padding: 8px 16px; font-weight: 800; display: flex; align-items: center; gap: 6px; transition: .2s; }
 .file-btn:hover { background: rgba(59,130,246,.2); }
+
 .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 50px; color: var(--muted); }
 .spinner { width: 40px; height: 40px; border: 3px solid var(--line); border-top-color: var(--blue); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px; }
-@keyframes spin { to { transform: rotate(360deg); } }
+
 @media (max-width: 768px) { .top-header { flex-direction: column; align-items: flex-start; } .header-tags { justify-content: flex-start; } .video-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
+
 <header class="app-nav">
   <div class="app-nav-in">
     <div class="brand" onclick="window.location.href='index.html'">
@@ -87,9 +97,11 @@ a { text-decoration: none; color: inherit; }
     <div class="profile-wrap"><button class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
   </div>
 </header>
+
 <main class="wrap" id="main">
   <div class="loading"><div class="spinner"></div><p>جاري تحميل المحتوى...</p></div>
 </main>
+
 <script>
 (function(){
   'use strict';
@@ -101,6 +113,7 @@ a { text-decoration: none; color: inherit; }
   const urlTeacher = qs.get('teacherName') || '';
   const urlChapter = qs.get('chapterName') || '';
   const urlSubject = qs.get('subjectName') || '';
+  
   const api = async (path, opts = {}) => {
     const headers = { Accept: 'application/json', ...opts.headers };
     if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -110,16 +123,20 @@ a { text-decoration: none; color: inherit; }
     if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ في السيرفر');
     return data.data;
   };
+  
   const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  
   function formatDuration(seconds) {
     if (!seconds || isNaN(seconds)) return '00:00';
     const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = Math.floor(seconds % 60);
     if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
+  
   function isVideoWatched(videoId) {
     try { const saved = JSON.parse(localStorage.getItem('cstk_w_' + videoId) || 'null'); return saved && (saved.watched || saved.percent >= 90); } catch(e) { return false; }
   }
+
   async function load() {
     if (!lectureId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المحاضرة غير موجود في الرابط (lectureId).</div>'; return; }
     try {
@@ -136,13 +153,15 @@ a { text-decoration: none; color: inherit; }
       if (chapterName) tagsHtml += `<span class="tag"><svg viewBox="0 0 24 24" style="color:#ef4444"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg> ${esc(chapterName)}</span>`;
       if (subjectName) tagsHtml += `<span class="tag">${esc(subjectName)}</span>`;
 
+      // بناء الصفحة: زرار الرجوع فوق، وبعده التاجات والعنوان، وبعدهم الفيديوهات
       let html = `
       <div class="header-action">
         <button class="back-btn" onclick="history.back()">
           <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          رجوع للفصل
+          رجوع للفصول
         </button>
       </div>
+
       <div class="top-header">
         <div style="display:flex; flex-direction: column; gap: 16px; align-items: flex-start; width: 100%;">
           <div class="header-tags">${tagsHtml}</div>
@@ -152,6 +171,7 @@ a { text-decoration: none; color: inherit; }
           </div>
         </div>
       </div>
+
       <div class="section-box">
         <div class="section-head">
           <div>
@@ -176,6 +196,7 @@ a { text-decoration: none; color: inherit; }
         });
       }
       html += `</div></div>`; 
+      
       if (files.length > 0) {
         html += `<div class="section-box"><div class="section-head"><div class="section-title"><div class="section-title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></div><div><span>الملفات والمذكرات</span><div class="section-subtitle">${files.length} ملف متاح</div></div></div></div><div class="file-list">`;
         files.forEach(f => {
@@ -185,10 +206,13 @@ a { text-decoration: none; color: inherit; }
         });
         html += `</div></div>`;
       }
+      
       $('main').innerHTML = html;
     } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
   }
+  
   async function loadProfile() { try { const me = await api('/api/auth/me'); if(me) { $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); } } catch (e) {} }
+  
   load(); loadProfile();
 })();
 </script>
