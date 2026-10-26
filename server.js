@@ -2814,34 +2814,38 @@ app.get("/api/file-proxy", async (req, res) => {
     if (!targetUrl) return res.status(400).send("Missing URL");
 
     const headers = {
-      "User-Agent": "Mozilla/5.0",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Referer": "https://coursatk.online/",
-      "Origin": "https://coursatk.online"
+      "Origin": "https://coursatk.online",
+      "Accept": "*/*"
     };
 
-    // مرر طلب الـ Range لو موجود عشان المتصفح يعرف يعرض الـ PDF
-    if (req.headers.range) {
-      headers.Range = req.headers.range;
-    }
-
+    // 1. بنجيب الملف كامل من كورساتك
     const upstream = await fetch(targetUrl, { headers });
+    if (!upstream.ok) throw new Error("HTTP " + upstream.status);
+
+    // 2. بنحوله لـ Buffer (بنخزنه في الرامات)
+    const buffer = Buffer.from(await upstream.arrayBuffer());
     
-    if (!upstream.ok && upstream.status !== 206) {
-      throw new Error("HTTP " + upstream.status);
-    }
+    // 3. بنحدد نوع الملف
+    let contentType = upstream.headers.get("content-type") || "application/pdf";
+    if (contentType.includes("text/html")) contentType = "application/pdf";
 
-    const contentType = upstream.headers.get("content-type") || "application/pdf";
-    const contentLength = upstream.headers.get("content-length");
-    const contentRange = upstream.headers.get("content-range");
-    const acceptRanges = upstream.headers.get("accept-ranges");
-
+    // 4. بنبعت الملف كامل للمتصفح
     res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.length);
     res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Accept-Ranges", "none"); // نقول للمتصفح مفيش أجزاء، الملف كامل
+    res.setHeader("Cache-Control", "public, max-age=3600");
     
-    if (contentLength) res.setHeader("Content-Length", contentLength);
-    if (acceptRanges) res.setHeader("Accept-Ranges", acceptRanges);
-    if (contentRange) res.setHeader("Content-Range", contentRange);
+    res.status(200).send(buffer);
 
+  } catch (e) {
+    console.error("File proxy error:", e.message);
+    if (!res.headersSent) res.status(502).send("Error fetching file: " + e.message);
+    else res.end();
+  }
+});
     // ابعت الرد بنفس حالة السيرفر الأصلي (200 أو 206)
     res.status(upstream.status);
 
