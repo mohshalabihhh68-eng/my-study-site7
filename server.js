@@ -2739,6 +2739,7 @@ app.post("/api/heartbeat", async function (req, res) {
 });
 
 // ==================== بروكسي الملفات (يحفظ الملف ثم يبعته) ====================
+// ==================== بروكسي الملفات (يحفظ الملف ثم يبعته) ====================
 app.get("/api/file-proxy", async (req, res) => {
   try {
     const targetUrl = req.query.url;
@@ -2751,20 +2752,36 @@ app.get("/api/file-proxy", async (req, res) => {
       "Accept": "*/*"
     };
 
+    // 1. بنجيب الملف من كورساتك
     const upstream = await fetch(targetUrl, { headers });
     if (!upstream.ok) throw new Error("HTTP " + upstream.status);
 
+    // 2. بنحوله لـ Buffer
     const buffer = Buffer.from(await upstream.arrayBuffer());
+    
+    // 3. بنحدد نوع الملف (لو رجع HTML، يبقى PDF)
     let contentType = upstream.headers.get("content-type") || "application/pdf";
     if (contentType.includes("text/html")) contentType = "application/pdf";
 
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Length", buffer.length);
-    res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Accept-Ranges", "none"); // يجبر المتصفح على معاينة الملف كامل
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    
-    res.status(200).send(buffer);
+    // 4. بنحفظ الملف مؤقتاً في السيرفر
+    const fileName = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`;
+    const filePath = path.join(TEMP_DIR, fileName);
+    fs.writeFileSync(filePath, buffer);
+
+    // 5. بنبعت الملف للمتصفح مباشرة من مكانه الثابت (ده اللي بيخلي المعاينة تشتغل)
+    res.sendFile(filePath, {
+      headers: {
+        "Content-Type": contentType,
+        "Content-Disposition": "inline"
+      }
+    }, (err) => {
+      // 6. بعد ما المتصفح ياخد الملف، بنمسحه من السيرفر
+      try { fs.unlinkSync(filePath); } catch (e) {}
+      if (err && !res.headersSent) {
+        res.status(500).send("Error sending file");
+      }
+    });
+
   } catch (e) {
     console.error("File proxy error:", e.message);
     if (!res.headersSent) res.status(502).send("Error fetching file: " + e.message);
