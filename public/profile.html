@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b14">
 <title>ملفي الشخصي | ثانوية club</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -20,19 +21,34 @@
   --red: #ef4444;
   --line: rgba(148, 163, 184, .12);
 }
-* { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
-body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 40px; }
+* { box-sizing: border-box; font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
+body { 
+  margin: 0; 
+  background: var(--bg); 
+  color: var(--text); 
+  min-height: 100vh; 
+  padding-bottom: 40px; 
+  background-image: radial-gradient(circle at top right, rgba(59,130,246,0.08), transparent 40%);
+}
 
 /* Navbar */
-.top { position: sticky; top: 0; z-index: 100; background: rgba(7, 11, 20, .88); backdrop-filter: blur(18px); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+.top { position: sticky; top: 0; z-index: 100; background: rgba(7, 11, 20, .88); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 16px; cursor: pointer; }
-.brand .logo { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; background: linear-gradient(145deg, #5ba0ff, #2454d8); box-shadow: 0 8px 26px #2563eb55; color: white; }
+.brand .logo { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; background: linear-gradient(145deg, #5ba0ff, #2454d8); box-shadow: 0 8px 26px #2563eb55; color: white; transition: transform 0.3s; }
+.brand:hover .logo { transform: scale(1.05) rotate(-3deg); }
 .brand .logo svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .brand small { display: block; font-size: 10px; font-weight: 600; color: var(--muted); margin-top: -3px; }
-.btn-back { background: rgba(255,255,255,.05); border: 1px solid var(--line); color: #fff; padding: 8px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; text-decoration: none; font-size: 13px; transition: 0.2s; }
-.btn-back:hover { background: rgba(255,255,255,.1); }
+.btn-back { background: rgba(255,255,255,.05); border: 1px solid var(--line); color: #fff; padding: 8px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; text-decoration: none; font-size: 13px; transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.btn-back:hover { background: rgba(255,255,255,.1); transform: translateY(-2px); }
+.btn-back:active { transform: scale(0.96); }
 
-.wrap { max-width: 800px; margin: 0 auto; padding: 20px 16px; }
+.wrap { max-width: 800px; margin: 0 auto; padding: 20px 16px; animation: fadeIn 0.6s ease both; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* هيكل التحميل */
+.loading-skeleton { display: flex; flex-direction: column; gap: 15px; }
+.sk-card { background: var(--card); border-radius: 24px; height: 120px; animation: pulseSk 1.5s infinite ease-in-out; }
+@keyframes pulseSk { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 /* الكارت الرئيسي */
 .hero-card {
@@ -46,6 +62,7 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
   display: flex;
   flex-direction: column;
   gap: 15px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 .hero-card::before {
   content: ''; position: absolute; inset: 0;
@@ -55,7 +72,7 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 .hero-top { display: flex; justify-content: space-between; align-items: flex-start; }
 .hero-text { display: flex; flex-direction: column; gap: 8px; text-align: right; }
 .badge-student { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; width: fit-content; margin-right: auto; }
-.hero-name { font-size: 32px; font-weight: 900; margin: 0; }
+.hero-name { font-size: 32px; font-weight: 900; margin: 0; color: #fff; }
 .hero-desc { color: var(--muted); font-size: 14px; font-weight: 600; margin: 0; }
 .avatar {
   width: 80px; height: 80px; border-radius: 24px;
@@ -63,33 +80,37 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
   display: grid; place-items: center; font-size: 32px; font-weight: 900; color: #fff;
   box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
   flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,0.1);
 }
 
 /* كروت التفاصيل */
 .grid-details { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
 @media (max-width: 600px) { .grid-details { grid-template-columns: 1fr; } }
-.detail-card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; align-items: center; justify-content: space-between; }
-.detail-info { display: flex; flex-direction: column; gap: 5px; text-align: right; }
+.detail-card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; align-items: center; justify-content: space-between; transition: transform 0.25s, border-color 0.25s; }
+.detail-card:hover { transform: translateY(-3px); border-color: rgba(59,130,246,0.3); }
+.detail-info { display: flex; flex-direction: column; gap: 5px; text-align: right; min-width: 0; }
 .detail-label { color: var(--muted); font-size: 13px; font-weight: 700; }
-.detail-value { font-size: 18px; font-weight: 900; }
-.icon-box { width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; background: rgba(255,255,255,.03); }
+.detail-value { font-size: 18px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-box { width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; background: rgba(255,255,255,.03); flex-shrink: 0; transition: background 0.2s; }
+.detail-card:hover .icon-box { background: rgba(255,255,255,.08); }
 .icon-box svg { width: 24px; height: 24px; }
 .status-badge { background: rgba(16, 185, 129, 0.15); color: var(--green); padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
-.status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
+.status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 8px var(--green); }
 
 /* كارت العداد */
 .timer-card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 30px 20px; position: relative; overflow: hidden; margin-bottom: 20px; }
 .timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
-.timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; }
+.timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; flex-wrap: wrap; gap: 10px; }
 .timer-title { display: flex; flex-direction: column; gap: 5px; text-align: right; }
 .timer-title h2 { margin: 0; font-size: 22px; font-weight: 900; }
 .timer-title p { margin: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
-.timer-badge { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.timer-badge { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .timer-badge::before { content: ''; width: 6px; height: 6px; background: var(--blue2); border-radius: 50%; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0% { opacity: 1; } 50% { opacity: .3; } 100% { opacity: 1; } }
+@keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
 .timer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; position: relative; z-index: 2; }
-.time-box { background: var(--card-inner); border: 1px solid rgba(255,255,255,.05); border-radius: 16px; padding: 15px 5px; text-align: center; }
-.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; }
+.time-box { background: var(--card-inner); border: 1px solid rgba(255,255,255,.05); border-radius: 16px; padding: 15px 5px; text-align: center; transition: border-color 0.2s; }
+.time-box:hover { border-color: rgba(59,130,246,0.3); }
+.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; text-shadow: 0 2px 10px rgba(96,165,250,0.2); }
 .time-label { color: var(--muted); font-size: 13px; font-weight: 700; }
 
 /* زرار تسجيل الخروج */
@@ -101,10 +122,22 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
   border-radius: 16px;
   font-size: 16px; font-weight: 900;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  cursor: pointer; transition: all 0.2s ease; font-family: inherit;
+  cursor: pointer; transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); font-family: inherit;
 }
-.logout-btn:hover { background: rgba(239, 68, 68, 0.2); transform: translateY(-2px); }
+.logout-btn:hover { background: rgba(239, 68, 68, 0.2); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(239,68,68,0.15); }
+.logout-btn:active { transform: scale(0.97); }
 .logout-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+/* زر نسخ الكود */
+.copy-btn {
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px; border-radius: 8px; transition: all 0.2s; margin-right: auto;
+}
+.copy-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.copy-btn:active { transform: scale(0.9); }
+.copy-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.code-wrapper { display: flex; align-items: center; gap: 8px; }
 
 @media (max-width: 500px) {
   .time-val { font-size: 24px; }
@@ -112,6 +145,7 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
   .time-box { padding: 10px 2px; border-radius: 12px; }
   .hero-name { font-size: 26px; }
   .avatar { width: 60px; height: 60px; font-size: 24px; border-radius: 18px; }
+  .timer-title h2 { font-size: 18px; }
 }
 </style>
 </head>
@@ -128,7 +162,11 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 </header>
 
 <main class="wrap" id="main">
-  <div style="text-align:center;padding:50px;color:var(--muted)">جاري تحميل بياناتك...</div>
+  <div class="loading-skeleton">
+    <div class="sk-card"></div>
+    <div class="sk-card" style="height: 100px;"></div>
+    <div class="sk-card" style="height: 200px;"></div>
+  </div>
 </main>
 
 <script>
@@ -194,7 +232,7 @@ async function loadProfile() {
       <div class="grid-details">
         <div class="detail-card">
           <div class="detail-info">
-            <span class="detail-label">المسار</span>
+            <span class="detail-label">المسار الدراسي</span>
             <span class="detail-value">${getSectionName(me.section)}</span>
           </div>
           <div class="icon-box" style="color:var(--purple)">
@@ -205,7 +243,12 @@ async function loadProfile() {
         <div class="detail-card">
           <div class="detail-info">
             <span class="detail-label">كود الطالب</span>
-            <span class="detail-value" style="color:var(--blue2)">${me.code || '—'}</span>
+            <div class="code-wrapper">
+              <span class="detail-value" style="color:var(--blue2); direction:ltr;">${me.code || '—'}</span>
+              <button class="copy-btn" id="copy-code-btn" title="نسخ الكود" aria-label="نسخ الكود">
+                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
           </div>
           <div class="icon-box" style="color:var(--blue2)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
@@ -224,7 +267,7 @@ async function loadProfile() {
 
         <div class="detail-card">
           <div class="detail-info">
-            <span class="detail-label">الحالة</span>
+            <span class="detail-label">حالة الحساب</span>
             <span class="status-badge">مفعل</span>
           </div>
           <div class="icon-box" style="color:var(--green)">
@@ -238,7 +281,7 @@ async function loadProfile() {
           <div class="timer-badge">العداد شغال</div>
           <div class="timer-title">
             <h2>فاضل على اشتراكك</h2>
-            <p>يخلص ${formatArabicDate(expiresAt)} في ${formatArabicTime(expiresAt)} بتوقيت مصر</p>
+            <p>يخلص ${formatArabicDate(expiresAt)} في ${formatArabicTime(expiresAt)}</p>
           </div>
         </div>
         <div class="timer-grid">
@@ -249,7 +292,6 @@ async function loadProfile() {
         </div>
       </div>
 
-      <!-- زرار تسجيل الخروج المعدل -->
       <button class="logout-btn" id="logout-btn">
         <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
         تسجيل الخروج من الحساب
@@ -258,6 +300,24 @@ async function loadProfile() {
 
     $('main').innerHTML = html;
     
+    // ربط زر النسخ
+    const copyBtn = document.getElementById('copy-code-btn');
+    if (copyBtn && me.code) {
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(me.code);
+          copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+          copyBtn.style.color = 'var(--green)';
+          setTimeout(() => {
+            copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+            copyBtn.style.color = '';
+          }, 2000);
+        } catch (err) {
+          console.error('Copy failed', err);
+        }
+      });
+    }
+
     // ربط الزرار بالحدث
     document.getElementById('logout-btn').addEventListener('click', function() {
       if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
