@@ -254,13 +254,14 @@
             <th>الكود</th>
             <th>الحالة</th>
             <th>آخر ظهور</th>
+            <th>الزيارات</th> <!-- ✨ جديد -->
             <th>ينتهي في</th>
             <th style="text-align:center">الأجهزة</th>
             <th style="text-align:left">إجراءات</th>
           </tr>
         </thead>
         <tbody id="students-table">
-          <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--muted);">جاري تحميل البيانات...</td></tr>
+          <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--muted);">جاري تحميل البيانات...</td></tr>
         </tbody>
       </table>
     </div>
@@ -438,7 +439,7 @@
   // جلب البيانات
   async function loadStudents() {
     const tbody = document.getElementById('students-table');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px;">جاري التحميل...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px;">جاري التحميل...</td></tr>';
     
     try {
       const res = await fetch(`${API_URL}/admin/students`, {
@@ -451,10 +452,10 @@
         renderTable();
         calculateStats();
       } else {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">${data.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);">${data.message}</td></tr>`;
       }
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--red);">خطأ في تحميل البيانات</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red);">خطأ في تحميل البيانات</td></tr>';
     }
   }
 
@@ -464,7 +465,7 @@
     const tbody = document.getElementById('students-table');
     
     if (data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--muted);">لا يوجد نتائج مطابقة</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--muted);">لا يوجد نتائج مطابقة</td></tr>';
       return;
     }
 
@@ -490,6 +491,7 @@
         else lastSeenAgo = `منذ ${Math.floor(diffMin/1440)} يوم`;
       }
 
+      const visits = Number(s.visitCount) || 0;
       const firstLetter = (s.name || '?').charAt(0);
 
       return `
@@ -510,6 +512,11 @@
               <strong>${lastSeenText}</strong>
               <span>${lastSeenAgo}</span>
             </div>
+          </td>
+          <td style="text-align:center">
+            <span style="background:rgba(59,130,246,0.1); color:var(--blue2); padding:4px 10px; border-radius:6px; font-size:12px; font-weight:700;">
+              ${visits} مرة
+            </span>
           </td>
           <td>${expDate}</td>
           <td style="text-align:center">
@@ -675,6 +682,7 @@
       <div class="detail-row"><span class="detail-label">تاريخ الإنشاء</span><span class="detail-value">${createdDate}</span></div>
       <div class="detail-row"><span class="detail-label">ينتهي في</span><span class="detail-value">${expDate}</span></div>
       <div class="detail-row"><span class="detail-label">آخر ظهور</span><span class="detail-value" style="color:var(--mint)">${lastSeenDate}</span></div>
+      <div class="detail-row"><span class="detail-label">مرات فتح الموقع</span><span class="detail-value" style="color:var(--blue2)">${student.visitCount || 0} مرة</span></div>
       
       <h4 style="margin:25px 0 10px; font-size:15px; color:var(--muted);">الأجهزة المسجلة (${student.devices})</h4>
       <div id="devices-list-inner">
@@ -852,7 +860,7 @@
       return;
     }
 
-    // ✨ تجميع حسب الطالب
+    // تجميع حسب الطالب
     const grouped = {};
     filtered.forEach(h => {
       const code = h.code || 'unknown';
@@ -871,7 +879,6 @@
       const firstLetter = (stu.name || '?').charAt(0);
       const totalViews = stu.items.reduce((sum, i) => sum + (Number(i.viewCount) || 1), 0);
       
-      // ترتيب فيديوهات الطالب حسب آخر مشاهدة
       const sortedItems = stu.items.sort((a, b) => (b.lastViewedAt || b.time || 0) - (a.lastViewedAt || a.time || 0));
 
       const videosHtml = sortedItems.map(h => {
@@ -935,9 +942,7 @@
     currentHistoryFilter = 'all';
     document.querySelectorAll('.history-filter').forEach(b => b.classList.toggle('active', b.dataset.hfilter === 'all'));
     
-    // نفلتر allHistory على الطالب ده فقط
     try {
-      // لو allHistory مش مليان، نجيبه
       if (!allHistory.length) {
         const allRes = await fetch(`${API_URL}/admin/history`, {
           headers: { 'Authorization': `Bearer ${adminToken}` }
