@@ -1617,14 +1617,36 @@ $('skipBtn').onclick=()=>{
   if(current<videos.length-1){hideError();playIndex(current+1,true)}
 };
 
+/* ============ تسجيل المشاهدة ============ */
+function trackView(videoId, videoTitle) {
+    if (!token) return;
+    fetch('/api/track-video', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+            videoId: videoId,
+            videoTitle: videoTitle,
+            lectureId: lectureId,
+            lectureName: document.getElementById('lectureName')?.textContent || ''
+        })
+    }).catch(() => {});
+}
+
+// إضافة استدعاء التسجيل عند بدء التشغيل
+video.addEventListener('play', function onFirstPlay() {
+    if (current >= 0 && videos[current]) {
+        trackView(videos[current].id, videos[current].title);
+    }
+    video.removeEventListener('play', onFirstPlay);
+});
+
 /* ============ START ============ */
 init();
 
 })();
 </script>
 </body>
-</html>
-
-
-
-
+                              </html>
