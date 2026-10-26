@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6.5 — File Proxy: support /api/file-proxy/document.pdf for better mobile preview
+ * VERSION v1.6.6 — File Proxy: never force PDF Content-Type on non-PDF bytes
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.6.5";
+const APP_VERSION = "v1.6.6";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -2845,46 +2845,57 @@ app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
       );
     }
 
-    // كشف لو الـ upstream رجّع صفحة خطأ HTML رغم الـ 200
-    const headText = buffer.slice(0, 400).toString("utf8").toLowerCase();
-    const looksLikeHtmlError =
-      (headText.includes("<!doctype") || headText.includes("<html") || headText.includes("<head")) &&
-      (headText.includes("cloudflare") || headText.includes("access denied") || headText.includes("forbidden") ||
-       headText.includes("unauthorized") || headText.includes("error") || headText.includes("login") ||
-       headText.includes("captcha") || buffer.length < 2000);
+    // تحديد نوع المحتوى من الـ magic bytes فقط (مهم جدًا)
+    const head = buffer.slice(0, 1024).toString("latin1");
+    const headUtf = buffer.slice(0, 800).toString("utf8").toLowerCase();
+    const urlLower = String(targetUrl).toLowerCase();
+    const isReallyPdf = head.includes("%PDF-");
+    const isJpeg = head.startsWith("\xFF\xD8\xFF");
+    const isPng = head.startsWith("\x89PNG");
+    const isWebp = head.startsWith("RIFF") && head.includes("WEBP");
+    const isHtml =
+      headUtf.includes("<!doctype") ||
+      headUtf.includes("<html") ||
+      headUtf.includes("<head") ||
+      headUtf.trimStart().startsWith("<?xml");
 
-    if (looksLikeHtmlError) {
-      console.error("[file-proxy] got HTML error page instead of file:", String(targetUrl).slice(0, 100));
+    // لو رجع HTML (صفحة خطأ / Cloudflare / تسجيل دخول) — نعرض رسالة واضحة
+    if (isHtml && !isReallyPdf) {
+      console.error("[file-proxy] upstream returned HTML instead of file:", String(targetUrl).slice(0, 120), "size=", buffer.length);
       return res.status(502).type("html").send(
         `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
-        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
-        <body><div class="box"><h1>المصدر رفض الطلب</h1><p>السيرفر المصدر رجّع صفحة خطأ بدل الملف</p></div></body></html>`
+        <title>تعذر فتح الملف</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:28px;border-radius:16px;max-width:380px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px;line-height:1.6}</style></head>
+        <body><div class="box"><h1>تعذر فتح الملف</h1>
+        <p>المصدر رجّع صفحة ويب بدل ملف PDF.<br>الملف قد يكون محميًا أو الرابط منتهي الصلاحية.</p>
+        <p style="margin-top:14px;font-size:12px;opacity:.5">الحجم المستلم: ${buffer.length} بايت</p></div></body></html>`
       );
     }
 
-    // تحديد Content-Type (مرن أكتر)
-    let contentType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-    const head = buffer.slice(0, 1024).toString("latin1");
-    const urlLower = String(targetUrl).toLowerCase();
-    const isReallyPdf = head.includes("%PDF-");
-
-    if (isReallyPdf) {
-      contentType = "application/pdf";
-    } else if (urlLower.match(/\.(jpe?g)(\?|$)/) || head.startsWith("\xFF\xD8\xFF")) {
-      contentType = "image/jpeg";
-    } else if (urlLower.match(/\.png(\?|$)/) || head.startsWith("\x89PNG")) {
-      contentType = "image/png";
-    } else if (urlLower.match(/\.webp(\?|$)/) || head.startsWith("RIFF")) {
-      contentType = "image/webp";
-    } else if (urlLower.includes(".pdf") || contentType.includes("pdf")) {
-      // الرابط أو السيرفر بيقول PDF حتى لو الـ magic مش واضح — نحاول نفتحه كـ PDF
-      contentType = "application/pdf";
-    } else if (!contentType || contentType === "application/octet-stream" || contentType.includes("text/")) {
-      contentType = "application/octet-stream";
+    // لو الرابط بيقول PDF بس المحتوى مش PDF — متنبعتش Content-Type غلط (بيبوظ عارض كروم)
+    if (!isReallyPdf && !isJpeg && !isPng && !isWebp && (urlLower.includes(".pdf") || (upstream.headers.get("content-type") || "").includes("pdf"))) {
+      console.error("[file-proxy] expected PDF but magic mismatch:", JSON.stringify(head.slice(0, 32)), "size=", buffer.length, String(targetUrl).slice(0, 100));
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>تعذر فتح الملف</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:28px;border-radius:16px;max-width:380px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px;line-height:1.6}
+        a{display:inline-block;margin-top:16px;padding:10px 20px;background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:700}</style></head>
+        <body><div class="box"><h1>الملف تالف أو غير مدعوم</h1>
+        <p>المحتوى المستلم مش PDF صالح (الحجم: ${Math.round(buffer.length/1024)} ك.ب).<br>ممكن الملف يكون محمي أو الرابط غلط.</p></div></body></html>`
+      );
     }
 
-    // هيدرز بسيطة زي الملف الشغال بالظبط
+    let contentType = "application/octet-stream";
+    if (isReallyPdf) contentType = "application/pdf";
+    else if (isJpeg) contentType = "image/jpeg";
+    else if (isPng) contentType = "image/png";
+    else if (isWebp) contentType = "image/webp";
+    else {
+      const ct = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+      if (ct && !ct.includes("text/html") && !ct.includes("text/plain")) contentType = ct;
+    }
+
+    // هيدرز نظيفة للمعاينة
     res.status(200);
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Length", String(buffer.length));
