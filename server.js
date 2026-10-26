@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.4 — Added file proxy (hides upstream URLs)
+ * VERSION v1.3 — CF bypass helpers (proxy/relay) + direct CDN segments
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.4";
+const APP_VERSION = "v1.3";
 
 // ═══════════════════════════════════════════════════════════
 // Crash guards
@@ -2811,9 +2811,7 @@ app.get("/api/file-proxy", async (req, res) => {
   try {
     const targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).send("Missing URL");
-    if (!targetUrl.includes("coursatk") && !targetUrl.includes("thanawica")) {
-      return res.status(403).send("Not allowed");
-    }
+    
     const upstream = await fetch(targetUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0",
@@ -2822,9 +2820,11 @@ app.get("/api/file-proxy", async (req, res) => {
       }
     });
     if (!upstream.ok) throw new Error("HTTP " + upstream.status);
+    
     const contentType = upstream.headers.get("content-type") || "application/pdf";
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", "inline");
+    
     const buffer = Buffer.from(await upstream.arrayBuffer());
     res.send(buffer);
   } catch (e) {
