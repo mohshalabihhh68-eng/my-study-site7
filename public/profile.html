@@ -25,13 +25,16 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 
 /* Navbar */
 .top { position: sticky; top: 0; z-index: 100; background: rgba(7, 11, 20, .88); backdrop-filter: blur(18px); border-bottom: 1px solid var(--line); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 16px; }
-.logo { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, #60a5fa, #1d4ed8); display: grid; place-items: center; }
-.btn-back { background: rgba(255,255,255,.05); border: 1px solid var(--line); color: #fff; padding: 8px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; text-decoration: none; font-size: 13px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 16px; cursor: pointer; }
+.brand .logo { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 14px; background: linear-gradient(145deg, #5ba0ff, #2454d8); box-shadow: 0 8px 26px #2563eb55; color: white; }
+.brand .logo svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.brand small { display: block; font-size: 10px; font-weight: 600; color: var(--muted); margin-top: -3px; }
+.btn-back { background: rgba(255,255,255,.05); border: 1px solid var(--line); color: #fff; padding: 8px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; text-decoration: none; font-size: 13px; transition: 0.2s; }
+.btn-back:hover { background: rgba(255,255,255,.1); }
 
 .wrap { max-width: 800px; margin: 0 auto; padding: 20px 16px; }
 
-/* الكارت الرئيسي (البروفايل) */
+/* الكارت الرئيسي */
 .hero-card {
   background: linear-gradient(135deg, #142543, #0d1524);
   border: 1px solid rgba(59, 130, 246, 0.15);
@@ -54,7 +57,6 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 .badge-student { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; width: fit-content; margin-right: auto; }
 .hero-name { font-size: 32px; font-weight: 900; margin: 0; }
 .hero-desc { color: var(--muted); font-size: 14px; font-weight: 600; margin: 0; }
-
 .avatar {
   width: 80px; height: 80px; border-radius: 24px;
   background: linear-gradient(135deg, var(--blue), var(--blue3));
@@ -66,44 +68,18 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 /* كروت التفاصيل */
 .grid-details { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
 @media (max-width: 600px) { .grid-details { grid-template-columns: 1fr; } }
-
-.detail-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+.detail-card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; align-items: center; justify-content: space-between; }
 .detail-info { display: flex; flex-direction: column; gap: 5px; text-align: right; }
 .detail-label { color: var(--muted); font-size: 13px; font-weight: 700; }
 .detail-value { font-size: 18px; font-weight: 900; }
-.icon-box {
-  width: 50px; height: 50px; border-radius: 16px;
-  display: grid; place-items: center;
-  background: rgba(255,255,255,.03);
-}
+.icon-box { width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; background: rgba(255,255,255,.03); }
 .icon-box svg { width: 24px; height: 24px; }
-
 .status-badge { background: rgba(16, 185, 129, 0.15); color: var(--green); padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
 .status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
 
-/* كارت العداد التنازلي */
-.timer-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  padding: 30px 20px;
-  position: relative;
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-.timer-card::before {
-  content: ''; position: absolute; inset: 0;
-  background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px);
-  background-size: 20px 20px; pointer-events: none;
-}
+/* كارت العداد */
+.timer-card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 30px 20px; position: relative; overflow: hidden; margin-bottom: 20px; }
+.timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
 .timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; }
 .timer-title { display: flex; flex-direction: column; gap: 5px; text-align: right; }
 .timer-title h2 { margin: 0; font-size: 22px; font-weight: 900; }
@@ -111,7 +87,6 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 .timer-badge { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
 .timer-badge::before { content: ''; width: 6px; height: 6px; background: var(--blue2); border-radius: 50%; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: .3; } 100% { opacity: 1; } }
-
 .timer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; position: relative; z-index: 2; }
 .time-box { background: var(--card-inner); border: 1px solid rgba(255,255,255,.05); border-radius: 16px; padding: 15px 5px; text-align: center; }
 .time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; }
@@ -119,21 +94,14 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 
 /* زرار تسجيل الخروج */
 .logout-btn {
-  width: 100%;
-  padding: 16px;
+  width: 100%; padding: 16px;
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: var(--red);
   border-radius: 16px;
-  font-size: 16px;
-  font-weight: 900;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
+  font-size: 16px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; transition: all 0.2s ease; font-family: inherit;
 }
 .logout-btn:hover { background: rgba(239, 68, 68, 0.2); transform: translateY(-2px); }
 .logout-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -150,7 +118,12 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 <body>
 
 <header class="top">
-  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m8 5 11 7-11 7z"/></svg></div>ثانوية club</div>
+  <div class="brand" onclick="window.location.href='index.html'">
+    <span class="logo">
+      <svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg>
+    </span>
+    <span>ثانوية <span style="color:var(--blue2)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
+  </div>
   <a href="subjects.html" class="btn-back">← المواد</a>
 </header>
 
@@ -165,7 +138,7 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 const API_BASE = '';
 const TOKEN_KEY = 'student_token';
 const TOKEN = localStorage.getItem(TOKEN_KEY);
-if (!TOKEN) { window.location.replace('index.html'); return; }
+if (!TOKEN) { window.location.replace('login.html'); return; }
 
 const $ = id => document.getElementById(id);
 let countdownInterval = null;
@@ -276,13 +249,22 @@ async function loadProfile() {
         </div>
       </div>
 
-      <button class="logout-btn" onclick="logout()">
+      <!-- زرار تسجيل الخروج المعدل -->
+      <button class="logout-btn" id="logout-btn">
         <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
         تسجيل الخروج من الحساب
       </button>
     `;
 
     $('main').innerHTML = html;
+    
+    // ربط الزرار بالحدث
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
+        localStorage.removeItem(TOKEN_KEY);
+        window.location.href = 'login.html';
+      }
+    });
     
     if (expiresAt) {
       if (countdownInterval) clearInterval(countdownInterval);
@@ -316,13 +298,6 @@ function updateCountdown(expiresAt) {
     document.getElementById('t-hours').innerText = hours;
     document.getElementById('t-mins').innerText = mins;
     document.getElementById('t-secs').innerText = secs;
-  }
-}
-
-function logout() {
-  if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
-    localStorage.removeItem(TOKEN_KEY);
-    window.location.replace('login.html');
   }
 }
 
