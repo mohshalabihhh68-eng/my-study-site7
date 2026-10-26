@@ -1,6 +1,6 @@
-**
+/**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.0 — Full Analytics (Visits + Watch History)
+ * VERSION v1.7.1 — Full Analytics (Visits + Grouped Watch History)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.0";
+const APP_VERSION = "v1.7.1";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1166,7 +1166,7 @@ app.get("/api/admin/visits", requireAdmin("students_view"), async (_req, res) =>
   }
 });
 
-// ==================== سجل المشاهدة ====================
+// ==================== سجل المشاهدة (مُحسَّن) ====================
 app.post("/api/track-video", requireStudent, async (req, res) => {
   try {
     const { videoId, videoTitle, lectureId, lectureName, currentTime, duration, percent } = req.body;
@@ -1175,7 +1175,7 @@ app.post("/api/track-video", requireStudent, async (req, res) => {
     const code = req.student.code;
     const nowTime = now();
     
-    // جلب السجل السابق لنفس الفيديو (لو موجود) عشان نحدّثه بدل ما نعمل سجل جديد كل مرة
+    // تجميع السجل: history/<code>/<videoId>
     const existing = await fbGet(`history/${code}/${videoId}`);
     const curTime = Number(currentTime) || 0;
     const dur = Number(duration) || 0;
@@ -1235,40 +1235,6 @@ app.get("/api/admin/history/:code", requireAdmin("students_view"), async (req, r
       ...v,
       time: v.lastViewedAt || v.time || 0
     })).sort((a, b) => (b.time || 0) - (a.time || 0));
-    res.json({ success: true, data: list });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
-});
-    
-    res.json({ success: true });
-  } catch (e) {
-    console.warn("[track-video]", e.message);
-    res.json({ success: false });
-  }
-});
-
-app.get("/api/admin/history", requireAdmin("students_view"), async (_req, res) => {
-  try {
-    const history = (await fbGet("history")) || {};
-    let list = [];
-    for (const [code, videos] of Object.entries(history)) {
-      for (const [id, v] of Object.entries(videos || {})) {
-        list.push({ id, ...v });
-      }
-    }
-    list.sort((a, b) => b.time - a.time);
-    res.json({ success: true, data: list });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
-});
-
-app.get("/api/admin/history/:code", requireAdmin("students_view"), async (req, res) => {
-  try {
-    const code = req.params.code;
-    const history = (await fbGet(`history/${code}`)) || {};
-    const list = Object.entries(history).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.time - a.time);
     res.json({ success: true, data: list });
   } catch (e) {
     jsonError(res, 500, e.message);
