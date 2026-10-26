@@ -85,64 +85,55 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .empty-state svg{width:60px;height:60px;margin-bottom:15px;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5}
 .empty-state h3{color:var(--ink);font-size:18px;font-weight:900;margin:0 0 8px}
 
-/* ===== الموبايل (كل مادة في صف) ===== */
+/* ===== الموبايل (تصميم طولي واخد الشاشة) ===== */
 @media(max-width:700px){
-  .motivation-bar { padding: 14px; gap: 12px; margin-bottom: 20px; }
-  .mot-text { font-size: 14px; }
-  .mot-icon { width: 36px; height: 36px; }
+  .motivation-bar { padding: 16px; gap: 12px; margin-bottom: 20px; border-radius: 14px; }
+  .mot-text { font-size: 15px; }
+  .mot-icon { width: 38px; height: 38px; }
   
-  .grid { display: flex; flex-direction: column; gap: 14px; }
+  .grid { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 16px; 
+  }
   
   .card {
-    flex-direction: row;
-    align-items: stretch;
-    border-radius: 16px;
-    padding: 0;
+    flex-direction: column;
+    border-radius: 20px;
+    width: 100%;
   }
   
   .card-img {
-    width: 115px;
-    height: auto;
-    aspect-ratio: auto;
-    flex-shrink: 0;
-    border-radius: 16px 0 0 16px;
+    width: 100%;
+    aspect-ratio: 16/9;
+    border-radius: 20px 20px 0 0;
   }
   
-  .card-img img { height: 100%; object-fit: cover; }
+  .card-img img { object-position: center; }
   
   .card-body {
-    padding: 12px 14px;
-    flex: 1;
-    justify-content: center;
+    padding: 16px;
+    align-items: center;
+    text-align: center;
   }
   
-  .card-body h3 { font-size: 16px; margin-bottom: 2px; }
-  .card-body .sub { font-size: 11px; margin-bottom: 8px; }
+  .card-body h3 { font-size: 20px; margin-bottom: 4px; }
+  .card-body .sub { font-size: 12px; margin-bottom: 16px; }
   
   .action-btn {
-    width: auto;
-    padding: 8px 14px;
-    font-size: 12px;
-    border-radius: 10px;
-    margin-top: 4px;
-    align-self: flex-start;
+    width: 100%;
+    padding: 14px;
+    font-size: 14px;
+    border-radius: 12px;
   }
-  .action-btn svg { width: 14px; height: 14px; }
+  .action-btn svg { width: 16px; height: 16px; }
 
-  .sk-card {
-    flex-direction: row;
-    height: 100px;
-    padding: 0;
-  }
-  .sk-img {
-    width: 115px;
-    height: 100%;
-    aspect-ratio: auto;
-  }
-  .sk-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
-  .sk-line.title { height: 16px; margin-bottom: 6px; }
-  .sk-line.sub { margin-bottom: 8px; }
-  .sk-line.btn { width: 100px; height: 30px; margin-top: 4px; border-radius: 8px; }
+  .sk-card { height: auto; padding: 0; flex-direction: column; }
+  .sk-img { width: 100%; aspect-ratio: 16/9; height: auto; }
+  .sk-body { padding: 16px; align-items: center;}
+  .sk-line.title { height: 20px; width: 60%; }
+  .sk-line.sub { width: 30%; }
+  .sk-line.btn { height: 44px; border-radius: 12px; }
 }
 </style>
 </head>
@@ -176,7 +167,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
     </div>
 
     <div class="grid" id="subjects-grid">
-      <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
     </div>
@@ -235,7 +225,6 @@ function startMotivationQuotes() {
   const textEl = $('mot-text');
   
   function showQuote() {
-    // إعادة تشغيل الأنيميشن
     textEl.style.animation = 'none';
     void textEl.offsetWidth; 
     textEl.style.animation = 'quoteFade 0.6s ease both';
@@ -243,9 +232,9 @@ function startMotivationQuotes() {
     index = (index + 1) % quotes.length;
   }
   
-  showQuote(); // عرض أول عبارة فوراً
+  showQuote(); 
   if(quoteInterval) clearInterval(quoteInterval);
-  quoteInterval = setInterval(showQuote, 3 * 60 * 1000); // كل 3 دقائق
+  quoteInterval = setInterval(showQuote, 3 * 60 * 1000); // كل 3 دقايق
 }
 
 async function load() {
@@ -271,7 +260,7 @@ async function load() {
       <div class="card">
         <div class="card-img">
           ${s.image_url ? `<img src="${esc(s.image_url)}" alt="${esc(s.name)}" onerror="this.style.display='none'">` : ''}
-          <div class="ph" style="display:${s.image_url ? 'none' : 'grid'}"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+          <div class="ph" style="display:${s.image_url ? 'none' : 'grid'}"><svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
         </div>
         <div class="card-body">
           <h3>${esc(s.name)}</h3>
