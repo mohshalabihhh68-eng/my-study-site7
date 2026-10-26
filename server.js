@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.5 — Robust File Proxy (Saves to disk for perfect PDF preview)
+ * VERSION v1.6 — Robust File Proxy (in-memory + correct headers for reliable PDF preview)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.5";
+const APP_VERSION = "v1.6";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -77,7 +77,7 @@ app.use(
   compression({
     filter: (req, res) => {
       const p = req.path || "";
-      if (p.startsWith("/api/hls/") || p.startsWith("/api/stream/segment/")) return false;
+      if (p.startsWith("/api/hls/") || p.startsWith("/api/stream/segment/") || p.startsWith("/api/file-proxy")) return false;
       if (p.includes("/messages/stream") || p.endsWith("/stream")) return false;
       return compression.filter(req, res);
     }
@@ -2738,54 +2738,102 @@ app.post("/api/heartbeat", async function (req, res) {
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-// ==================== بروكسي الملفات (يحفظ الملف ثم يبعته) ====================
-// ==================== بروكسي الملفات (يحفظ الملف ثم يبعته) ====================
+// ==================== بروكسي الملفات (معاينة موثوقة للـ PDF والملفات) ====================
 app.get("/api/file-proxy", async (req, res) => {
   try {
     const targetUrl = req.query.url;
-    if (!targetUrl) return res.status(400).send("Missing URL");
+    if (!targetUrl || typeof targetUrl !== "string") {
+      return res.status(400).send("Missing URL");
+    }
+
+    // منع SSRF بسيط: فقط http/https
+    let parsed;
+    try {
+      parsed = new URL(targetUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return res.status(400).send("Invalid URL protocol");
+      }
+    } catch {
+      return res.status(400).send("Invalid URL");
+    }
 
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Referer": "https://coursatk.online/",
       "Origin": "https://coursatk.online",
-      "Accept": "*/*"
+      "Accept": "application/pdf,application/octet-stream,image/*,*/*;q=0.8"
     };
 
-    // 1. بنجيب الملف من كورساتك
-    const upstream = await fetch(targetUrl, { headers });
-    if (!upstream.ok) throw new Error("HTTP " + upstream.status);
+    // دعم Range لو المتصفح طلب جزء من الملف (مفيد لبعض عارضات PDF)
+    if (req.headers.range) {
+      headers.Range = req.headers.range;
+    }
 
-    // 2. بنحوله لـ Buffer
-    const buffer = Buffer.from(await upstream.arrayBuffer());
-    
-    // 3. بنحدد نوع الملف (لو رجع HTML، يبقى PDF)
-    let contentType = upstream.headers.get("content-type") || "application/pdf";
-    if (contentType.includes("text/html")) contentType = "application/pdf";
-
-    // 4. بنحفظ الملف مؤقتاً في السيرفر
-    const fileName = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`;
-    const filePath = path.join(TEMP_DIR, fileName);
-    fs.writeFileSync(filePath, buffer);
-
-    // 5. بنبعت الملف للمتصفح مباشرة من مكانه الثابت (ده اللي بيخلي المعاينة تشتغل)
-    res.sendFile(filePath, {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": "inline"
-      }
-    }, (err) => {
-      // 6. بعد ما المتصفح ياخد الملف، بنمسحه من السيرفر
-      try { fs.unlinkSync(filePath); } catch (e) {}
-      if (err && !res.headersSent) {
-        res.status(500).send("Error sending file");
-      }
+    const upstream = await fetch(targetUrl, {
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(45_000)
     });
 
+    if (!upstream.ok) {
+      console.error("[file-proxy] upstream", upstream.status, String(targetUrl).slice(0, 120));
+      return res.status(upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502)
+        .send("Error fetching file: HTTP " + upstream.status);
+    }
+
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    if (!buffer.length) {
+      return res.status(502).send("Empty file from upstream");
+    }
+
+    // تحديد Content-Type بشكل ذكي
+    let contentType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    const magic = buffer.slice(0, 8).toString("ascii");
+    if (
+      magic.startsWith("%PDF-") ||
+      contentType.includes("text/html") ||
+      (contentType.includes("application/octet-stream") && String(targetUrl).toLowerCase().includes(".pdf"))
+    ) {
+      contentType = "application/pdf";
+    } else if (!contentType || contentType === "application/octet-stream") {
+      // fallback حسب الامتداد
+      const lower = String(targetUrl).toLowerCase();
+      if (lower.includes(".pdf")) contentType = "application/pdf";
+      else if (lower.match(/\.(jpe?g)$/)) contentType = "image/jpeg";
+      else if (lower.includes(".png")) contentType = "image/png";
+      else if (lower.includes(".webp")) contentType = "image/webp";
+      else contentType = "application/octet-stream";
+    }
+
+    // هيدرز ضرورية لمعاينة PDF سليمة في المتصفح والموبايل
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", String(buffer.length));
+    res.setHeader("Content-Disposition", contentType === "application/pdf"
+      ? 'inline; filename="document.pdf"'
+      : 'inline');
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Accept-Ranges");
+    res.setHeader("Cache-Control", "private, max-age=1800");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Accept-Ranges", "bytes");
+
+    // لو فيه Content-Range من الـ upstream (Range request)
+    const cr = upstream.headers.get("content-range");
+    if (cr) {
+      res.setHeader("Content-Range", cr);
+      res.status(upstream.status === 206 ? 206 : 200);
+    } else {
+      res.status(200);
+    }
+
+    res.send(buffer);
   } catch (e) {
-    console.error("File proxy error:", e.message);
-    if (!res.headersSent) res.status(502).send("Error fetching file: " + e.message);
-    else res.end();
+    console.error("[file-proxy] error:", e.message);
+    if (!res.headersSent) {
+      res.status(502).send("Error fetching file: " + (e.message || "unknown"));
+    } else {
+      res.end();
+    }
   }
 });
 
