@@ -23,19 +23,19 @@
   * { box-sizing: border-box; font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
   body { margin: 0; background: var(--bg); color: var(--text); padding: 20px; background-image: radial-gradient(circle at top right, rgba(59,130,246,0.05), transparent 40%); }
 
-  /* ====== شاشة الدخول ====== */
+  /* شاشة الدخول */
   #login-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 90vh; }
   .login-box { background: var(--panel); padding: 40px; border-radius: 24px; border: 1px solid var(--line); width: 100%; max-width: 400px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5); animation: rise 0.6s ease; }
   .login-box h2 { margin-top: 0; font-size: 24px; font-weight: 900; margin-bottom: 25px; }
   @keyframes rise { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-  /* ====== الحقول والأزرار ====== */
+  /* الحقول والأزرار */
   input, select { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 12px; border: 1px solid var(--line); background: #080d17; color: #fff; font-size: 14px; font-family: inherit; transition: 0.2s; }
   input:focus, select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
   button { width: 100%; padding: 14px; border-radius: 12px; border: none; background: var(--blue); color: #fff; font-weight: 800; font-size: 15px; cursor: pointer; transition: 0.2s; }
   button:hover { background: var(--blue2); transform: translateY(-1px); }
   
-  /* ====== لوحة التحكم ====== */
+  /* لوحة التحكم */
   #dashboard-screen { display: none; max-width: 1400px; margin: auto; animation: fadeIn 0.5s ease; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   
@@ -54,7 +54,7 @@
   .stat-card .value { font-size: 30px; font-weight: 900; line-height: 1; }
   .stat-icon { position: absolute; left: 15px; top: 15px; opacity: 0.15; width: 48px; height: 48px; }
 
-  /* شريط الأدوات (بحث وإضافة) */
+  /* شريط الأدوات */
   .toolbar { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
   .search-box { flex: 1; position: relative; min-width: 250px; }
   .search-box input { padding-right: 45px; margin-bottom: 0; height: 48px; }
@@ -98,14 +98,14 @@
   .btn-icon.renew:hover { background: var(--orange); color: #fff; }
   .btn-icon.delete:hover { background: var(--red); color: #fff; }
   .btn-icon.toggle:hover { background: var(--muted); color: #000; }
-  .btn-icon.history:hover { background: var(--purple); color: #fff; }
+  .btn-icon.history:hover { background: var(--blue); color: #fff; }
 
   /* المودالات */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 200; padding: 20px; backdrop-filter: blur(4px); }
   .modal { background: var(--panel); border-radius: 24px; width: 100%; max-width: 500px; border: 1px solid var(--line); max-height: 90vh; overflow-y: auto; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-  .modal.wide { max-width: 750px; }
+  .modal.wide { max-width: 800px; }
   @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--panel); z-index: 5; }
+  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--panel); z-index: 5; border-radius: 24px 24px 0 0; }
   .modal-header h2 { margin: 0; font-size: 18px; font-weight: 800; }
   .modal-body { padding: 24px; }
   .modal-footer { padding: 20px 24px; border-top: 1px solid var(--line); display: flex; gap: 10px; }
@@ -121,7 +121,7 @@
   .btn-kick { background: rgba(239,68,68,0.15); color: var(--red); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; width: auto; border: none; cursor: pointer; }
   .btn-kick:hover { background: var(--red); color: #fff; }
 
-  /* بطاقات سجل المشاهدة */
+  /* سجل المشاهدة */
   .history-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .history-filter { padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; transition: 0.2s; width: auto; }
   .history-filter:hover { background: var(--panel-hover); color: var(--text); }
@@ -130,21 +130,30 @@
   .history-stat { padding: 12px; border-radius: 12px; background: #080d17; text-align: center; border: 1px solid var(--line); }
   .history-stat b { display: block; font-size: 20px; font-weight: 900; color: var(--blue2); }
   .history-stat span { font-size: 11px; color: var(--muted); font-weight: 700; }
-  .history-item { padding: 14px; border-radius: 12px; background: #080d17; border: 1px solid var(--line); margin-bottom: 10px; transition: 0.2s; }
-  .history-item:hover { border-color: rgba(59,130,246,0.4); background: #0a1220; }
-  .history-item-head { display: flex; justify-content: space-between; align-items: start; gap: 10px; margin-bottom: 8px; }
-  .history-item-name { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-  .history-item-name b { font-size: 13px; font-weight: 800; color: var(--text); }
-  .history-item-name small { color: var(--muted); font-size: 11px; }
-  .history-item-body { display: flex; flex-direction: column; gap: 4px; padding-right: 36px; }
-  .history-item-body div { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-  .history-item-body svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-  .history-item-body strong { color: var(--text); font-weight: 700; }
-  .history-item-actions { display: flex; gap: 6px; margin-top: 10px; padding-right: 36px; }
-  .btn-play { padding: 6px 14px; border-radius: 8px; background: var(--mint); color: #000; border: none; font-size: 11px; font-weight: 800; cursor: pointer; width: auto; display: inline-flex; align-items: center; gap: 5px; transition: 0.2s; }
-  .btn-play:hover { background: #059669; color: #fff; }
-  .btn-play svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.5; }
-  .history-time { font-size: 11px; color: var(--muted); background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 6px; font-weight: 700; white-space: nowrap; }
+  
+  .student-card { background: #0a1220; border: 1px solid var(--line); border-radius: 16px; margin-bottom: 16px; overflow: hidden; }
+  .student-card-head { padding: 14px 16px; background: rgba(59,130,246,0.05); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+  .student-card-title { display: flex; align-items: center; gap: 10px; }
+  .student-card-title b { font-size: 15px; font-weight: 800; }
+  .student-card-title small { color: var(--muted); font-size: 12px; }
+  .student-card-count { background: rgba(59,130,246,0.15); color: var(--blue2); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 800; }
+  
+  .video-row { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 12px; transition: 0.2s; }
+  .video-row:last-child { border-bottom: none; }
+  .video-row:hover { background: rgba(255,255,255,0.02); }
+  .video-info { flex: 1; min-width: 0; }
+  .video-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .video-title svg { width: 14px; height: 14px; stroke: var(--blue2); fill: none; stroke-width: 2; flex-shrink: 0; }
+  .video-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .video-meta span { display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.03); padding: 2px 6px; border-radius: 6px; }
+  .video-meta svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .percent-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 99px; margin-top: 6px; overflow: hidden; }
+  .percent-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); border-radius: 99px; transition: width 0.3s; }
+  
+  .btn-play-small { padding: 6px 12px; border-radius: 8px; background: var(--mint); color: #000; border: none; font-size: 11px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: 0.2s; white-space: nowrap; width: auto; }
+  .btn-play-small:hover { background: #059669; color: #fff; }
+  .btn-play-small svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.5; }
+  
   .empty-history { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px; }
 
   /* قائمة الفيديوهات في تفاصيل الطالب */
@@ -160,9 +169,9 @@
     .toolbar { flex-direction: column; }
     .search-box, .btn-add-main { width: 100%; }
     .modal { max-height: 95vh; }
-    .history-stats { grid-template-columns: repeat(2, 1fr); }
-    .history-item-body { padding-right: 0; }
-    .history-item-actions { padding-right: 0; }
+    .history-stats { grid-template-columns: 1fr; }
+    .video-row { flex-direction: column; align-items: stretch; }
+    .btn-play-small { justify-content: center; }
   }
 </style>
 </head>
@@ -351,7 +360,7 @@
     <div class="modal-body">
       <!-- بحث -->
       <div class="search-box" style="margin-bottom:16px">
-        <input type="text" id="history-search" placeholder="ابحث بالطالب أو الفيديو أو المحاضرة..." oninput="filterHistory()" style="margin-bottom:0">
+        <input type="text" id="history-search" placeholder="ابحث بالطالب أو الفيديو أو المحاضرة..." oninput="renderHistory()" style="margin-bottom:0">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </div>
 
@@ -371,7 +380,7 @@
       </div>
 
       <!-- القائمة -->
-      <div id="history-list" style="max-height:50vh;overflow-y:auto;">
+      <div id="history-list" style="max-height:55vh;overflow-y:auto;padding-right:4px;">
         <div class="empty-history">جاري التحميل...</div>
       </div>
     </div>
@@ -772,7 +781,17 @@
     return new Date(ts).toLocaleDateString('ar-EG');
   }
 
-  // ==================== سجل المشاهدة الكامل ====================
+  function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '0:00';
+    const s = Math.floor(seconds);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    return `${m}:${String(sec).padStart(2,'0')}`;
+  }
+
+  // ==================== سجل المشاهدة (مُجمَّع حسب الطالب) ====================
   async function showWatchHistory() {
     document.getElementById('history-modal').style.display = 'flex';
     document.getElementById('history-search').value = '';
@@ -802,21 +821,15 @@
     renderHistory();
   }
 
-  function filterHistory() {
-    renderHistory();
-  }
-
   function renderHistory() {
-    // فلترة حسب الوقت
     const now = Date.now();
     const timeLimits = { hour: 3600000, day: 86400000, week: 604800000 };
     let filtered = allHistory;
 
     if (currentHistoryFilter !== 'all' && timeLimits[currentHistoryFilter]) {
-      filtered = filtered.filter(h => (now - h.time) <= timeLimits[currentHistoryFilter]);
+      filtered = filtered.filter(h => (now - (h.lastViewedAt || h.time)) <= timeLimits[currentHistoryFilter]);
     }
 
-    // فلترة حسب البحث
     const q = document.getElementById('history-search').value.toLowerCase().trim();
     if (q) {
       filtered = filtered.filter(h => 
@@ -827,49 +840,86 @@
       );
     }
 
-    // إحصائيات
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
     const weekAgo = now - 604800000;
     document.getElementById('hs-total').innerText = allHistory.length;
-    document.getElementById('hs-day').innerText = allHistory.filter(h => h.time >= todayStart.getTime()).length;
-    document.getElementById('hs-week').innerText = allHistory.filter(h => h.time >= weekAgo).length;
+    document.getElementById('hs-day').innerText = allHistory.filter(h => (h.lastViewedAt || h.time) >= todayStart.getTime()).length;
+    document.getElementById('hs-week').innerText = allHistory.filter(h => (h.lastViewedAt || h.time) >= weekAgo).length;
 
-    // عرض
     const list = document.getElementById('history-list');
     if (filtered.length === 0) {
       list.innerHTML = '<div class="empty-history">مفيش مشاهدات مطابقة.</div>';
       return;
     }
 
-    list.innerHTML = filtered.map(h => {
-      const ago = timeAgo(h.time);
-      const firstLetter = (h.name || '?').charAt(0);
-      const lectureParam = h.lectureId ? `&lectureId=${encodeURIComponent(h.lectureId)}` : '';
-      const videoParam = `&videoId=${encodeURIComponent(h.videoId)}`;
-      const playerUrl = `player.html?${lectureParam.slice(1)}${videoParam}`;
+    // ✨ تجميع حسب الطالب
+    const grouped = {};
+    filtered.forEach(h => {
+      const code = h.code || 'unknown';
+      if (!grouped[code]) grouped[code] = { name: h.name, code, items: [] };
+      grouped[code].items.push(h);
+    });
+
+    // ترتيب الطلاب حسب الأحدث
+    const students = Object.values(grouped).sort((a, b) => {
+      const aMax = Math.max(...a.items.map(i => i.lastViewedAt || i.time || 0));
+      const bMax = Math.max(...b.items.map(i => i.lastViewedAt || i.time || 0));
+      return bMax - aMax;
+    });
+
+    list.innerHTML = students.map(stu => {
+      const firstLetter = (stu.name || '?').charAt(0);
+      const totalViews = stu.items.reduce((sum, i) => sum + (Number(i.viewCount) || 1), 0);
       
+      // ترتيب فيديوهات الطالب حسب آخر مشاهدة
+      const sortedItems = stu.items.sort((a, b) => (b.lastViewedAt || b.time || 0) - (a.lastViewedAt || a.time || 0));
+
+      const videosHtml = sortedItems.map(h => {
+        const ago = timeAgo(h.lastViewedAt || h.time);
+        const percent = Number(h.maxPercent) || 0;
+        const viewCount = Number(h.viewCount) || 1;
+        const watched = Number(h.lastCurrentTime) || 0;
+        const totalDur = Number(h.duration) || 0;
+        const lectureParam = h.lectureId ? `lectureId=${encodeURIComponent(h.lectureId)}&` : '';
+        const playerUrl = `player.html?${lectureParam}videoId=${encodeURIComponent(h.videoId)}`;
+        
+        return `
+          <div class="video-row">
+            <div class="video-info">
+              <div class="video-title">
+                <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="m10 8 6 3-6 3V8Z"/></svg>
+                ${escapeHtml(h.videoTitle || 'فيديو')}
+              </div>
+              ${h.lectureName ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">📚 ${escapeHtml(h.lectureName)}</div>` : ''}
+              <div class="video-meta">
+                <span>👁️ ${viewCount} ${viewCount === 1 ? 'مشاهدة' : 'مشاهدات'}</span>
+                ${totalDur > 0 ? `<span>⏱️ ${formatDuration(watched)} / ${formatDuration(totalDur)}</span>` : ''}
+                <span>📊 ${percent}%</span>
+                <span>🕐 ${ago}</span>
+              </div>
+              <div class="percent-bar"><div class="percent-fill" style="width:${percent}%"></div></div>
+            </div>
+            <a class="btn-play-small" href="${playerUrl}" target="_blank">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              شوف
+            </a>
+          </div>
+        `;
+      }).join('');
+
       return `
-        <div class="history-item">
-          <div class="history-item-head">
-            <div class="history-item-name">
-              <div class="avatar" style="width:28px;height:28px;font-size:12px;border-radius:8px;">${firstLetter}</div>
-              <div style="min-width:0;overflow:hidden">
-                <b>${escapeHtml(h.name || 'طالب')}</b>
-                <small> · ${escapeHtml(h.code || '')}</small>
+        <div class="student-card">
+          <div class="student-card-head">
+            <div class="student-card-title">
+              <div class="avatar" style="width:32px;height:32px;font-size:13px;border-radius:9px;">${firstLetter}</div>
+              <div>
+                <b>${escapeHtml(stu.name || 'طالب')}</b>
+                <small> · ${escapeHtml(stu.code)}</small>
               </div>
             </div>
-            <span class="history-time">${ago}</span>
+            <span class="student-card-count">${stu.items.length} فيديو · ${totalViews} مشاهدة</span>
           </div>
-          <div class="history-item-body">
-            <div><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="m10 8 6 3-6 3V8Z"/></svg> <strong>${escapeHtml(h.videoTitle || 'فيديو')}</strong></div>
-            ${h.lectureName ? `<div><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg> ${escapeHtml(h.lectureName)}</div>` : ''}
-          </div>
-          ${h.lectureId || h.videoId ? `<div class="history-item-actions">
-            <a class="btn-play" href="${playerUrl}" target="_blank">
-              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              شوف الفيديو
-            </a>
-          </div>` : ''}
+          ${videosHtml}
         </div>
       `;
     }).join('');
@@ -880,76 +930,24 @@
     const student = allStudents.find(s => String(s.code) === String(code));
     if (!student) return;
     
+    document.getElementById('history-modal').style.display = 'flex';
+    document.getElementById('history-search').value = code;
+    currentHistoryFilter = 'all';
+    document.querySelectorAll('.history-filter').forEach(b => b.classList.toggle('active', b.dataset.hfilter === 'all'));
+    
+    // نفلتر allHistory على الطالب ده فقط
     try {
-      const res = await fetch(`${API_URL}/admin/history/${code}`, {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
-      });
-      const data = await res.json();
-      
-      // فلتر allHistory للطالب ده
-      allHistory = data.success ? (data.data || []) : [];
-      
-      // فلتر البحث بالكود
-      document.getElementById('history-modal').style.display = 'flex';
-      document.getElementById('history-search').value = code;
-      currentHistoryFilter = 'all';
-      document.querySelectorAll('.history-filter').forEach(b => b.classList.toggle('active', b.dataset.hfilter === 'all'));
-      
-      // إعادة جلب كل السجل عشان الإحصائيات تبقى صح
-      try {
+      // لو allHistory مش مليان، نجيبه
+      if (!allHistory.length) {
         const allRes = await fetch(`${API_URL}/admin/history`, {
           headers: { 'Authorization': `Bearer ${adminToken}` }
         });
         const allData = await allRes.json();
-        if (allData.success) {
-          // نخلي allHistory هو الكل عشان الإحصائيات العامة
-          // لكن نعرض للطالب فقط
-          const studentHistory = allHistory;
-          allHistory = allData.data || [];
-          renderHistory();
-          // دلوقتي فلترة يدوية لعرض الطالب فقط
-          const list = document.getElementById('history-list');
-          if (studentHistory.length === 0) {
-            list.innerHTML = `<div class="empty-history">${escapeHtml(student.name)} لسه مفتحش أي فيديو.</div>`;
-            return;
-          }
-          list.innerHTML = `<div style="margin-bottom:12px;padding:10px;background:rgba(59,130,246,0.1);border-radius:10px;font-size:13px;color:var(--blue2);font-weight:700">📺 سجل ${escapeHtml(student.name)} (${studentHistory.length} فيديو)</div>` + 
-            studentHistory.map(h => {
-              const ago = timeAgo(h.time);
-              const firstLetter = (h.name || '?').charAt(0);
-              const lectureParam = h.lectureId ? `&lectureId=${encodeURIComponent(h.lectureId)}` : '';
-              const videoParam = `&videoId=${encodeURIComponent(h.videoId)}`;
-              const playerUrl = `player.html?${lectureParam.slice(1)}${videoParam}`;
-              
-              return `
-                <div class="history-item">
-                  <div class="history-item-head">
-                    <div class="history-item-name">
-                      <div class="avatar" style="width:28px;height:28px;font-size:12px;border-radius:8px;">${firstLetter}</div>
-                      <div style="min-width:0;overflow:hidden">
-                        <b>${escapeHtml(h.name || 'طالب')}</b>
-                        <small> · ${escapeHtml(h.code || '')}</small>
-                      </div>
-                    </div>
-                    <span class="history-time">${ago}</span>
-                  </div>
-                  <div class="history-item-body">
-                    <div><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="m10 8 6 3-6 3V8Z"/></svg> <strong>${escapeHtml(h.videoTitle || 'فيديو')}</strong></div>
-                    ${h.lectureName ? `<div><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg> ${escapeHtml(h.lectureName)}</div>` : ''}
-                  </div>
-                  ${h.lectureId || h.videoId ? `<div class="history-item-actions">
-                    <a class="btn-play" href="${playerUrl}" target="_blank">
-                      <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                      شوف الفيديو
-                    </a>
-                  </div>` : ''}
-                </div>
-              `;
-            }).join('');
-        }
-      } catch (e) {}
+        if (allData.success) allHistory = allData.data || [];
+      }
+      renderHistory();
     } catch (e) {
-      alert('خطأ في تحميل سجل الطالب');
+      document.getElementById('history-list').innerHTML = '<div class="empty-history" style="color:var(--red)">خطأ في التحميل</div>';
     }
   }
 
