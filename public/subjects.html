@@ -50,7 +50,7 @@ button{font:inherit;cursor:pointer; outline: none;}
 <body>
   <header class="app-nav"><div class="app-nav-in">
     <div class="brand" id="brand-home"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563eb'/%3E%3Cpath d='M32 14 8 26l24 12 24-12z' fill='%23fff'/%3E%3C/svg%3E" alt=""><div>ثانوية club<small>منصة الثانوية العامة</small></div></div>
-    <div class="profile-wrap"><button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
+    <div class="profile-wrap"><button type="button" class="profile-btn" id="profile-btn"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
   </div></header>
 
   <main class="wrap" id="main">
@@ -119,8 +119,17 @@ async function load() {
   } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
 }
 
-async function loadProfile() { try { const me = await api('/api/auth/me'); if(me) { $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); } } catch (e) {} }
+async function loadProfile() { 
+  try { 
+    const me = await api('/api/auth/me'); 
+    if(me) { 
+      $('nav-name').textContent = me.name || 'طالب'; 
+      $('nav-av').textContent = (me.name || 'ط').charAt(0); 
+    } 
+  } catch (e) {} 
+}
 $('brand-home').onclick = () => window.location.href = 'index.html';
+$('profile-btn').onclick = () => window.location.href = 'profile.html';
 load(); loadProfile();
 })();
 </script>
