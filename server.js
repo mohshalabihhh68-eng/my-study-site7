@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6.6 — File Proxy: never force PDF Content-Type on non-PDF bytes
+ * VERSION v1.6.6 — Visits Tracking + Last Seen Support
  */
 import express from "express";
 import cors from "cors";
@@ -1116,6 +1116,39 @@ app.get("/api/public/site", rateLimit({ max: 120, windowMs: 60_000, scope: "publ
   res.json({ success: true, data: { siteName: runtime.siteName || "ثانوية World", packages, agents, firebaseConfigured: Boolean(getFirebaseUrl()), tokenConfigured: Boolean(getCoursatkTokenSync()) } });
 });
 
+// ==================== تسجيل الزوار ====================
+app.post("/api/track-visit", async (req, res) => {
+  try {
+    const ip = clientIp(req);
+    const ua = req.headers["user-agent"] || "Unknown";
+    const nowTime = now();
+    
+    // نسجل الزيارة في Firebase
+    const visitKey = `visits/${nowTime}_${Math.random().toString(36).slice(2, 8)}`;
+    await fbSet(visitKey, {
+      ip: ip,
+      userAgent: ua,
+      time: nowTime
+    });
+    
+    res.json({ success: true });
+  } catch (e) {
+    res.json({ success: false });
+  }
+});
+
+app.get("/api/admin/visits", requireAdmin("students_view"), async (_req, res) => {
+  try {
+    const visits = (await fbGet("visits")) || {};
+    const list = Object.entries(visits).map(([id, v]) => ({ id, ...v }));
+    // ترتيب من الأحدث للأقدم
+    list.sort((a, b) => b.time - a.time);
+    res.json({ success: true, data: list });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
 app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "student-login", banAfter: 3, banMs: 15 * 60_000 }), async (req, res) => {
   try {
     const code = String(req.body?.code || "").trim();
@@ -1162,6 +1195,9 @@ app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "stude
       devices[deviceId].name = deviceName || devices[deviceId].name;
       await fbSet(`students/${code}/devices/${deviceId}`, devices[deviceId]);
     }
+
+    // حفظ آخر ظهور للطالب
+    try { await fbPatch(`students/${code}`, { lastSeen: now() }); } catch (e) { console.warn("[auth] lastSeen save failed:", e.message); }
 
     const sessionTtl = Math.min(CONFIG.STUDENT_SESSION_MS, Math.max(60_000, (student.expiresAt || now() + CONFIG.STUDENT_SESSION_MS) - now()));
     const token = randomToken(32);
@@ -1998,7 +2034,7 @@ app.get("/api/admin/students", requireAdmin("students_view"), async (_req, res) 
   try {
     const all = (await fbGet("students")) || {};
     const list = Object.entries(all).map(([code, s]) => ({
-      code, name: s.name, section: s.section || null, type: s.type || null, days: s.days || null, durationMs: s.durationMs || null, activatedAt: s.activatedAt || null, expiresAt: s.expiresAt || null, maxDevices: s.maxDevices || 1, devices: Object.keys(s.devices || {}).length, active: s.active !== false, createdAt: s.createdAt || null, status: !s.activatedAt ? "لم يبدأ" : (s.expiresAt && Date.now() > s.expiresAt ? "منتهي" : "نشط")
+      code, name: s.name, section: s.section || null, type: s.type || null, days: s.days || null, durationMs: s.durationMs || null, activatedAt: s.activatedAt || null, expiresAt: s.expiresAt || null, maxDevices: s.maxDevices || 1, devices: Object.keys(s.devices || {}).length, active: s.active !== false, createdAt: s.createdAt || null, lastSeen: s.lastSeen || null, status: !s.activatedAt ? "لم يبدأ" : (s.expiresAt && Date.now() > s.expiresAt ? "منتهي" : "نشط")
     }));
     list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     res.json({ success: true, data: list });
@@ -2739,7 +2775,6 @@ app.post("/api/heartbeat", async function (req, res) {
 });
 
 // ==================== بروكسي الملفات (معاينة موثوقة للـ PDF والملفات) ====================
-// ندعم /api/file-proxy و /api/file-proxy/document.pdf عشان الموبايل يفتح المعاينة
 app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
   try {
     let targetUrl = req.query.url;
@@ -2751,7 +2786,6 @@ app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
         <body><div class="box"><h1>رابط الملف ناقص</h1><p>مفيش معامل url</p></div></body></html>`
       );
     }
-    // فك الترميز لو الـ frontend بعت الـ URL مُرمّز مرتين
     try {
       if (targetUrl.includes("%")) targetUrl = decodeURIComponent(targetUrl);
     } catch {}
@@ -2793,7 +2827,6 @@ app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
     if (tok) baseHeaders.Authorization = `Bearer ${tok}`;
     if (req.headers.range) baseHeaders.Range = req.headers.range;
 
-    // نستخدم fetchT عشان يدعم الـ proxy / relay ويتعامل مع Cloudflare
     let upstream;
     try {
       upstream = await upstreamSlot(() =>
@@ -2810,7 +2843,6 @@ app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
     }
 
     if (!upstream.ok) {
-      // جرب مرة تانية بدون Authorization لو فشلت (بعض الروابط عامة)
       if (tok && (upstream.status === 401 || upstream.status === 403)) {
         try { await upstream.arrayBuffer(); } catch {}
         const noAuthHeaders = { ...baseHeaders };
@@ -2845,57 +2877,42 @@ app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
       );
     }
 
-    // تحديد نوع المحتوى من الـ magic bytes فقط (مهم جدًا)
+    const headText = buffer.slice(0, 400).toString("utf8").toLowerCase();
+    const looksLikeHtmlError =
+      (headText.includes("<!doctype") || headText.includes("<html") || headText.includes("<head")) &&
+      (headText.includes("cloudflare") || headText.includes("access denied") || headText.includes("forbidden") ||
+       headText.includes("unauthorized") || headText.includes("error") || headText.includes("login") ||
+       headText.includes("captcha") || buffer.length < 2000);
+
+    if (looksLikeHtmlError) {
+      console.error("[file-proxy] got HTML error page instead of file:", String(targetUrl).slice(0, 100));
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
+        <body><div class="box"><h1>المصدر رفض الطلب</h1><p>السيرفر المصدر رجّع صفحة خطأ بدل الملف</p></div></body></html>`
+      );
+    }
+
+    let contentType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
     const head = buffer.slice(0, 1024).toString("latin1");
-    const headUtf = buffer.slice(0, 800).toString("utf8").toLowerCase();
     const urlLower = String(targetUrl).toLowerCase();
     const isReallyPdf = head.includes("%PDF-");
-    const isJpeg = head.startsWith("\xFF\xD8\xFF");
-    const isPng = head.startsWith("\x89PNG");
-    const isWebp = head.startsWith("RIFF") && head.includes("WEBP");
-    const isHtml =
-      headUtf.includes("<!doctype") ||
-      headUtf.includes("<html") ||
-      headUtf.includes("<head") ||
-      headUtf.trimStart().startsWith("<?xml");
 
-    // لو رجع HTML (صفحة خطأ / Cloudflare / تسجيل دخول) — نعرض رسالة واضحة
-    if (isHtml && !isReallyPdf) {
-      console.error("[file-proxy] upstream returned HTML instead of file:", String(targetUrl).slice(0, 120), "size=", buffer.length);
-      return res.status(502).type("html").send(
-        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>تعذر فتح الملف</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
-        .box{background:#222;padding:28px;border-radius:16px;max-width:380px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px;line-height:1.6}</style></head>
-        <body><div class="box"><h1>تعذر فتح الملف</h1>
-        <p>المصدر رجّع صفحة ويب بدل ملف PDF.<br>الملف قد يكون محميًا أو الرابط منتهي الصلاحية.</p>
-        <p style="margin-top:14px;font-size:12px;opacity:.5">الحجم المستلم: ${buffer.length} بايت</p></div></body></html>`
-      );
+    if (isReallyPdf) {
+      contentType = "application/pdf";
+    } else if (urlLower.match(/\.(jpe?g)(\?|$)/) || head.startsWith("\xFF\xD8\xFF")) {
+      contentType = "image/jpeg";
+    } else if (urlLower.match(/\.png(\?|$)/) || head.startsWith("\x89PNG")) {
+      contentType = "image/png";
+    } else if (urlLower.match(/\.webp(\?|$)/) || head.startsWith("RIFF")) {
+      contentType = "image/webp";
+    } else if (urlLower.includes(".pdf") || contentType.includes("pdf")) {
+      contentType = "application/pdf";
+    } else if (!contentType || contentType === "application/octet-stream" || contentType.includes("text/")) {
+      contentType = "application/octet-stream";
     }
 
-    // لو الرابط بيقول PDF بس المحتوى مش PDF — متنبعتش Content-Type غلط (بيبوظ عارض كروم)
-    if (!isReallyPdf && !isJpeg && !isPng && !isWebp && (urlLower.includes(".pdf") || (upstream.headers.get("content-type") || "").includes("pdf"))) {
-      console.error("[file-proxy] expected PDF but magic mismatch:", JSON.stringify(head.slice(0, 32)), "size=", buffer.length, String(targetUrl).slice(0, 100));
-      return res.status(502).type("html").send(
-        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>تعذر فتح الملف</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
-        .box{background:#222;padding:28px;border-radius:16px;max-width:380px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px;line-height:1.6}
-        a{display:inline-block;margin-top:16px;padding:10px 20px;background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:700}</style></head>
-        <body><div class="box"><h1>الملف تالف أو غير مدعوم</h1>
-        <p>المحتوى المستلم مش PDF صالح (الحجم: ${Math.round(buffer.length/1024)} ك.ب).<br>ممكن الملف يكون محمي أو الرابط غلط.</p></div></body></html>`
-      );
-    }
-
-    let contentType = "application/octet-stream";
-    if (isReallyPdf) contentType = "application/pdf";
-    else if (isJpeg) contentType = "image/jpeg";
-    else if (isPng) contentType = "image/png";
-    else if (isWebp) contentType = "image/webp";
-    else {
-      const ct = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-      if (ct && !ct.includes("text/html") && !ct.includes("text/plain")) contentType = ct;
-    }
-
-    // هيدرز نظيفة للمعاينة
     res.status(200);
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Length", String(buffer.length));
@@ -2913,7 +2930,6 @@ app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
   } catch (e) {
     console.error("[file-proxy] error:", e.message);
     if (!res.headersSent) {
-      // صفحة HTML واضحة بدل نص يتحمّل باسم file-proxy
       res.status(502).type("html").send(
         `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
         <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
