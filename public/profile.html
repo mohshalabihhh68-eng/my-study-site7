@@ -23,13 +23,9 @@
 * { 
   box-sizing: border-box; 
   font-family: 'Cairo', sans-serif; 
-  /* تحسينات اللمس */
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
-  -khtml-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
   user-select: none;
 }
 body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 40px; }
@@ -83,13 +79,19 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 .detail-card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; align-items: center; justify-content: space-between; }
 .detail-info { display: flex; flex-direction: column; gap: 5px; text-align: right; }
 .detail-label { color: var(--muted); font-size: 13px; font-weight: 700; }
-.detail-value { font-size: 18px; font-weight: 900; }
+.detail-value { font-size: 18px; font-weight: 900; display: flex; align-items: center; gap: 10px;}
 .icon-box { width: 50px; height: 50px; border-radius: 16px; display: grid; place-items: center; background: rgba(255,255,255,.03); }
 .icon-box svg { width: 24px; height: 24px; }
 .status-badge { background: rgba(16, 185, 129, 0.15); color: var(--green); padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
 .status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
 
-/* كارت العداد */
+/* زر النسخ */
+.copy-btn { background: transparent; border: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; padding: 4px; border-radius: 6px; transition: 0.2s; }
+.copy-btn:active { transform: scale(0.9); }
+.copy-btn.success { color: var(--green); }
+.copy-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+/* كارت العداد (زي ما هو) */
 .timer-card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 30px 20px; position: relative; overflow: hidden; margin-bottom: 20px; }
 .timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
 .timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; }
@@ -99,21 +101,9 @@ body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; 
 .timer-badge { background: rgba(59, 130, 246, 0.15); color: var(--blue2); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
 .timer-badge::before { content: ''; width: 6px; height: 6px; background: var(--blue2); border-radius: 50%; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: .3; } 100% { opacity: 1; } }
-
 .timer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; position: relative; z-index: 2; }
 .time-box { background: var(--card-inner); border: 1px solid rgba(255,255,255,.05); border-radius: 16px; padding: 15px 5px; text-align: center; }
-.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; display: inline-block; }
-
-/* تحسين السلسة: تأثير النبض الناعم على الثواني */
-.time-val.tick {
-  animation: smoothTick 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-@keyframes smoothTick {
-  0% { transform: scale(1); opacity: 1; color: var(--blue2); }
-  40% { transform: scale(1.15); opacity: 1; color: #ffffff; text-shadow: 0 0 12px var(--blue2); }
-  100% { transform: scale(1); opacity: 1; color: var(--blue2); }
-}
-
+.time-val { font-size: 32px; font-weight: 900; color: var(--blue2); line-height: 1; margin-bottom: 8px; }
 .time-label { color: var(--muted); font-size: 13px; font-weight: 700; }
 
 /* زرار تسجيل الخروج */
@@ -167,7 +157,6 @@ if (!TOKEN) { window.location.replace('login.html'); return; }
 
 const $ = id => document.getElementById(id);
 let countdownInterval = null;
-let lastSec = null;
 
 function formatArabicDate(ts) {
   if (!ts) return 'غير محدد';
@@ -231,7 +220,12 @@ async function loadProfile() {
         <div class="detail-card">
           <div class="detail-info">
             <span class="detail-label">كود الطالب</span>
-            <span class="detail-value" style="color:var(--blue2)">${me.code || '—'}</span>
+            <span class="detail-value" style="color:var(--blue2)">
+              ${me.code || '—'}
+              <button class="copy-btn" id="copy-code-btn" title="نسخ الكود">
+                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </span>
           </div>
           <div class="icon-box" style="color:var(--blue2)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
@@ -283,6 +277,21 @@ async function loadProfile() {
 
     $('main').innerHTML = html;
     
+    // زر النسخ
+    const copyBtn = document.getElementById('copy-code-btn');
+    if (copyBtn && me.code) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(me.code);
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+        copyBtn.classList.add('success');
+        setTimeout(() => {
+          copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          copyBtn.classList.remove('success');
+        }, 2000);
+      });
+    }
+
+    // زر الخروج
     document.getElementById('logout-btn').addEventListener('click', function() {
       if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
         localStorage.removeItem(TOKEN_KEY);
@@ -290,6 +299,7 @@ async function loadProfile() {
       }
     });
     
+    // العداد (زي ما هو)
     if (expiresAt) {
       if (countdownInterval) clearInterval(countdownInterval);
       updateCountdown(expiresAt);
@@ -327,19 +337,7 @@ function updateCountdown(expiresAt) {
     elDays.innerText = days;
     document.getElementById('t-hours').innerText = hours;
     document.getElementById('t-mins').innerText = mins;
-    
-    const elSecs = document.getElementById('t-secs');
-    if (elSecs) {
-      elSecs.innerText = secs;
-      
-      // إضافة تأثير النبض عند تغير الثواني
-      if (lastSec !== secs) {
-        elSecs.classList.remove('tick');
-        void elSecs.offsetWidth; // إجبار المتصفح على إعادة تشغيل الأنيميشن
-        elSecs.classList.add('tick');
-        lastSec = secs;
-      }
-    }
+    document.getElementById('t-secs').innerText = secs;
   }
 }
 
