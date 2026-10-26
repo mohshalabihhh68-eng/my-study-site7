@@ -1382,13 +1382,39 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   for (const raw of lines) { const t = raw.trim(); if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0; }
 
   /*
-   * DIRECT_SEGMENTS strategy:
-   * Cloudflare blocks Railway/datacenter IPs on floravon/c-cdn.
-   * So we keep absolute CDN segment URLs (browser fetches with user IP),
-   * and only proxy the AES key through our server.
+   * Cloudflare blocks floravon/c-cdn from Railway IPs, BUT
+   * api.stream-weave.com segment paths work fine.
+   * Convert CDN URLs → https://api.stream-weave.com/api/v1/videos/{id}/stream/{quality}/{file}
+   * and proxy+decrypt on our server (browser only sees /api/hls/.../seg/N).
    */
-  const DIRECT = process.env.HLS_DIRECT_SEGMENTS !== "0"; // default ON
-  src.directSegments = DIRECT;
+  src.directSegments = false;
+
+  function toWeaveSegUrl(absUrl, fallbackVideoId) {
+    try {
+      const u = new URL(absUrl);
+      // already stream-weave
+      if (/stream-weave\.com$/i.test(u.hostname) || u.hostname.endsWith(".stream-weave.com")) {
+        return u.href.split("?")[0];
+      }
+      const parts = u.pathname.split("/").filter(Boolean);
+      const vi = parts.indexOf("videos");
+      if (vi >= 0 && parts.length >= vi + 3) {
+        const vid = parts[vi + 1];
+        const quality = parts[vi + 2];
+        const fname = (parts[vi + 3] || "").split("?")[0];
+        if (vid && quality && fname) {
+          return `https://api.stream-weave.com/api/v1/videos/${vid}/stream/${quality}/${fname}`;
+        }
+      }
+      // relative under stream path
+      if (fallbackVideoId && /\.(ts|m4s|woff2|cmfv|cmfa)(\?|$)/i.test(u.pathname)) {
+        const fname = parts[parts.length - 1].split("?")[0];
+        const quality = parts[parts.length - 2] || "600";
+        return `https://api.stream-weave.com/api/v1/videos/${fallbackVideoId}/stream/${quality}/${fname}`;
+      }
+    } catch {}
+    return absUrl;
+  }
 
   let segIndex = 0;
   for (const raw of lines) {
@@ -1401,8 +1427,15 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         keyIvAttr = `IV=${ivHex.startsWith("0x") || ivHex.startsWith("0X") ? ivHex : ("0x" + ivHex)}`;
       }
       if (uri && !keyFetched) {
-        const keyUrl = new URL(uri, baseUrl).href;
+        let keyUrl = new URL(uri, baseUrl).href;
+        // Prefer stream-weave key path
+        try {
+          if (!/stream-weave\.com/i.test(keyUrl) && src.videoId) {
+            keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/key`;
+          }
+        } catch {}
         try { src.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
+        src.allowedHosts.add("api.stream-weave.com");
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
@@ -1410,28 +1443,21 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         else src.plainKey = await unwrapKey(wrapped, src.videoId);
         src.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} direct=${DIRECT}`);
+        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} via stream-weave API`);
       }
-      // Point KEY URI at our server so browser can decrypt CDN segments
-      if (DIRECT) {
-        out.push(`#EXT-X-KEY:METHOD=AES-128,URI="/api/hls/${SID_TOKEN}/key",${keyIvAttr || "IV=0x00000000000000000000000000000000"}`.replace(/,$/, ""));
-      }
-      // if !DIRECT we strip the key line (server decrypts) — old behavior
+      // Server decrypts — strip key line from playlist
       continue;
     }
     if (line && !line.startsWith("#")) {
-      const segmentUrl = new URL(line, baseUrl).href;
+      const rawSeg = new URL(line, baseUrl).href;
+      const segmentUrl = toWeaveSegUrl(rawSeg, src.videoId);
       try { src.allowedHosts.add(new URL(segmentUrl).hostname); } catch {}
+      src.allowedHosts.add("api.stream-weave.com");
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
       const ivHex = iv.toString("hex");
       segs.push({ u: segmentUrl, iv: ivHex, s: seq, i: segIndex });
-      if (DIRECT) {
-        // Browser hits CDN directly — avoids Cloudflare block on Railway IP
-        out.push(segmentUrl);
-      } else {
-        out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
-      }
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
       segIndex++;
       continue;
     }
@@ -1604,20 +1630,67 @@ function revokeOtherSessions(ownerCode, videoId, keepId) {
 async function persistStreamSession(session) {
   try {
     if (!getFirebaseUrl() || !session || !session.id) return;
+    const src = session.src;
     const slim = {
-      id: session.id, videoId: session.videoId, ownerCode: session.ownerCode, ownerToken: session.ownerToken, ownerDeviceId: session.ownerDeviceId || null,
-      streamKey: session.streamKey, createdAt: session.createdAt, lastUsed: session.lastUsed,
-      src: session.src ? { mode: session.src.mode, videoId: session.src.videoId, plainKey: session.src.plainKey ? (Buffer.isBuffer(session.src.plainKey) ? session.src.plainKey.toString("base64") : session.src.plainKey) : null, defaultIv: session.src.defaultIv ? (Buffer.isBuffer(session.src.defaultIv) ? session.src.defaultIv.toString("hex") : session.src.defaultIv) : null, mediaSeq: session.src.mediaSeq || 0, targetDuration: session.src.targetDuration || 6, segs: session.src.segs || [], mp4Url: session.src.mp4Url || null } : null
+      id: session.id,
+      videoId: session.videoId,
+      ownerCode: session.ownerCode,
+      ownerToken: session.ownerToken,
+      ownerDeviceId: session.ownerDeviceId || null,
+      streamKey: session.streamKey,
+      createdAt: session.createdAt,
+      lastUsed: session.lastUsed,
+      src: src
+        ? {
+            mode: src.mode,
+            videoId: src.videoId,
+            reqVideoId: src.reqVideoId || null,
+            plainKey: src.plainKey
+              ? Buffer.isBuffer(src.plainKey)
+                ? src.plainKey.toString("base64")
+                : src.plainKey
+              : null,
+            defaultIv: src.defaultIv
+              ? Buffer.isBuffer(src.defaultIv)
+                ? src.defaultIv.toString("hex")
+                : src.defaultIv
+              : null,
+            mediaSeq: src.mediaSeq || 0,
+            targetDuration: src.targetDuration || 6,
+            segs: src.segs || [],
+            mp4Url: src.mp4Url || null,
+            // CRITICAL: without these, master falls back to /api/hls/seg (CF-blocked)
+            directSegments: src.directSegments !== false,
+            playlist: typeof src.playlist === "string" ? src.playlist : null,
+            streamUrl: src.streamUrl || null,
+            token: src.token || null
+          }
+        : null
     };
     await fbSet(`stream_sessions/${session.id}`, slim);
-  } catch (e) { console.warn("[stream] persist:", e.message); }
+  } catch (e) {
+    console.warn("[stream] persist:", e.message);
+  }
 }
 
 function reviveStreamSrc(src) {
   if (!src) return src;
   const out = { ...src };
-  if (out.plainKey && typeof out.plainKey === "string") { try { out.plainKey = Buffer.from(out.plainKey, "base64"); } catch {} }
-  if (out.defaultIv && typeof out.defaultIv === "string") { try { out.defaultIv = Buffer.from(out.defaultIv, "hex"); } catch {} }
+  if (out.plainKey && typeof out.plainKey === "string") {
+    try {
+      out.plainKey = Buffer.from(out.plainKey, "base64");
+    } catch {}
+  }
+  if (out.defaultIv && typeof out.defaultIv === "string") {
+    try {
+      out.defaultIv = Buffer.from(out.defaultIv, "hex");
+    } catch {}
+  }
+  // Default to direct segments when segs look like absolute CDN URLs
+  if (out.directSegments == null) {
+    const sample = Array.isArray(out.segs) && out.segs[0] && out.segs[0].u;
+    out.directSegments = typeof sample === "string" && /^https?:\/\//i.test(sample);
+  }
   return out;
 }
 
