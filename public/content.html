@@ -201,8 +201,8 @@ a { text-decoration: none; color: inherit; }
         files.forEach(f => {
           const fileName = f.title || f.name || f.file_name || f.filename || 'ملف مرفق';
           const rawUrl = f.file_url || f.url || f.link || f.path || f.download_url || '#';
-          // استخدام البروكسي في السيرفر لمنع ظهور رابط كورساتك
-          const fileUrl = rawUrl !== '#' ? ('/api/file-proxy?url=' + encodeURIComponent(rawUrl)) : '#';
+          // مسار ينتهي بـ .pdf عشان الموبايل يفتح المعاينة بدل التحميل باسم file-proxy
+          const fileUrl = rawUrl !== '#' ? ('/api/file-proxy/document.pdf?url=' + encodeURIComponent(rawUrl)) : '#';
           html += `<div class="file-item"><div class="file-info"><div class="file-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></div><div class="file-text">${esc(fileName)}</div></div><button class="file-btn" onclick="window.open('${esc(fileUrl)}', '_blank')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> فتح الملف</button></div>`;
         });
         html += `</div></div>`;
