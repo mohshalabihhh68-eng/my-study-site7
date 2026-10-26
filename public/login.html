@@ -1,333 +1,80 @@
-٨<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar-EG" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#05080e">
 <title>تسجيل الدخول | ثانوية club</title>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem('thanawya_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute('content', t === 'dark' ? '#05080e' : '#f4f7fc');
+  } catch(e){}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #05080e;
-    --panel: #0d1424;
-    --text: #ffffff;
-    --muted: #94a3b8;
-    --blue: #3b82f6;
-    --blue2: #8ab4ff;
-    --line: rgba(148, 163, 184, .12);
-    --red: #ef4444;
-    --amber: #f59e0b;
-  }
-  * { box-sizing: border-box; font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
-  
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: hidden;
-    position: relative;
-  }
-
-  body::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: 
-      radial-gradient(circle at 50% 0%, rgba(59,130,246,0.1) 0%, transparent 50%),
-      radial-gradient(circle at 50% 100%, rgba(96,165,250,0.05) 0%, transparent 50%),
-      #05080e;
-    z-index: -2;
-  }
-
-  .login-container {
-    background: rgba(13, 20, 36, 0.65);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 28px;
-    padding: 40px 30px;
-    width: 100%;
-    max-width: 380px;
-    box-shadow: 
-      0 30px 60px rgba(0,0,0,0.6),
-      inset 0 1px 0 rgba(255,255,255,0.08);
-    animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-    position: relative;
-    z-index: 1;
-    margin: 20px;
-  }
-  @keyframes rise {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 24px;
-  }
-  
-  .logo-wrap {
-    position: relative;
-    width: 80px;
-    height: 80px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-
-  .logo-glow {
-    position: absolute;
-    inset: -20px;
-    background: radial-gradient(circle, rgba(96,165,250,0.6) 0%, rgba(59,130,246,0.2) 40%, transparent 70%);
-    filter: blur(15px);
-    border-radius: 50%;
-    z-index: -1;
-    animation: pulseGlow 3s ease-in-out infinite alternate;
-  }
-  @keyframes pulseGlow {
-    0% { transform: scale(0.9); opacity: 0.6; }
-    100% { transform: scale(1.1); opacity: 1; }
-  }
-
-  .logo {
-    width: 76px;
-    height: 76px;
-    border-radius: 22px;
-    background: linear-gradient(135deg, #2563eb, #1e40af);
-    display: grid;
-    place-items: center;
-    box-shadow: 
-      0 10px 25px rgba(37, 99, 235, 0.4),
-      inset 0 2px 2px rgba(255,255,255,0.2);
-    position: relative;
-    z-index: 1;
-  }
-  .logo svg { width: 38px; height: 38px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  
-  .brand-text { 
-    font-size: 26px; 
-    font-weight: 900; 
-    letter-spacing: -0.5px;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .brand-text span { 
-    background: linear-gradient(90deg, #8ab4ff, #a78bfa);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .subtitle {
-    text-align: center;
-    color: var(--muted);
-    font-size: 14px;
-    margin-bottom: 24px;
-    font-weight: 600;
-  }
-
-  .warn-box {
-    background: rgba(245, 158, 11, 0.08);
-    border: 1px solid rgba(245, 158, 11, 0.2);
-    color: #fcd34d;
-    padding: 12px 14px;
-    border-radius: 14px;
-    font-size: 12.5px;
-    margin-bottom: 16px;
-    display: none;
-    align-items: flex-start;
-    gap: 10px;
-    line-height: 1.6;
-  }
-  .warn-box.show { display: flex; animation: slideDown 0.3s ease; }
-  .warn-box svg { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; stroke: currentColor; fill: none; stroke-width: 2; }
-  .warn-box strong { display: block; margin-bottom: 2px; font-weight: 800; color: #fde68a; }
-  @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-
-  .error-box {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: #fca5a5;
-    padding: 12px;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 700;
-    text-align: center;
-    margin-bottom: 16px;
-    display: none;
-  }
-  .error-box.show { display: block; animation: shake 0.4s ease; }
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-4px); }
-    75% { transform: translateX(4px); }
-  }
-
-  /* مربعات الكود (OTP) - Smooth Interaction */
-  .otp-container {
-    direction: ltr;
-    display: flex;
-    justify-content: center;
-    gap: 5px;
-    margin-bottom: 20px;
-    width: 100%;
-  }
-  
-  .otp-input {
-    width: 34px;
-    height: 46px;
-    border-radius: 10px;
-    border: 1.5px solid rgba(255,255,255,0.1);
-    background: rgba(0,0,0,0.3);
-    color: #fff;
-    font-size: 18px;
-    font-weight: 800;
-    text-align: center;
-    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-    outline: none;
-    padding: 0;
-    caret-color: transparent; /* يخفي مؤشر الكتابة لمظهر أنظف */
-  }
-  
-  /* حالة التركيز */
-  .otp-input:focus {
-    border-color: var(--blue);
-    background: rgba(59, 130, 246, 0.1);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-    transform: translateY(-3px) scale(1.05);
-  }
-  
-  /* حالة وجود رقم */
-  .otp-input.filled {
-    border-color: rgba(138, 180, 255, 0.5);
-    background: rgba(138, 180, 255, 0.1);
-    color: var(--blue2);
-    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  @keyframes popIn {
-    0% { transform: scale(0.8); }
-    100% { transform: scale(1); }
-  }
-
-  .attempts {
-    text-align: center;
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 16px;
-    display: none;
-  }
-  .attempts.show { display: block; }
-  .attempts b { color: var(--amber); }
-
-  .btn-login {
-    width: 100%;
-    padding: 16px;
-    border-radius: 14px;
-    border: none;
-    background: linear-gradient(135deg, var(--blue), #2563eb);
-    color: #fff;
-    font-weight: 800;
-    font-size: 16px;
-    cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
-    position: relative;
-    overflow: hidden;
-  }
-  /* تأثير اللمس (Ripple) */
-  .btn-login::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(255,255,255,0.2);
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-  .btn-login:active:not(:disabled)::after { opacity: 1; }
-
-  .btn-login:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 25px rgba(37, 99, 235, 0.5);
-  }
-  .btn-login:active:not(:disabled) { transform: translateY(0) scale(0.98); }
-  .btn-login:disabled { opacity: 0.7; cursor: not-allowed; }
-  .btn-login svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-
-  .spinner {
-    width: 20px;
-    height: 20px;
-    border: 2.5px solid rgba(255,255,255,0.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .footer-text {
-    text-align: center;
-    font-size: 13px;
-    color: var(--muted);
-    border-top: 1px solid rgba(255,255,255,0.05);
-    padding-top: 18px;
-    margin-top: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-  }
-  .footer-text a {
-    color: var(--blue2);
-    text-decoration: none;
-    font-weight: 800;
-    transition: color 0.2s;
-  }
-  .footer-text a:hover { color: #fff; }
-
-  .back-home {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-    text-decoration: none;
-    transition: all 0.2s;
-    z-index: 10;
-  }
-  .back-home:hover { background: rgba(255,255,255,0.08); color: #fff; }
-  .back-home svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-
-  @media (max-width: 360px) {
-    .login-container { padding: 24px 16px; }
-    .otp-container { gap: 3px; }
-    .otp-input { width: 30px; height: 42px; font-size: 16px; }
-  }
+:root, [data-theme="dark"]{--bg:#05080e;--panel:#0d1424;--text:#ffffff;--muted:#94a3b8;--blue:#3b82f6;--blue2:#8ab4ff;--line:rgba(148,163,184,.12);--red:#ef4444;--amber:#f59e0b;--panel-glass:rgba(13,20,36,.65);--otp-bg:rgba(0,0,0,.3);--otp-border:rgba(255,255,255,.1)}
+[data-theme="light"]{--bg:#f4f7fc;--panel:#ffffff;--text:#0f172a;--muted:#5b6b85;--blue:#2563eb;--blue2:#3b82f6;--line:rgba(37,99,235,.12);--red:#dc2626;--amber:#d97706;--panel-glass:rgba(255,255,255,.85);--otp-bg:#f1f5f9;--otp-border:rgba(37,99,235,.15)}
+*{box-sizing:border-box;font-family:'Cairo',sans-serif;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;align-items:center;min-height:100vh;min-height:100dvh;overflow:hidden;position:relative;transition:background-color .35s,color .35s}
+body::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(59,130,246,.1) 0%,transparent 50%),radial-gradient(circle at 50% 100%,rgba(96,165,250,.05) 0%,transparent 50%);z-index:-2}
+.login-container{background:var(--panel-glass);backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:28px;padding:40px 30px;width:100%;max-width:380px;box-shadow:0 30px 60px rgba(0,0,0,.4);animation:rise .6s cubic-bezier(.2,.8,.2,1) both;position:relative;z-index:1;margin:20px}
+@keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.brand{display:flex;flex-direction:column;align-items:center;margin-bottom:24px}
+.logo-wrap{position:relative;width:80px;height:80px;display:flex;justify-content:center;align-items:center;margin-bottom:16px}
+.logo-glow{position:absolute;inset:-20px;background:radial-gradient(circle,rgba(96,165,250,.6) 0%,rgba(59,130,246,.2) 40%,transparent 70%);filter:blur(15px);border-radius:50%;z-index:-1;animation:pulseGlow 3s ease-in-out infinite alternate}
+@keyframes pulseGlow{0%{transform:scale(.9);opacity:.6}100%{transform:scale(1.1);opacity:1}}
+.logo{width:76px;height:76px;border-radius:22px;background:linear-gradient(135deg,#2563eb,#1e40af);display:grid;place-items:center;box-shadow:0 10px 25px rgba(37,99,235,.4),inset 0 2px 2px rgba(255,255,255,.2);position:relative;z-index:1}
+.logo svg{width:38px;height:38px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand-text{font-size:26px;font-weight:900;display:flex;gap:8px;align-items:center}
+.brand-text span{background:linear-gradient(90deg,#8ab4ff,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{text-align:center;color:var(--muted);font-size:14px;margin-bottom:24px;font-weight:600}
+.warn-box{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#fcd34d;padding:12px 14px;border-radius:14px;font-size:12.5px;margin-bottom:16px;display:none;align-items:flex-start;gap:10px;line-height:1.6}
+.warn-box.show{display:flex}
+.warn-box svg{width:20px;height:20px;flex-shrink:0;margin-top:2px;stroke:currentColor;fill:none;stroke-width:2}
+.warn-box strong{display:block;margin-bottom:2px;font-weight:800;color:#fde68a}
+.error-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#fca5a5;padding:12px;border-radius:12px;font-size:13px;font-weight:700;text-align:center;margin-bottom:16px;display:none}
+.error-box.show{display:block}
+.otp-container{direction:ltr;display:flex;justify-content:center;gap:5px;margin-bottom:20px;width:100%}
+.otp-input{width:34px;height:46px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:18px;font-weight:800;text-align:center;transition:all .25s;outline:none;padding:0;caret-color:transparent}
+.otp-input:focus{border-color:var(--blue);background:rgba(59,130,246,.1);box-shadow:0 0 0 3px rgba(59,130,246,.15);transform:translateY(-3px) scale(1.05)}
+.otp-input.filled{border-color:rgba(138,180,255,.5);background:rgba(138,180,255,.1);color:var(--blue2)}
+.attempts{text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px;display:none}
+.attempts.show{display:block}
+.attempts b{color:var(--amber)}
+.btn-login{width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,var(--blue),#2563eb);color:#fff;font-weight:800;font-size:16px;cursor:pointer;transition:all .25s;display:flex;justify-content:center;align-items:center;gap:8px;box-shadow:0 8px 20px rgba(37,99,235,.3)}
+.btn-login:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 25px rgba(37,99,235,.5)}
+.btn-login:disabled{opacity:.7;cursor:not-allowed}
+.btn-login svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.spinner{width:20px;height:20px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.footer-text{text-align:center;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;margin-top:20px;display:flex;justify-content:center;align-items:center;gap:6px}
+.footer-text a{color:var(--blue2);text-decoration:none;font-weight:800}
+.back-home{position:absolute;top:20px;right:20px;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:var(--panel-glass);border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:700;text-decoration:none;transition:all .2s;z-index:10}
+.back-home:hover{color:var(--text)}
+.back-home svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.theme-toggle-floating{position:fixed;top:20px;left:20px;z-index:100;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel-glass);backdrop-filter:blur(20px);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:all .25s}
+.theme-toggle-floating:hover{transform:rotate(15deg) scale(1.05);border-color:var(--blue2)}
+.theme-toggle-floating svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.theme-toggle-floating .icon-sun{display:none}
+.theme-toggle-floating .icon-moon{display:block}
+[data-theme="dark"] .theme-toggle-floating .icon-sun{display:block}
+[data-theme="dark"] .theme-toggle-floating .icon-moon{display:none}
+@media (max-width:360px){.login-container{padding:24px 16px}.otp-container{gap:3px}.otp-input{width:30px;height:42px;font-size:16px}}
 </style>
 </head>
 <body>
+
+<button type="button" class="theme-toggle-floating" data-theme-toggle aria-label="تبديل الثيم">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+</button>
 
 <a href="index.html" class="back-home">
   <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 0 14h-2"/></svg>
@@ -338,29 +85,16 @@
   <div class="brand">
     <div class="logo-wrap">
       <div class="logo-glow"></div>
-      <div class="logo">
-        <svg viewBox="0 0 24 24">
-          <path d="m2 8 10-5 10 5-10 5L2 8Z"/>
-          <path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/>
-        </svg>
-      </div>
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>
     </div>
     <div class="brand-text">ثانوية <span>club</span></div>
   </div>
-
   <div class="subtitle">دخل كودك هنا</div>
-
   <div class="warn-box" id="warn-box">
     <svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <div>
-      <strong>تنبيه</strong>
-    للأسف الكود دا متسجل قبل كدا ، لو غيرت جهازك وعايز تدخل الكود كلم الأدمن .
-    </div>
+    <div><strong>تنبيه</strong>للأسف الكود دا متسجل قبل كدا، لو غيرت جهازك وعايز تدخل الكود كلم الأدمن.</div>
   </div>
-
   <div class="error-box" id="error-msg"></div>
-
-  <!-- مربعات الكود -->
   <div class="otp-container">
     <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
     <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
@@ -372,31 +106,16 @@
     <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
     <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
   </div>
-
-  <div class="attempts" id="attempts">
-     فاضلك <b id="attempts-num">5</b> محاولات قبل القفل المؤقت
-  </div>
-
-  <button class="btn-login" id="btn-login">
-    <span id="btn-text">تسجيل الدخول</span>
-    <svg id="btn-arrow" viewBox="0 0 24 24">
-      <path d="M5 12h14M13 6l6 6-6 6"/>
-    </svg>
-  </button>
-
-  <div class="footer-text">
-    <span>عندك مشكلة؟</span>
-    <a href="https://t.me/S7alaby7" target="_blank" rel="noopener">تواصل مع الأدمن</a>
-  </div>
+  <div class="attempts" id="attempts">فاضلك <b id="attempts-num">5</b> محاولات قبل القفل المؤقت</div>
+  <button class="btn-login" id="btn-login"><span id="btn-text">تسجيل الدخول</span><svg id="btn-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+  <div class="footer-text"><span>عندك مشكلة؟</span><a href="https://t.me/S7alaby7" target="_blank" rel="noopener">تواصل مع الأدمن</a></div>
 </div>
 
 <script>
 (function() {
   'use strict';
-
   const API = '';
   const $ = id => document.getElementById(id);
-
   const inputs = document.querySelectorAll('.otp-input');
   const btnLogin = $('btn-login');
   const btnText = $('btn-text');
@@ -405,222 +124,108 @@
   const warnBox = $('warn-box');
   const attemptsBox = $('attempts');
   const attemptsNum = $('attempts-num');
-
   const LAST_CODE_KEY = 'student_last_code';
   const LAST_DEVICE_KEY = 'student_device_id';
 
-  // دالة اهتزاز خفيفة (Haptic Feedback) للموبايل
-  function vibrate(ms = 10) {
-    if (navigator.vibrate) navigator.vibrate(ms);
-  }
-
+  function vibrate(ms = 10) { if (navigator.vibrate) navigator.vibrate(ms); }
   function getDeviceId() {
     let id = localStorage.getItem(LAST_DEVICE_KEY);
-    if (!id) {
-      id = 'web_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-      localStorage.setItem(LAST_DEVICE_KEY, id);
-    }
+    if (!id) { id = 'web_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36); localStorage.setItem(LAST_DEVICE_KEY, id); }
     return id;
   }
-
-  function getCode() {
-    let code = '';
-    inputs.forEach(inp => code += inp.value.trim());
-    return code;
-  }
-
+  function getCode() { let c = ''; inputs.forEach(i => c += i.value.trim()); return c; }
   function setInputValue(val) {
     const digits = String(val).replace(/\D/g, '').slice(0, 9).split('');
-    inputs.forEach((inp, i) => {
-      inp.value = digits[i] || '';
-      inp.classList.toggle('filled', !!inp.value);
-    });
-    if (digits.length > 0 && digits.length < 9) {
-      inputs[digits.length].focus();
-    } else if (digits.length === 9) {
-      inputs[8].blur(); // إغلاق الكيبورد بعد اكتمال الكود
-    }
+    inputs.forEach((inp, i) => { inp.value = digits[i] || ''; inp.classList.toggle('filled', !!inp.value); });
+    if (digits.length > 0 && digits.length < 9) inputs[digits.length].focus();
+    else if (digits.length === 9) inputs[8].blur();
   }
-
   function init() {
-    if (localStorage.getItem('student_token')) {
-      window.location.href = 'subjects.html';
-      return;
-    }
-
+    if (localStorage.getItem('student_token')) { window.location.href = 'subjects.html'; return; }
     const savedCode = localStorage.getItem(LAST_CODE_KEY);
-    if (savedCode && /^\d{9}$/.test(savedCode)) {
-      setInputValue(savedCode);
-    } else {
-      setTimeout(() => inputs[0].focus(), 300); // فوكس سلس بعد التحميل
-    }
+    if (savedCode && /^\d{9}$/.test(savedCode)) setInputValue(savedCode);
+    else setTimeout(() => inputs[0].focus(), 300);
   }
-
   function showError(msg, seconds) {
     errorMsg.textContent = msg;
     errorMsg.classList.add('show');
-    vibrate([50, 50, 50]); // اهتزاز تنبيهي
+    vibrate([50, 50, 50]);
     setTimeout(() => errorMsg.classList.remove('show'), (seconds || 6) * 1000);
   }
-
   function showAttempts(n) {
-    if (n > 0 && n <= 5) {
-      attemptsNum.textContent = n;
-      attemptsBox.classList.add('show');
-    } else {
-      attemptsBox.classList.remove('show');
-    }
+    if (n > 0 && n <= 5) { attemptsNum.textContent = n; attemptsBox.classList.add('show'); }
+    else attemptsBox.classList.remove('show');
   }
-
   function setLoading(on) {
     btnLogin.disabled = on;
     if (on) {
       btnText.textContent = 'جاري التحقق...';
       btnArrow.style.display = 'none';
-      if (!document.querySelector('.spinner')) {
-        const sp = document.createElement('div');
-        sp.className = 'spinner';
-        btnLogin.insertBefore(sp, btnText);
-      }
+      if (!document.querySelector('.spinner')) { const sp = document.createElement('div'); sp.className = 'spinner'; btnLogin.insertBefore(sp, btnText); }
     } else {
       btnText.textContent = 'تسجيل الدخول';
       btnArrow.style.display = '';
-      const sp = document.querySelector('.spinner');
-      if (sp) sp.remove();
+      const sp = document.querySelector('.spinner'); if (sp) sp.remove();
     }
   }
-
   inputs.forEach((inp, i) => {
-    // عند الكتابة
     inp.addEventListener('input', (e) => {
-      // التأكد من أن المدخل رقم واحد فقط
       let val = e.target.value.replace(/\D/g, '');
-      if (val.length > 1) val = val.slice(-1); // لو المستخدم كتب بسرعة
-      
+      if (val.length > 1) val = val.slice(-1);
       e.target.value = val;
       inp.classList.toggle('filled', !!val);
-
-      if (val) {
-        vibrate(10); // اهتزاز خفيف عند كتابة رقم
-        if (i < inputs.length - 1) {
-          inputs[i + 1].focus();
-        } else {
-          inp.blur(); // آخر رقم -> اقفل الكيبورد
-        }
-      }
+      if (val) { vibrate(10); if (i < inputs.length - 1) inputs[i + 1].focus(); else inp.blur(); }
       warnBox.classList.remove('show');
     });
-
-    // التعامل مع المسح (Backspace) والأسهم
     inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace') {
-        if (!e.target.value && i > 0) {
-          // لو المربع فاضي، ارجع للمربع اللي قبله وامسح محتواه
-          e.preventDefault();
-          inputs[i - 1].focus();
-          inputs[i - 1].value = '';
-          inputs[i - 1].classList.remove('filled');
-        }
-      } 
-      else if (e.key === 'ArrowLeft' && i > 0) {
-        e.preventDefault();
-        inputs[i - 1].focus();
-      } 
-      else if (e.key === 'ArrowRight' && i < inputs.length - 1) {
-        e.preventDefault();
-        inputs[i + 1].focus();
-      } 
-      else if (e.key === 'Enter') {
-        e.preventDefault();
-        inp.blur();
-        login();
-      }
+      if (e.key === 'Backspace') { if (!e.target.value && i > 0) { e.preventDefault(); inputs[i - 1].focus(); inputs[i - 1].value = ''; inputs[i - 1].classList.remove('filled'); } }
+      else if (e.key === 'ArrowLeft' && i > 0) { e.preventDefault(); inputs[i - 1].focus(); }
+      else if (e.key === 'ArrowRight' && i < inputs.length - 1) { e.preventDefault(); inputs[i + 1].focus(); }
+      else if (e.key === 'Enter') { e.preventDefault(); inp.blur(); login(); }
     });
-
-    // عند التركيز، حدد النص الموجود لتسهيل استبداله
-    inp.addEventListener('focus', (e) => {
-      e.target.select();
-    });
-
-    // التعامل مع اللصق (Paste)
+    inp.addEventListener('focus', (e) => e.target.select());
     inp.addEventListener('paste', (e) => {
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData('text');
       const digits = text.replace(/\D/g, '').slice(0, 9);
-      if (digits) {
-        setInputValue(digits);
-        vibrate(20);
-      }
+      if (digits) { setInputValue(digits); vibrate(20); }
     });
   });
-
   async function login() {
-    const code = getCode();
-    const deviceId = getDeviceId();
-    const deviceName = 'Web Browser';
-
+    const code = getCode(), deviceId = getDeviceId(), deviceName = 'Web Browser';
     if (code.length !== 9) {
       showError('لازم تدخل الـ 9 أرقام كاملة');
-      // ركز على أول مربع فاضي
       const firstEmpty = Array.from(inputs).find(inp => !inp.value);
       if (firstEmpty) firstEmpty.focus();
       return;
     }
-
-    setLoading(true);
-    vibrate(20);
-    errorMsg.classList.remove('show');
-    warnBox.classList.remove('show');
-    attemptsBox.classList.remove('show');
-
+    setLoading(true); vibrate(20);
+    errorMsg.classList.remove('show'); warnBox.classList.remove('show'); attemptsBox.classList.remove('show');
     try {
-      const response = await fetch(API + '/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, deviceId, deviceName })
-      });
-
+      const response = await fetch(API + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, deviceId, deviceName }) });
       const data = await response.json();
-
       if (data.success) {
         localStorage.setItem(LAST_CODE_KEY, code);
         localStorage.setItem('student_token', data.data.token);
         localStorage.setItem('student_name', data.data.student.name);
-        
         btnText.textContent = 'تم الدخول ✓';
         btnLogin.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-        vibrate([30, 50, 30]); // نغمة اهتزاز النجاح
-        
-        setTimeout(() => {
-          window.location.href = 'subjects.html';
-        }, 600);
+        vibrate([30, 50, 30]);
+        setTimeout(() => { window.location.href = 'subjects.html'; }, 600);
         return;
       }
-
       const msg = data.message || 'كود غير صحيح';
       const attemptsMatch = msg.match(/متبقي\s+(\d+)\s+محاولات/);
-      
       if (attemptsMatch) showAttempts(parseInt(attemptsMatch[1]));
-      
-      if (msg.includes('الحد الأقصى للأجهزة') || msg.includes('الأجهزة')) {
-        warnBox.classList.add('show');
-        errorMsg.classList.remove('show');
-        vibrate([50, 50]);
-      } else {
-        showError(msg);
-      }
-
+      if (msg.includes('الحد الأقصى للأجهزة') || msg.includes('الأجهزة')) { warnBox.classList.add('show'); errorMsg.classList.remove('show'); vibrate([50, 50]); }
+      else showError(msg);
       setLoading(false);
-    } catch (err) {
-      showError('خطأ في الاتصال، جرب تاني');
-      setLoading(false);
-    }
+    } catch (err) { showError('خطأ في الاتصال، جرب تاني'); setLoading(false); }
   }
-
   btnLogin.addEventListener('click', login);
-
   init();
 })();
 </script>
+<script src="theme.js"></script>
 </body>
-  </html>
+</html>
