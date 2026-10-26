@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6.2 — File Proxy: clean Content-Disposition (fixes mobile PDF preview)
+ * VERSION v1.6.3 — File Proxy: minimal reliable headers for mobile PDF preview
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.6.2";
+const APP_VERSION = "v1.6.3";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -2854,71 +2854,28 @@ app.get("/api/file-proxy", async (req, res) => {
       else contentType = "application/octet-stream";
     }
 
-    // ——— هيدرز نظيفة 100% لمعاينة PDF على الموبايل ———
-    // مهم: ممنوع أي حروف عربية في filename العادي (بتبوظ كروم أندرويد)
-    // بنستخدم filename* حسب RFC 5987 عشان الاسم العربي يظهر صح في التنزيل
+    // ——— هيدرز بسيطة وثابتة تخلي الموبايل يفتح المعاينة ———
+    // لو الـ Content-Disposition مش مظبوط المتصفح بيسمي الملف "file-proxy" وبيحمله
 
-    // نمسح أي هيدرز قديمة ممكن تكون اتبعتت
-    res.removeHeader("Content-Disposition");
-    res.removeHeader("Content-Type");
+    const finalType = contentType === "application/pdf" ? "application/pdf" : contentType;
 
-    res.setHeader("Content-Type", contentType);
+    res.status(200);
+    res.setHeader("Content-Type", finalType);
     res.setHeader("Content-Length", String(buffer.length));
+    res.setHeader("Content-Disposition", finalType === "application/pdf"
+      ? 'inline; filename="document.pdf"'
+      : "inline");
     res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "no-store, no-transform");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "private, max-age=1800, no-transform");
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Accept-Ranges, Content-Range");
-
-    // اسم نظيف للمعاينة + اسم عربي صحيح للتنزيل
-    let safeName = "document.pdf";
-    let utf8Name = "document.pdf";
-    try {
-      // لو الفرونت بعت اسم الملف في query
-      const qName = req.query.name || req.query.filename || req.query.title;
-      if (qName && typeof qName === "string") {
-        utf8Name = String(qName).trim().slice(0, 120) || "document.pdf";
-        // اسم ASCII احتياطي (من غير حروف عربية)
-        safeName = utf8Name
-          .replace(/[^\x20-\x7E]/g, "")   // نشيل أي non-ASCII
-          .replace(/["\\]/g, "")
-          .trim() || "document.pdf";
-        if (!safeName.toLowerCase().endsWith(".pdf") && contentType === "application/pdf") {
-          safeName += ".pdf";
-        }
-      }
-    } catch {}
-
-    if (contentType === "application/pdf") {
-      // الصيغة دي بتشتغل معاينة + تنزيل على كروم أندرويد وآيفون
-      const encoded = encodeURIComponent(utf8Name).replace(/['()]/g, escape);
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="${safeName}"; filename*=UTF-8''${encoded}`
-      );
-    } else {
-      res.setHeader("Content-Disposition", "inline");
-    }
-
-    // منع أي تحويل أو ضغط من الوسط
-    res.setHeader("X-Content-Type-Options", "nosniff");
-
-    const cr = upstream.headers.get("content-range");
-    if (cr) {
-      res.setHeader("Content-Range", cr);
-      res.status(upstream.status === 206 ? 206 : 200);
-    } else {
-      res.status(200);
-    }
-
-    // نتأكد إن مفيش compression
     res.removeHeader("Content-Encoding");
 
-    res.send(buffer);
+    return res.end(buffer);
   } catch (e) {
     console.error("[file-proxy] error:", e.message);
     if (!res.headersSent) {
-      res.status(502).send("Error fetching file: " + (e.message || "unknown"));
+      res.status(502).type("text/plain").send("Error fetching file: " + (e.message || "unknown"));
     } else {
       res.end();
     }
