@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6.1 — File Proxy: auth + fetchT/relay + smarter PDF detection
+ * VERSION v1.6.2 — File Proxy: clean Content-Disposition (fixes mobile PDF preview)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.6.1";
+const APP_VERSION = "v1.6.2";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -2830,37 +2830,78 @@ app.get("/api/file-proxy", async (req, res) => {
       return res.status(502).send("Upstream returned an error page instead of the file");
     }
 
-    // تحديد Content-Type بشكل ذكي
+    // تحديد Content-Type بشكل صارم (مهم جدًا للمعاينة)
     let contentType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-    const magic = buffer.slice(0, 8).toString("ascii");
+    const magic = buffer.slice(0, 8).toString("latin1"); // latin1 عشان الـ bytes تفضل زي ما هي
     const urlLower = String(targetUrl).toLowerCase();
+    const isReallyPdf = magic.startsWith("%PDF-");
 
-    if (magic.startsWith("%PDF-")) {
+    if (isReallyPdf) {
       contentType = "application/pdf";
-    } else if (contentType.includes("text/html") || contentType.includes("text/plain")) {
-      // upstream أحيانًا يرجع text/html أو text/plain للـ PDF
-      if (magic.startsWith("%PDF-") || urlLower.includes(".pdf")) contentType = "application/pdf";
-    } else if (!contentType || contentType === "application/octet-stream") {
-      if (urlLower.includes(".pdf") || magic.startsWith("%PDF-")) contentType = "application/pdf";
-      else if (urlLower.match(/\.(jpe?g)(\?|$)/)) contentType = "image/jpeg";
-      else if (urlLower.match(/\.png(\?|$)/)) contentType = "image/png";
+    } else if (contentType.includes("pdf")) {
+      // upstream قال PDF بس الملف مش PDF حقيقي → نرفضه أحسن من معاينة فاسدة
+      console.error("[file-proxy] claimed PDF but magic mismatch:", magic.slice(0, 8), String(targetUrl).slice(0, 80));
+      return res.status(502).send("File is not a valid PDF");
+    } else if (!contentType || contentType === "application/octet-stream" || contentType.includes("text/html") || contentType.includes("text/plain")) {
+      if (urlLower.includes(".pdf")) {
+        // الرابط بيقول PDF بس المحتوى مش PDF
+        console.error("[file-proxy] URL says PDF but content is not:", magic.slice(0, 20));
+        return res.status(502).send("File content is not a valid PDF");
+      }
+      if (urlLower.match(/\.(jpe?g)(\?|$)/) || magic.startsWith("\xFF\xD8\xFF")) contentType = "image/jpeg";
+      else if (urlLower.match(/\.png(\?|$)/) || magic.startsWith("\x89PNG")) contentType = "image/png";
       else if (urlLower.match(/\.webp(\?|$)/)) contentType = "image/webp";
-      else if (urlLower.match(/\.(mp4|webm)(\?|$)/)) contentType = urlLower.includes("webm") ? "video/webm" : "video/mp4";
       else contentType = "application/octet-stream";
     }
 
-    // هيدرز ضرورية لمعاينة PDF سليمة في المتصفح والموبايل
+    // ——— هيدرز نظيفة 100% لمعاينة PDF على الموبايل ———
+    // مهم: ممنوع أي حروف عربية في filename العادي (بتبوظ كروم أندرويد)
+    // بنستخدم filename* حسب RFC 5987 عشان الاسم العربي يظهر صح في التنزيل
+
+    // نمسح أي هيدرز قديمة ممكن تكون اتبعتت
+    res.removeHeader("Content-Disposition");
+    res.removeHeader("Content-Type");
+
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Length", String(buffer.length));
-    res.setHeader(
-      "Content-Disposition",
-      contentType === "application/pdf" ? 'inline; filename="document.pdf"' : "inline"
-    );
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, max-age=1800, no-transform");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Type, Content-Disposition, Accept-Ranges, Content-Range");
-    res.setHeader("Cache-Control", "private, max-age=1800");
+
+    // اسم نظيف للمعاينة + اسم عربي صحيح للتنزيل
+    let safeName = "document.pdf";
+    let utf8Name = "document.pdf";
+    try {
+      // لو الفرونت بعت اسم الملف في query
+      const qName = req.query.name || req.query.filename || req.query.title;
+      if (qName && typeof qName === "string") {
+        utf8Name = String(qName).trim().slice(0, 120) || "document.pdf";
+        // اسم ASCII احتياطي (من غير حروف عربية)
+        safeName = utf8Name
+          .replace(/[^\x20-\x7E]/g, "")   // نشيل أي non-ASCII
+          .replace(/["\\]/g, "")
+          .trim() || "document.pdf";
+        if (!safeName.toLowerCase().endsWith(".pdf") && contentType === "application/pdf") {
+          safeName += ".pdf";
+        }
+      }
+    } catch {}
+
+    if (contentType === "application/pdf") {
+      // الصيغة دي بتشتغل معاينة + تنزيل على كروم أندرويد وآيفون
+      const encoded = encodeURIComponent(utf8Name).replace(/['()]/g, escape);
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${safeName}"; filename*=UTF-8''${encoded}`
+      );
+    } else {
+      res.setHeader("Content-Disposition", "inline");
+    }
+
+    // منع أي تحويل أو ضغط من الوسط
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Accept-Ranges", "bytes");
 
     const cr = upstream.headers.get("content-range");
     if (cr) {
@@ -2869,6 +2910,9 @@ app.get("/api/file-proxy", async (req, res) => {
     } else {
       res.status(200);
     }
+
+    // نتأكد إن مفيش compression
+    res.removeHeader("Content-Encoding");
 
     res.send(buffer);
   } catch (e) {
