@@ -3,32 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b14">
+<meta name="theme-color" content="#f8fafc">
 <title>ملفي الشخصي | ثانوية club</title>
 <script>
 (function(){
   try {
-    var t = localStorage.getItem('thanawya_theme') || 'dark';
+    var t = localStorage.getItem('thanawya_theme') || 'light';
     document.documentElement.setAttribute('data-theme', t);
     var m = document.querySelector('meta[name="theme-color"]');
-    if(m) m.setAttribute('content', t === 'dark' ? '#070b14' : '#f4f7fc');
+    if(m) m.setAttribute('content', t === 'dark' ? '#070b14' : '#f8fafc');
   } catch(e){}
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root, [data-theme="dark"]{--bg:#070b14;--bg-alt:#0b111d;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(7,11,20,.88);--back-btn-bg:#111a2b;--back-btn-bg-hover:#1a253a}
-[data-theme="light"]{--bg:#f4f7fc;--bg-alt:#eef3fb;--card:#ffffff;--card-hover:#f5f8ff;--card-inner:#f1f5f9;--ink:#0f172a;--muted:#5b6b85;--line:rgba(37,99,235,.12);--line-soft:rgba(37,99,235,.08);--blue:#2563eb;--blue2:#3b82f6;--blue3:#1d4ed8;--green:#059669;--red:#dc2626;--purple:#7c3aed;--nav-bg:rgba(255,255,255,.88);--back-btn-bg:#ffffff;--back-btn-bg-hover:#f5f8ff}
+:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(7,11,20,.88);--back-btn-bg:#111a2b}
+[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(255,255,255,.88);--back-btn-bg:#ffffff}
 *{box-sizing:border-box;font-family:'Cairo',sans-serif;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--ink);min-height:100vh;padding-bottom:40px;transition:background-color .35s,color .35s}
 .top{position:sticky;top:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer}
-.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#5ba0ff,#2454d8);box-shadow:0 8px 26px #2563eb55;color:white}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
+.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
 .brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .top-right{display:flex;align-items:center;gap:8px;margin-right:auto}
 .theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
-.theme-toggle:hover{background:var(--card-hover);border-color:var(--blue2);transform:rotate(15deg)}
+.theme-toggle:hover{background:var(--card-hover);border-color:var(--blue);transform:rotate(15deg)}
 .theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 .theme-toggle .icon-sun{display:none}
 .theme-toggle .icon-moon{display:block}
@@ -37,39 +37,39 @@ body{margin:0;background:var(--bg);color:var(--ink);min-height:100vh;padding-bot
 .btn-back{background:var(--card);border:1px solid var(--line);color:var(--ink);padding:8px 16px;border-radius:10px;font-weight:700;cursor:pointer;text-decoration:none;font-size:13px;transition:all .2s}
 .btn-back:hover{background:var(--card-hover)}
 .wrap{max-width:800px;margin:0 auto;padding:20px 16px}
-.hero-card{background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(139,92,246,.08)),var(--card);border:1px solid rgba(59,130,246,.2);border-radius:24px;padding:30px;position:relative;overflow:hidden;margin-bottom:20px;display:flex;flex-direction:column;gap:15px;box-shadow:0 10px 40px rgba(0,0,0,.2);transition:transform .3s,box-shadow .3s}
-.hero-card:hover{transform:translateY(-2px);box-shadow:0 15px 50px rgba(59,130,246,.1)}
+.hero-card{background:linear-gradient(135deg,rgba(108,99,255,.10),rgba(0,212,255,.05)),var(--card);border:1px solid rgba(108,99,255,.15);border-radius:24px;padding:30px;position:relative;overflow:hidden;margin-bottom:20px;display:flex;flex-direction:column;gap:15px;box-shadow:0 10px 30px rgba(108,99,255,.08);transition:transform .3s,box-shadow .3s}
+.hero-card:hover{transform:translateY(-2px);box-shadow:0 15px 40px rgba(108,99,255,.15)}
 .hero-top{display:flex;justify-content:space-between;align-items:flex-start}
 .hero-text{display:flex;flex-direction:column;gap:8px;text-align:right}
-.badge-student{background:rgba(59,130,246,.15);color:var(--blue2);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:5px;width:fit-content;margin-right:auto}
-.hero-name{font-size:32px;font-weight:900;margin:0}
+.badge-student{background:rgba(108,99,255,.10);color:var(--blue);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:5px;width:fit-content;margin-right:auto;border:1px solid rgba(108,99,255,.2)}
+.hero-name{font-size:32px;font-weight:900;margin:0;color:var(--ink)}
 .hero-desc{color:var(--muted);font-size:14px;font-weight:600;margin:0}
-.avatar{width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,var(--blue),var(--blue3));display:grid;place-items:center;font-size:32px;font-weight:900;color:#fff;box-shadow:0 0 20px rgba(59,130,246,.4),inset 0 2px 0 rgba(255,255,255,.2);flex-shrink:0;transition:transform .3s}
+.avatar{width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,var(--blue),var(--blue2));display:grid;place-items:center;font-size:32px;font-weight:900;color:#fff;box-shadow:0 0 20px rgba(108,99,255,.35),inset 0 2px 0 rgba(255,255,255,.2);flex-shrink:0;transition:transform .3s}
 .avatar:hover{transform:scale(1.05) rotate(5deg)}
 .grid-details{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px}
 @media (max-width:600px){.grid-details{grid-template-columns:1fr}}
-.detail-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;display:flex;align-items:center;justify-content:space-between;transition:all .3s}
-.detail-card:hover{border-color:rgba(59,130,246,.4);background:var(--card-hover);transform:translateY(-2px)}
+.detail-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;display:flex;align-items:center;justify-content:space-between;transition:all .3s;box-shadow:0 2px 10px rgba(108,99,255,.03)}
+.detail-card:hover{border-color:rgba(108,99,255,.3);background:var(--card-hover);transform:translateY(-2px)}
 .detail-info{display:flex;flex-direction:column;gap:5px;text-align:right}
 .detail-label{color:var(--muted);font-size:13px;font-weight:700}
-.detail-value{font-size:18px;font-weight:900}
-.icon-box{width:50px;height:50px;border-radius:16px;display:grid;place-items:center;background:rgba(255,255,255,.03);transition:background .2s}
-.detail-card:hover .icon-box{background:rgba(255,255,255,.08)}
+.detail-value{font-size:18px;font-weight:900;color:var(--ink)}
+.icon-box{width:50px;height:50px;border-radius:16px;display:grid;place-items:center;background:rgba(108,99,255,.08);color:var(--blue);transition:background .2s}
+.detail-card:hover .icon-box{background:rgba(108,99,255,.15)}
 .icon-box svg{width:24px;height:24px}
 .status-badge{background:rgba(16,185,129,.15);color:var(--green);padding:4px 12px;border-radius:20px;font-size:13px;font-weight:800;display:inline-flex;align-items:center;gap:6px}
 .status-badge::before{content:'';width:6px;height:6px;background:var(--green);border-radius:50%;box-shadow:0 0 8px var(--green)}
-.timer-card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px 20px;position:relative;overflow:hidden;margin-bottom:20px}
+.timer-card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px 20px;position:relative;overflow:hidden;margin-bottom:20px;box-shadow:0 2px 15px rgba(108,99,255,.05)}
 .timer-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;position:relative;z-index:2}
 .timer-title{display:flex;flex-direction:column;gap:5px;text-align:right}
-.timer-title h2{margin:0;font-size:22px;font-weight:900}
+.timer-title h2{margin:0;font-size:22px;font-weight:900;color:var(--ink)}
 .timer-title p{margin:0;color:var(--muted);font-size:13px;font-weight:600}
-.timer-badge{background:rgba(59,130,246,.15);color:var(--blue2);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px}
-.timer-badge::before{content:'';width:6px;height:6px;background:var(--blue2);border-radius:50%;animation:pulse 1.5s infinite}
+.timer-badge{background:rgba(108,99,255,.10);color:var(--blue);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px}
+.timer-badge::before{content:'';width:6px;height:6px;background:var(--blue);border-radius:50%;animation:pulse 1.5s infinite}
 @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
 .timer-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;position:relative;z-index:2}
 .time-box{background:var(--card-inner);border:1px solid var(--line-soft);border-radius:16px;padding:15px 5px;text-align:center;overflow:hidden}
-.time-val{font-size:32px;font-weight:900;color:var(--blue2);line-height:1;margin-bottom:8px;display:inline-block}
-@keyframes tickFade{0%{opacity:1;transform:scale(1);text-shadow:none}30%{opacity:0;transform:scale(.85)}60%{opacity:0;transform:scale(1.15);text-shadow:0 0 20px var(--blue2);color:#fff}100%{opacity:1;transform:scale(1)}}
+.time-val{font-size:32px;font-weight:900;color:var(--blue);line-height:1;margin-bottom:8px;display:inline-block}
+@keyframes tickFade{0%{opacity:1;transform:scale(1)}30%{opacity:0;transform:scale(.85)}60%{opacity:0;transform:scale(1.15);text-shadow:0 0 20px var(--blue);color:#fff}100%{opacity:1;transform:scale(1)}}
 .time-val.tick-anim{animation:tickFade .6s cubic-bezier(.2,.8,.2,1) forwards}
 .time-label{color:var(--muted);font-size:13px;font-weight:700}
 .logout-btn{width:100%;padding:16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:16px;font-size:16px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:all .2s;font-family:inherit}
@@ -82,7 +82,7 @@ body{margin:0;background:var(--bg);color:var(--ink);min-height:100vh;padding-bot
 <header class="top">
   <div class="brand" onclick="window.location.href='index.html'">
     <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
-    <span>ثانوية <span style="color:var(--blue2)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
+    <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <div class="top-right">
     <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
@@ -127,8 +127,8 @@ async function loadProfile() {
       </div>
       <div class="grid-details">
         <div class="detail-card"><div class="detail-info"><span class="detail-label">المسار</span><span class="detail-value">${getSectionName(me.section)}</span></div><div class="icon-box" style="color:var(--purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div></div>
-        <div class="detail-card"><div class="detail-info"><span class="detail-label">كود الطالب</span><span class="detail-value" style="color:var(--blue2)">${me.code || '—'}</span></div><div class="icon-box" style="color:var(--blue2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg></div></div>
-        <div class="detail-card"><div class="detail-info"><span class="detail-label">تاريخ إنشاء الحساب</span><span class="detail-value">${createdAt}</span></div><div class="icon-box" style="color:var(--blue)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div></div>
+        <div class="detail-card"><div class="detail-info"><span class="detail-label">كود الطالب</span><span class="detail-value" style="color:var(--blue)">${me.code || '—'}</span></div><div class="icon-box" style="color:var(--blue)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg></div></div>
+        <div class="detail-card"><div class="detail-info"><span class="detail-label">تاريخ إنشاء الحساب</span><span class="detail-value">${createdAt}</span></div><div class="icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div></div>
         <div class="detail-card"><div class="detail-info"><span class="detail-label">الحالة</span><span class="status-badge">مفعل</span></div><div class="icon-box" style="color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></svg></div></div>
       </div>
       <div class="timer-card">
