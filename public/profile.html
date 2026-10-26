@@ -19,9 +19,11 @@
   --green: #10b981;
   --purple: #8b5cf6;
   --red: #ef4444;
+  --amber: #f59e0b;
   --line: rgba(148, 163, 184, .12);
 }
 * { box-sizing: border-box; font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparent; }
+html { scroll-behavior: smooth; }
 body { 
   margin: 0; 
   background: var(--bg); 
@@ -98,8 +100,25 @@ body {
 .status-badge::before { content: ''; width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 8px var(--green); }
 
 /* كارت العداد */
-.timer-card { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 30px 20px; position: relative; overflow: hidden; margin-bottom: 20px; }
+.timer-card { 
+  background: var(--card); 
+  border: 1px solid var(--line); 
+  border-radius: 24px; 
+  padding: 30px 20px; 
+  position: relative; 
+  overflow: hidden; 
+  margin-bottom: 20px;
+  transition: border-color 0.3s, background 0.3s;
+}
 .timer-card::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 20px 20px; pointer-events: none; }
+
+/* حالة الخطر (الاشتراك قارب ينتهي) */
+.timer-card.danger { border-color: rgba(239,68,68,0.4); background: linear-gradient(135deg, #2a1419, #121a2b); }
+.timer-card.danger .timer-title h2 { color: #fca5a5; }
+.timer-card.danger .timer-badge { background: rgba(239,68,68,0.15); color: #fca5a5; }
+.timer-card.danger .timer-badge::before { background: var(--red); }
+.timer-card.danger .time-val { color: #fca5a5; text-shadow: 0 2px 10px rgba(239,68,68,0.2); }
+
 .timer-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; flex-wrap: wrap; gap: 10px; }
 .timer-title { display: flex; flex-direction: column; gap: 5px; text-align: right; }
 .timer-title h2 { margin: 0; font-size: 22px; font-weight: 900; }
@@ -138,6 +157,38 @@ body {
 .copy-btn:active { transform: scale(0.9); }
 .copy-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .code-wrapper { display: flex; align-items: center; gap: 8px; }
+
+/* الشريط التحذيري */
+.warn-strip {
+  display: none;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #fca5a5;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  animation: fadeIn 0.4s ease;
+}
+.warn-strip.show { display: flex; }
+.warn-strip a {
+  background: var(--red);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 12.5px;
+  transition: transform 0.2s;
+  white-space: nowrap;
+}
+.warn-strip a:hover { transform: translateY(-2px); }
+.warn-strip a:active { transform: scale(0.95); }
 
 @media (max-width: 500px) {
   .time-val { font-size: 24px; }
@@ -214,10 +265,19 @@ async function loadProfile() {
     const me = data.data;
     const name = me.name || 'طالب';
     const firstLetter = name.charAt(0);
-    const createdAt = formatArabicDate(me.expiresAt ? (me.expiresAt - 30*24*3600*1000) : Date.now());
     const expiresAt = me.expiresAt;
+    const createdAt = formatArabicDate(expiresAt ? (expiresAt - 30*24*3600*1000) : Date.now());
+
+    // تحديد حالة الخطر (لو فاضل 3 أيام أو أقل)
+    const isDanger = expiresAt && (expiresAt - Date.now() < 3 * 24 * 3600 * 1000);
 
     let html = `
+      <!-- الشريط التحذيري للاشتراكات القريبة من الانتهاء -->
+      <div class="warn-strip ${isDanger ? 'show' : ''}" id="warn-strip">
+        <span>⚠️ اشتراكك قارب على الانتهاء! جدد دلوقتي عشان متقطعش مذاكرتك.</span>
+        <a href="https://t.me/S7alaby7" target="_blank" rel="noopener">جدد الآن</a>
+      </div>
+
       <div class="hero-card">
         <div class="hero-top">
           <div class="avatar">${firstLetter}</div>
@@ -276,9 +336,9 @@ async function loadProfile() {
         </div>
       </div>
 
-      <div class="timer-card">
+      <div class="timer-card ${isDanger ? 'danger' : ''}" id="timer-card">
         <div class="timer-top">
-          <div class="timer-badge">العداد شغال</div>
+          <div class="timer-badge">${isDanger ? 'قارب على الانتهاء' : 'العداد شغال'}</div>
           <div class="timer-title">
             <h2>فاضل على اشتراكك</h2>
             <p>يخلص ${formatArabicDate(expiresAt)} في ${formatArabicTime(expiresAt)}</p>
@@ -300,7 +360,7 @@ async function loadProfile() {
 
     $('main').innerHTML = html;
     
-    // ربط زر النسخ
+    // زر النسخ
     const copyBtn = document.getElementById('copy-code-btn');
     if (copyBtn && me.code) {
       copyBtn.addEventListener('click', async () => {
@@ -318,7 +378,7 @@ async function loadProfile() {
       });
     }
 
-    // ربط الزرار بالحدث
+    // زر الخروج
     document.getElementById('logout-btn').addEventListener('click', function() {
       if(confirm('هل تريد تسجيل الخروج من الحساب؟')) {
         localStorage.removeItem(TOKEN_KEY);
@@ -328,8 +388,8 @@ async function loadProfile() {
     
     if (expiresAt) {
       if (countdownInterval) clearInterval(countdownInterval);
-      updateCountdown(expiresAt);
-      countdownInterval = setInterval(() => updateCountdown(expiresAt), 1000);
+      updateCountdown(expiresAt, isDanger);
+      countdownInterval = setInterval(() => updateCountdown(expiresAt, isDanger), 1000);
     }
 
   } catch (e) {
@@ -337,7 +397,7 @@ async function loadProfile() {
   }
 }
 
-function updateCountdown(expiresAt) {
+function updateCountdown(expiresAt, isDanger) {
   const now = Date.now();
   const diff = expiresAt - now;
   if (diff <= 0) {
