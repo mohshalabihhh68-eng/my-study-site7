@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.6.6 — Visits Tracking + Last Seen Support
+ * VERSION v1.7.0 — Full Analytics (Visits + Watch History)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.6.6";
+const APP_VERSION = "v1.7.0";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1123,10 +1123,28 @@ app.post("/api/track-visit", async (req, res) => {
     const ua = req.headers["user-agent"] || "Unknown";
     const nowTime = now();
     
-    // نسجل الزيارة في Firebase
+    let os = "غير معروف";
+    if (/android/i.test(ua)) os = "أندرويد";
+    else if (/iphone|ipad|ipod/i.test(ua)) os = "آيفون / آيباد";
+    else if (/windows/i.test(ua)) os = "ويندوز";
+    else if (/macintosh|mac os x/i.test(ua)) os = "ماك";
+    else if (/linux/i.test(ua)) os = "لينكس";
+
+    let browser = "غير معروف";
+    if (/edg/i.test(ua)) browser = "Edge";
+    else if (/chrome|crios/i.test(ua)) browser = "Chrome";
+    else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
+    else if (/safari/i.test(ua)) browser = "Safari";
+    else if (/opr|opera/i.test(ua)) browser = "Opera";
+
+    const isMobile = /mobile|android|iphone|ipad/i.test(ua);
+    
     const visitKey = `visits/${nowTime}_${Math.random().toString(36).slice(2, 8)}`;
     await fbSet(visitKey, {
       ip: ip,
+      os: os,
+      browser: browser,
+      isMobile: isMobile,
       userAgent: ua,
       time: nowTime
     });
@@ -1141,8 +1159,61 @@ app.get("/api/admin/visits", requireAdmin("students_view"), async (_req, res) =>
   try {
     const visits = (await fbGet("visits")) || {};
     const list = Object.entries(visits).map(([id, v]) => ({ id, ...v }));
-    // ترتيب من الأحدث للأقدم
     list.sort((a, b) => b.time - a.time);
+    res.json({ success: true, data: list });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+// ==================== سجل المشاهدة ====================
+app.post("/api/track-video", requireStudent, async (req, res) => {
+  try {
+    const { videoId, videoTitle, lectureId, lectureName } = req.body;
+    if (!videoId) return res.status(400).json({ success: false });
+    
+    const code = req.student.code;
+    const nowTime = now();
+    
+    const historyKey = `history/${code}/${nowTime}_${Math.random().toString(36).slice(2, 6)}`;
+    await fbSet(historyKey, {
+      code: code,
+      name: req.student.name,
+      videoId: String(videoId),
+      videoTitle: videoTitle || "فيديو",
+      lectureId: lectureId || null,
+      lectureName: lectureName || null,
+      time: nowTime
+    });
+    
+    res.json({ success: true });
+  } catch (e) {
+    console.warn("[track-video]", e.message);
+    res.json({ success: false });
+  }
+});
+
+app.get("/api/admin/history", requireAdmin("students_view"), async (_req, res) => {
+  try {
+    const history = (await fbGet("history")) || {};
+    let list = [];
+    for (const [code, videos] of Object.entries(history)) {
+      for (const [id, v] of Object.entries(videos || {})) {
+        list.push({ id, ...v });
+      }
+    }
+    list.sort((a, b) => b.time - a.time);
+    res.json({ success: true, data: list });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/admin/history/:code", requireAdmin("students_view"), async (req, res) => {
+  try {
+    const code = req.params.code;
+    const history = (await fbGet(`history/${code}`)) || {};
+    const list = Object.entries(history).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.time - a.time);
     res.json({ success: true, data: list });
   } catch (e) {
     jsonError(res, 500, e.message);
@@ -1196,8 +1267,7 @@ app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "stude
       await fbSet(`students/${code}/devices/${deviceId}`, devices[deviceId]);
     }
 
-    // حفظ آخر ظهور للطالب
-    try { await fbPatch(`students/${code}`, { lastSeen: now() }); } catch (e) { console.warn("[auth] lastSeen save failed:", e.message); }
+    try { await fbPatch(`students/${code}`, { lastSeen: now() }); } catch (e) {}
 
     const sessionTtl = Math.min(CONFIG.STUDENT_SESSION_MS, Math.max(60_000, (student.expiresAt || now() + CONFIG.STUDENT_SESSION_MS) - now()));
     const token = randomToken(32);
@@ -2774,7 +2844,7 @@ app.post("/api/heartbeat", async function (req, res) {
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
-// ==================== بروكسي الملفات (معاينة موثوقة للـ PDF والملفات) ====================
+// ==================== بروكسي الملفات ====================
 app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
   try {
     let targetUrl = req.query.url;
