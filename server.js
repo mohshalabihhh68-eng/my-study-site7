@@ -1,9 +1,10 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.2 — Cleaned (No Earnings, Single Package, Dynamic Env)
+ * VERSION v1.3 — CF bypass helpers (proxy/relay) + direct CDN segments
  * - Student codes (9-digit) + devices + sessions in Firebase RTDB
  * - Admin panel API (users, permissions, sections, subject IDs)
- * - Stream-Weave key unwrap + AES-128 segment decrypt (upstream token NEVER leaves server)
+ * - Stream-Weave key unwrap; browser decrypts CDN segments (avoids CF on Railway IP)
+ * - UPSTREAM_PROXY / UPSTREAM_RELAY_URL to bypass Cloudflare IP blocks
  * - All student/catalog/stream routes require valid session token
  */
 import express from "express";
@@ -14,6 +15,17 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+
+// undici is bundled with Node 18+; fall back gracefully if missing
+let ProxyAgent = null;
+let undiciFetch = null;
+try {
+  const undici = await import("undici");
+  ProxyAgent = undici.ProxyAgent;
+  undiciFetch = undici.fetch;
+} catch {
+  console.warn("[API] undici not available — UPSTREAM_PROXY disabled");
+}
 import {
   thanawicaLogin,
   thSubjectsForYear,
@@ -39,7 +51,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.2";
+const APP_VERSION = "v1.3";
 
 // ═══════════════════════════════════════════════════════════
 // Crash guards
@@ -85,11 +97,114 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ── Upstream transport (proxy / relay / direct) ──────────────────────────
+const UPSTREAM_PROXY = (process.env.UPSTREAM_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "").trim();
+const UPSTREAM_RELAY_URL = (process.env.UPSTREAM_RELAY_URL || "").trim().replace(/\/$/, "");
+let proxyAgent = null;
+if (UPSTREAM_PROXY && ProxyAgent) {
+  try {
+    proxyAgent = new ProxyAgent(UPSTREAM_PROXY);
+    console.log("[API] UPSTREAM_PROXY enabled:", UPSTREAM_PROXY.replace(/:[^:@/]+@/, ":****@"));
+  } catch (e) {
+    console.warn("[API] UPSTREAM_PROXY invalid:", e.message);
+  }
+} else if (UPSTREAM_PROXY && !ProxyAgent) {
+  console.warn("[API] UPSTREAM_PROXY set but undici/ProxyAgent unavailable");
+}
+if (UPSTREAM_RELAY_URL) console.log("[API] UPSTREAM_RELAY_URL:", UPSTREAM_RELAY_URL);
+
+const UA_PROFILES = [
+  {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36",
+    "X-Requested-With": "com.mycompany.app.soulbrowser",
+    Origin: "https://coursatk.online",
+    Referer: "https://coursatk.online/"
+  },
+  {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    Origin: "https://coursatk.online",
+    Referer: "https://coursatk.online/"
+  },
+  {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    Origin: "https://coursatk.online",
+    Referer: "https://coursatk.online/"
+  },
+  {
+    "User-Agent": "okhttp/4.12.0",
+    Accept: "application/json",
+    Origin: "https://coursatk.online",
+    Referer: "https://coursatk.online/"
+  }
+];
+
+function isCloudflareBlock(status, text) {
+  if (status !== 403 && status !== 503) return false;
+  const s = String(text || "").slice(0, 800).toLowerCase();
+  return s.includes("cloudflare") || s.includes("cf-ray") || s.includes("attention required") || s.includes("sorry, you have been blocked") || s.includes("cf-browser-verification");
+}
+
+async function rawFetch(url, opts = {}, timeout = 15_000) {
+  const signal = opts.signal || AbortSignal.timeout(timeout);
+  const fetchOpts = { ...opts, signal };
+  if (proxyAgent && undiciFetch) {
+    return undiciFetch(url, { ...fetchOpts, dispatcher: proxyAgent });
+  }
+  return fetch(url, fetchOpts);
+}
+
+async function relayFetch(url, opts = {}, timeout = 15_000) {
+  if (!UPSTREAM_RELAY_URL) throw new Error("no relay");
+  const method = (opts.method || "GET").toUpperCase();
+  const headers = { ...(opts.headers || {}) };
+  let bodyB64 = null;
+  if (opts.body != null && method !== "GET" && method !== "HEAD") {
+    if (Buffer.isBuffer(opts.body)) bodyB64 = opts.body.toString("base64");
+    else if (typeof opts.body === "string") bodyB64 = Buffer.from(opts.body).toString("base64");
+    else bodyB64 = Buffer.from(String(opts.body)).toString("base64");
+  }
+  const relayHeaders = { "Content-Type": "application/json", Accept: "application/json" };
+  const relaySecret = (process.env.RELAY_SECRET || "").trim();
+  if (relaySecret) relayHeaders["X-Relay-Secret"] = relaySecret;
+  const relayRes = await rawFetch(UPSTREAM_RELAY_URL, {
+    method: "POST",
+    headers: relayHeaders,
+    body: JSON.stringify({ url, method, headers, bodyBase64: bodyB64, timeout })
+  }, timeout + 5_000);
+  const ct = relayRes.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    const j = await relayRes.json();
+    if (j.error && !j.status) throw new Error("relay: " + j.error);
+    const status = j.status || relayRes.status;
+    let buf;
+    if (j.bodyBase64) buf = Buffer.from(j.bodyBase64, "base64");
+    else if (typeof j.body === "string") buf = Buffer.from(j.body);
+    else buf = Buffer.from(JSON.stringify(j.body ?? j));
+    return new Response(buf, { status, headers: j.headers || { "content-type": j.contentType || "application/octet-stream" } });
+  }
+  return relayRes;
+}
+
 async function fetchT(url, opts = {}, { timeout = 15_000, retries = 0, retryOn = [429, 502, 503, 504] } = {}) {
   let lastErr;
+  const tryRelay = Boolean(UPSTREAM_RELAY_URL);
   for (let a = 0; a <= retries; a++) {
     try {
-      const r = await fetch(url, { ...opts, signal: AbortSignal.timeout(timeout) });
+      let r;
+      try {
+        r = await rawFetch(url, opts, timeout);
+      } catch (e) {
+        if (tryRelay) r = await relayFetch(url, opts, timeout);
+        else throw e;
+      }
+      // On CF block, optionally fall back to relay once
+      if (tryRelay && (r.status === 403 || r.status === 503)) {
+        const peek = await r.clone().text().catch(() => "");
+        if (isCloudflareBlock(r.status, peek)) {
+          console.warn("[fetchT] CF block on direct → relay", String(url).slice(0, 80));
+          r = await relayFetch(url, opts, timeout);
+        }
+      }
       if (a < retries && retryOn.includes(r.status)) {
         try { await r.arrayBuffer(); } catch {}
         lastErr = new Error("HTTP " + r.status);
@@ -870,25 +985,72 @@ function decryptSegment(encrypted, key, iv) { const decipher = crypto.createDeci
 function parseIvHex(hex) { const h = String(hex || "").replace(/^0x/i, "").trim(); if (!/^[0-9a-fA-F]{32}$/.test(h)) return null; return Buffer.from(h, "hex"); }
 function ivFromMediaSequence(seq) { const iv = Buffer.alloc(16, 0); iv.writeUInt32BE(Number(seq) >>> 0, 12); return iv; }
 // Upstream helpers
-async function upstreamHeaders(extra = {}) {
+async function upstreamHeaders(extra = {}, profileIdx = 0) {
   const tok = await getCoursatkToken();
-  return { Authorization: `Bearer ${tok}`, Accept: "application/json", ...extra };
+  const profile = UA_PROFILES[profileIdx % UA_PROFILES.length];
+  return {
+    Authorization: `Bearer ${tok}`,
+    Accept: "application/json",
+    ...profile,
+    ...extra
+  };
 }
 
 async function upstreamJsonRaw(apiPath, options = {}) {
   const isGet = !options.method || String(options.method).toUpperCase() === "GET";
-  const headers = await upstreamHeaders(options.headers || {});
-  const r = await upstreamSlot(() => fetchT(`${CONFIG.COURSATK_API}${apiPath}`, { ...options, headers }, { timeout: 15_000, retries: isGet ? 1 : 0 }));
-  const text = await r.text();
-  let data;
-  try { data = JSON.parse(text); } catch { throw new Error(`Upstream non-JSON (${r.status})`); }
-  if (!r.ok) throw new Error(data?.message || `Upstream HTTP ${r.status}`);
-  return data;
+  const url = `${CONFIG.COURSATK_API}${apiPath}`;
+  let lastErr = null;
+
+  // Try several UA profiles + proxy/relay via fetchT
+  for (let p = 0; p < UA_PROFILES.length; p++) {
+    try {
+      const headers = await upstreamHeaders(options.headers || {}, p);
+      const r = await upstreamSlot(() =>
+        fetchT(url, { ...options, headers }, { timeout: 18_000, retries: isGet && p === 0 ? 1 : 0, retryOn: [429, 502, 503, 504] })
+      );
+      const text = await r.text();
+      if (isCloudflareBlock(r.status, text)) {
+        lastErr = new Error("Cloudflare حاجب IP السيرفر على Coursatk — استخدم UPSTREAM_PROXY أو UPSTREAM_RELAY_URL");
+        console.warn("[upstream] CF block", apiPath, "profile", p);
+        // try next profile / eventually relay inside fetchT
+        if (p < UA_PROFILES.length - 1) continue;
+        throw lastErr;
+      }
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        lastErr = new Error(`Upstream non-JSON (${r.status})`);
+        if (r.status === 403 || r.status === 401) {
+          // try next profile
+          if (p < UA_PROFILES.length - 1) continue;
+        }
+        throw lastErr;
+      }
+      if (!r.ok) {
+        const msg = data?.error || data?.message || `Upstream HTTP ${r.status}`;
+        // Expired subscription style errors — don't retry profiles
+        if (/اشتراك|انته|expired|token/i.test(String(msg))) throw new Error(msg);
+        lastErr = new Error(msg);
+        if (r.status === 403 && p < UA_PROFILES.length - 1) continue;
+        throw lastErr;
+      }
+      return data;
+    } catch (e) {
+      lastErr = e;
+      if (p < UA_PROFILES.length - 1 && /non-JSON|403|Cloudflare|Hajeb|حاجب/i.test(String(e.message || ""))) {
+        await delay(150 + Math.random() * 200);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr || new Error("Upstream failed");
 }
 
 const upCache = new Map();
-const UP_STALE_MS = 30 * 60_000;
-function upTtl(apiPath) { return /\/lectures\/[^/]+\/content/.test(apiPath) ? 60_000 : 180_000; }
+const UP_STALE_MS = 2 * 60 * 60_000; // keep stale longer when CF is blocking
+function upTtl(apiPath) { return /\/lectures\/[^/]+\/content/.test(apiPath) ? 120_000 : 300_000; }
 async function upstreamJson(apiPath, options = {}) {
   const isGet = !options.method || String(options.method).toUpperCase() === "GET";
   if (!isGet) return upstreamJsonRaw(apiPath, options);
@@ -900,7 +1062,10 @@ async function upstreamJson(apiPath, options = {}) {
     upCache.set(apiPath, { data, exp: t + upTtl(apiPath), stale: t + UP_STALE_MS });
     return data;
   } catch (e) {
-    if (hit && Date.now() < hit.stale) { console.warn("[upstream] served stale:", apiPath, e.message); return hit.data; }
+    if (hit && Date.now() < hit.stale) {
+      console.warn("[upstream] served stale:", apiPath, e.message);
+      return hit.data;
+    }
     throw e;
   }
 }
@@ -940,9 +1105,22 @@ app.use("/api/hls/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", k
 
 app.get("/health", (_req, res) => {
   res.json({
-    ok: true, service: "thanawya-world-api", cryptoReady: Boolean(decryptPlaybackKeyFn),
-    decryptSegments: true, version: APP_VERSION,
-    cache: { segments: segCache.size, segmentMB: Math.round(segCacheBytes / 1048576), sources: sourceCache.size, streamSessions: streamSessions.size, upstream: upstreamSlot.stats() },
+    ok: true,
+    service: "thanawya-world-api",
+    cryptoReady: Boolean(decryptPlaybackKeyFn),
+    decryptSegments: true,
+    directSegments: process.env.HLS_DIRECT_SEGMENTS !== "0",
+    version: APP_VERSION,
+    upstreamProxy: Boolean(proxyAgent),
+    upstreamRelay: Boolean(UPSTREAM_RELAY_URL),
+    tokenConfigured: Boolean(getCoursatkTokenSync()),
+    cache: {
+      segments: segCache.size,
+      segmentMB: Math.round(segCacheBytes / 1048576),
+      sources: sourceCache.size,
+      streamSessions: streamSessions.size,
+      upstream: upstreamSlot.stats()
+    },
     now: new Date().toISOString()
   });
 });
