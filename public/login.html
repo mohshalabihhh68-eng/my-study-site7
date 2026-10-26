@@ -233,12 +233,12 @@
     </span>
     <span>ثانوية <span class="gradient">club</span></span>
   </div>
-  <div class="subtitle">أهلاً بيك، يرجى إدخال كود الطالب للمتابعة</div>
+  <div class="subtitle">أهلاً بيك، دخل كودك هنا </div>
 
   <div class="error-box" id="error-msg"></div>
 
   <div class="input-group">
-    <input type="text" id="code-input" placeholder="ادخل الكود المكون من 9 أرقام" maxlength="9" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+    <input type="text" id="code-input" placeholder="دخل الكود المكون من 9 أرقام" maxlength="9" inputmode="numeric" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
     <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
   </div>
 
@@ -248,7 +248,7 @@
   </button>
 
   <div class="footer-text">
-    تواجه مشكلة؟ <a href="index.html#admins">تواصل مع الإدارة</a>
+    تواجه مشكلة؟ <a href="index.html#admins">تواصل مع واحد من الأدمنز </a>
   </div>
 </div>
 
@@ -264,11 +264,11 @@
     const errMsg = document.getElementById('error-msg');
 
     if (code.length !== 9) {
-      showError("الكود يجب أن يتكون من 9 أرقام");
+      showError("الكود لازم يبقي 9 أرقام");
       return;
     }
 
-    btn.innerHTML = 'جاري التحقق...';
+    btn.innerHTML = 'ثانية بتحقق من الكود ...';
     btn.disabled = true;
     errMsg.style.display = 'none';
 
@@ -292,7 +292,7 @@
         localStorage.setItem('student_name', data.data.student.name);
         window.location.href = 'subjects.html';
       } else {
-        showError(data.message || "كود غير صحيح أو منتهي");
+        showError(data.message || "الكود دا غلط أو منتهي");
         btn.innerHTML = 'دخول للمنصة <svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>';
         btn.disabled = false;
       }
