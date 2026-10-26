@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.1 — Full Analytics (Visits + Grouped Watch History)
+ * VERSION v1.7.2 — Full Analytics (Visits + Grouped Watch History + Student Tracker)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.1";
+const APP_VERSION = "v1.7.2";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1116,6 +1116,29 @@ app.get("/api/public/site", rateLimit({ max: 120, windowMs: 60_000, scope: "publ
   res.json({ success: true, data: { siteName: runtime.siteName || "ثانوية World", packages, agents, firebaseConfigured: Boolean(getFirebaseUrl()), tokenConfigured: Boolean(getCoursatkTokenSync()) } });
 });
 
+// ==================== تتبع فتح الموقع للطالب ====================
+app.post("/api/auth/track", requireStudent, async (req, res) => {
+  try {
+    const code = req.session.code;
+    const nowTime = now();
+    
+    const student = await fbGet(`students/${code}`);
+    if (!student) return jsonError(res, 404, "الطالب غير موجود");
+    
+    const visitCount = (Number(student.visitCount) || 0) + 1;
+    
+    await fbPatch(`students/${code}`, { 
+      lastSeen: nowTime, 
+      visitCount: visitCount 
+    });
+    
+    res.json({ success: true, visitCount });
+  } catch (e) {
+    console.warn("[track-student-visit]", e.message);
+    res.json({ success: false });
+  }
+});
+
 // ==================== تسجيل الزوار ====================
 app.post("/api/track-visit", async (req, res) => {
   try {
@@ -1175,7 +1198,6 @@ app.post("/api/track-video", requireStudent, async (req, res) => {
     const code = req.student.code;
     const nowTime = now();
     
-    // تجميع السجل: history/<code>/<videoId>
     const existing = await fbGet(`history/${code}/${videoId}`);
     const curTime = Number(currentTime) || 0;
     const dur = Number(duration) || 0;
@@ -2125,7 +2147,21 @@ app.get("/api/admin/students", requireAdmin("students_view"), async (_req, res) 
   try {
     const all = (await fbGet("students")) || {};
     const list = Object.entries(all).map(([code, s]) => ({
-      code, name: s.name, section: s.section || null, type: s.type || null, days: s.days || null, durationMs: s.durationMs || null, activatedAt: s.activatedAt || null, expiresAt: s.expiresAt || null, maxDevices: s.maxDevices || 1, devices: Object.keys(s.devices || {}).length, active: s.active !== false, createdAt: s.createdAt || null, lastSeen: s.lastSeen || null, status: !s.activatedAt ? "لم يبدأ" : (s.expiresAt && Date.now() > s.expiresAt ? "منتهي" : "نشط")
+      code, 
+      name: s.name, 
+      section: s.section || null, 
+      type: s.type || null, 
+      days: s.days || null, 
+      durationMs: s.durationMs || null, 
+      activatedAt: s.activatedAt || null, 
+      expiresAt: s.expiresAt || null, 
+      maxDevices: s.maxDevices || 1, 
+      devices: Object.keys(s.devices || {}).length, 
+      active: s.active !== false, 
+      createdAt: s.createdAt || null, 
+      lastSeen: s.lastSeen || null, 
+      visitCount: s.visitCount || 0, 
+      status: !s.activatedAt ? "لم يبدأ" : (s.expiresAt && Date.now() > s.expiresAt ? "منتهي" : "نشط")
     }));
     list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     res.json({ success: true, data: list });
