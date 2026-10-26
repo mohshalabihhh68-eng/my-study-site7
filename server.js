@@ -2807,59 +2807,29 @@ app.post("/api/heartbeat", async function (req, res) {
 });
 
 // ==================== بروكسي للملفات ====================
-// ==================== بروكسي للملفات (يدعم Range للـ PDF) ====================
 app.get("/api/file-proxy", async (req, res) => {
   try {
     const targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).send("Missing URL");
-
-    const headers = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Referer": "https://coursatk.online/",
-      "Origin": "https://coursatk.online",
-      "Accept": "*/*"
-    };
-
-    // 1. بنجيب الملف كامل من كورساتك
-    const upstream = await fetch(targetUrl, { headers });
+    
+    const upstream = await fetch(targetUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://coursatk.online/",
+        "Origin": "https://coursatk.online"
+      }
+    });
     if (!upstream.ok) throw new Error("HTTP " + upstream.status);
-
-    // 2. بنحوله لـ Buffer (بنخزنه في الرامات)
-    const buffer = Buffer.from(await upstream.arrayBuffer());
     
-    // 3. بنحدد نوع الملف
-    let contentType = upstream.headers.get("content-type") || "application/pdf";
-    if (contentType.includes("text/html")) contentType = "application/pdf";
-
-    // 4. بنبعت الملف كامل للمتصفح
+    const contentType = upstream.headers.get("content-type") || "application/pdf";
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Length", buffer.length);
     res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Accept-Ranges", "none"); // نقول للمتصفح مفيش أجزاء، الملف كامل
-    res.setHeader("Cache-Control", "public, max-age=3600");
     
-    res.status(200).send(buffer);
-
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.send(buffer);
   } catch (e) {
     console.error("File proxy error:", e.message);
-    if (!res.headersSent) res.status(502).send("Error fetching file: " + e.message);
-    else res.end();
-  }
-});
-    // ابعت الرد بنفس حالة السيرفر الأصلي (200 أو 206)
-    res.status(upstream.status);
-
-    if (upstream.body) {
-      // استخدام stream تمرير الملف مباشرة للمتصفح (يدعم الملفات الكبيرة)
-      const { Readable } = await import("node:stream");
-      Readable.fromWeb(upstream.body).pipe(res);
-    } else {
-      res.end();
-    }
-  } catch (e) {
-    console.error("File proxy error:", e.message);
-    if (!res.headersSent) res.status(502).send("Error fetching file");
-    else res.end();
+    res.status(502).send("Error fetching file");
   }
 });
 
