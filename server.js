@@ -1361,14 +1361,23 @@ function parseDeviceInfo(ua) {
     os = "أندرويد";
     const m = s.match(/Android\s+([\d.]+)/i);
     if (m) osVersion = m[1];
-    deviceType = /mobile/i.test(s) ? "موبايل" : "تابلت";
-    // موديل أندرويد من الـ UA (إن وجد)
-    const modelMatch = s.match(/Android\s[\d.]+;\s*([^);]+)(?:\)|;)/i);
-    if (modelMatch) {
-      let raw = modelMatch[1].trim();
-      raw = raw.replace(/\s*Build\/.*$/i, "").replace(/^(?:SM|sm)-/i, "SM-").trim();
-      if (raw && !/^(wv|Linux|U|arm|aarch|en-|ar-)/i.test(raw) && raw.length < 50) {
-        deviceModel = raw;
+    deviceType = /tablet|nexus\s?(7|9|10)|sm-t|pad/i.test(s) && !/mobile/i.test(s) ? "تابلت" : (/mobile/i.test(s) ? "موبايل" : "تابلت");
+    // محاولات متعددة لاستخراج الموديل من الـ UA
+    const patterns = [
+      /Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i,
+      /;\s*((?:SM|GT|SC|SGH|SCH|SHV|LG|Lenovo|HTC|Pixel|Redmi|Mi|POCO|RMX|CPH|V\d{4}|Infinix|TECNO|ITE|Nokia|Moto)[^);/]{0,40})/i,
+      /\b((?:SM|RMX|CPH|V\d{4})-[A-Z0-9]+)\b/i
+    ];
+    for (const re of patterns) {
+      const modelMatch = s.match(re);
+      if (modelMatch) {
+        let raw = modelMatch[1].trim();
+        raw = raw.replace(/\s*Build\/.*$/i, "").replace(/\/.*$/, "").trim();
+        // تجاهل القيم المختزلة زي "K" أو "U"
+        if (raw && raw.length > 1 && !/^(wv|Linux|U|K|arm|aarch64?|en-|ar-|zh-|es-|fr-|de-|it-|ru-|tr-|pt-)$/i.test(raw) && raw.length < 50) {
+          deviceModel = raw;
+          break;
+        }
       }
     }
   } else if (/iphone/i.test(s)) {
@@ -1477,12 +1486,12 @@ async function lookupGeo(ip) {
       cleanIp.startsWith("10.") ||
       /^172\.(1[6-9]|2\d|3[0-1])\./.test(cleanIp)
     ) {
-      return { country: "محلي", countryCode: "", city: "", region: "", isp: "", as: "", lat: null, lon: null, query: cleanIp };
+      return { country: "محلي", countryCode: "", city: "", region: "", district: "", postal: "", timezone: "", isp: "", as: "", lat: null, lon: null, query: cleanIp };
     }
 
-    // 1) ipwho.is — HTTPS ونتائج جيدة
+    // 1) ipwho.is
     try {
-      const r1 = await fetchT(`https://ipwho.is/${encodeURIComponent(cleanIp)}`, { headers: { Accept: "application/json" } }, { timeout: 4000, retries: 0 });
+      const r1 = await fetchT(`https://ipwho.is/${encodeURIComponent(cleanIp)}`, { headers: { Accept: "application/json" } }, { timeout: 4500, retries: 0 });
       if (r1.ok) {
         const j = await r1.json();
         if (j && j.success !== false && (j.country || j.city)) {
@@ -1491,8 +1500,11 @@ async function lookupGeo(ip) {
             countryCode: j.country_code || "",
             city: j.city || "",
             region: j.region || j.region_code || "",
+            district: j.district || j.city || "",
+            postal: j.postal || j.zip || "",
+            timezone: (j.timezone && (j.timezone.id || j.timezone)) || "",
             isp: (j.connection && (j.connection.isp || j.connection.org)) || j.isp || j.org || "",
-            as: (j.connection && j.connection.asn) ? String(j.connection.asn) : "",
+            as: (j.connection && j.connection.asn != null) ? String(j.connection.asn) : "",
             lat: j.latitude ?? null,
             lon: j.longitude ?? null,
             query: j.ip || cleanIp
@@ -1503,15 +1515,18 @@ async function lookupGeo(ip) {
 
     // 2) ipapi.co
     try {
-      const r2 = await fetchT(`https://ipapi.co/${encodeURIComponent(cleanIp)}/json/`, { headers: { Accept: "application/json" } }, { timeout: 4000, retries: 0 });
+      const r2 = await fetchT(`https://ipapi.co/${encodeURIComponent(cleanIp)}/json/`, { headers: { Accept: "application/json" } }, { timeout: 4500, retries: 0 });
       if (r2.ok) {
         const j = await r2.json();
         if (j && !j.error && (j.country_name || j.country)) {
           return {
             country: j.country_name || j.country || "",
-            countryCode: j.country_code || j.country || "",
+            countryCode: j.country_code || "",
             city: j.city || "",
             region: j.region || j.region_code || "",
+            district: j.city || "",
+            postal: j.postal || "",
+            timezone: j.timezone || "",
             isp: j.org || j.asn || "",
             as: j.asn || "",
             lat: j.latitude ?? null,
@@ -1522,12 +1537,12 @@ async function lookupGeo(ip) {
       }
     } catch {}
 
-    // 3) ip-api.com (احتياطي)
+    // 3) ip-api.com — فيه district في بعض الردود
     try {
       const r3 = await fetchT(
-        `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,lat,lon,isp,org,as,query&lang=ar`,
+        `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,district,zip,lat,lon,timezone,isp,org,as,query&lang=ar`,
         { headers: { Accept: "application/json" } },
-        { timeout: 4000, retries: 0 }
+        { timeout: 4500, retries: 0 }
       );
       if (r3.ok) {
         const j = await r3.json();
@@ -1537,6 +1552,9 @@ async function lookupGeo(ip) {
             countryCode: j.countryCode || "",
             city: j.city || "",
             region: j.regionName || "",
+            district: j.district || j.city || "",
+            postal: j.zip || "",
+            timezone: j.timezone || "",
             isp: j.isp || j.org || "",
             as: j.as || "",
             lat: j.lat ?? null,
@@ -1570,33 +1588,45 @@ app.post("/api/track-visit", async (req, res) => {
 
     // بيانات إضافية من الفرونت
     const screen = body.screen ? String(body.screen).slice(0, 40) : null;
-    const timezone = body.timezone ? String(body.timezone).slice(0, 60) : null;
+    const timezoneBody = body.timezone ? String(body.timezone).slice(0, 60) : null;
     const language = body.language
       ? String(body.language).slice(0, 20)
       : String(req.headers["accept-language"] || "").split(",")[0].trim().slice(0, 20) || null;
     const page = body.page ? String(body.page).slice(0, 200) : null;
-    const connection = body.connection ? String(body.connection).slice(0, 40) : null;
+    const connection = body.connection ? String(body.connection).slice(0, 60) : null;
     const referer = String(req.headers["referer"] || req.headers["referrer"] || body.referrer || "").slice(0, 400);
     const clientModel = body.model ? String(body.model).slice(0, 80) : "";
     const clientBrand = body.brand ? String(body.brand).slice(0, 40) : "";
+    const platform = body.platform ? String(body.platform).slice(0, 40) : (chPlatform || null);
+    const cores = body.cores != null ? Number(body.cores) || null : null;
+    const touchPoints = body.touchPoints != null ? Number(body.touchPoints) || null : null;
+    const gpu = body.gpu ? String(body.gpu).slice(0, 120) : null;
+    const vendor = body.vendor ? String(body.vendor).slice(0, 60) : null;
 
-    // أفضل موديل متاح
-    let deviceModel = clientModel || (chModel && chModel !== "?0" && chModel !== "?1" ? chModel : "") || device.deviceModel || "";
+    const cleanModel = (m) => {
+      const x = String(m || "").trim();
+      if (!x || x === "?0" || x === "?1" || /^[KU]$/i.test(x)) return "";
+      return x;
+    };
+
+    // أفضل موديل متاح: Client Hints / فرونت أولاً ثم UA
+    let deviceModel = cleanModel(clientModel) || cleanModel(chModel) || cleanModel(device.deviceModel) || "";
     let deviceBrand = clientBrand || device.deviceBrand || "";
     if (!deviceBrand && deviceModel) {
       if (/iphone|ipad|mac/i.test(deviceModel)) deviceBrand = "Apple";
       else if (/sm-|galaxy|samsung/i.test(deviceModel)) deviceBrand = "Samsung";
       else if (/redmi|xiaomi|poco|mi\s/i.test(deviceModel)) deviceBrand = "Xiaomi";
-    }
-    if (chPlatform && device.os === "غير معروف") {
-      // تجاهل — عندنا parse من UA
+      else if (/rmx|cph|oppo|realme/i.test(deviceModel)) deviceBrand = "OPPO/Realme";
+      else if (/infinix|tecno|itel/i.test(deviceModel)) deviceBrand = "Infinix/Tecno";
+      else if (/pixel/i.test(deviceModel)) deviceBrand = "Google";
+      else if (/vivo|v\d{4}/i.test(deviceModel)) deviceBrand = "Vivo";
     }
     if (chMobile === "?1" && device.deviceType === "كمبيوتر") {
       device.deviceType = "موبايل";
       device.isMobile = true;
     }
-    if (chPlatformVer && !device.osVersion && /android|ios|windows/i.test(chPlatform || device.os)) {
-      device.osVersion = chPlatformVer.replace(/_/g, ".");
+    if (chPlatformVer && !device.osVersion) {
+      device.osVersion = String(chPlatformVer).replace(/_/g, ".").slice(0, 20);
     }
 
     let geo = null;
@@ -1616,13 +1646,20 @@ app.post("/api/track-visit", async (req, res) => {
       language: language || null,
       referer: referer || null,
       screen: screen || null,
-      timezone: timezone || null,
+      timezone: timezoneBody || geo?.timezone || null,
       page: page || null,
       connection: connection || null,
+      platform: platform || null,
+      cores: cores,
+      touchPoints: touchPoints,
+      gpu: gpu || null,
+      vendor: vendor || null,
       country: geo?.country || null,
       countryCode: geo?.countryCode || null,
       city: geo?.city || null,
       region: geo?.region || null,
+      district: geo?.district || null,
+      postal: geo?.postal || null,
       isp: geo?.isp || null,
       as: geo?.as || null,
       lat: geo?.lat ?? null,
