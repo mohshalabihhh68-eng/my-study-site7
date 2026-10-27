@@ -98,7 +98,7 @@ a{text-decoration:none;color:inherit}
 <main class="wrap">
   <div class="top-header">
     <span class="tag"><svg viewBox="0 0 24 24"><path d="m3 8 9-5 9 5-9 5-9-5Z"/></svg> المواد الدراسية</span>
-    <div class="page-title">صباح الخير يا <span class="name" id="main-name">—</span> 🌅</div>
+    <div class="page-title">مساء الخير يا <span class="name" id="main-name">—</span> 🌅</div>
     <div class="page-subtitle" id="subjects-count">جاري التحميل...</div>
   </div>
 
@@ -153,14 +153,17 @@ a{text-decoration:none;color:inherit}
       if (me) {
         $('nav-name').textContent = me.name || 'طالب';
         $('nav-av').textContent = (me.name || 'ط').charAt(0);
-        $('main-name').textContent = me.name || 'طالب';
+        // تحديث الاسم في العنوان
+        const greetTextNode = document.querySelector('.page-title');
+        greetTextNode.innerHTML = `${getGreeting()} <span class="name" id="main-name">${esc(me.name || 'طالب')}</span> 🌅`;
       }
     } catch (e) {}
   }
 
   async function loadSubjects() {
     try {
-      const data = await api('/api/subjects');
+      // تم إرجاع الرابط الأصلي اللي كان بيشتغل معاك
+      const data = await api('/api/lectures/student/subjects');
       const subjects = (data.subjects || data || []);
       const grid = $('subjectsGrid');
       
