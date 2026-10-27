@@ -33,13 +33,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
 
-/* توهج الاسم باللون البنفسجي */
-@keyframes textGlowPurple {
-  0% { text-shadow: 0 0 5px #8b5cf6, 0 0 10px #8b5cf6, 0 0 20px #a78bfa; }
-  50% { text-shadow: 0 0 10px #8b5cf6, 0 0 20px #a78bfa, 0 0 30px #c4b5fd; }
-  100% { text-shadow: 0 0 5px #8b5cf6, 0 0 10px #8b5cf6, 0 0 20px #a78bfa; }
-}
-
 #toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:10px;width:90%;max-width:400px;pointer-events:none}
 .toast{background:var(--card);color:var(--ink);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.1);border:1px solid var(--line);animation:slideDown .3s ease;pointer-events:auto}
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
@@ -66,12 +59,27 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
 
-/* الاسم بلون بنفسجي متوهج */
-.name-span{
-  font-size:22px;
-  font-weight:900;
-  color: #a78bfa; /* اللون البنفسجي الفاتح */
-  animation: textGlowPurple 1.5s ease-in-out infinite alternate;
+/* ستايل الاسم الجديد زي الصورة بالظبط */
+.name-span {
+  font-size: 26px;
+  font-weight: 900;
+  /* التدرج من الأزرق الفاتح للأزرق الغامق زي الصورة */
+  background: linear-gradient(to right, #00d4ff, #3b82f6, #1e3a8a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  /* عشان يشتغل على كل المتصفحات */
+  display: inline-block;
+}
+
+/* في الوضع الليلي نخلي التدرج أفتح شوية عشان يبان */
+[data-theme="dark"] .name-span {
+  background: linear-gradient(to right, #00d4ff, #60a5fa, #3b82f6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
