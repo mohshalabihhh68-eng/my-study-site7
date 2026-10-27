@@ -35,10 +35,24 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 
-/* تعديل اللوجو عشان ميبوظش الهيدر لو مربع */
+/* اللوجو */
 .brand{display:flex;align-items:center;cursor:pointer;flex-shrink:0;}
-.brand-img{height: 50px; width: auto; max-width: 160px; object-fit: contain; transition: transform .2s; display: block; border-radius: 8px;}
-.brand:hover .brand-img{transform: scale(1.05);}
+.brand-img{height: 55px; width: auto; max-width: 160px; object-fit: contain; transition: transform .2s; display: none;}
+.brand:hover .brand-img{transform: scale(1.02);}
+
+/* الكلام العادي لو الصورة مش موجودة */
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-weight: 900;
+  font-size: 16px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.brand-text span { font-size: 22px; }
+.brand-text .club { color: var(--blue); }
+.brand-text small { font-size: 10px; color: var(--muted); font-weight: 600; margin-top: 2px; }
 
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
 .profile-wrap{position:relative}
@@ -126,7 +140,7 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .empty-state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted)}
 .empty-state svg{width:60px;height:60px;margin-bottom:15px;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5}
 .empty-state h3{color:var(--ink);font-size:18px;font-weight:900;margin:0 0 8px}
-@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand-img{height: 40px; max-width: 130px;}#scroll-progress-side{width:3px}}
+@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand-img{height: 45px; max-width: 130px;}.brand-text span { font-size: 18px; } .brand-text small { display: none; }#scroll-progress-side{width:3px}}
 </style>
 </head>
 <body>
@@ -136,9 +150,15 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 <div id="toast-container"></div>
 <header class="app-nav"><div class="app-nav-in">
   
-  <!-- اللوجو هنا -->
+  <!-- اللوجو هنا (تم تعديل المسار ليصبح /logo.png) -->
   <div class="brand" onclick="window.location.href='index.html'">
-    <img src="logo.png" alt="ثانوية club" class="brand-img">
+    <img src="/logo.png" alt="ثانوية club" class="brand-img" id="main-logo" onerror="this.style.display='none'; document.getElementById('fallback-text').style.display='flex';">
+    
+    <!-- الكلام اللي هيظهر لو الصورة مش موجودة -->
+    <div class="brand-text" id="fallback-text">
+      <span>ثانوية <span class="club">club</span></span>
+      <small>مستقبلك الدراسي في مكان واحد</small>
+    </div>
   </div>
 
   <div class="nav-right">
@@ -168,6 +188,18 @@ const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(T
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
+
+const logoImg = $('main-logo');
+const fallbackText = $('fallback-text');
+if (logoImg && logoImg.complete && logoImg.naturalHeight !== 0) {
+  logoImg.style.display = 'block';
+  fallbackText.style.display = 'none';
+} else if (logoImg) {
+  logoImg.onload = () => {
+    logoImg.style.display = 'block';
+    fallbackText.style.display = 'none';
+  };
+}
 
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
