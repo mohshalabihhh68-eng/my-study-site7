@@ -23,7 +23,7 @@
 body{margin:0;background:var(--bg);background-image:var(--bg-pattern);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none;border:none}
 
-/* شريط التقدم */
+/* شريط التقدم العلوي */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
@@ -37,14 +37,18 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
   100% { text-shadow: 0 0 5px var(--blue), 0 0 10px var(--blue), 0 0 20px var(--blue2); }
 }
 
-/* اهتزاز الصورة */
-@keyframes shake {
-  0% { transform: scale(1) rotate(0deg); }
-  20% { transform: scale(1.05) rotate(-2deg); }
-  40% { transform: scale(1.05) rotate(2deg); }
-  60% { transform: scale(1.05) rotate(-1deg); }
-  80% { transform: scale(1.05) rotate(1deg); }
-  100% { transform: scale(1) rotate(0deg); }
+/* شريط التحميل الخاص بالضغط */
+.card-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 4px;
+  width: 0%;
+  background: linear-gradient(90deg, #38bdf8, #5b8cff 55%, #a78bfa);
+  z-index: 10;
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 0 10px #5b8cff;
 }
 
 #toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:10px;width:90%;max-width:400px;pointer-events:none}
@@ -72,27 +76,14 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head{margin-bottom:20px;animation:fadeUp .4s ease}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
-
-/* الاسم المتوهج */
-.name-span{
-  font-size:22px;
-  font-weight:900;
-  color: var(--blue2);
-  animation: textGlow 1.5s ease-in-out infinite alternate;
-}
-
+.name-span{font-size:22px;font-weight:900;color:var(--blue2);animation: textGlow 1.5s ease-in-out infinite alternate}
 .page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
 .page-head h1 .count{font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:4px 14px;border-radius:99px;font-weight:900;box-shadow:0 4px 10px rgba(108,99,255,.3)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;margin-top:24px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:all .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
-.card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
 
-/* تأثير عند الضغط على الكارت */
-.card:active {
-  animation: shake 0.4s ease-in-out;
-  border-color: var(--blue2);
-  box-shadow: 0 0 20px var(--blue), inset 0 0 10px rgba(108, 99, 255, 0.2);
-}
+/* الكارت */
+.card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05);cursor:pointer}
+.card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
 
 .card-img{width:100%;aspect-ratio:16/10;background:var(--card-inner);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;position:relative;pointer-events:none}
 .card-img img{width:100%;height:100%;object-fit:cover;object-position:center 80%;transition:transform .4s ease}
@@ -118,7 +109,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 </style>
 </head>
 <body>
-<!-- شريط التقدم -->
 <div id="scroll-progress"></div>
 
 <div id="toast-container"></div>
@@ -141,8 +131,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
     <h1 class="greeting" id="greeting">جاري التحميل...</h1>
     <p>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></p>
   </div>
-  
-  <!-- تم حذف خانة المقولات -->
 
   <div class="grid" id="subjects-grid">
     <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
@@ -157,7 +145,7 @@ const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
 
-// شريط التقدم
+// شريط التقدم العلوي
 const progressBar = $('scroll-progress');
 window.addEventListener('scroll', () => {
   const scrollTop = window.scrollY;
@@ -183,6 +171,18 @@ function setGreeting(name){
   $('greeting').innerHTML = `${icon} ${greet} يا <span class="name-span">${esc(name)}</span>`;
 }
 
+// دالة التحويل مع الشريط
+window.goToTeachers = function(url, cardEl) {
+  const bar = cardEl.querySelector('.card-progress');
+  if(bar) {
+    bar.style.width = '100%';
+  }
+  // استنى نص ثانية عشان الشريط يتملا وبعدين انقل
+  setTimeout(() => {
+    window.location.href = url;
+  }, 400);
+};
+
 async function load() {
   try {
     const subjects = await api('/api/subjects/' + subjectId);
@@ -194,7 +194,8 @@ async function load() {
     countEl.textContent = subjects.length;
     countEl.style.display = 'inline-block';
     $('subjects-grid').innerHTML = subjects.map(s => `
-      <div class="card">
+      <div class="card" onclick="goToTeachers('teachers.html?subjectId=${s.id}&subjectName=${encodeURIComponent(s.name)}', this)">
+        <div class="card-progress"></div>
         <div class="card-img">
           ${s.image_url ? `<img src="${esc(s.image_url)}" alt="${esc(s.name)}" onerror="this.style.display='none'">` : ''}
           <div class="ph" style="display:${s.image_url?'none':'grid'}"><svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
@@ -202,7 +203,8 @@ async function load() {
         <div class="card-body">
           <h3>${esc(s.name)}</h3>
           <div class="sub">مادة دراسية</div>
-          <button class="action-btn" onclick="window.location.href='teachers.html?subjectId=${s.id}&subjectName=${encodeURIComponent(s.name)}'">عرض المدرسين<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          <!-- الزر مبقاش عليه onclick عشان ميتعارضش مع الكارت -->
+          <button class="action-btn">عرض المدرسين<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
         </div>
       </div>
     `).join('');
