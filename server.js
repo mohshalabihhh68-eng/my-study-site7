@@ -3732,6 +3732,258 @@ app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.removeHeader("Content-Encoding");
+// ==================== بروكسي الملفات ====================
+// دالة مساعدة: تحويل روابط Google Drive لروابط مباشرة/معاينة
+function normalizeDriveUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    const host = u.hostname.toLowerCase();
+    if (!host.includes("drive.google.com") && !host.includes("docs.google.com")) return rawUrl;
+
+    let fileId = null;
+    // patterns: /file/d/<id>/view  |  ?id=<id>  |  /open?id=<id>  |  /uc?id=<id>
+    const m1 = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+    if (m1) fileId = m1[1];
+    if (!fileId) {
+      const idParam = u.searchParams.get("id");
+      if (idParam && /^[a-zA-Z0-9_-]{10,}$/.test(idParam)) fileId = idParam;
+    }
+    if (!fileId) return rawUrl;
+
+    // لو الرابط أصلاً uc?export=download أو uc?id= سيبها زي ما هي
+    if (u.pathname === "/uc") {
+      // نحولها لمعاينة مباشرة
+      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+
+    // رابط معاينة/عرض مباشر بدون صفحة Drive
+    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+  } catch {
+    return rawUrl;
+  }
+}
+
+// دالة مساعدة: استخراج fileId من رابط Drive
+function extractDriveFileId(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    const host = u.hostname.toLowerCase();
+    if (!host.includes("drive.google.com") && !host.includes("docs.google.com")) return null;
+    const m1 = u.pathname.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+    if (m1) return m1[1];
+    const idParam = u.searchParams.get("id");
+    if (idParam && /^[a-zA-Z0-9_-]{10,}$/.test(idParam)) return idParam;
+    return null;
+  } catch { return null; }
+}
+
+app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
+  try {
+    let targetUrl = req.query.url;
+    if (!targetUrl || typeof targetUrl !== "string") {
+      return res.status(400).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px}</style></head>
+        <body><div class="box"><h1>رابط الملف ناقص</h1><p>مفيش معامل url</p></div></body></html>`
+      );
+    }
+    try {
+      if (targetUrl.includes("%")) targetUrl = decodeURIComponent(targetUrl);
+    } catch {}
+
+    let parsed;
+    try {
+      parsed = new URL(targetUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return res.status(400).type("html").send(
+          `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطأ</title></head>
+          <body style="background:#111;color:#eee;text-align:center;padding:40px;font-family:sans-serif"><h1>رابط غير صالح</h1></body></html>`
+        );
+      }
+    } catch {
+      return res.status(400).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>خطأ</title></head>
+        <body style="background:#111;color:#eee;text-align:center;padding:40px;font-family:sans-serif"><h1>رابط غير صالح</h1></body></html>`
+      );
+    }
+
+    // ✅ جديد: لو الرابط Google Drive، نستخدم رابط المعاينة المباشر
+    const driveFileId = extractDriveFileId(targetUrl);
+    if (driveFileId) {
+      targetUrl = `https://drive.google.com/uc?export=view&id=${driveFileId}`;
+    }
+
+    const host = (parsed.hostname || "").toLowerCase();
+    const isDrive = Boolean(driveFileId) || host.includes("drive.google.com") || host.includes("docs.google.com");
+    const needsCoursatkAuth =
+      !isDrive && (
+        host.includes("coursatk") ||
+        host.includes("stream-weave") ||
+        host.includes("floravon") ||
+        host.includes("c-cdn") ||
+        host.includes("thanawica") ||
+        CONFIG.STREAM_HOSTS.some((h) => host === h || host.endsWith("." + h))
+      );
+
+    const tok = needsCoursatkAuth ? await getCoursatkToken() : "";
+
+    const baseHeaders = {
+      "User-Agent": CONFIG.STREAM_UA || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Referer": isDrive ? "https://drive.google.com/" : (CONFIG.STREAM_REFERER || "https://coursatk.online/"),
+      "Origin": isDrive ? "https://drive.google.com" : (CONFIG.STREAM_ORIGIN || "https://coursatk.online"),
+      "Accept": "application/pdf,application/octet-stream,image/*,*/*;q=0.8",
+      "Accept-Language": "ar,en;q=0.9"
+    };
+    if (tok) baseHeaders.Authorization = `Bearer ${tok}`;
+    if (req.headers.range) baseHeaders.Range = req.headers.range;
+
+    let upstream;
+    try {
+      upstream = await upstreamSlot(() =>
+        fetchT(targetUrl, { headers: baseHeaders, redirect: "follow" }, { timeout: 50_000, retries: 1 })
+      );
+    } catch (fetchErr) {
+      console.error("[file-proxy] fetch failed:", fetchErr.message, String(targetUrl).slice(0, 100));
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
+        <body><div class="box"><h1>فشل الاتصال بالمصدر</h1><p>${String(fetchErr.message || "network").replace(/[<>&]/g, "")}</p></div></body></html>`
+      );
+    }
+
+    if (!upstream.ok) {
+      if (tok && (upstream.status === 401 || upstream.status === 403)) {
+        try { await upstream.arrayBuffer(); } catch {}
+        const noAuthHeaders = { ...baseHeaders };
+        delete noAuthHeaders.Authorization;
+        try {
+          upstream = await upstreamSlot(() =>
+            fetchT(targetUrl, { headers: noAuthHeaders, redirect: "follow" }, { timeout: 40_000, retries: 0 })
+          );
+        } catch {}
+      }
+    }
+
+    if (!upstream.ok) {
+      console.error("[file-proxy] upstream", upstream.status, String(targetUrl).slice(0, 120));
+      const code = upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502;
+      return res.status(code).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
+        <body><div class="box"><h1>تعذر جلب الملف</h1><p>كود الخطأ: ${code}</p>
+        <p style="margin-top:12px;font-size:12px;opacity:.5">الملف غير متاح حاليًا من المصدر</p></div></body></html>`
+      );
+    }
+
+    // ✅ مهم: Drive بيرجع HTML (صفحة "Confirm download" أو صفحة الفيروسات) للملفات الكبيرة
+    // لازم نكتشفها ونحاول نتعامل معاها
+    const rawBuffer = Buffer.from(await upstream.arrayBuffer());
+    const headPreview = rawBuffer.slice(0, 2048).toString("utf8").toLowerCase();
+
+    // لو Drive رجّع صفحة تحذير الفيروسات، نحاول نستخرج الرابط المباشر
+    if (isDrive && (headPreview.includes("<!doctype") || headPreview.includes("<html"))) {
+      // نحاول نستخرج الـ confirm token
+      const tokenMatch = rawBuffer.toString("utf8").match(/confirm=([0-9A-Za-z_-]+)/);
+      const uuidMatch = rawBuffer.toString("utf8").match(/uuid=([0-9A-Za-z_-]+)/);
+      if (tokenMatch && driveFileId) {
+        const confirmUrl = `https://drive.google.com/uc?export=download&confirm=${tokenMatch[1]}${uuidMatch ? "&uuid=" + uuidMatch[1] : ""}&id=${driveFileId}`;
+        try {
+          const retry = await upstreamSlot(() =>
+            fetchT(confirmUrl, { headers: baseHeaders, redirect: "follow" }, { timeout: 50_000, retries: 0 })
+          );
+          if (retry.ok) {
+            const retryBuf = Buffer.from(await retry.arrayBuffer());
+            const retryHead = retryBuf.slice(0, 2048).toString("utf8").toLowerCase();
+            if (!retryHead.includes("<!doctype") && !retryHead.includes("<html")) {
+              // نجحنا — نرجع الملف
+              const ct = retryBuf.slice(0, 4).toString("latin1") === "%PDF" ? "application/pdf" : (retry.headers.get("content-type") || "application/octet-stream").split(";")[0].trim();
+              res.status(200);
+              res.setHeader("Content-Type", ct);
+              res.setHeader("Content-Length", String(retryBuf.length));
+              res.setHeader("Content-Disposition", ct === "application/pdf" ? 'inline; filename="document.pdf"' : "inline");
+              res.setHeader("Accept-Ranges", "bytes");
+              res.setHeader("Cache-Control", "no-store, no-transform");
+              res.setHeader("X-Content-Type-Options", "nosniff");
+              res.setHeader("Access-Control-Allow-Origin", "*");
+              res.removeHeader("Content-Encoding");
+              return res.end(retryBuf);
+            }
+          }
+        } catch {}
+      }
+
+      // لو فشلنا، نرجع رسالة واضحة بدل ما نعرض صفحة Drive
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>الملف محمي</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:380px;line-height:1.7}h1{font-size:18px;margin:0 0 12px;color:#ffcc00}p{opacity:.85;font-size:14px}</style></head>
+        <body><div class="box"><h1>⚠️ الملف مش قابل للفتح مباشرة</h1>
+        <p>الملف على Google Drive ومحتاج صلاحية وصول، أو حجمه كبير ومحتاج تأكيد تحميل.</p>
+        <p style="margin-top:12px">اطلب من الأدمن يخلي الملف <b>Anyone with the link</b> ويجرب تاني.</p></div></body></html>`
+      );
+    }
+
+    const buffer = rawBuffer;
+    if (!buffer.length) {
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px}</style></head>
+        <body><div class="box"><h1>الملف فاضي</h1></div></body></html>`
+      );
+    }
+
+    const headText = buffer.slice(0, 400).toString("utf8").toLowerCase();
+    const looksLikeHtmlError =
+      (headText.includes("<!doctype") || headText.includes("<html") || headText.includes("<head")) &&
+      (headText.includes("cloudflare") || headText.includes("access denied") || headText.includes("forbidden") ||
+       headText.includes("unauthorized") || headText.includes("error") || headText.includes("login") ||
+       headText.includes("captcha") || buffer.length < 2000);
+
+    if (looksLikeHtmlError) {
+      console.error("[file-proxy] got HTML error page instead of file:", String(targetUrl).slice(0, 100));
+      return res.status(502).type("html").send(
+        `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>خطأ</title><style>body{font-family:sans-serif;background:#111;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}
+        .box{background:#222;padding:24px;border-radius:12px;max-width:360px}h1{font-size:18px;margin:0 0 12px}p{opacity:.8;font-size:14px}</style></head>
+        <body><div class="box"><h1>المصدر رفض الطلب</h1><p>السيرفر المصدر رجّع صفحة خطأ بدل الملف</p></div></body></html>`
+      );
+    }
+
+    let contentType = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    const head = buffer.slice(0, 1024).toString("latin1");
+    const urlLower = String(targetUrl).toLowerCase();
+    const isReallyPdf = head.includes("%PDF-");
+
+    if (isReallyPdf) {
+      contentType = "application/pdf";
+    } else if (urlLower.match(/\.(jpe?g)(\?|$)/) || head.startsWith("\xFF\xD8\xFF")) {
+      contentType = "image/jpeg";
+    } else if (urlLower.match(/\.png(\?|$)/) || head.startsWith("\x89PNG")) {
+      contentType = "image/png";
+    } else if (urlLower.match(/\.webp(\?|$)/) || head.startsWith("RIFF")) {
+      contentType = "image/webp";
+    } else if (urlLower.includes(".pdf") || contentType.includes("pdf")) {
+      contentType = "application/pdf";
+    } else if (!contentType || contentType === "application/octet-stream" || contentType.includes("text/")) {
+      contentType = "application/octet-stream";
+    }
+
+    res.status(200);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", String(buffer.length));
+    res.setHeader(
+      "Content-Disposition",
+      contentType === "application/pdf" ? 'inline; filename="document.pdf"' : "inline"
+    );
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "no-store, no-transform");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.removeHeader("Content-Encoding");
 
     return res.end(buffer);
   } catch (e) {
