@@ -97,7 +97,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 .success-circle.done::before{border-color:#10b981;animation:none;opacity:.9}
 .success-circle svg{width:54px;height:54px;fill:none;stroke:#10b981;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:80;stroke-dashoffset:80}
 .success-circle.done svg{animation:drawCheck .5s .1s cubic-bezier(.65,0,.35,1) forwards}
-.success-text{margin-top:18px;color:#10b981;font-weight:900;font-size:18px;text-align:center;text-shadow:0 0 12px rgba(16,185,129,.5)}
+.success-text{margin-top:18px;color:#10b981;font-weight:900;font-size:18px;text-align:center;text-shadow:0 0 12px rgba(16,185,129,.5);padding:0 16px;line-height:1.6}
 @keyframes ringSpin{to{transform:rotate(360deg)}}
 @keyframes drawCheck{to{stroke-dashoffset:0}}
 @keyframes successGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4),0 0 30px rgba(16,185,129,.35)}50%{box-shadow:0 0 0 10px rgba(16,185,129,0),0 0 55px rgba(16,185,129,.65)}}
@@ -135,7 +135,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     <svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     <div>
       <strong>تنبيه هام</strong>
-      للأسف الكود دا متسجل قبل كدا .لو غيرت جهازك وعاوز تنقل الكود كلم الأدمن   .
+      للأسف الكود دا متسجل قبل كدا على.لو غيرت جهازك وعاوز تنقل الكود كلم الأدمن   .
     </div>
   </div>
 
@@ -171,7 +171,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     <div class="success-circle" id="success-circle">
       <svg viewBox="0 0 52 52"><path d="M14 27l8 8 16-18"/></svg>
     </div>
-    <div class="success-text">تم الدخول بنجاح</div>
+    <div class="success-text" id="success-text">أهلاً بيك</div>
   </div>
 </div>
 
@@ -221,16 +221,31 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     otpContainer.classList.add('shake');
   }
 
-  function init() {
-    if (localStorage.getItem('student_token')) { window.location.href = 'subjects.html'; return; }
+  function applySavedCode() {
     const savedCode = localStorage.getItem(LAST_CODE_KEY);
     if (savedCode && /^\d{9}$/.test(savedCode)) {
-      // الكود جاهز علطول وآخر خانة عليها التركيز عشان تضغط دخول على طول
       setInputValue(savedCode);
       inputs[inputs.length - 1].blur();
-    } else {
-      setTimeout(() => inputs[0].focus(), 300);
+      return true;
     }
+    return false;
+  }
+
+  function init() {
+    if (localStorage.getItem('student_token')) { window.location.href = 'subjects.html'; return; }
+    const tryApply = (attempt) => {
+      if (!applySavedCode() && attempt < 3) {
+        setTimeout(() => tryApply(attempt + 1), 150);
+      }
+    };
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', () => setTimeout(() => tryApply(0), 50));
+    } else {
+      setTimeout(() => tryApply(0), 50);
+    }
+    setTimeout(() => {
+      if (getCode().length === 0) inputs[0].focus();
+    }, 600);
   }
 
   function showError(msg, seconds) {
@@ -258,7 +273,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     }
   }
 
-  // ===== توزيع الأرقام على الخانات =====
   function fillFrom(startIndex, digitsArr) {
     let idx = startIndex;
     for (let d = 0; d < digitsArr.length && idx < inputs.length; d++, idx++) {
@@ -273,7 +287,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     else inputs[inputs.length - 1].blur();
   }
 
-  // دالة موحدة لمعالجة أي إدخال (كتابة / لصق / drop / autofill)
   function handleDigits(startIndex, digits) {
     digits = String(digits).replace(/\D/g, '');
     if (!digits) return;
@@ -288,7 +301,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     updateContainerState();
   }
 
-  // ===== المسح المستمر (Long Backspace) =====
   let holdTimer = null, holdInterval = null, isHolding = false;
 
   function startErase() {
@@ -325,7 +337,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   }
 
   inputs.forEach((inp, i) => {
-    // 1) أي إدخال (كتابة / autofill / IME)
     inp.addEventListener('input', (e) => {
       const raw = e.target.value.replace(/\D/g, '');
       if (!raw) {
@@ -350,7 +361,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       warnBox.classList.remove('show');
     });
 
-    // 2) اللصق — من أي خانة يوزّع من الأول
     inp.addEventListener('paste', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -363,7 +373,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       warnBox.classList.remove('show');
     });
 
-    // 3) السحب والإفلات
     inp.addEventListener('drop', (e) => {
       e.preventDefault();
       const text = e.dataTransfer.getData('text') || '';
@@ -373,7 +382,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       handleDigits(0, digits);
     });
 
-    // 4) beforeinput — يمسك الإدخال الجماعي الحديث
     inp.addEventListener('beforeinput', (e) => {
       if (e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop' || e.inputType === 'insertReplacementText') {
         if (!e.data) return;
@@ -385,7 +393,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       }
     });
 
-    // 5) لوحة المفاتيح: Backspace المستمر + التنقل
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Backspace') {
         if (e.target.value) {
@@ -411,7 +418,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     inp.addEventListener('focus', (e) => e.target.select());
   });
 
-  // إيقاف المسح المستمر لو المستخدم شال إيده
   document.addEventListener('mouseup', stopErase);
   document.addEventListener('touchend', stopErase);
   window.addEventListener('blur', stopErase);
@@ -444,18 +450,22 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
         localStorage.setItem('student_token', data.data.token);
         localStorage.setItem('student_name', data.data.student.name);
 
-        // تأثير النجاح: توهج + دايرة بتلف ثم علامة صح
+        const studentName = (data.data.student && data.data.student.name) ? data.data.student.name : '';
+
         btnLogin.classList.add('success-glow');
-        btnText.textContent = 'تم الدخول ✓';
+        btnText.textContent = studentName ? ('أهلاً بيك يا ' + studentName) : 'أهلاً بيك ✓';
         btnArrow.style.display = 'none';
         vibrate([30, 50, 30]);
 
         const overlay = $('success-overlay');
         const circle = $('success-circle');
+        const successText = $('success-text');
+        successText.textContent = studentName ? ('أهلاً بيك يا ' + studentName) : 'أهلاً بيك';
+
         overlay.classList.add('show');
         setTimeout(() => circle.classList.add('done'), 700);
 
-        setTimeout(() => { window.location.href = 'subjects.html'; }, 1800);
+        setTimeout(() => { window.location.href = 'subjects.html'; }, 2000);
         return;
       }
 
