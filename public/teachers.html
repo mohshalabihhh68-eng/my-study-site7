@@ -22,6 +22,13 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none}
+
+/* شريط التقدم العلوي */
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
+
+/* شريط التقدم الجانبي */
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
@@ -31,10 +38,13 @@ button{font:inherit;cursor:pointer;outline:none}
 .brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
+
+/* تكبير خانة البروفايل */
 .profile-wrap{position:relative}
-.profile-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px 5px 5px;cursor:pointer;font-weight:800;font-size:12px;color:var(--ink);transition:.2s}
-.profile-btn:hover{background:var(--card-hover)}
-.profile-btn .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:13px}
+.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
+.profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
+.profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
+
 .theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
 .theme-toggle:hover{background:var(--card-hover);border-color:var(--blue);transform:rotate(15deg)}
 .theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;display:block}
@@ -52,8 +62,34 @@ button{font:inherit;cursor:pointer;outline:none}
 .page-head h1{margin:0;font-size:28px;font-weight:900;color:var(--ink)}
 .page-head p{margin:8px 0 0;color:var(--muted);font-size:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}
+
+/* الكارت */
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:all .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
 .card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
+
+/* الشريط الجانبي للكارت */
+.side-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  z-index: 10;
+  border-radius: 0 0 0 24px;
+}
+.side-progress-bar .fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0%;
+  background: linear-gradient(180deg, #10b981, #34d399, #6ee7b7);
+  box-shadow: 0 0 15px #34d399;
+  transition: height 0.5s ease-in-out;
+  border-radius: 0 0 0 24px;
+}
+
 .card-img{width:100%;aspect-ratio:4/3;background:var(--placeholder-bg);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;pointer-events:none}
 .card-img img{width:100%;height:100%;object-fit:cover;transition:transform .4s ease}
 .card:hover .card-img img{transform:scale(1.05)}
@@ -61,21 +97,28 @@ button{font:inherit;cursor:pointer;outline:none}
 .card-body{padding:20px;display:flex;flex-direction:column;flex:1;background:var(--card)}
 .card-body h3{margin:0;font-size:18px;font-weight:900;margin-bottom:4px;color:var(--ink)}
 .card-body .sub{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px}
+
+/* الزرار */
 .action-btn{width:100%;padding:12px;border:0;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(108,99,255,.2)}
 .action-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(108,99,255,.35)}
 .action-btn svg{width:16px;height:16px;fill:currentColor}
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
 .spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
-@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.brand small{display:none}}
+@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.brand small{display:none}#scroll-progress-side{width:3px}}
 </style>
 </head>
 <body>
+<!-- شريط التقدم العلوي والجانبي -->
+<div id="scroll-progress"></div>
+<div id="scroll-progress-side"></div>
+
 <header class="app-nav"><div class="app-nav-in">
   <div class="brand" onclick="window.location.href='index.html'">
     <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
     <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <div class="nav-right">
+    <!-- تم تكبير خانة البروفايل هنا -->
     <div class="profile-wrap"><button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
     <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
       <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
@@ -92,6 +135,18 @@ const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId');
 const subjectName = qs.get('subjectName') || '';
+
+// تحديث شريط التقدم (العلوي والجانبي)
+const progressBar = $('scroll-progress');
+const progressBarSide = $('scroll-progress-side');
+window.addEventListener('scroll', () => {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+  if (progressBar) progressBar.style.width = progress + '%';
+  if (progressBarSide) progressBarSide.style.height = progress + '%';
+}, { passive: true });
+
 const api = async (path, opts = {}) => {
   const headers = { Accept: 'application/json', ...opts.headers };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -102,18 +157,34 @@ const api = async (path, opts = {}) => {
   return data.data;
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+window.goToChapters = function(url, cardEl) {
+  const barFill = cardEl.querySelector('.side-progress-bar .fill');
+  if(barFill) {
+    barFill.style.height = '100%';
+  }
+  setTimeout(() => {
+    window.location.href = url;
+  }, 650);
+};
+
 async function load() {
   if (!subjectId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المادة غير موجود.</div>'; return; }
   try {
     const data = await api('/api/subjects/' + subjectId + '/teachers');
     const teachers = data.teachers || data || [];
     if (!teachers.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>'; return; }
+    
     let html = `
     <div class="header-action"><button class="back-btn" onclick="window.location.href='subjects.html'"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمواد</button></div>
     <div class="page-head"><div class="badge">المدرسين</div><h1>اختر المدرس</h1><p>دول المدرسين المتاحين لمادة ${esc(subjectName)}</p></div>
     <div class="grid">`;
+    
     teachers.forEach(t => {
-      html += `<div class="card">
+      html += `<div class="card" id="card-${t.id}">
+        <div class="side-progress-bar">
+          <div class="fill"></div>
+        </div>
         <div class="card-img">
           ${t.image_url ? `<img src="${esc(t.image_url)}" alt="${esc(t.name)}" onerror="this.style.display='none'">` : ''}
           <div class="ph" style="display:${t.image_url?'none':'grid'}"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></div>
@@ -121,7 +192,7 @@ async function load() {
         <div class="card-body">
           <h3>${esc(t.name)}</h3>
           <div class="sub">${t.chapter_count || 0} فصل متاح</div>
-          <button class="action-btn" onclick="window.location.href='chapters.html?teacherId=${t.id}&teacherName=${encodeURIComponent(t.name)}&subjectName=${encodeURIComponent(subjectName)}'">عرض الفصول<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          <button class="action-btn" onclick="goToChapters('chapters.html?teacherId=${t.id}&teacherName=${encodeURIComponent(t.name)}&subjectName=${encodeURIComponent(subjectName)}', document.getElementById('card-${t.id}'))">عرض الفصول<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
         </div>
       </div>`;
     });
