@@ -17,16 +17,13 @@
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root, [data-theme="dark"]{--bg:#070b14;--bg-alt:#0b111d;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(7,11,20,.88);--bg-pattern:radial-gradient(circle at top right,rgba(59,130,246,.05),transparent 40%)}
-[data-theme="light"]{--bg:#f8fafc;--bg-alt:#ffffff;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(255,255,255,.88);--bg-pattern:radial-gradient(circle at top right,rgba(108,99,255,.05),transparent 40%)}
+:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(7,11,20,.88);--bg-pattern:radial-gradient(circle at top right,rgba(59,130,246,.05),transparent 40%)}
+[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(255,255,255,.88);--bg-pattern:radial-gradient(circle at top right,rgba(108,99,255,.05),transparent 40%)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);background-image:var(--bg-pattern);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none;border:none}
 
-/* شريط التقدم العلوي */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
-
-/* شريط التقدم الجانبي */
 #scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
@@ -37,11 +34,12 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .toast{background:var(--card);color:var(--ink);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.1);border:1px solid var(--line);animation:slideDown .3s ease;pointer-events:auto}
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
-.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white;transition:transform .2s}
-.brand:hover .logo{transform:scale(1.05)}
-.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
+
+/* تعديل اللوجو عشان ميبوظش الهيدر لو مربع */
+.brand{display:flex;align-items:center;cursor:pointer;flex-shrink:0;}
+.brand-img{height: 50px; width: auto; max-width: 160px; object-fit: contain; transition: transform .2s; display: block; border-radius: 8px;}
+.brand:hover .brand-img{transform: scale(1.05);}
+
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
 .profile-wrap{position:relative}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
@@ -59,21 +57,16 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
 
-/* ستايل الاسم الجديد زي الصورة بالظبط */
-.name-span {
+.name-span{
   font-size: 26px;
   font-weight: 900;
-  /* التدرج من الأزرق الفاتح للأزرق الغامق زي الصورة */
   background: linear-gradient(to right, #00d4ff, #3b82f6, #1e3a8a);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  /* عشان يشتغل على كل المتصفحات */
   display: inline-block;
 }
-
-/* في الوضع الليلي نخلي التدرج أفتح شوية عشان يبان */
 [data-theme="dark"] .name-span {
   background: linear-gradient(to right, #00d4ff, #60a5fa, #3b82f6);
   -webkit-background-clip: text;
@@ -86,11 +79,9 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head h1 .count{font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:4px 14px;border-radius:99px;font-weight:900;box-shadow:0 4px 10px rgba(108,99,255,.3)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;margin-top:24px}
 
-/* الكارت */
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
 .card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
 
-/* الشريط الجانبي للكارت */
 .side-progress-bar {
   position: absolute;
   top: 0;
@@ -121,7 +112,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .card-body h3{margin:0;font-size:20px;font-weight:900;margin-bottom:4px;color:var(--ink)}
 .card-body .sub{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:20px}
 
-/* الزرار */
 .action-btn{width:100%;padding:12px;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(108,99,255,.2)}
 .action-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(108,99,255,.35)}
 .action-btn svg{width:16px;height:16px;fill:currentColor}
@@ -136,20 +126,21 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .empty-state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted)}
 .empty-state svg{width:60px;height:60px;margin-bottom:15px;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5}
 .empty-state h3{color:var(--ink);font-size:18px;font-weight:900;margin:0 0 8px}
-@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand small{display:none}#scroll-progress-side{width:3px}}
+@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand-img{height: 40px; max-width: 130px;}#scroll-progress-side{width:3px}}
 </style>
 </head>
 <body>
-<!-- شريط التقدم العلوي والجانبي -->
 <div id="scroll-progress"></div>
 <div id="scroll-progress-side"></div>
 
 <div id="toast-container"></div>
 <header class="app-nav"><div class="app-nav-in">
+  
+  <!-- اللوجو هنا -->
   <div class="brand" onclick="window.location.href='index.html'">
-    <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
-    <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
+    <img src="logo.png" alt="ثانوية club" class="brand-img">
   </div>
+
   <div class="nav-right">
     <div class="profile-wrap"><button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
     <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
@@ -178,7 +169,6 @@ const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
 
-// تحديث شريط التقدم (العلوي والجانبي)
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
 window.addEventListener('scroll', () => {
