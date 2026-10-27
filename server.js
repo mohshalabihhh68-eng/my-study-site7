@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.2 — Full Analytics (Visits + Grouped Watch History + Student Tracker)
+ * VERSION v1.8.0 — SPEED OPTIMIZED (Aggressive Caching + Compression)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.2";
+const APP_VERSION = "v1.8.0";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -71,20 +71,34 @@ for (const m of ["get", "post", "put", "patch", "delete", "use"]) {
   };
 }
 app.set("trust proxy", 1);
-app.use(cors({ origin: true, credentials: true }));
+
+// تحسين إعدادات الـ CORS
+app.use(cors({ origin: true, credentials: true, maxAge: 86400 }));
+
 app.use(express.json({ limit: "20mb" }));
+
+// تحسين الضغط ليكون أقوى وأسرع
 app.use(
   compression({
+    level: 6, // مستوى ضغط متوازن (سرعه وحجم كويسين)
+    threshold: 1024, // ضغط أي رد أكبر من 1 كيلو
     filter: (req, res) => {
       const p = req.path || "";
       if (p.startsWith("/api/hls/") || p.startsWith("/api/stream/segment/") || p.startsWith("/api/file-proxy")) return false;
+      if (p.startsWith("/api/cdn")) return false;
       if (p.includes("/messages/stream") || p.endsWith("/stream")) return false;
+      if (p.match(/\.(jpg|jpeg|png|webp|gif|mp4|m3u8|ts)$/i)) return false;
       return compression.filter(req, res);
     }
   })
 );
 
-app.use(express.static(path.join(__dirname, "public")));
+// تحسين كاش الملفات الثابتة (Static Caching)
+app.use(express.static(path.join(__dirname, "public"), {
+  maxAge: '7d', // خلي المتصفح يحفظ الصور والملفات 7 أيام
+  etag: true,
+  lastModified: true
+}));
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
