@@ -716,11 +716,25 @@ const DEFAULT_SECTIONS = [
   { id:"scientific_math",     name:"علمي رياضة", emoji:"📐" },
   { id:"literary",            name:"أدبي",        emoji:"📖" }
 ];
-const TYPES = { trial:"تجربة", month:"شهر", term:"ترم", year:"سنة", custom:"مخصص" };
+const TYPES = {
+  h1:"ساعة واحدة", h6:"6 ساعات", h12:"12 ساعة", trial:"تجربة — 24 ساعة",
+  d3:"3 أيام", week:"أسبوع", d15:"15 يوم",
+  month:"شهر واحد", m2:"شهرين", m3:"3 شهور", m4:"4 شهور", m5:"5 شهور",
+  m6:"6 شهور", m7:"7 شهور", m8:"8 شهور", m9:"9 شهور", m10:"10 شهور", m11:"11 شهر",
+  year:"سنة — 12 شهر", custom:"مخصص"
+};
 function syncTypes(){
-  const base = { trial:"تجربة", month:"شهر", term:"ترم", year:"سنة" };
+  const base = {
+    h1:"ساعة واحدة", h6:"6 ساعات", h12:"12 ساعة", trial:"تجربة — 24 ساعة",
+    d3:"3 أيام", week:"أسبوع", d15:"15 يوم",
+    month:"شهر واحد", m2:"شهرين", m3:"3 شهور", m4:"4 شهور", m5:"5 شهور",
+    m6:"6 شهور", m7:"7 شهور", m8:"8 شهور", m9:"9 شهور", m10:"10 شهور", m11:"11 شهر",
+    year:"سنة — 12 شهر"
+  };
   Object.keys(TYPES).forEach(k => delete TYPES[k]); Object.assign(TYPES, base);
-  ((S.runtime && S.runtime.packages) || []).forEach(p => { if(p && p.id && !(p.id in base) && p.active !== false) TYPES[p.id] = p.name || p.id; });
+  ((S.runtime && S.runtime.packages) || []).forEach(p => {
+    if (p && p.id && p.active !== false && p.id !== "custom") TYPES[p.id] = p.name || p.id;
+  });
   TYPES.custom = "مخصص";
 }
 const PERMS = [
@@ -1373,9 +1387,22 @@ async function createStudent(body){
 }
 
 /* ---------- إنشاء كود ---------- */
-function estExpiry(type, days){
-  const pk = ((S.runtime && S.runtime.packages) || []).find(p => p.id === type), pms = pk ? ((Number(pk.days) || 0)*24 + (Number(pk.hours) || 0))*36e5 : 0;
-  const ms = type === "custom" ? (Number(days) || 0)*DAY : pms || (type === "trial" ? 36e5 : type === "month" ? 30*DAY : type === "term" ? 180*DAY : type === "year" ? 365*DAY : 0);
+function estExpiry(type, days, hours){
+  const pk = ((S.runtime && S.runtime.packages) || []).find(p => p.id === type);
+  const pms = pk ? ((Number(pk.days) || 0) * 24 + (Number(pk.hours) || 0)) * 36e5 : 0;
+  const table = {
+    h1: 1 * 36e5, h6: 6 * 36e5, h12: 12 * 36e5, trial: 24 * 36e5,
+    d3: 3 * DAY, week: 7 * DAY, d15: 15 * DAY,
+    month: 30 * DAY, m2: 60 * DAY, m3: 90 * DAY, m4: 120 * DAY, m5: 150 * DAY,
+    m6: 180 * DAY, m7: 210 * DAY, m8: 240 * DAY, m9: 270 * DAY, m10: 300 * DAY, m11: 330 * DAY,
+    year: 365 * DAY, d45: 45 * DAY, d60: 60 * DAY, term: 120 * DAY, d180: 180 * DAY
+  };
+  let ms = 0;
+  if (type === "custom") {
+    ms = (Number(days) || 0) * DAY + (Number(hours) || 0) * 36e5;
+  } else {
+    ms = pms || table[type] || 0;
+  }
   return ms ? fmt(Date.now() + ms) : "—";
 }
 ACT["st-new"] = () => {
@@ -1385,7 +1412,8 @@ ACT["st-new"] = () => {
     <div class="form-grid">
       <div class="field"><label>الشعبة</label><select class="sel" id="n-sec">${sectionOptions("")}</select></div>
       <div class="field"><label>نوع الاشتراك</label><select class="sel" id="n-type" data-ch="n-type">${typeOptions("month")}</select></div>
-      <div class="field hide" id="n-days-f"><label>عدد الأيام</label><input class="inp" id="n-days" type="number" min="1" max="3650" placeholder="45"></div>
+      <div class="field hide" id="n-days-f"><label>عدد الأيام</label><input class="inp" id="n-days" type="number" min="0" max="3650" placeholder="45"></div>
+      <div class="field hide" id="n-hours-f"><label>عدد الساعات</label><input class="inp" id="n-hours" type="number" min="0" max="87600" placeholder="0"></div>
       <div class="field"><label>حد الأجهزة</label><input class="inp" id="n-dev" type="number" min="1" max="10" value="1"></div>
       <div class="field"><label>كود يدوي (اختياري)</label><input class="inp mono" id="n-code" maxlength="9" inputmode="numeric" placeholder="9 أرقام أو سيبه فاضي"></div>
       <div class="field"><label>موبايل / واتساب</label><input class="inp ltr" id="n-phone" inputmode="tel" placeholder="01xxxxxxxxx"></div>
@@ -1393,9 +1421,16 @@ ACT["st-new"] = () => {
     </div>
     <div class="hint" id="n-est">ينتهي تقريبًا: ${estExpiry("month")}</div></div>
     <div class="md-f"><button class="btn btn-g" data-act="mclose">إلغاء</button><button class="btn btn-p" id="n-go" data-act="st-create">${ic("check", 16)} إنشاء الكود</button></div>`);
-  const upd = () => { const t = $("#n-type").value; $("#n-days-f").classList.toggle("hide", t !== "custom"); $("#n-est").textContent = "ينتهي تقريبًا: " + estExpiry(t, $("#n-days").value); };
-  CH["n-type"] = upd; $("#n-days").oninput = upd;
+  const upd = () => {
+    const t = $("#n-type").value;
+    const custom = t === "custom";
+    $("#n-days-f").classList.toggle("hide", !custom);
+    $("#n-hours-f").classList.toggle("hide", !custom);
+    $("#n-est").textContent = "ينتهي تقريبًا: " + estExpiry(t, $("#n-days")?.value, $("#n-hours")?.value);
+  };
+  CH["n-type"] = upd; $("#n-days").oninput = upd; if ($("#n-hours")) $("#n-hours").oninput = upd;
   $("#n-name").addEventListener("keydown", e => { if(e.key === "Enter") ACT["st-create"](); });
+  upd();
 };
 ACT["st-create"] = async () => {
   const name = $("#n-name").value.trim(); if(!name){ toast("اكتب اسم الطالب", "err"); return; }
@@ -1407,7 +1442,13 @@ ACT["st-create"] = async () => {
     phone: ($("#n-phone") && $("#n-phone").value.trim()) || "",
     email: ($("#n-email") && $("#n-email").value.trim()) || ""
   };
-  if(type === "custom"){ const d = Number($("#n-days").value); if(!d){ toast("اكتب عدد الأيام", "err"); return; } body.days = d; }
+  if(type === "custom"){
+    const d = Number($("#n-days")?.value) || 0;
+    const h = Number($("#n-hours")?.value) || 0;
+    if (d <= 0 && h <= 0) { toast("اكتب عدد الأيام أو الساعات", "err"); return; }
+    if (d > 0) body.days = d;
+    if (h > 0) body.hours = h;
+  }
   const c = $("#n-code").value.trim(); if(c){ if(!/^\d{9}$/.test(c)){ toast("الكود لازم 9 أرقام", "err"); return; } body.code = c; }
   const btn = $("#n-go"); btn.disabled = true;
   try{
@@ -1590,20 +1631,62 @@ ACT["st-save"] = async el => {
 };
 ACT["st-renew"] = el => {
   const code = el.dataset.code, s = S.students.find(x => x.code === code); if(!s) return;
-  const def = ["month", "term", "year"].includes(s.type) ? s.type : "month";
-  openModal(mHead("تجديد الاشتراك", esc(s.name)) + `<div class="md-b">
+  const def = TYPES[s.type] ? s.type : "month";
+  openModal(mHead("تجديد / زيادة المدة", esc(s.name)) + `<div class="md-b">
     <p class="hint">ينتهي حاليًا: <b>${fmt(s.expiresAt)}</b></p>
-    <div class="field"><label>المدة الجديدة</label><select class="sel" id="r-type" data-ch="r-type">${typeOptions(def)}</select></div>
-    <div class="field hide" id="r-days-f"><label>عدد الأيام</label><input class="inp" id="r-days" type="number" min="1" max="3650" placeholder="45"></div>
-    <label class="row sm muted" style="gap:8px;cursor:pointer"><input type="checkbox" class="chk" id="r-now" checked> العدّ من دلوقتي</label></div>
-    <div class="md-f"><button class="btn btn-g" data-act="mclose">إلغاء</button><button class="btn btn-s" data-act="st-renew-go" data-code="${esc(code)}">${ic("check", 16)} تجديد</button></div>`);
+    <div class="field"><label>المدة</label><select class="sel" id="r-type" data-ch="r-type">${typeOptions(def)}</select></div>
+    <div class="field hide" id="r-days-f"><label>عدد الأيام</label><input class="inp" id="r-days" type="number" min="0" max="3650" placeholder="90"></div>
+    <div class="field hide" id="r-hours-f"><label>عدد الساعات</label><input class="inp" id="r-hours" type="number" min="0" max="87600" placeholder="0"></div>
+    <label class="row sm muted" style="gap:8px;cursor:pointer"><input type="checkbox" class="chk" id="r-now" checked> العدّ من دلوقتي (لو مقفول: بتتضاف على تاريخ الانتهاء الحالي)</label>
+    <label class="row sm muted" style="gap:8px;cursor:pointer;margin-top:6px"><input type="checkbox" class="chk" id="r-extend"> إضافة المدة فوق المتبقي (تمديد)</label>
+    </div>
+    <div class="md-f"><button class="btn btn-g" data-act="mclose">إلغاء</button><button class="btn btn-s" data-act="st-renew-go" data-code="${esc(code)}">${ic("check", 16)} تطبيق</button></div>`);
 };
-CH["r-type"] = () => { $("#r-days-f").classList.toggle("hide", $("#r-type").value !== "custom"); };
+CH["r-type"] = () => {
+  const c = $("#r-type").value === "custom";
+  $("#r-days-f").classList.toggle("hide", !c);
+  $("#r-hours-f").classList.toggle("hide", !c);
+};
 ACT["st-renew-go"] = async el => {
-  const code = el.dataset.code, type = $("#r-type").value, body = { type, renew:$("#r-now").checked };
-  if(type === "custom"){ const d = Number($("#r-days").value); if(!d || d < 1){ toast("اكتب عدد الأيام", "err"); return; } body.days = d; }
-  try{ await api("/api/admin/students/" + encodeURIComponent(code), { method:"PATCH", body });
-    logAct("edit", "تجديد " + code + " (" + TYPES[type] + ")"); toast("تم التجديد"); closeModal(); await reload(); }catch(e){ toast(e.message, "err"); }
+  const code = el.dataset.code, type = $("#r-type").value;
+  const extend = $("#r-extend") && $("#r-extend").checked;
+  const body = { type, renew: !extend && $("#r-now").checked };
+  if (type === "custom") {
+    const d = Number($("#r-days")?.value) || 0;
+    const h = Number($("#r-hours")?.value) || 0;
+    if (d <= 0 && h <= 0) { toast("اكتب أيام أو ساعات", "err"); return; }
+    if (d > 0) body.days = d;
+    if (h > 0) body.hours = h;
+  }
+  if (extend) {
+    // مدد فوق تاريخ الانتهاء الحالي
+    const pk = ((S.runtime && S.runtime.packages) || []).find(p => p.id === type);
+    let addDays = 0, addHours = 0;
+    if (type === "custom") {
+      addDays = Number(body.days) || 0;
+      addHours = Number(body.hours) || 0;
+    } else if (pk) {
+      addDays = Number(pk.days) || 0;
+      addHours = Number(pk.hours) || 0;
+    } else {
+      const map = { h1:0,h6:0,h12:0,trial:1,d3:3,week:7,d15:15,month:30,m2:60,m3:90,m4:120,m5:150,m6:180,m7:210,m8:240,m9:270,m10:300,m11:330,year:365 };
+      const hmap = { h1:1,h6:6,h12:12,trial:24 };
+      addDays = map[type] || 0;
+      addHours = hmap[type] || 0;
+    }
+    if (addDays > 0) body.extendDays = addDays;
+    if (addHours > 0) body.extendMs = addHours * 3600 * 1000;
+    delete body.renew;
+    delete body.type;
+    delete body.days;
+    delete body.hours;
+  }
+  try{
+    await api("/api/admin/students/" + encodeURIComponent(code), { method:"PATCH", body });
+    logAct("edit", (extend ? "تمديد " : "تجديد ") + code);
+    toast(extend ? "تم التمديد" : "تم التجديد");
+    closeModal(); await reload();
+  }catch(e){ toast(e.message, "err"); }
 };
 ACT["st-del"] = async el => {
   const code = el.dataset.code, s = S.students.find(x => x.code === code);
