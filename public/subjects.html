@@ -40,6 +40,11 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .brand-img{height: 55px; width: auto; max-width: 160px; object-fit: contain; transition: transform .2s; display: none;}
 .brand:hover .brand-img{transform: scale(1.02);}
 
+/* إخفاء وإظهار اللوجو حسب الوضع */
+.logo-dark { display: none; } /* بيختفي في الوضع الفاتح */
+[data-theme="dark"] .logo-light { display: none; } /* بيختفي في الوضع الداكن */
+[data-theme="dark"] .logo-dark { display: block; } /* بيظهر في الوضع الداكن */
+
 /* الكلام العادي لو الصورة مش موجودة */
 .brand-text {
   display: flex;
@@ -150,10 +155,14 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 <div id="toast-container"></div>
 <header class="app-nav"><div class="app-nav-in">
   
-  <!-- اللوجو هنا (تم تعديل المسار ليكون رابط مباشر من GitHub) -->
+  <!-- اللوجو هنا -->
   <div class="brand" onclick="window.location.href='index.html'">
-    <!-- غير الرابط ده لو صورة اللوجو بتاعتك ليها رابط تاني أو اسم تاني -->
-    <img src="https://raw.githubusercontent.com/mohshalabihhh68-eng/my-study-site7/main/logo.png" alt="ثانوية club" class="brand-img" id="main-logo" onerror="this.style.display='none'; document.getElementById('fallback-text').style.display='flex';">
+    
+    <!-- اللوجو الفاتح -->
+    <img src="https://raw.githubusercontent.com/mohshalabihh68-eng/my-study-site7/main/logo.png" alt="ثانوية club" class="brand-img logo-light" id="main-logo-light" onerror="this.style.display='none'; document.getElementById('fallback-text').style.display='flex';">
+    
+    <!-- اللوجو الداكن (غير الرابط ده لو سميت الصورة باسم مختلف) -->
+    <img src="https://raw.githubusercontent.com/mohshalabihh68-eng/my-study-site7/main/logo-dark.png" alt="ثانوية club" class="brand-img logo-dark" id="main-logo-dark" onerror="this.style.display='none';">
     
     <!-- الكلام اللي هيظهر لو الصورة مش موجودة -->
     <div class="brand-text" id="fallback-text">
@@ -190,16 +199,15 @@ const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
 
-const logoImg = $('main-logo');
+// كود إخفاء الكلام لو الصورة اتحملت
+const logoLight = $('main-logo-light');
 const fallbackText = $('fallback-text');
-if (logoImg && logoImg.complete && logoImg.naturalHeight !== 0) {
-  logoImg.style.display = 'block';
-  fallbackText.style.display = 'none';
-} else if (logoImg) {
-  logoImg.onload = () => {
-    logoImg.style.display = 'block';
+
+if (logoLight) {
+  logoLight.onload = () => { fallbackText.style.display = 'none'; };
+  if (logoLight.complete && logoLight.naturalHeight !== 0) {
     fallbackText.style.display = 'none';
-  };
+  }
 }
 
 const progressBar = $('scroll-progress');
