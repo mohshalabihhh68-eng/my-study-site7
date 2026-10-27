@@ -209,10 +209,25 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   inputs.forEach((inp, i) => {
     inp.addEventListener('input', (e) => {
       let val = e.target.value.replace(/\D/g, '');
-      if (val.length > 1) val = val.slice(-1);
-      e.target.value = val;
-      inp.classList.toggle('filled', !!val);
-      if (val) { vibrate(10); if (i < inputs.length - 1) inputs[i + 1].focus(); else inp.blur(); }
+      if (!val) { inp.classList.remove('filled'); return; }
+      // لو دخل أو لصق أكتر من رقم في خانة واحدة، وزّعهم على الخانات
+      if (val.length > 1) {
+        const digits = val.slice(0, inputs.length - i).split('');
+        digits.forEach((d, idx) => {
+          if (inputs[i + idx]) {
+            inputs[i + idx].value = d;
+            inputs[i + idx].classList.toggle('filled', true);
+          }
+        });
+        const nextEmpty = Array.from(inputs).find(x => !x.value);
+        if (nextEmpty) nextEmpty.focus(); else inputs[inputs.length - 1].blur();
+        warnBox.classList.remove('show');
+        return;
+      }
+      inp.value = val;
+      inp.classList.toggle('filled', true);
+      vibrate(10);
+      if (i < inputs.length - 1) inputs[i + 1].focus(); else inp.blur();
       warnBox.classList.remove('show');
     });
 
@@ -227,11 +242,25 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 
     inp.addEventListener('focus', (e) => e.target.select());
     
+    // الحل الجذري للصق: نمنع السلوك الافتراضي ونوزّع الأرقام يدوياً من أول خانة
     inp.addEventListener('paste', (e) => {
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text');
+      e.stopPropagation();
+      const text = (e.clipboardData || window.clipboardData).getData('text') || '';
       const digits = text.replace(/\D/g, '').slice(0, 9);
-      if (digits) { setInputValue(digits); vibrate(20); }
+      if (!digits) return;
+
+      inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+      digits.split('').forEach((d, idx) => {
+        if (inputs[idx]) {
+          inputs[idx].value = d;
+          inputs[idx].classList.toggle('filled', true);
+        }
+      });
+      const nextEmpty = Array.from(inputs).find(x => !x.value);
+      if (nextEmpty) nextEmpty.focus(); else inputs[inputs.length - 1].blur();
+      vibrate(20);
+      warnBox.classList.remove('show');
     });
   });
 
