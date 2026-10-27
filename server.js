@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.8.0 — SPEED OPTIMIZED (Aggressive Caching + Compression)
+ * VERSION v1.7.2 — Full Analytics (Visits + Grouped Watch History + Student Tracker)
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.8.0";
+const APP_VERSION = "v1.7.2";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -71,33 +71,43 @@ for (const m of ["get", "post", "put", "patch", "delete", "use"]) {
   };
 }
 app.set("trust proxy", 1);
-
-// تحسين إعدادات الـ CORS
-app.use(cors({ origin: true, credentials: true, maxAge: 86400 }));
-
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "20mb" }));
-
-// تحسين الضغط ليكون أقوى وأسرع
+// طلب Client Hints من المتصفح (موديل الجهاز وغيره)
+app.use((req, res, next) => {
+  res.setHeader(
+    "Accept-CH",
+    "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List"
+  );
+  res.setHeader(
+    "Permissions-Policy",
+    "ch-ua-model=*, ch-ua-platform=*, ch-ua-platform-version=*, ch-ua-mobile=*"
+  );
+  res.setHeader("Critical-CH", "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Mobile");
+  next();
+});
 app.use(
   compression({
-    level: 6, // مستوى ضغط متوازن (سرعه وحجم كويسين)
-    threshold: 1024, // ضغط أي رد أكبر من 1 كيلو
     filter: (req, res) => {
       const p = req.path || "";
       if (p.startsWith("/api/hls/") || p.startsWith("/api/stream/segment/") || p.startsWith("/api/file-proxy")) return false;
-      if (p.startsWith("/api/cdn")) return false;
       if (p.includes("/messages/stream") || p.endsWith("/stream")) return false;
-      if (p.match(/\.(jpg|jpeg|png|webp|gif|mp4|m3u8|ts)$/i)) return false;
       return compression.filter(req, res);
     }
   })
 );
 
-// تحسين كاش الملفات الثابتة (Static Caching)
 app.use(express.static(path.join(__dirname, "public"), {
-  maxAge: '7d', // خلي المتصفح يحفظ الصور والملفات 7 أيام
+  maxAge: process.env.NODE_ENV === "production" ? "7d" : 0,
   etag: true,
-  lastModified: true
+  lastModified: true,
+  setHeaders(res, filePath) {
+    if (/\.(?:js|css|png|jpg|jpeg|webp|svg|woff2?)$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+    } else if (/\.html?$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=60");
+    }
+  }
 }));
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -675,8 +685,79 @@ function scryptVerify(password, stored) {
   } catch { return false; }
 }
 function randomToken(bytes = 32) { return crypto.randomBytes(bytes).toString("base64url"); }
-function randomCode9() { return String(Math.floor(1000000 + Math.random() * 9000000)); }
+
+// سر توقيع JWT الطلاب
+const STUDENT_JWT_SECRET =
+  process.env.STUDENT_JWT_SECRET ||
+  process.env.JWT_SECRET ||
+  process.env.SESSION_SECRET ||
+  crypto.createHash("sha256").update("thanawya-student-jwt|" + (process.env.FIREBASE_DATABASE_URL || "local")).digest("hex");
+
+function b64urlJson(obj) {
+  return Buffer.from(JSON.stringify(obj)).toString("base64url");
+}
+
+/** توكن طالب بشكل JWT: header.payload.signature */
+function makeStudentJwt({ code, deviceId, name, expiresAt }) {
+  const header = { alg: "HS256", typ: "JWT" };
+  const uuid = crypto.randomBytes(16).toString("hex");
+  const payload = {
+    user_id: Number(String(code).replace(/\D/g, "")) || code,
+    role: "student",
+    uuid,
+    code: String(code),
+    deviceId: String(deviceId || ""),
+    name: name ? String(name).slice(0, 80) : undefined,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor((expiresAt || Date.now() + CONFIG.STUDENT_SESSION_MS) / 1000)
+  };
+  const h = b64urlJson(header);
+  const p = b64urlJson(payload);
+  const sig = crypto.createHmac("sha256", STUDENT_JWT_SECRET).update(h + "." + p).digest("base64url");
+  return `${h}.${p}.${sig}`;
+}
+
+// مفتاح تخزين الجلسة في Firebase (JWT فيه نقط ومش مسموح في المسار)
+function sessionStoreKey(token) {
+  const t = String(token || "");
+  if (!t) return "";
+  if (t.includes(".")) return crypto.createHash("sha256").update(t).digest("hex");
+  return t;
+}
+
+function dropStudentSessionEntry(storeKey, sess) {
+  if (sess && sess.token) studentSessions.delete(sess.token);
+  if (storeKey) studentSessions.delete(storeKey);
+  return fbDelete(`sessions/${storeKey}`).catch(() => {});
+}
+
+// كود طالب 9 أرقام (مثل المنصات الأخرى)
+function randomCode9() {
+  let s = "";
+  for (let i = 0; i < 9; i++) s += String(Math.floor(Math.random() * 10));
+  if (s[0] === "0") s = String(1 + Math.floor(Math.random() * 9)) + s.slice(1);
+  return s;
+}
 function now() { return Date.now(); }
+
+// تحديث lastSeen بشكل مخفّف (كل دقيقتين كحد أقصى لكل طالب)
+const lastSeenTouch = new Map();
+function touchStudentSeen(code, deviceId) {
+  const key = String(code || "");
+  if (!key) return;
+  const t = Date.now();
+  const prev = lastSeenTouch.get(key) || 0;
+  if (t - prev < 120_000) return;
+  lastSeenTouch.set(key, t);
+  const patch = { lastSeen: t };
+  const tasks = [fbPatch(`students/${key}`, patch).catch(() => {})];
+  if (deviceId) {
+    tasks.push(
+      fbPatch(`students/${key}/devices/${deviceId}`, { lastSeen: t }).catch(() => {})
+    );
+  }
+  Promise.all(tasks).then(() => { try { cacheDel("stu:" + key); } catch {} }).catch(() => {});
+}
 
 // Firebase helpers
 async function fbGetCached(p, ttlMs = 20_000) {
@@ -857,18 +938,19 @@ async function requireStudent(req, res, next) {
     if (!sess) {
       const bad = badTokens.get(token);
       if (bad && bad > Date.now()) return jsonError(res, 401, "جلسة غير صالحة");
-      const remote = await coalesce("sess:" + token, () => fbGet(`sessions/${token}`));
+      const sk = sessionStoreKey(token);
+      const remote = await coalesce("sess:" + sk, () => fbGet(`sessions/${sk}`));
       if (!remote) { badTokens.set(token, Date.now() + 20_000); return jsonError(res, 401, "جلسة غير صالحة"); }
       sess = remote; studentSessions.set(token, sess);
     }
-    if (sess.expiresAt && now() > sess.expiresAt) { studentSessions.delete(token); try { await fbDelete(`sessions/${token}`); } catch {} return jsonError(res, 401, "انتهت صلاحية الجلسة"); }
+    if (sess.expiresAt && now() > sess.expiresAt) { studentSessions.delete(token); try { await fbDelete(`sessions/${sessionStoreKey(token)}`); } catch {} return jsonError(res, 401, "انتهت صلاحية الجلسة"); }
     const student = await getStudentCached(String(sess.code));
     if (!student || student.active === false) { studentSessions.delete(token); return jsonError(res, 401, "الحساب غير موجود أو موقوف"); }
     if (student.expiresAt && now() > student.expiresAt) return jsonError(res, 403, "انتهت صلاحية كود الاشتراك");
     const devices = student.devices || {};
     if (sess.deviceId && !devices[sess.deviceId]) {
       const bannedMap = student.bannedDevices || {};
-      if (bannedMap[sess.deviceId]) { studentSessions.delete(token); try { await fbDelete(`sessions/${token}`); } catch {} return jsonError(res, 401, "هذا الجهاز محظور على هذا الكود"); }
+      if (bannedMap[sess.deviceId]) { studentSessions.delete(token); try { await fbDelete(`sessions/${sessionStoreKey(token)}`); } catch {} return jsonError(res, 401, "هذا الجهاز محظور على هذا الكود"); }
       try {
         const maxDevices = Number(student.maxDevices || 1);
         const activeCount = Object.keys(devices).length;
@@ -877,6 +959,8 @@ async function requireStudent(req, res, next) {
     }
     req.student = { ...student, code: String(sess.code) };
     req.session = sess; req.sessionToken = token;
+    // حدّث آخر ظهور مع أي نشاط للطالب (مخفّف)
+    try { touchStudentSeen(sess.code, sess.deviceId); } catch {}
     next();
   } catch (e) { console.error("[auth student]", e.message); return jsonError(res, 500, "خطأ في التحقق من الجلسة"); }
 }
@@ -1134,19 +1218,21 @@ app.get("/api/public/site", rateLimit({ max: 120, windowMs: 60_000, scope: "publ
 app.post("/api/auth/track", requireStudent, async (req, res) => {
   try {
     const code = req.session.code;
+    const deviceId = req.session.deviceId;
     const nowTime = now();
-    
     const student = await fbGet(`students/${code}`);
     if (!student) return jsonError(res, 404, "الطالب غير موجود");
-    
+
     const visitCount = (Number(student.visitCount) || 0) + 1;
-    
-    await fbPatch(`students/${code}`, { 
-      lastSeen: nowTime, 
-      visitCount: visitCount 
-    });
-    
-    res.json({ success: true, visitCount });
+    const patch = { lastSeen: nowTime, visitCount };
+    await fbPatch(`students/${code}`, patch);
+    if (deviceId) {
+      try { await fbPatch(`students/${code}/devices/${deviceId}`, { lastSeen: nowTime }); } catch {}
+    }
+    try { cacheDel("stu:" + code); } catch {}
+    lastSeenTouch.set(String(code), nowTime);
+
+    res.json({ success: true, visitCount, lastSeen: nowTime });
   } catch (e) {
     console.warn("[track-student-visit]", e.message);
     res.json({ success: false });
@@ -1391,8 +1477,9 @@ app.get("/api/admin/visits", requireAdmin("students_view"), async (_req, res) =>
   try {
     const visits = (await fbGet("visits")) || {};
     const list = Object.entries(visits).map(([id, v]) => ({ id, ...v }));
-    list.sort((a, b) => b.time - a.time);
-    res.json({ success: true, data: list });
+    list.sort((a, b) => (Number(b.time) || 0) - (Number(a.time) || 0));
+    // آخر 400 زيارة فقط — أخف على اللوحة
+    res.json({ success: true, data: list.slice(0, 400) });
   } catch (e) {
     jsonError(res, 500, e.message);
   }
@@ -1522,10 +1609,12 @@ app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "stude
     try { await fbPatch(`students/${code}`, { lastSeen: now() }); } catch (e) {}
 
     const sessionTtl = Math.min(CONFIG.STUDENT_SESSION_MS, Math.max(60_000, (student.expiresAt || now() + CONFIG.STUDENT_SESSION_MS) - now()));
-    const token = randomToken(32);
-    const sess = { token, code, deviceId, name: student.name, section: student.section || null, createdAt: now(), expiresAt: now() + sessionTtl };
+    const expiresAt = now() + sessionTtl;
+    // توكن JWT طويل بنفس شكل المنصات الأخرى
+    const token = makeStudentJwt({ code, deviceId, name: student.name, expiresAt });
+    const sess = { token, code, deviceId, name: student.name, section: student.section || null, createdAt: now(), expiresAt };
     studentSessions.set(token, sess);
-    try { await fbSet(`sessions/${token}`, sess); } catch (e) { console.warn("[login] session fb:", e.message); }
+    try { await fbSet(`sessions/${sessionStoreKey(token)}`, sess); } catch (e) { console.warn("[login] session fb:", e.message); }
     clearLoginFailBoth("student", deviceId, ip, code);
 
     let subjectIds = [];
@@ -1537,20 +1626,58 @@ app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "stude
       if (secInfo.id && student.section !== secInfo.id) { try { await fbPatch(`students/${code}`, { section: secInfo.id }); } catch {} student.section = secInfo.id; }
     }
 
+    const profile = studentProfileInfo(student);
     res.json({
       success: true,
       data: {
         token, expiresAt: sess.expiresAt,
-        student: { name: student.name, code, section: student.section || null, expiresAt: student.expiresAt, maxDevices, deviceId },
-        yearId, subjectIds
+        student: {
+          name: student.name,
+          code,
+          section: student.section || null,
+          expiresAt: student.expiresAt,
+          maxDevices,
+          deviceId,
+          email: student.email || null,
+          phone: student.phone || null,
+          governorate: student.governorate || null
+        },
+        yearId,
+        subjectIds,
+        needsProfile: profile.needsProfile,
+        missingFields: profile.missingFields
       }
     });
   } catch (e) { console.error("[login]", e.message); jsonError(res, 500, e.message); }
 });
 
 app.post("/api/auth/logout", requireStudent, async (req, res) => {
-  try { studentSessions.delete(req.sessionToken); await fbDelete(`sessions/${req.sessionToken}`); res.json({ success: true }); } catch (e) { jsonError(res, 500, e.message); }
+  try { studentSessions.delete(req.sessionToken); await fbDelete(`sessions/${sessionStoreKey(req.sessionToken)}`); res.json({ success: true }); } catch (e) { jsonError(res, 500, e.message); }
 });
+
+function studentProfileInfo(s) {
+  const email = String(s?.email || "").trim();
+  const phone = String(s?.phone || "").replace(/\D/g, "");
+  const missingFields = [];
+  if (!phone || phone.length < 10) missingFields.push("phone");
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) missingFields.push("email");
+  return {
+    needsProfile: missingFields.length > 0,
+    missingFields,
+    email: email || null,
+    phone: s?.phone ? String(s.phone).trim() : null,
+    governorate: s?.governorate ? String(s.governorate).trim() : null
+  };
+}
+
+function normalizePhone(raw) {
+  let p = String(raw || "").trim().replace(/[^\d+]/g, "");
+  if (!p) return "";
+  // مصر: حول 01xxxxxxxxx → +201xxxxxxxxx
+  if (/^01\d{9}$/.test(p)) p = "+20" + p.slice(1);
+  else if (/^201\d{9}$/.test(p)) p = "+" + p;
+  return p.slice(0, 20);
+}
 
 app.get("/api/auth/me", requireStudent, async (req, res) => {
   try {
@@ -1558,8 +1685,81 @@ app.get("/api/auth/me", requireStudent, async (req, res) => {
     let subjectIds = []; let yearId = CONFIG.DEFAULT_YEAR_ID;
     const secInfo = await resolveSection(s.section);
     if (secInfo) { subjectIds = secInfo.subjectIds || []; yearId = secInfo.yearId || yearId; if (secInfo.id) s.section = secInfo.id; }
-    res.json({ success: true, data: { name: s.name, code: req.session.code, section: s.section || null, expiresAt: s.expiresAt, maxDevices: s.maxDevices || 1, devices: Object.keys(s.devices || {}).length, deviceId: req.session.deviceId, yearId, subjectIds, sessionExpiresAt: req.session.expiresAt } });
+    const profile = studentProfileInfo(s);
+    res.json({
+      success: true,
+      data: {
+        name: s.name,
+        code: req.session.code,
+        section: s.section || null,
+        expiresAt: s.expiresAt,
+        maxDevices: s.maxDevices || 1,
+        devices: Object.keys(s.devices || {}).length,
+        deviceId: req.session.deviceId,
+        yearId,
+        subjectIds,
+        sessionExpiresAt: req.session.expiresAt,
+        email: profile.email,
+        phone: profile.phone,
+        governorate: profile.governorate,
+        needsProfile: profile.needsProfile,
+        missingFields: profile.missingFields,
+        visitCount: Number(s.visitCount) || 0,
+        lastSeen: s.lastSeen || null
+      }
+    });
   } catch (e) { jsonError(res, 500, e.message); }
+});
+
+// استكمال / تحديث بيانات الطالب بعد الدخول
+app.patch("/api/auth/profile", requireStudent, rateLimit({ max: 20, windowMs: 60_000, scope: "student-profile" }), async (req, res) => {
+  try {
+    const code = String(req.session.code);
+    const body = req.body || {};
+    const patch = {};
+
+    if (body.name != null) {
+      const name = String(body.name).trim().slice(0, 120);
+      if (name.length < 2) return jsonError(res, 400, "الاسم قصير جدًا");
+      patch.name = name;
+    }
+    if (body.email != null) {
+      const email = String(body.email).trim().toLowerCase().slice(0, 120);
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(res, 400, "الإيميل غير صالح");
+      patch.email = email || null;
+    }
+    if (body.phone != null) {
+      const phone = normalizePhone(body.phone);
+      if (phone && phone.replace(/\D/g, "").length < 10) return jsonError(res, 400, "رقم الموبايل غير صالح");
+      patch.phone = phone || null;
+    }
+    if (body.governorate != null) {
+      patch.governorate = String(body.governorate).trim().slice(0, 60) || null;
+    }
+
+    if (!Object.keys(patch).length) return jsonError(res, 400, "مفيش بيانات للتحديث");
+
+    patch.profileUpdatedAt = now();
+    await fbPatch(`students/${code}`, patch);
+    try { authCache.delete(code); } catch {}
+
+    const student = await fbGet(`students/${code}`);
+    const profile = studentProfileInfo(student || {});
+    res.json({
+      success: true,
+      message: "تم حفظ البيانات",
+      data: {
+        name: student?.name || null,
+        email: profile.email,
+        phone: profile.phone,
+        governorate: profile.governorate,
+        needsProfile: profile.needsProfile,
+        missingFields: profile.missingFields
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
 });
 
 app.get("/api/config", requireStudent, async (req, res) => {
@@ -2369,7 +2569,11 @@ app.get("/api/admin/students", requireAdmin("students_view"), async (_req, res) 
       active: s.active !== false, 
       createdAt: s.createdAt || null, 
       lastSeen: s.lastSeen || null, 
-      visitCount: s.visitCount || 0, 
+      visitCount: s.visitCount || 0,
+      email: s.email || null,
+      phone: s.phone || null,
+      governorate: s.governorate || null,
+      profileComplete: !studentProfileInfo(s).needsProfile,
       status: !s.activatedAt ? "لم يبدأ" : (s.expiresAt && Date.now() > s.expiresAt ? "منتهي" : "نشط")
     }));
     list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -2436,7 +2640,27 @@ app.post("/api/admin/students", requireAdmin("students_create"), async (req, res
     if (!duration || duration <= 0) return jsonError(res, 400, "حدد نوع الباقة أو عدد الأيام");
     if (code) { if (!/^\d{9}$/.test(code)) return jsonError(res, 400, "الكود يجب 9 أرقام"); const exists = await fbGet(`students/${code}`); if (exists) return jsonError(res, 409, "الكود مستخدم بالفعل"); }
     else { for (let i = 0; i < 30; i++) { code = randomCode9(); const exists = await fbGet(`students/${code}`); if (!exists) break; } }
-    const record = { name, section: section || null, type: req.body?.days != null ? "custom" : type, days: req.body?.days != null ? Number(req.body.days) : null, durationMs: duration, maxDevices, devices: {}, bannedDevices: {}, active: true, createdAt: now(), activatedAt: null, expiresAt: null, createdBy: req.admin.username };
+    const email = req.body?.email != null ? String(req.body.email).trim().toLowerCase().slice(0, 120) : "";
+    const phone = req.body?.phone != null ? normalizePhone(req.body.phone) : "";
+    const governorate = req.body?.governorate != null ? String(req.body.governorate).trim().slice(0, 60) : "";
+    const record = {
+      name,
+      section: section || null,
+      type: req.body?.days != null ? "custom" : type,
+      days: req.body?.days != null ? Number(req.body.days) : null,
+      durationMs: duration,
+      maxDevices,
+      devices: {},
+      bannedDevices: {},
+      active: true,
+      createdAt: now(),
+      activatedAt: null,
+      expiresAt: null,
+      createdBy: req.admin.username,
+      email: email || null,
+      phone: phone || null,
+      governorate: governorate || null
+    };
     await fbSet(`students/${code}`, record);
     res.json({ success: true, data: { code, ...record } });
   } catch (e) { jsonError(res, 500, e.message); }
@@ -2452,13 +2676,29 @@ app.patch("/api/admin/students/:code", requireAdmin("students_edit"), async (req
     if (req.body.section != null) patch.section = normalizeSection(req.body.section) || String(req.body.section).trim() || null;
     if (req.body.maxDevices != null) patch.maxDevices = Math.max(1, Math.min(10, Number(req.body.maxDevices)));
     if (req.body.active != null) patch.active = Boolean(req.body.active);
+    if (req.body.email != null) {
+      const email = String(req.body.email).trim().toLowerCase().slice(0, 120);
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonError(res, 400, "الإيميل غير صالح");
+      patch.email = email || null;
+    }
+    if (req.body.phone != null) {
+      const phone = normalizePhone(req.body.phone);
+      if (phone && phone.replace(/\D/g, "").length < 10) return jsonError(res, 400, "رقم الموبايل غير صالح");
+      patch.phone = phone || null;
+    }
+    if (req.body.governorate != null) patch.governorate = String(req.body.governorate).trim().slice(0, 60) || null;
     if (req.body.type && (CONFIG.CODE_TYPES[req.body.type] || (runtime.packages || []).some((p) => p.id === req.body.type))) { patch.type = req.body.type; const dur = resolveDurationMs({ type: req.body.type }); patch.durationMs = dur; if (req.body.renew) { patch.activatedAt = now(); patch.expiresAt = now() + dur; } else if (req.body.resetTimer) { patch.activatedAt = null; patch.expiresAt = null; } }
     if (req.body.days != null && Number(req.body.days) > 0) { patch.type = "custom"; patch.days = Number(req.body.days); const dur = resolveDurationMs({ days: req.body.days }); patch.durationMs = dur; if (req.body.renew) { patch.activatedAt = now(); patch.expiresAt = now() + dur; } else if (req.body.resetTimer || req.body.renew === false) { patch.activatedAt = null; patch.expiresAt = null; } }
     if (req.body.resetTimer === true) { patch.activatedAt = null; patch.expiresAt = null; }
     if (req.body.extendMs) { const base = Math.max(s.expiresAt || now(), now()); patch.expiresAt = base + Number(req.body.extendMs); }
     if (req.body.extendDays != null) { const base = Math.max(s.expiresAt || now(), now()); patch.expiresAt = base + Number(req.body.extendDays) * 24 * 3600 * 1000; }
     await fbPatch(`students/${code}`, patch);
-    if (req.body.forceLogout) { const sessions = (await fbGet("sessions")) || {}; for (const [tok, sess] of Object.entries(sessions)) { if (sess && sess.code === code) { studentSessions.delete(tok); await fbDelete(`sessions/${tok}`); } } }
+    if (req.body.forceLogout) {
+      const sessions = (await fbGet("sessions")) || {};
+      for (const [tok, sess] of Object.entries(sessions)) {
+        if (sess && sess.code === code) await dropStudentSessionEntry(tok, sess);
+      }
+    }
     res.json({ success: true, data: { code, ...s, ...patch } });
   } catch (e) { jsonError(res, 500, e.message); }
 });
@@ -2467,7 +2707,9 @@ app.delete("/api/admin/students/:code", requireAdmin("students_delete"), async (
   try {
     const code = req.params.code;
     const sessions = (await fbGet("sessions")) || {};
-    for (const [tok, sess] of Object.entries(sessions)) { if (sess && sess.code === code) { studentSessions.delete(tok); await fbDelete(`sessions/${tok}`); } }
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code) await dropStudentSessionEntry(tok, sess);
+    }
     await fbDelete(`students/${code}`);
     res.json({ success: true });
   } catch (e) { jsonError(res, 500, e.message); }
@@ -2480,7 +2722,9 @@ app.post("/api/admin/students/:code/logout-all", requireAdmin("devices_kick"), a
     if (!s) return jsonError(res, 404, "غير موجود");
     const sessions = (await fbGet("sessions")) || {};
     let n = 0;
-    for (const [tok, sess] of Object.entries(sessions)) { if (sess && sess.code === code) { studentSessions.delete(tok); await fbDelete(`sessions/${tok}`); n++; } }
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code) { await dropStudentSessionEntry(tok, sess); n++; }
+    }
     if (req.body?.clearDevices) await fbPatch(`students/${code}`, { devices: {} });
     res.json({ success: true, message: `تم تسجيل الخروج من ${n} جلسة`, killed: n });
   } catch (e) { jsonError(res, 500, e.message); }
@@ -2496,7 +2740,9 @@ app.post("/api/admin/students/:code/devices/:deviceId/ban", requireAdmin("device
     const devices = { ...(s.devices || {}) }; delete devices[deviceId];
     await fbPatch(`students/${code}`, { bannedDevices: banned, devices });
     const sessions = (await fbGet("sessions")) || {};
-    for (const [tok, sess] of Object.entries(sessions)) { if (sess && sess.code === code && sess.deviceId === deviceId) { studentSessions.delete(tok); await fbDelete(`sessions/${tok}`); } }
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code && sess.deviceId === deviceId) await dropStudentSessionEntry(tok, sess);
+    }
     res.json({ success: true, message: "تم حظر الجهاز" });
   } catch (e) { jsonError(res, 500, e.message); }
 });
@@ -2520,7 +2766,9 @@ app.delete("/api/admin/students/:code/devices/:deviceId", requireAdmin("devices_
     const devices = { ...(s.devices || {}) }; delete devices[deviceId];
     await fbSet(`students/${code}/devices`, devices);
     const sessions = (await fbGet("sessions")) || {};
-    for (const [tok, sess] of Object.entries(sessions)) { if (sess && sess.code === code && sess.deviceId === deviceId) { studentSessions.delete(tok); await fbDelete(`sessions/${tok}`); } }
+    for (const [tok, sess] of Object.entries(sessions)) {
+      if (sess && sess.code === code && sess.deviceId === deviceId) await dropStudentSessionEntry(tok, sess);
+    }
     res.json({ success: true, message: "تم تسجيل خروج الجهاز" });
   } catch (e) { jsonError(res, 500, e.message); }
 });
@@ -2937,7 +3185,7 @@ app.get("/api/media/:code/:file", async (req, res) => {
       const stu = studentSessions.get(token);
       if (stu && String(stu.code) === code) allowed = true;
       if (!allowed && adminSessions.get(token)) allowed = true;
-      if (!allowed) { try { const remote = await fbGet(`sessions/${token}`); if (remote && String(remote.code) === code) allowed = true; } catch {} }
+      if (!allowed) { try { const remote = await fbGet(`sessions/${sessionStoreKey(token)}`); if (remote && String(remote.code) === code) allowed = true; } catch {} }
     }
     if (!allowed) return jsonError(res, 403, "غير مصرح");
     const full = path.join(MEDIA_DIR, code, file);
