@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#f8fafc">
-<title>تسجيل الدخول | ثانوية club</title>
+<title>تسجيل دخول | ثانوية club</title>
 <script>
 (function(){
   try {
@@ -22,51 +22,64 @@
 :root, [data-theme="dark"]{--bg:#05080e;--panel:#0d1424;--text:#ffffff;--muted:#94a3b8;--blue:#3b82f6;--blue2:#8ab4ff;--line:rgba(148,163,184,.12);--red:#ef4444;--amber:#f59e0b;--panel-glass:rgba(13,20,36,.65);--otp-bg:rgba(0,0,0,.3);--otp-border:rgba(255,255,255,.1)}
 [data-theme="light"]{--bg:#f8fafc;--panel:#ffffff;--text:#1e293b;--muted:#64748b;--blue:#6c63ff;--blue2:#00d4ff;--line:rgba(108,99,255,.10);--red:#ef4444;--amber:#f59e0b;--panel-glass:rgba(255,255,255,.85);--otp-bg:#f1f5f9;--otp-border:rgba(108,99,255,.15)}
 *{box-sizing:border-box;font-family:'Cairo',sans-serif;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;align-items:center;min-height:100vh;min-height:100dvh;overflow:hidden;position:relative;transition:background-color .35s,color .35s}
-body::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(108,99,255,.15) 0%,transparent 50%),radial-gradient(circle at 50% 100%,rgba(0,212,255,.08) 0%,transparent 50%);z-index:-2}
-.login-container{background:var(--panel-glass);backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:28px;padding:40px 30px;width:100%;max-width:380px;box-shadow:0 30px 60px rgba(108,99,255,.15);animation:rise .6s cubic-bezier(.2,.8,.2,1) both;position:relative;z-index:1;margin:20px}
-@keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.brand{display:flex;flex-direction:column;align-items:center;margin-bottom:24px}
-.logo-wrap{position:relative;width:80px;height:80px;display:flex;justify-content:center;align-items:center;margin-bottom:16px}
-.logo-glow{position:absolute;inset:-20px;background:radial-gradient(circle,rgba(108,99,255,.5) 0%,rgba(0,212,255,.2) 40%,transparent 70%);filter:blur(15px);border-radius:50%;z-index:-1;animation:pulseGlow 3s ease-in-out infinite alternate}
-@keyframes pulseGlow{0%{transform:scale(.9);opacity:.6}100%{transform:scale(1.1);opacity:1}}
-.logo{width:76px;height:76px;border-radius:22px;background:linear-gradient(135deg,#6c63ff,#00d4ff);display:grid;place-items:center;box-shadow:0 10px 25px rgba(108,99,255,.4),inset 0 2px 2px rgba(255,255,255,.2);position:relative;z-index:1}
-.logo svg{width:38px;height:38px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.brand-text{font-size:26px;font-weight:900;display:flex;gap:8px;align-items:center;color:var(--text)}
+html{height:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;align-items:center;min-height:100vh;min-height:100dvh;overflow-y:auto;overflow-x:hidden;position:relative;transition:background-color .3s,color .3s;will-change:background-color;padding:20px 0}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 50% 0%,rgba(108,99,255,.15) 0%,transparent 50%),radial-gradient(circle at 50% 100%,rgba(0,212,255,.08) 0%,transparent 50%);z-index:-2;pointer-events:none}
+.login-container{background:var(--panel-glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:28px;padding:36px 28px;width:100%;max-width:380px;box-shadow:0 30px 60px rgba(108,99,255,.15);animation:rise .5s cubic-bezier(.2,.8,.2,1) both;position:relative;z-index:1;margin:auto;will-change:transform,opacity}
+@keyframes rise{from{opacity:0;transform:translate3d(0,15px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+.brand{display:flex;flex-direction:column;align-items:center;margin-bottom:20px}
+.logo-wrap{position:relative;width:76px;height:76px;display:flex;justify-content:center;align-items:center;margin-bottom:14px}
+.logo-glow{position:absolute;inset:-15px;background:radial-gradient(circle,rgba(108,99,255,.4) 0%,rgba(0,212,255,.15) 40%,transparent 70%);filter:blur(12px);border-radius:50%;z-index:-1;animation:pulseGlow 3s ease-in-out infinite alternate;will-change:transform,opacity}
+@keyframes pulseGlow{0%{transform:scale(.95);opacity:.7}100%{transform:scale(1.05);opacity:1}}
+.logo{width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#6c63ff,#00d4ff);display:grid;place-items:center;box-shadow:0 10px 25px rgba(108,99,255,.4),inset 0 2px 2px rgba(255,255,255,.2);position:relative;z-index:1}
+.logo svg{width:36px;height:36px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand-text{font-size:24px;font-weight:900;display:flex;gap:6px;align-items:center;color:var(--text)}
 .brand-text span{background:linear-gradient(90deg,#6c63ff,#00d4ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.subtitle{text-align:center;color:var(--muted);font-size:14px;margin-bottom:24px;font-weight:600}
-.warn-box{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#d97706;padding:12px 14px;border-radius:14px;font-size:12.5px;margin-bottom:16px;display:none;align-items:flex-start;gap:10px;line-height:1.6}
+.subtitle{text-align:center;color:var(--muted);font-size:14px;margin-bottom:22px;font-weight:600}
+
+/* تنسيق التنبيه (Warn Box) */
+.warn-box{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#d97706;padding:14px;border-radius:14px;font-size:13px;margin-bottom:18px;display:none;align-items:flex-start;gap:10px;line-height:1.6;animation:fadeIn .3s ease}
+[data-theme="dark"] .warn-box{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.15);color:#fbbf24}
 .warn-box.show{display:flex}
-.warn-box svg{width:20px;height:20px;flex-shrink:0;margin-top:2px;stroke:currentColor;fill:none;stroke-width:2}
-.warn-box strong{display:block;margin-bottom:2px;font-weight:800;color:#92400e}
-.error-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#dc2626;padding:12px;border-radius:12px;font-size:13px;font-weight:700;text-align:center;margin-bottom:16px;display:none}
+.warn-box svg{width:22px;height:22px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;margin-top:1px}
+.warn-box strong{display:block;margin-bottom:4px;font-weight:800;color:#b45309}
+[data-theme="dark"] .warn-box strong{color:#fcd34d}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+
+.error-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#dc2626;padding:12px;border-radius:12px;font-size:13px;font-weight:700;text-align:center;margin-bottom:16px;display:none;animation:fadeIn .3s ease}
+[data-theme="dark"] .error-box{background:rgba(239,68,68,.15);color:#fca5a5;border-color:rgba(239,68,68,.3)}
 .error-box.show{display:block}
-.otp-container{direction:ltr;display:flex;justify-content:center;gap:5px;margin-bottom:20px;width:100%}
-.otp-input{width:34px;height:46px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:18px;font-weight:800;text-align:center;transition:all .25s;outline:none;padding:0;caret-color:transparent}
-.otp-input:focus{border-color:var(--blue);background:rgba(108,99,255,.1);box-shadow:0 0 0 3px rgba(108,99,255,.15);transform:translateY(-3px) scale(1.05)}
+
+.otp-container{direction:ltr;display:flex;justify-content:center;gap:6px;margin-bottom:24px;width:100%}
+.otp-input{width:36px;height:48px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:20px;font-weight:800;text-align:center;transition:border-color .2s,background-color .2s,transform .2s,box-shadow .2s;outline:none;padding:0;caret-color:transparent}
+.otp-input:focus{border-color:var(--blue);background:rgba(108,99,255,.08);box-shadow:0 0 0 3px rgba(108,99,255,.15);transform:translateY(-2px) scale(1.02)}
 .otp-input.filled{border-color:rgba(108,99,255,.5);background:rgba(108,99,255,.08);color:var(--blue)}
-.attempts{text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px;display:none}
+.attempts{text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px;display:none;animation:fadeIn .3s ease}
 .attempts.show{display:block}
 .attempts b{color:var(--amber)}
-.btn-login{width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,#6c63ff,#00d4ff);color:#fff;font-weight:800;font-size:16px;cursor:pointer;transition:all .25s;display:flex;justify-content:center;align-items:center;gap:8px;box-shadow:0 8px 20px rgba(108,99,255,.3)}
+.btn-login{width:100%;padding:15px;border-radius:14px;border:none;background:linear-gradient(135deg,#6c63ff,#00d4ff);color:#fff;font-weight:800;font-size:16px;cursor:pointer;transition:transform .2s,box-shadow .2s,opacity .2s;display:flex;justify-content:center;align-items:center;gap:8px;box-shadow:0 8px 20px rgba(108,99,255,.3);will-change:transform}
 .btn-login:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 25px rgba(108,99,255,.5)}
+.btn-login:active:not(:disabled){transform:translateY(0) scale(.98)}
 .btn-login:disabled{opacity:.7;cursor:not-allowed}
 .btn-login svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 .spinner{width:20px;height:20px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .footer-text{text-align:center;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;margin-top:20px;display:flex;justify-content:center;align-items:center;gap:6px}
-.footer-text a{color:var(--blue);text-decoration:none;font-weight:800}
+.footer-text a{color:var(--blue);text-decoration:none;font-weight:800;transition:color .2s}
+.footer-text a:hover{color:var(--blue2)}
 .back-home{position:absolute;top:20px;right:20px;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:var(--panel-glass);border:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:700;text-decoration:none;transition:all .2s;z-index:10;backdrop-filter:blur(20px)}
-.back-home:hover{color:var(--text)}
+.back-home:hover{color:var(--text);background:var(--panel)}
 .back-home svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.theme-toggle-floating{position:fixed;top:20px;left:20px;z-index:100;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel-glass);backdrop-filter:blur(20px);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:all .25s;padding:0}
+.theme-toggle-floating{position:fixed;top:20px;left:20px;z-index:100;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel-glass);backdrop-filter:blur(20px);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:transform .25s,border-color .25s;padding:0;will-change:transform}
 .theme-toggle-floating:hover{transform:rotate(15deg) scale(1.05);border-color:var(--blue)}
 .theme-toggle-floating svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 .theme-toggle-floating .icon-sun{display:none}
 .theme-toggle-floating .icon-moon{display:block}
 [data-theme="dark"] .theme-toggle-floating .icon-sun{display:block}
 [data-theme="dark"] .theme-toggle-floating .icon-moon{display:none}
-@media (max-width:360px){.login-container{padding:24px 16px}.otp-container{gap:3px}.otp-input{width:30px;height:42px;font-size:16px}}
+
+@media (max-width:400px){.login-container{padding:24px 16px}.otp-container{gap:4px}.otp-input{width:32px;height:44px;font-size:18px}.brand-text{font-size:22px}}
+@media (max-width:340px){.otp-container{gap:3px}.otp-input{width:28px;height:40px;font-size:16px}}
 </style>
 </head>
 <body>
@@ -89,26 +102,43 @@ body::before{content:"";position:absolute;inset:0;background:radial-gradient(cir
     </div>
     <div class="brand-text">ثانوية <span>club</span></div>
   </div>
-  <div class="subtitle">دخل كودك هنا</div>
+  
+  <div class="subtitle">أدخل كودك هنا</div>
+  
+  <!-- تم تعديل شكل التنبيه هنا -->
   <div class="warn-box" id="warn-box">
     <svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <div><strong>تنبيه</strong>للأسف الكود دا متسجل قبل كدا، لو غيرت جهازك وعايز تدخل الكود كلم الأدمن.</div>
+    <div>
+      <strong>تنبيه هام</strong>
+      للأسف هذا الكود تم تسجيله مسبقاً على جهاز آخر. إذا قمت بتغيير جهازك وتريد الدخول، يرجى التواصل مع الأدمن.
+    </div>
   </div>
+
   <div class="error-box" id="error-msg"></div>
+  
   <div class="otp-container">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="off">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
   </div>
+  
   <div class="attempts" id="attempts">فاضلك <b id="attempts-num">5</b> محاولات قبل القفل المؤقت</div>
-  <button class="btn-login" id="btn-login"><span id="btn-text">تسجيل الدخول</span><svg id="btn-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-  <div class="footer-text"><span>عندك مشكلة؟</span><a href="https://t.me/S7alaby7" target="_blank" rel="noopener">تواصل مع الأدمن</a></div>
+  
+  <button class="btn-login" id="btn-login">
+    <span id="btn-text">تسجيل دخول</span>
+    <svg id="btn-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  </button>
+  
+  <div class="footer-text">
+    <span>عندك مشكلة؟</span>
+    <a href="https://t.me/S7alaby7" target="_blank" rel="noopener">تواصل مع الأدمن</a>
+  </div>
 </div>
 
 <script>
@@ -126,35 +156,43 @@ body::before{content:"";position:absolute;inset:0;background:radial-gradient(cir
   const attemptsNum = $('attempts-num');
   const LAST_CODE_KEY = 'student_last_code';
   const LAST_DEVICE_KEY = 'student_device_id';
+
   function vibrate(ms = 10) { if (navigator.vibrate) navigator.vibrate(ms); }
+  
   function getDeviceId() {
     let id = localStorage.getItem(LAST_DEVICE_KEY);
     if (!id) { id = 'web_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36); localStorage.setItem(LAST_DEVICE_KEY, id); }
     return id;
   }
+
   function getCode() { let c = ''; inputs.forEach(i => c += i.value.trim()); return c; }
+
   function setInputValue(val) {
     const digits = String(val).replace(/\D/g, '').slice(0, 9).split('');
     inputs.forEach((inp, i) => { inp.value = digits[i] || ''; inp.classList.toggle('filled', !!inp.value); });
     if (digits.length > 0 && digits.length < 9) inputs[digits.length].focus();
     else if (digits.length === 9) inputs[8].blur();
   }
+
   function init() {
     if (localStorage.getItem('student_token')) { window.location.href = 'subjects.html'; return; }
     const savedCode = localStorage.getItem(LAST_CODE_KEY);
     if (savedCode && /^\d{9}$/.test(savedCode)) setInputValue(savedCode);
     else setTimeout(() => inputs[0].focus(), 300);
   }
+
   function showError(msg, seconds) {
     errorMsg.textContent = msg;
     errorMsg.classList.add('show');
     vibrate([50, 50, 50]);
     setTimeout(() => errorMsg.classList.remove('show'), (seconds || 6) * 1000);
   }
+
   function showAttempts(n) {
     if (n > 0 && n <= 5) { attemptsNum.textContent = n; attemptsBox.classList.add('show'); }
     else attemptsBox.classList.remove('show');
   }
+
   function setLoading(on) {
     btnLogin.disabled = on;
     if (on) {
@@ -162,11 +200,12 @@ body::before{content:"";position:absolute;inset:0;background:radial-gradient(cir
       btnArrow.style.display = 'none';
       if (!document.querySelector('.spinner')) { const sp = document.createElement('div'); sp.className = 'spinner'; btnLogin.insertBefore(sp, btnText); }
     } else {
-      btnText.textContent = 'تسجيل الدخول';
+      btnText.textContent = 'تسجيل دخول';
       btnArrow.style.display = '';
       const sp = document.querySelector('.spinner'); if (sp) sp.remove();
     }
   }
+
   inputs.forEach((inp, i) => {
     inp.addEventListener('input', (e) => {
       let val = e.target.value.replace(/\D/g, '');
@@ -176,13 +215,18 @@ body::before{content:"";position:absolute;inset:0;background:radial-gradient(cir
       if (val) { vibrate(10); if (i < inputs.length - 1) inputs[i + 1].focus(); else inp.blur(); }
       warnBox.classList.remove('show');
     });
+
     inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace') { if (!e.target.value && i > 0) { e.preventDefault(); inputs[i - 1].focus(); inputs[i - 1].value = ''; inputs[i - 1].classList.remove('filled'); } }
+      if (e.key === 'Backspace') { 
+        if (!e.target.value && i > 0) { e.preventDefault(); inputs[i - 1].focus(); inputs[i - 1].value = ''; inputs[i - 1].classList.remove('filled'); } 
+      }
       else if (e.key === 'ArrowLeft' && i > 0) { e.preventDefault(); inputs[i - 1].focus(); }
       else if (e.key === 'ArrowRight' && i < inputs.length - 1) { e.preventDefault(); inputs[i + 1].focus(); }
       else if (e.key === 'Enter') { e.preventDefault(); inp.blur(); login(); }
     });
+
     inp.addEventListener('focus', (e) => e.target.select());
+    
     inp.addEventListener('paste', (e) => {
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData('text');
@@ -190,19 +234,29 @@ body::before{content:"";position:absolute;inset:0;background:radial-gradient(cir
       if (digits) { setInputValue(digits); vibrate(20); }
     });
   });
+
   async function login() {
     const code = getCode(), deviceId = getDeviceId(), deviceName = 'Web Browser';
+    
     if (code.length !== 9) {
       showError('لازم تدخل الـ 9 أرقام كاملة');
       const firstEmpty = Array.from(inputs).find(inp => !inp.value);
       if (firstEmpty) firstEmpty.focus();
       return;
     }
+
     setLoading(true); vibrate(20);
     errorMsg.classList.remove('show'); warnBox.classList.remove('show'); attemptsBox.classList.remove('show');
+
     try {
-      const response = await fetch(API + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, deviceId, deviceName }) });
+      const response = await fetch(API + '/api/auth/login', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ code, deviceId, deviceName }) 
+      });
+      
       const data = await response.json();
+
       if (data.success) {
         localStorage.setItem(LAST_CODE_KEY, code);
         localStorage.setItem('student_token', data.data.token);
@@ -213,18 +267,31 @@ body::before{content:"";position:absolute;inset:0;background:radial-gradient(cir
         setTimeout(() => { window.location.href = 'subjects.html'; }, 600);
         return;
       }
+
       const msg = data.message || 'كود غير صحيح';
       const attemptsMatch = msg.match(/متبقي\s+(\d+)\s+محاولات/);
+      
       if (attemptsMatch) showAttempts(parseInt(attemptsMatch[1]));
-      if (msg.includes('الحد الأقصى للأجهزة') || msg.includes('الأجهزة')) { warnBox.classList.add('show'); errorMsg.classList.remove('show'); vibrate([50, 50]); }
-      else showError(msg);
+      
+      if (msg.includes('الحد الأقصى للأجهزة') || msg.includes('الأجهزة')) { 
+        warnBox.classList.add('show'); 
+        errorMsg.classList.remove('show'); 
+        vibrate([50, 50]); 
+      } else {
+        showError(msg);
+      }
       setLoading(false);
-    } catch (err) { showError('خطأ في الاتصال، جرب تاني'); setLoading(false); }
+      
+    } catch (err) { 
+      showError('خطأ في الاتصال، جرب تاني'); 
+      setLoading(false); 
+    }
   }
+
   btnLogin.addEventListener('click', login);
   init();
 })();
 </script>
 <script src="theme.js"></script>
 </body>
-  </html>
+</html>
