@@ -29,9 +29,24 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes glowPulse{0%,100%{opacity:.85}50%{opacity:1}}
-@keyframes quoteFade{0%{opacity:0;transform:translateY(10px) scale(.95)}100%{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes floatIcon{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+
+/* توهج الاسم */
+@keyframes textGlow {
+  0% { text-shadow: 0 0 5px var(--blue), 0 0 10px var(--blue), 0 0 20px var(--blue2); }
+  50% { text-shadow: 0 0 10px var(--blue), 0 0 20px var(--blue2), 0 0 30px var(--blue2); }
+  100% { text-shadow: 0 0 5px var(--blue), 0 0 10px var(--blue), 0 0 20px var(--blue2); }
+}
+
+/* اهتزاز الصورة */
+@keyframes shake {
+  0% { transform: scale(1) rotate(0deg); }
+  20% { transform: scale(1.05) rotate(-2deg); }
+  40% { transform: scale(1.05) rotate(2deg); }
+  60% { transform: scale(1.05) rotate(-1deg); }
+  80% { transform: scale(1.05) rotate(1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
 #toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:10px;width:90%;max-width:400px;pointer-events:none}
 .toast{background:var(--card);color:var(--ink);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.1);border:1px solid var(--line);animation:slideDown .3s ease;pointer-events:auto}
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
@@ -57,14 +72,29 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head{margin-bottom:20px;animation:fadeUp .4s ease}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
-.name-span{font-size:20px;font-weight:900;color:transparent;background:linear-gradient(90deg, var(--blue), var(--blue2));-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 10px rgba(108,99,255,.5));animation:glowPulse 2s infinite alternate}
+
+/* الاسم المتوهج */
+.name-span{
+  font-size:22px;
+  font-weight:900;
+  color: var(--blue2);
+  animation: textGlow 1.5s ease-in-out infinite alternate;
+}
+
 .page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
 .page-head h1 .count{font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:4px 14px;border-radius:99px;font-weight:900;box-shadow:0 4px 10px rgba(108,99,255,.3)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;margin-top:24px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:all .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
 .card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
+
+/* تأثير عند الضغط على الكارت */
+.card:active {
+  animation: shake 0.4s ease-in-out;
+  border-color: var(--blue2);
+  box-shadow: 0 0 20px var(--blue), inset 0 0 10px rgba(108, 99, 255, 0.2);
+}
+
 .card-img{width:100%;aspect-ratio:16/10;background:var(--card-inner);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;position:relative;pointer-events:none}
-/* تعديل نزول الصورة */
 .card-img img{width:100%;height:100%;object-fit:cover;object-position:center 80%;transition:transform .4s ease}
 .card:hover .card-img img{transform:scale(1.05)}
 .card-img .ph{position:absolute;inset:0;display:none;place-items:center;background:var(--card-inner);color:var(--blue)}
@@ -112,7 +142,7 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
     <p>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></p>
   </div>
   
-  <!-- تم حذف خانة المقولات من هنا -->
+  <!-- تم حذف خانة المقولات -->
 
   <div class="grid" id="subjects-grid">
     <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
@@ -155,7 +185,6 @@ function setGreeting(name){
 
 async function load() {
   try {
-    // المسار الأصلي اللي شغال معاك
     const subjects = await api('/api/subjects/' + subjectId);
     if (!subjects || !subjects.length) { 
       $('subjects-grid').innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><h3>لا يوجد مواد متاحة</h3><p>هتلاقي موادك هنا قريباً</p></div>`; 
