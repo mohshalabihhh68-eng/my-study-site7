@@ -53,11 +53,23 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 .otp-container{direction:ltr;display:flex;justify-content:center;gap:6px;margin-bottom:24px;width:100%}
 .otp-input{width:36px;height:48px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:20px;font-weight:800;text-align:center;transition:border-color .2s,background-color .2s,transform .2s,box-shadow .2s;outline:none;padding:0;caret-color:transparent}
 .otp-input:focus{border-color:var(--blue);background:rgba(108,99,255,.08);box-shadow:0 0 0 3px rgba(108,99,255,.15);transform:translateY(-2px) scale(1.02)}
-.otp-input.filled{border-color:rgba(108,99,255,.5);background:rgba(108,99,255,.08);color:var(--blue)}
+.otp-input.filled{border-color:rgba(108,99,255,.5);background:rgba(108,99,255,.08);color:var(--blue);box-shadow:0 0 10px rgba(108,99,255,.25)}
+/* لمعة الخانات لما تتملي */
+.otp-input.pop{animation:pop .25s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.12)}100%{transform:scale(1)}}
+/* توهج المجموعة لما تكتمل */
+.otp-container.complete .otp-input{border-color:rgba(16,185,129,.55);box-shadow:0 0 12px rgba(16,185,129,.25)}
+/* اهتزاز عند النقص */
+.otp-container.shake{animation:shake .4s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes shake{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(4px)}30%,50%,70%{transform:translateX(-6px)}40%,60%{transform:translateX(6px)}}
+
 .attempts{text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px;display:none;animation:fadeIn .3s ease}
 .attempts.show{display:block}
 .attempts b{color:var(--amber)}
-.btn-login{width:100%;padding:15px;border-radius:14px;border:none;background:linear-gradient(135deg,#6c63ff,#00d4ff);color:#fff;font-weight:800;font-size:16px;cursor:pointer;transition:transform .2s,box-shadow .2s,opacity .2s;display:flex;justify-content:center;align-items:center;gap:8px;box-shadow:0 8px 20px rgba(108,99,255,.3);will-change:transform}
+
+.btn-login{position:relative;overflow:hidden;width:100%;padding:15px;border-radius:14px;border:none;background:linear-gradient(135deg,#6c63ff,#00d4ff);color:#fff;font-weight:800;font-size:16px;cursor:pointer;transition:transform .2s,box-shadow .2s,opacity .2s;display:flex;justify-content:center;align-items:center;gap:8px;box-shadow:0 8px 20px rgba(108,99,255,.3);will-change:transform}
+.btn-login::after{content:"";position:absolute;top:0;left:-120%;width:60%;height:100%;background:linear-gradient(120deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);animation:shine 4s ease-in-out infinite}
+@keyframes shine{0%{left:-120%}40%{left:130%}100%{left:130%}}
 .btn-login:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 25px rgba(108,99,255,.5)}
 .btn-login:active:not(:disabled){transform:translateY(0) scale(.98)}
 .btn-login:disabled{opacity:.7;cursor:not-allowed}
@@ -116,7 +128,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 
   <div class="error-box" id="error-msg"></div>
   
-  <div class="otp-container">
+  <div class="otp-container" id="otp-container">
     <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autocapitalize="off" spellcheck="false">
     <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
     <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -147,6 +159,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   const API = '';
   const $ = id => document.getElementById(id);
   const inputs = document.querySelectorAll('.otp-input');
+  const otpContainer = $('otp-container');
   const btnLogin = $('btn-login');
   const btnText = $('btn-text');
   const btnArrow = $('btn-arrow');
@@ -172,6 +185,18 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     inputs.forEach((inp, i) => { inp.value = digits[i] || ''; inp.classList.toggle('filled', !!inp.value); });
     if (digits.length > 0 && digits.length < 9) inputs[digits.length].focus();
     else if (digits.length === 9) inputs[8].blur();
+    updateContainerState();
+  }
+
+  function updateContainerState() {
+    const full = getCode().length === 9;
+    otpContainer.classList.toggle('complete', full);
+  }
+
+  function shakeOtp() {
+    otpContainer.classList.remove('shake');
+    void otpContainer.offsetWidth;
+    otpContainer.classList.add('shake');
   }
 
   function init() {
@@ -206,43 +231,111 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     }
   }
 
+  // ===== توزيع الأرقام على الخانات (يستخدم للّصق والكتابة الجماعية) =====
+  function fillFrom(startIndex, digits) {
+    let idx = startIndex;
+    for (let d = 0; d < digits.length && idx < inputs.length; d++, idx++) {
+      inputs[idx].value = digits[d];
+      inputs[idx].classList.add('filled');
+      inputs[idx].classList.add('pop');
+      (function(el){ setTimeout(() => el.classList.remove('pop'), 260); })(inputs[idx]);
+    }
+    updateContainerState();
+    const nextEmpty = Array.from(inputs).find(x => !x.value);
+    if (nextEmpty) nextEmpty.focus();
+    else inputs[inputs.length - 1].blur();
+  }
+
+  // ===== المسح المستمر (Long Backspace) =====
+  let holdTimer = null, holdInterval = null, isHolding = false;
+
+  function startErase() {
+    // امسح الخانة الحالية أو اللي قبلها فورًا
+    let idx = Array.from(inputs).findIndex(x => !x.value);
+    idx = idx === -1 ? inputs.length - 1 : Math.max(0, idx - 1);
+
+    function eraseStep() {
+      const cur = Array.from(inputs).findIndex(x => !x.value);
+      let target = cur === -1 ? inputs.length - 1 : cur - 1;
+      if (target < 0) target = 0;
+      if (inputs[target].value) {
+        inputs[target].value = '';
+        inputs[target].classList.remove('filled');
+        vibrate(8);
+        updateContainerState();
+      }
+      // لو الخانة اللي بعدها مليانة امسحها كمان في نفس الدورة (تسريع)
+      const after = target + 1;
+      if (after < inputs.length && inputs[after].value) {
+        inputs[after].value = '';
+        inputs[after].classList.remove('filled');
+        updateContainerState();
+      }
+      // وقف لما الكل فاضي
+      if (getCode().length === 0) stopErase();
+    }
+
+    isHolding = true;
+    eraseStep();
+    holdTimer = setTimeout(() => {
+      holdInterval = setInterval(eraseStep, 80);
+    }, 350);
+  }
+
+  function stopErase() {
+    isHolding = false;
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    if (holdInterval) { clearInterval(holdInterval); holdInterval = null; }
+  }
+
   inputs.forEach((inp, i) => {
     inp.addEventListener('input', (e) => {
       let val = e.target.value.replace(/\D/g, '');
-      if (!val) { inp.classList.remove('filled'); return; }
+      if (!val) { inp.classList.remove('filled'); updateContainerState(); return; }
       // لو دخل أو لصق أكتر من رقم في خانة واحدة، وزّعهم على الخانات
       if (val.length > 1) {
-        const digits = val.slice(0, inputs.length - i).split('');
-        digits.forEach((d, idx) => {
-          if (inputs[i + idx]) {
-            inputs[i + idx].value = d;
-            inputs[i + idx].classList.toggle('filled', true);
-          }
-        });
-        const nextEmpty = Array.from(inputs).find(x => !x.value);
-        if (nextEmpty) nextEmpty.focus(); else inputs[inputs.length - 1].blur();
+        inp.value = '';
+        fillFrom(i, val.slice(0, inputs.length - i).split(''));
         warnBox.classList.remove('show');
         return;
       }
       inp.value = val;
       inp.classList.toggle('filled', true);
+      inp.classList.add('pop');
+      setTimeout(() => inp.classList.remove('pop'), 260);
       vibrate(10);
       if (i < inputs.length - 1) inputs[i + 1].focus(); else inp.blur();
+      updateContainerState();
       warnBox.classList.remove('show');
     });
 
     inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace') { 
-        if (!e.target.value && i > 0) { e.preventDefault(); inputs[i - 1].focus(); inputs[i - 1].value = ''; inputs[i - 1].classList.remove('filled'); } 
+      if (e.key === 'Backspace') {
+        // لو الخانة فيها قيمة: امسحها عادي وامنع السلوك الافتراضي (عشان التحكم الكامل)
+        if (e.target.value) {
+          e.preventDefault();
+          e.target.value = '';
+          e.target.classList.remove('filled');
+          updateContainerState();
+          vibrate(8);
+          return;
+        }
+        // لو الخانة فاضية: ابدأ المسح المستمر
+        e.preventDefault();
+        if (!isHolding) startErase();
       }
       else if (e.key === 'ArrowLeft' && i > 0) { e.preventDefault(); inputs[i - 1].focus(); }
       else if (e.key === 'ArrowRight' && i < inputs.length - 1) { e.preventDefault(); inputs[i + 1].focus(); }
       else if (e.key === 'Enter') { e.preventDefault(); inp.blur(); login(); }
     });
 
+    inp.addEventListener('keyup', (e) => {
+      if (e.key === 'Backspace') stopErase();
+    });
+
     inp.addEventListener('focus', (e) => e.target.select());
-    
-    // الحل الجذري للصق: نمنع السلوك الافتراضي ونوزّع الأرقام يدوياً من أول خانة
+
+    // ===== اللصق (Paste) — يوزّع كل الأرقام من أول خانة =====
     inp.addEventListener('paste', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -251,24 +344,24 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       if (!digits) return;
 
       inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
-      digits.split('').forEach((d, idx) => {
-        if (inputs[idx]) {
-          inputs[idx].value = d;
-          inputs[idx].classList.toggle('filled', true);
-        }
-      });
-      const nextEmpty = Array.from(inputs).find(x => !x.value);
-      if (nextEmpty) nextEmpty.focus(); else inputs[inputs.length - 1].blur();
+      fillFrom(0, digits.split(''));
       vibrate(20);
       warnBox.classList.remove('show');
+      updateContainerState();
     });
   });
+
+  // إيقاف المسح المستمر لو المستخدم شال إيده من أي مكان
+  document.addEventListener('mouseup', stopErase);
+  document.addEventListener('touchend', stopErase);
+  window.addEventListener('blur', stopErase);
 
   async function login() {
     const code = getCode(), deviceId = getDeviceId(), deviceName = 'Web Browser';
     
     if (code.length !== 9) {
       showError('لازم تدخل الـ 9 أرقام كاملة');
+      shakeOtp();
       const firstEmpty = Array.from(inputs).find(inp => !inp.value);
       if (firstEmpty) firstEmpty.focus();
       return;
@@ -308,6 +401,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
         vibrate([50, 50]); 
       } else {
         showError(msg);
+        shakeOtp();
       }
       setLoading(false);
       
