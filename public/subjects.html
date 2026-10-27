@@ -35,24 +35,16 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 
-/* اللوجو */
-.brand{display:flex;align-items:center;cursor:pointer;flex-shrink:0;}
-.brand-img{height: 55px; width: auto; max-width: 160px; object-fit: contain; transition: transform .2s; display: none;}
-.brand:hover .brand-img{transform: scale(1.02);}
+/* ستايل الهيدر القديم */
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
+.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
+.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 
-/* الكلام العادي لو الصورة مش موجودة */
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  font-weight: 900;
-  font-size: 16px;
-  color: var(--ink);
-  line-height: 1.2;
-}
-.brand-text span { font-size: 22px; }
-.brand-text .club { color: var(--blue); }
-.brand-text small { font-size: 10px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+/* لو حابب تحط صورة اللوجو، فعل السطر ده وامسح اللي فوق */
+/*
+.brand-img{height:45px; width:auto; object-fit:contain;}
+*/
 
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
 .profile-wrap{position:relative}
@@ -140,7 +132,7 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .empty-state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted)}
 .empty-state svg{width:60px;height:60px;margin-bottom:15px;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5}
 .empty-state h3{color:var(--ink);font-size:18px;font-weight:900;margin:0 0 8px}
-@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand-img{height: 45px; max-width: 130px;}.brand-text span { font-size: 18px; } .brand-text small { display: none; }#scroll-progress-side{width:3px}}
+@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand small{display:none}#scroll-progress-side{width:3px}}
 </style>
 </head>
 <body>
@@ -150,17 +142,13 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 <div id="toast-container"></div>
 <header class="app-nav"><div class="app-nav-in">
   
-  <!-- اللوجو هنا -->
   <div class="brand" onclick="window.location.href='index.html'">
+    <!-- الهيدر القديم اللي شغال -->
+    <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
+    <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
     
-    <!-- اللوجو (هنا المسار المباشر لصورة logo.png اللي في حسابك) -->
-    <img src="https://raw.githubusercontent.com/mohshalabihh68-eng/my-study-site7/main/logo.png" alt="ثانوية club" class="brand-img" id="main-logo" onerror="this.style.display='none'; document.getElementById('fallback-text').style.display='flex';">
-    
-    <!-- الكلام اللي هيظهر لو الصورة مش موجودة -->
-    <div class="brand-text" id="fallback-text">
-      <span>ثانوية <span class="club">club</span></span>
-      <small>مستقبلك الدراسي في مكان واحد</small>
-    </div>
+    <!-- لو عايز تحط صورة بدل اللي فوق، امسح الكلام اللي فوق ده وفعل ده (وغير الاسم لو مختلف) -->
+    <!-- <img src="logo.png" alt="Logo" style="height:45px;"> -->
   </div>
 
   <div class="nav-right">
@@ -190,15 +178,6 @@ const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(T
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
-
-const logoImg = $('main-logo');
-const fallbackText = $('fallback-text');
-if (logoImg) {
-  logoImg.onload = () => { fallbackText.style.display = 'none'; };
-  if (logoImg.complete && logoImg.naturalHeight !== 0) {
-    fallbackText.style.display = 'none';
-  }
-}
 
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
