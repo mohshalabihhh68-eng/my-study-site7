@@ -31,7 +31,11 @@ button{cursor:pointer;outline:none}
 body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;background:var(--hero-body-bg)}
 svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
+/* شريط التقدم الأفقي (فوق) */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:1000;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
+
+/* شريط التقدم الرأسي (على اليمين) */
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:1000;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
 
 .nav{position:sticky;top:0;z-index:30;background:var(--nav-bg);border-bottom:1px solid var(--line);backdrop-filter:blur(18px);transition:background .35s,box-shadow .3s}
 .nav.scrolled{background:var(--nav-bg-scrolled);box-shadow:0 10px 30px rgba(108,99,255,.10)}
@@ -149,11 +153,6 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .save-badge{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(16,185,129,.15);color:var(--mint);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:900;margin-top:8px;border:1px solid rgba(16,185,129,.3)}
 .save-badge svg{width:16px;height:16px;stroke-width:2.5}
 
-/* تنسيق المميزات اللي تحت الباقات مباشرة */
-.features-under-prices{max-width:900px;margin:35px auto 0;display:grid;grid-template-columns:repeat(2,1fr);gap:16px;background:var(--panel);border:1px solid var(--line);padding:24px;border-radius:22px;box-shadow:var(--shadow)}
-.feat-item{display:flex;align-items:center;gap:12px;color:var(--text);font-size:14px;font-weight:800}
-.feat-item svg{width:20px;height:20px;color:var(--mint);flex:none;stroke-width:3}
-
 .note{margin:18px auto 0;text-align:center;color:var(--muted);font-size:11px;line-height:1.8}
 
 .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -204,14 +203,17 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 #back-to-top:hover{transform:translateY(-4px) scale(1.05);box-shadow:0 15px 35px rgba(108,99,255,.5)}
 #back-to-top svg{width:22px;height:22px;stroke-width:2.5}
 
-@media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:20px}.hero-copy{text-align:center}.hero-copy .eyebrow{margin-inline:auto}.hero-copy p{margin-inline:auto}.hero-actions,.trust{justify-content:center}.hero-art{min-height:420px}.dashboard{width:min(100%,420px)}.tag-one{left:2%}.tag-two{right:2%}.features{grid-template-columns:repeat(2,1fr)}.prices{gap:12px}.price-card{padding:22px 17px}.features-under-prices{grid-template-columns:1fr;padding:20px}}
-@media(max-width:650px){.container{width:min(100% - 28px,1160px)}.navin{height:66px}.navlinks{display:none}.brand{font-size:16px}.logo{width:39px;height:39px}.brand small{display:none}.navactions .btn{padding:10px 12px;font-size:11px}.hero{padding:52px 0 42px}.hero h1{font-size:clamp(34px,10vw,47px);letter-spacing:-.8px}.hero p{font-size:14px}.hero-art{min-height:365px}.orb{width:270px;height:270px}.dashboard{padding:16px;border-radius:22px}.tag-one{top:8px;left:0}.tag-two{bottom:4px;right:0}.float-tag{font-size:10px;padding:9px 11px}.stats-grid{gap:8px}.stat{padding:15px 7px}.stat b{font-size:20px}.stat span{font-size:10px}.section{padding:49px 0}.quote-card{border-radius:22px}.quote-card p{font-size:13px}.prices{grid-template-columns:1fr}.price-card .desc{min-height:0}.price-card.featured{order:-1}.features{grid-template-columns:1fr}.feature{padding:20px}.trial-box{grid-template-columns:1fr;text-align:center}.trial-cta .btn{width:100%}.admins{grid-template-columns:1fr}.admin-card{text-align:right}.footer-in{justify-content:center;text-align:center}.footer-in>div{width:100%}.navactions .btn-soft{display:none}#back-to-top{bottom:16px;left:16px;width:42px;height:42px}.theme-toggle{width:36px;height:36px}}
+@media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:20px}.hero-copy{text-align:center}.hero-copy .eyebrow{margin-inline:auto}.hero-copy p{margin-inline:auto}.hero-actions,.trust{justify-content:center}.hero-art{min-height:420px}.dashboard{width:min(100%,420px)}.tag-one{left:2%}.tag-two{right:2%}.features{grid-template-columns:repeat(2,1fr)}.prices{gap:12px}.price-card{padding:22px 17px}}
+@media(max-width:650px){.container{width:min(100% - 28px,1160px)}.navin{height:66px}.navlinks{display:none}.brand{font-size:16px}.logo{width:39px;height:39px}.brand small{display:none}.navactions .btn{padding:10px 12px;font-size:11px}.hero{padding:52px 0 42px}.hero h1{font-size:clamp(34px,10vw,47px);letter-spacing:-.8px}.hero p{font-size:14px}.hero-art{min-height:365px}.orb{width:270px;height:270px}.dashboard{padding:16px;border-radius:22px}.tag-one{top:8px;left:0}.tag-two{bottom:4px;right:0}.float-tag{font-size:10px;padding:9px 11px}.stats-grid{gap:8px}.stat{padding:15px 7px}.stat b{font-size:20px}.stat span{font-size:10px}.section{padding:49px 0}.quote-card{border-radius:22px}.quote-card p{font-size:13px}.prices{grid-template-columns:1fr}.price-card .desc{min-height:0}.price-card.featured{order:-1}.features{grid-template-columns:1fr}.feature{padding:20px}.trial-box{grid-template-columns:1fr;text-align:center}.trial-cta .btn{width:100%}.admins{grid-template-columns:1fr}.admin-card{text-align:right}.footer-in{justify-content:center;text-align:center}.footer-in>div{width:100%}.navactions .btn-soft{display:none}#back-to-top{bottom:16px;left:16px;width:42px;height:42px}.theme-toggle{width:36px;height:36px}#scroll-progress-side{width:3px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.reveal{opacity:1;transform:none}}
 </style>
 </head>
 <body>
 
+<!-- شريط التقدم العلوي والجانبي -->
 <div id="scroll-progress"></div>
+<div id="scroll-progress-side"></div>
+
 <button id="back-to-top" aria-label="العودة لأعلى"><svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg></button>
 
 <header class="nav" id="main-nav"><div class="container navin">
@@ -283,12 +285,14 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
   <p class="desc">كل شهر بتجدد براحتك، بسعر ثابت وواضح.</p>
   <div class="price">150 <small>جنيه / شهر</small></div>
   <div class="price-note">مدة الاشتراك شهر واحد</div>
+  
   <ul>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>مدة الاشتراك شهر واحد</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>الوصول للمحتوى المفعّل لحسابك</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الإدارة عند الحاجة</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تجديد يدوي أو تلقائي حسب الاتفاق</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>محاضرات كل المدرسين في كل مواد شعبتك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>ارجع لأي محاضرة وقت ما تحب طول مدة اشتراكك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>المنصة بتحفظ مكانك في كل محاضرة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>دعم لو قابلتك أي مشكلة</li>
   </ul>
+
   <a class="btn btn-soft price-cta" href="login.html">معايا كود</a>
 </article>
 
@@ -299,40 +303,20 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
   <p class="desc">اشترك 3 شهور مرة واحدة ووفّر 100 جنيه عن الشهري.</p>
   <div class="price">350 <small>جنيه / 3 شهور</small></div>
   
-  <!-- وفّر 100 جنيه بشكل مميز -->
   <div class="save-badge">
     <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
     وفّر 100 جنيه
   </div>
 
   <ul>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>مدة الاشتراك 3 شهور</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>الوصول للمحتوى المفعّل لحسابك</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>توفير 100 جنيه عن الدفع الشهري</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الإدارة عند الحاجة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>محاضرات كل المدرسين في كل مواد شعبتك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>ارجع لأي محاضرة وقت ما تحب طول مدة اشتراكك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>المنصة بتحفظ مكانك في كل محاضرة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>دعم لو قابلتك أي مشكلة</li>
   </ul>
+
   <a class="btn btn-primary price-cta" href="login.html" id="price-auth-btn">معايا كود</a>
 </article>
-</div>
-
-<!-- المميزات الجديدة (استبدال الجملة القديمة) -->
-<div class="features-under-prices reveal">
-  <div class="feat-item">
-    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
-    <span>محاضرات كل المدرسين في كل مواد شعبتك</span>
-  </div>
-  <div class="feat-item">
-    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
-    <span>ارجع لأي محاضرة وقت ما تحب طول مدة اشتراكك</span>
-  </div>
-  <div class="feat-item">
-    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
-    <span>المنصة بتحفظ مكانك في كل محاضرة</span>
-  </div>
-  <div class="feat-item">
-    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
-    <span>دعم لو قابلتك أي مشكلة</span>
-  </div>
 </div>
 
 </div></section>
@@ -376,21 +360,29 @@ if (isLoggedIn) {
   if (priceBtns) { priceBtns.forEach(btn => { btn.href = 'subjects.html'; btn.textContent = 'اذهب لموادي'; }); }
 }
 const progressBar = $('scroll-progress');
+const progressBarSide = $('scroll-progress-side'); // الشريط الجانبي
 const backToTop = $('back-to-top');
 const mainNav = $('main-nav');
 const sections = document.querySelectorAll('section[id]');
 const navLinks = document.querySelectorAll('.nav-link');
+
 function onScroll() {
   const scrollTop = window.scrollY;
   const docHeight = document.documentElement.scrollHeight - window.innerHeight;
   const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+  
+  // تحديث الشريط الأفقي
   if (progressBar) progressBar.style.width = progress + '%';
+  // تحديث الشريط الرأسي الجانبي
+  if (progressBarSide) progressBarSide.style.height = progress + '%';
+  
   if (mainNav) mainNav.classList.toggle('scrolled', scrollTop > 50);
   if (backToTop) backToTop.classList.toggle('show', scrollTop > 400);
   let current = '';
   sections.forEach(s => { if (scrollTop >= s.offsetTop - 120) current = s.getAttribute('id'); });
   navLinks.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + current));
 }
+
 window.addEventListener('scroll', onScroll, { passive: true });
 onScroll();
 if (backToTop) backToTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
