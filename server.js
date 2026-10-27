@@ -300,8 +300,32 @@ const rateBuckets = new Map();
 const banBuckets = new Map();
 
 function clientIp(req) {
-  const ip = req.ip || req.socket?.remoteAddress || "unknown";
-  return String(ip).replace(/^::ffff:/, "");
+  // Railway / Cloudflare / البروكسيات: خُذ أول IP عام من السلسلة
+  const candidates = [
+    req.headers["cf-connecting-ip"],
+    req.headers["true-client-ip"],
+    req.headers["x-real-ip"],
+    ...(String(req.headers["x-forwarded-for"] || "").split(",").map((s) => s.trim())),
+    req.ip,
+    req.socket?.remoteAddress
+  ].filter(Boolean).map((s) => String(s).replace(/^::ffff:/, "").trim());
+
+  const isPrivate = (ip) =>
+    !ip ||
+    ip === "unknown" ||
+    ip === "127.0.0.1" ||
+    ip === "::1" ||
+    ip.startsWith("10.") ||
+    ip.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip) ||
+    ip.startsWith("fc") ||
+    ip.startsWith("fd") ||
+    ip.startsWith("fe80");
+
+  for (const ip of candidates) {
+    if (!isPrivate(ip) && /^[\d.a-fA-F:]+$/.test(ip)) return ip;
+  }
+  return candidates[0] || "unknown";
 }
 
 function rateLimit(options = {}) {
@@ -445,8 +469,29 @@ const CONFIG = {
   THANAWICA_CODE: process.env.THANAWICA_CODE || "",
   THANAWICA_ENABLED: process.env.THANAWICA_ENABLED !== "0",
   CODE_TYPES: {
-    trial: { label: "تجربة", ms: 1 * 3600 * 1000 },
-    month: { label: "شهر", ms: 30 * 24 * 3600 * 1000 }
+    h1: { label: "ساعة واحدة", ms: 1 * 3600 * 1000 },
+    h6: { label: "6 ساعات", ms: 6 * 3600 * 1000 },
+    h12: { label: "12 ساعة", ms: 12 * 3600 * 1000 },
+    trial: { label: "تجربة — 24 ساعة", ms: 24 * 3600 * 1000 },
+    d3: { label: "3 أيام", ms: 3 * 24 * 3600 * 1000 },
+    week: { label: "أسبوع", ms: 7 * 24 * 3600 * 1000 },
+    d15: { label: "15 يوم", ms: 15 * 24 * 3600 * 1000 },
+    month: { label: "شهر واحد", ms: 30 * 24 * 3600 * 1000 },
+    m2: { label: "شهرين", ms: 60 * 24 * 3600 * 1000 },
+    m3: { label: "3 شهور", ms: 90 * 24 * 3600 * 1000 },
+    m4: { label: "4 شهور", ms: 120 * 24 * 3600 * 1000 },
+    m5: { label: "5 شهور", ms: 150 * 24 * 3600 * 1000 },
+    m6: { label: "6 شهور", ms: 180 * 24 * 3600 * 1000 },
+    m7: { label: "7 شهور", ms: 210 * 24 * 3600 * 1000 },
+    m8: { label: "8 شهور", ms: 240 * 24 * 3600 * 1000 },
+    m9: { label: "9 شهور", ms: 270 * 24 * 3600 * 1000 },
+    m10: { label: "10 شهور", ms: 300 * 24 * 3600 * 1000 },
+    m11: { label: "11 شهر", ms: 330 * 24 * 3600 * 1000 },
+    year: { label: "سنة — 12 شهر", ms: 365 * 24 * 3600 * 1000 },
+    d45: { label: "45 يوم", ms: 45 * 24 * 3600 * 1000 },
+    d60: { label: "شهرين — 60 يوم", ms: 60 * 24 * 3600 * 1000 },
+    term: { label: "ترم — 120 يوم", ms: 120 * 24 * 3600 * 1000 },
+    d180: { label: "6 شهور", ms: 180 * 24 * 3600 * 1000 }
   }
 };
 
@@ -457,7 +502,25 @@ const runtime = {
   coursatkToken: CONFIG.COURSATK_TOKEN,
   siteName: "ثانوية World",
   packages: [
-    { id: "month", name: "باقة الشهر — 30 يوم", price: 150, days: 30, hours: 0, active: true }
+    { id: "h1", name: "ساعة واحدة", price: 0, days: 0, hours: 1, active: true },
+    { id: "h6", name: "6 ساعات", price: 0, days: 0, hours: 6, active: true },
+    { id: "h12", name: "12 ساعة", price: 0, days: 0, hours: 12, active: true },
+    { id: "trial", name: "تجربة — 24 ساعة", price: 0, days: 0, hours: 24, active: true },
+    { id: "d3", name: "3 أيام", price: 30, days: 3, hours: 0, active: true },
+    { id: "week", name: "أسبوع", price: 50, days: 7, hours: 0, active: true },
+    { id: "d15", name: "15 يوم", price: 80, days: 15, hours: 0, active: true },
+    { id: "month", name: "شهر واحد", price: 150, days: 30, hours: 0, active: true },
+    { id: "m2", name: "شهرين", price: 280, days: 60, hours: 0, active: true },
+    { id: "m3", name: "3 شهور", price: 400, days: 90, hours: 0, active: true },
+    { id: "m4", name: "4 شهور", price: 520, days: 120, hours: 0, active: true },
+    { id: "m5", name: "5 شهور", price: 640, days: 150, hours: 0, active: true },
+    { id: "m6", name: "6 شهور", price: 750, days: 180, hours: 0, active: true },
+    { id: "m7", name: "7 شهور", price: 860, days: 210, hours: 0, active: true },
+    { id: "m8", name: "8 شهور", price: 970, days: 240, hours: 0, active: true },
+    { id: "m9", name: "9 شهور", price: 1080, days: 270, hours: 0, active: true },
+    { id: "m10", name: "10 شهور", price: 1180, days: 300, hours: 0, active: true },
+    { id: "m11", name: "11 شهر", price: 1280, days: 330, hours: 0, active: true },
+    { id: "year", name: "سنة — 12 شهر", price: 1400, days: 365, hours: 0, active: true }
   ],
   agents: []
 };
@@ -471,7 +534,44 @@ function loadRuntimeFile() {
     if (raw.firebaseUrl) runtime.firebaseUrl = String(raw.firebaseUrl).replace(/\/$/, "");
     if (raw.coursatkToken) runtime.coursatkToken = String(raw.coursatkToken);
     if (raw.siteName) runtime.siteName = String(raw.siteName);
-    if (Array.isArray(raw.packages) && raw.packages.length) runtime.packages = raw.packages;
+    if (Array.isArray(raw.packages) && raw.packages.length) {
+      // ادمج الباقات المحفوظة مع الافتراضية (ما نمسح باقات المستخدم)
+      const defaults = [
+        { id: "h1", name: "ساعة واحدة", price: 0, days: 0, hours: 1, active: true },
+        { id: "h6", name: "6 ساعات", price: 0, days: 0, hours: 6, active: true },
+        { id: "h12", name: "12 ساعة", price: 0, days: 0, hours: 12, active: true },
+        { id: "trial", name: "تجربة — 24 ساعة", price: 0, days: 0, hours: 24, active: true },
+        { id: "d3", name: "3 أيام", price: 30, days: 3, hours: 0, active: true },
+        { id: "week", name: "أسبوع", price: 50, days: 7, hours: 0, active: true },
+        { id: "d15", name: "15 يوم", price: 80, days: 15, hours: 0, active: true },
+        { id: "month", name: "شهر واحد", price: 150, days: 30, hours: 0, active: true },
+        { id: "m2", name: "شهرين", price: 280, days: 60, hours: 0, active: true },
+        { id: "m3", name: "3 شهور", price: 400, days: 90, hours: 0, active: true },
+        { id: "m4", name: "4 شهور", price: 520, days: 120, hours: 0, active: true },
+        { id: "m5", name: "5 شهور", price: 640, days: 150, hours: 0, active: true },
+        { id: "m6", name: "6 شهور", price: 750, days: 180, hours: 0, active: true },
+        { id: "m7", name: "7 شهور", price: 860, days: 210, hours: 0, active: true },
+        { id: "m8", name: "8 شهور", price: 970, days: 240, hours: 0, active: true },
+        { id: "m9", name: "9 شهور", price: 1080, days: 270, hours: 0, active: true },
+        { id: "m10", name: "10 شهور", price: 1180, days: 300, hours: 0, active: true },
+        { id: "m11", name: "11 شهر", price: 1280, days: 330, hours: 0, active: true },
+        { id: "year", name: "سنة — 12 شهر", price: 1400, days: 365, hours: 0, active: true }
+      ];
+      const byId = new Map();
+      defaults.forEach((p) => byId.set(p.id, { ...p }));
+      raw.packages.forEach((p) => {
+        if (!p || !p.id) return;
+        byId.set(p.id, {
+          id: String(p.id),
+          name: String(p.name || p.id),
+          price: Number(p.price) || 0,
+          days: Math.max(0, Number(p.days) || 0),
+          hours: Math.max(0, Number(p.hours) || 0),
+          active: p.active !== false
+        });
+      });
+      runtime.packages = Array.from(byId.values());
+    }
     if (Array.isArray(raw.agents)) runtime.agents = raw.agents;
     if (raw.storageBucket) runtime.storageBucket = String(raw.storageBucket);
     if (raw.notify && typeof raw.notify === "object") runtime.notify = raw.notify;
@@ -645,14 +745,21 @@ async function resolveSection(sectionRaw, yearOverride = null) {
 }
 
 function resolveDurationMs(body) {
-  if (body?.days != null && body.days !== "") {
-    const d = Number(body.days);
-    if (!Number.isNaN(d) && d > 0 && d <= 3650) return Math.round(d * 24 * 3600 * 1000);
+  const days = body?.days != null && body.days !== "" ? Number(body.days) : 0;
+  const hours = body?.hours != null && body.hours !== "" ? Number(body.hours) : 0;
+  // أيام + ساعات معًا (مخصص من اللوحة)
+  if ((!Number.isNaN(days) && days > 0) || (!Number.isNaN(hours) && hours > 0)) {
+    const d = !Number.isNaN(days) && days > 0 ? Math.min(3650, days) : 0;
+    const h = !Number.isNaN(hours) && hours > 0 ? Math.min(24 * 3650, hours) : 0;
+    const ms = (d * 24 + h) * 3600 * 1000;
+    if (ms > 0) return Math.round(ms);
   }
-  if (body?.hours != null && Number(body.hours) > 0) return Math.round(Number(body.hours) * 3600 * 1000);
   const type = String(body?.type || "month");
   const pkg = (runtime.packages || []).find((p) => p.id === type);
-  if (pkg) { const ms = packageDurationMs(pkg); if (ms > 0) return ms; }
+  if (pkg) {
+    const ms = packageDurationMs(pkg);
+    if (ms > 0) return ms;
+  }
   if (CONFIG.CODE_TYPES[type]) return CONFIG.CODE_TYPES[type].ms;
   return CONFIG.CODE_TYPES.month.ms;
 }
@@ -1360,28 +1467,87 @@ function parseDeviceInfo(ua) {
 
 async function lookupGeo(ip) {
   try {
-    if (!ip || ip === "unknown" || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.") || ip === "::1") {
-      return { country: "محلي", countryCode: "", city: "", region: "", isp: "", lat: null, lon: null };
+    const cleanIp = String(ip || "").replace(/^::ffff:/, "").trim();
+    if (
+      !cleanIp ||
+      cleanIp === "unknown" ||
+      cleanIp === "127.0.0.1" ||
+      cleanIp === "::1" ||
+      cleanIp.startsWith("192.168.") ||
+      cleanIp.startsWith("10.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(cleanIp)
+    ) {
+      return { country: "محلي", countryCode: "", city: "", region: "", isp: "", as: "", lat: null, lon: null, query: cleanIp };
     }
-    const cleanIp = String(ip).replace(/^::ffff:/, "");
-    const r = await fetchT(
-      `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,lat,lon,isp,org,as,query&lang=ar`,
-      { headers: { Accept: "application/json" } },
-      { timeout: 4500, retries: 0 }
-    );
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (j.status !== "success") return null;
-    return {
-      country: j.country || "",
-      countryCode: j.countryCode || "",
-      city: j.city || "",
-      region: j.regionName || "",
-      isp: j.isp || j.org || "",
-      as: j.as || "",
-      lat: j.lat ?? null,
-      lon: j.lon ?? null
-    };
+
+    // 1) ipwho.is — HTTPS ونتائج جيدة
+    try {
+      const r1 = await fetchT(`https://ipwho.is/${encodeURIComponent(cleanIp)}`, { headers: { Accept: "application/json" } }, { timeout: 4000, retries: 0 });
+      if (r1.ok) {
+        const j = await r1.json();
+        if (j && j.success !== false && (j.country || j.city)) {
+          return {
+            country: j.country || "",
+            countryCode: j.country_code || "",
+            city: j.city || "",
+            region: j.region || j.region_code || "",
+            isp: (j.connection && (j.connection.isp || j.connection.org)) || j.isp || j.org || "",
+            as: (j.connection && j.connection.asn) ? String(j.connection.asn) : "",
+            lat: j.latitude ?? null,
+            lon: j.longitude ?? null,
+            query: j.ip || cleanIp
+          };
+        }
+      }
+    } catch {}
+
+    // 2) ipapi.co
+    try {
+      const r2 = await fetchT(`https://ipapi.co/${encodeURIComponent(cleanIp)}/json/`, { headers: { Accept: "application/json" } }, { timeout: 4000, retries: 0 });
+      if (r2.ok) {
+        const j = await r2.json();
+        if (j && !j.error && (j.country_name || j.country)) {
+          return {
+            country: j.country_name || j.country || "",
+            countryCode: j.country_code || j.country || "",
+            city: j.city || "",
+            region: j.region || j.region_code || "",
+            isp: j.org || j.asn || "",
+            as: j.asn || "",
+            lat: j.latitude ?? null,
+            lon: j.longitude ?? null,
+            query: j.ip || cleanIp
+          };
+        }
+      }
+    } catch {}
+
+    // 3) ip-api.com (احتياطي)
+    try {
+      const r3 = await fetchT(
+        `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,lat,lon,isp,org,as,query&lang=ar`,
+        { headers: { Accept: "application/json" } },
+        { timeout: 4000, retries: 0 }
+      );
+      if (r3.ok) {
+        const j = await r3.json();
+        if (j.status === "success") {
+          return {
+            country: j.country || "",
+            countryCode: j.countryCode || "",
+            city: j.city || "",
+            region: j.regionName || "",
+            isp: j.isp || j.org || "",
+            as: j.as || "",
+            lat: j.lat ?? null,
+            lon: j.lon ?? null,
+            query: j.query || cleanIp
+          };
+        }
+      }
+    } catch {}
+
+    return null;
   } catch {
     return null;
   }
@@ -1478,8 +1644,8 @@ app.get("/api/admin/visits", requireAdmin("students_view"), async (_req, res) =>
     const visits = (await fbGet("visits")) || {};
     const list = Object.entries(visits).map(([id, v]) => ({ id, ...v }));
     list.sort((a, b) => (Number(b.time) || 0) - (Number(a.time) || 0));
-    // آخر 400 زيارة فقط — أخف على اللوحة
-    res.json({ success: true, data: list.slice(0, 400) });
+    // كل الزوار — بدون قص
+    res.json({ success: true, data: list, total: list.length });
   } catch (e) {
     jsonError(res, 500, e.message);
   }
@@ -2687,11 +2853,31 @@ app.patch("/api/admin/students/:code", requireAdmin("students_edit"), async (req
       patch.phone = phone || null;
     }
     if (req.body.governorate != null) patch.governorate = String(req.body.governorate).trim().slice(0, 60) || null;
-    if (req.body.type && (CONFIG.CODE_TYPES[req.body.type] || (runtime.packages || []).some((p) => p.id === req.body.type))) { patch.type = req.body.type; const dur = resolveDurationMs({ type: req.body.type }); patch.durationMs = dur; if (req.body.renew) { patch.activatedAt = now(); patch.expiresAt = now() + dur; } else if (req.body.resetTimer) { patch.activatedAt = null; patch.expiresAt = null; } }
-    if (req.body.days != null && Number(req.body.days) > 0) { patch.type = "custom"; patch.days = Number(req.body.days); const dur = resolveDurationMs({ days: req.body.days }); patch.durationMs = dur; if (req.body.renew) { patch.activatedAt = now(); patch.expiresAt = now() + dur; } else if (req.body.resetTimer || req.body.renew === false) { patch.activatedAt = null; patch.expiresAt = null; } }
+    if (req.body.type && (CONFIG.CODE_TYPES[req.body.type] || (runtime.packages || []).some((p) => p.id === req.body.type))) {
+      patch.type = req.body.type;
+      const dur = resolveDurationMs({ type: req.body.type });
+      patch.durationMs = dur;
+      if (req.body.renew) { patch.activatedAt = now(); patch.expiresAt = now() + dur; }
+      else if (req.body.resetTimer) { patch.activatedAt = null; patch.expiresAt = null; }
+    }
+    if ((req.body.days != null && Number(req.body.days) > 0) || (req.body.hours != null && Number(req.body.hours) > 0)) {
+      patch.type = "custom";
+      if (req.body.days != null) patch.days = Number(req.body.days) || 0;
+      if (req.body.hours != null) patch.hours = Number(req.body.hours) || 0;
+      const dur = resolveDurationMs({ days: req.body.days, hours: req.body.hours });
+      patch.durationMs = dur;
+      if (req.body.renew) { patch.activatedAt = now(); patch.expiresAt = now() + dur; }
+      else if (req.body.resetTimer || req.body.renew === false) { patch.activatedAt = null; patch.expiresAt = null; }
+    }
     if (req.body.resetTimer === true) { patch.activatedAt = null; patch.expiresAt = null; }
-    if (req.body.extendMs) { const base = Math.max(s.expiresAt || now(), now()); patch.expiresAt = base + Number(req.body.extendMs); }
-    if (req.body.extendDays != null) { const base = Math.max(s.expiresAt || now(), now()); patch.expiresAt = base + Number(req.body.extendDays) * 24 * 3600 * 1000; }
+    // تمديد: أيام و/أو مللي ثانية فوق تاريخ الانتهاء الحالي
+    let extendBase = null;
+    if (req.body.extendMs || req.body.extendDays != null) {
+      extendBase = Math.max(Number(s.expiresAt) || now(), now());
+      if (req.body.extendDays != null) extendBase += Number(req.body.extendDays) * 24 * 3600 * 1000;
+      if (req.body.extendMs) extendBase += Number(req.body.extendMs);
+      patch.expiresAt = extendBase;
+    }
     await fbPatch(`students/${code}`, patch);
     if (req.body.forceLogout) {
       const sessions = (await fbGet("sessions")) || {};
