@@ -40,11 +40,6 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .brand-img{height: 55px; width: auto; max-width: 160px; object-fit: contain; transition: transform .2s; display: none;}
 .brand:hover .brand-img{transform: scale(1.02);}
 
-/* إخفاء وإظهار اللوجو حسب الوضع */
-.logo-dark { display: none; } /* بيختفي في الوضع الفاتح */
-[data-theme="dark"] .logo-light { display: none; } /* بيختفي في الوضع الداكن */
-[data-theme="dark"] .logo-dark { display: block; } /* بيظهر في الوضع الداكن */
-
 /* الكلام العادي لو الصورة مش موجودة */
 .brand-text {
   display: flex;
@@ -158,11 +153,8 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
   <!-- اللوجو هنا -->
   <div class="brand" onclick="window.location.href='index.html'">
     
-    <!-- اللوجو الفاتح -->
-    <img src="https://raw.githubusercontent.com/mohshalabihh68-eng/my-study-site7/main/logo.png" alt="ثانوية club" class="brand-img logo-light" id="main-logo-light" onerror="this.style.display='none'; document.getElementById('fallback-text').style.display='flex';">
-    
-    <!-- اللوجو الداكن (غير الرابط ده لو سميت الصورة باسم مختلف) -->
-    <img src="https://raw.githubusercontent.com/mohshalabihh68-eng/my-study-site7/main/logo-dark.png" alt="ثانوية club" class="brand-img logo-dark" id="main-logo-dark" onerror="this.style.display='none';">
+    <!-- اللوجو (هنا المسار المباشر لصورة logo.png اللي في حسابك) -->
+    <img src="https://raw.githubusercontent.com/mohshalabihh68-eng/my-study-site7/main/logo.png" alt="ثانوية club" class="brand-img" id="main-logo" onerror="this.style.display='none'; document.getElementById('fallback-text').style.display='flex';">
     
     <!-- الكلام اللي هيظهر لو الصورة مش موجودة -->
     <div class="brand-text" id="fallback-text">
@@ -199,13 +191,11 @@ const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
 
-// كود إخفاء الكلام لو الصورة اتحملت
-const logoLight = $('main-logo-light');
+const logoImg = $('main-logo');
 const fallbackText = $('fallback-text');
-
-if (logoLight) {
-  logoLight.onload = () => { fallbackText.style.display = 'none'; };
-  if (logoLight.complete && logoLight.naturalHeight !== 0) {
+if (logoImg) {
+  logoImg.onload = () => { fallbackText.style.display = 'none'; };
+  if (logoImg.complete && logoImg.naturalHeight !== 0) {
     fallbackText.style.display = 'none';
   }
 }
