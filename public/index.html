@@ -130,7 +130,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .quote-card strong{color:var(--blue)}
 
 .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.price-card{position:relative;padding:26px 23px;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel2),var(--panel));border-radius:24px;transition:transform .25s,border-color .25s;overflow:hidden}
+.price-card{position:relative;padding:26px 23px;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel2),var(--panel));border-radius:24px;transition:transform .25s,border-color .25s;overflow:hidden;display:flex;flex-direction:column}
 .price-card:hover{transform:translateY(-7px);border-color:rgba(108,99,255,.4)}
 .price-card.featured{border-color:rgba(108,99,255,.4);background:linear-gradient(155deg,var(--panel2),var(--panel));box-shadow:0 18px 50px rgba(108,99,255,.15)}
 .popular{position:absolute;top:17px;left:17px;background:rgba(108,99,255,.15);color:var(--blue);padding:5px 9px;border-radius:99px;font-size:10px;font-weight:900}
@@ -140,10 +140,10 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .price{font-size:37px;line-height:1.3;font-weight:900;letter-spacing:-1px;color:var(--text)}
 .price small{font-size:13px;color:var(--muted);letter-spacing:0}
 .price-note{font-size:11px;color:var(--muted);margin-top:3px;min-height:18px}
-.price-card ul{padding:0;list-style:none;margin:22px 0;display:grid;gap:12px}
+.price-card ul{padding:0;list-style:none;margin:22px 0 22px;display:grid;gap:12px;flex:1}
 .price-card li{display:flex;align-items:center;gap:9px;color:var(--text);font-size:12px;font-weight:700}
-.price-card li svg{color:var(--mint);width:17px;height:17px}
-.price-card .btn{width:100%}
+.price-card li svg{color:var(--mint);width:17px;height:17px;flex:none}
+.price-card .btn{width:100%;margin-top:auto}
 .note{margin:18px auto 0;text-align:center;color:var(--muted);font-size:11px;line-height:1.8}
 
 .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -248,9 +248,9 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 <div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><path d="m3 8 9-5 9 5-9 5-9-5Z"/><path d="M7 11v5c3 2 7 2 10 0v-5"/></svg></div><b>المواد الدراسية</b><small>كل مادة في قسمها</small></div>
 <div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 9 5 3-5 3V9Z"/></svg></div><b>المحاضرات</b><small>تابع وقت ما تحب</small></div>
 <div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg></div><b>نظّم وقتك</b><small>كمّل من حيث وقفت</small></div>
-<div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 3 15 9l6 .9-4.5 4.3 1.1 6.1L12 17.4l-5.6 2.9 1.1-6.1L3 9.9 9 9l3-6Z"/></svg></div><b>اشتراك مرن</b><small>شهري أو 3 شهور</small></div>
+<div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 3 15 9l6 .9-4.5 4.3 1.1 6.1L12 17.4l-5.6 2.9 1.1-6.1L3 9.9 9 9l3-6Z"/></svg></div><b>باقات اشتراك</b><small>شهري أو 3 شهور</small></div>
 </div><div class="dash-bottom"><span>خطوتك الجاية؟ افتح موادك وابدأ</span><strong>يلا نذاكر ←</strong></div></div>
-<div class="float-tag tag-two"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg><span>باقات مرنة<small>شهري 150 · 3 شهور 350</small></span></div>
+<div class="float-tag tag-two"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg><span>باقات متاحة<small>شهري 150 · 3 شهور 350</small></span></div>
 </div></div></section>
 
 <section class="stats"><div class="container stats-grid reveal">
@@ -259,13 +259,13 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 <div class="stat"><b>دعم مباشر</b><span>تواصل مع فريق الإدارة</span></div>
 </div></section>
 
-<section class="section" id="about"><div class="container"><div class="section-head reveal"><div class="eyebrow">حكاية ثانوية club</div><h2>اشتراك مرن وبسعر واضح <span class="gradient">من غير تعقيد.</span></h2><p>فكرتنا بسيطة: نخلي الوصول للمحتوى الدراسي أوضح وأسهل، باشتراك شهري ثابت 150 جنيه أو اشتراك 3 شهور بـ350 جنيه.</p></div>
+<section class="section" id="about"><div class="container"><div class="section-head reveal"><div class="eyebrow">حكاية ثانوية club</div><h2>اشتراك واضح وبسعر ثابت <span class="gradient">من غير تعقيد.</span></h2><p>فكرتنا بسيطة: نخلي الوصول للمحتوى الدراسي أوضح وأسهل، باشتراك شهري ثابت 150 جنيه أو اشتراك 3 شهور بـ350 جنيه.</p></div>
 <div class="quote-card reveal"><div class="quote-mark"><svg viewBox="0 0 24 24"><path d="M4 19c4-2 6-6 6-12H4v7h4M14 19c4-2 6-6 6-12h-6v7h4"/></svg></div>
-<h3>مذاكرتك في مكان واحد، باشتراك مرن يناسبك.</h3>
+<h3>مذاكرتك في مكان واحد، بباقات اشتراك تناسبك.</h3>
 <p>إحنا في ثانوية club بنسهّل عليك الوصول للمحتوى الدراسي من مكان واحد. اختار بين الاشتراك الشهري بـ150 جنيه، أو وفّر أكثر باشتراك 3 شهور بـ350 جنيه (توفير 100 جنيه عن الدفع الشهري).</p>
 </div></div></section>
 
-<section class="section" id="plans"><div class="container"><div class="section-head reveal"><div class="eyebrow">باقات الاشتراك</div><h2>باقتين مرنتين <span class="gradient">على قدّك.</span></h2><p>اختار اللي يناسبك: شهر واحد بـ150 جنيه، أو 3 شهور بـ350 جنيه مع توفير 100 جنيه.</p></div>
+<section class="section" id="plans"><div class="container"><div class="section-head reveal"><div class="eyebrow">باقات الاشتراك</div><h2>باقتين متاحتين <span class="gradient">على قدّك.</span></h2><p>اختار اللي يناسبك: شهر واحد بـ150 جنيه، أو 3 شهور بـ350 جنيه مع توفير 100 جنيه.</p></div>
 <div class="prices" style="grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px;margin:0 auto">
 <article class="price-card reveal">
   <div class="price-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></div>
@@ -276,9 +276,10 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
   <ul>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>مدة الاشتراك شهر واحد</li>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>الوصول للمحتوى المفعّل لحسابك</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الإدارة عند الحاجة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الأدمن عند الحاجة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تجديد يدوي أو تلقائي حسب الاتفاق</li>
   </ul>
-  <a class="btn btn-soft" href="login.html">معايا كود</a>
+  <a class="btn btn-soft price-cta" href="login.html">معايا كود</a>
 </article>
 
 <article class="price-card featured reveal">
@@ -292,9 +293,9 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>مدة الاشتراك 3 شهور</li>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>الوصول للمحتوى المفعّل لحسابك</li>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>توفير 100 جنيه عن الدفع الشهري</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الإدارة عند الحاجة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الأدمن عند الحاجة</li>
   </ul>
-  <a class="btn btn-primary" href="login.html" id="price-auth-btn">معايا كود</a>
+  <a class="btn btn-primary price-cta" href="login.html" id="price-auth-btn">معايا كود</a>
 </article>
 </div>
 <p class="note">الباقات المتاحة حاليًا: شهري 150 جنيهًا، و3 شهور 350 جنيهًا.</p>
@@ -313,9 +314,9 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 <section class="section" id="faq"><div class="container"><div class="section-head reveal"><div class="eyebrow">محتاج تعرف إيه؟</div><h2>أسئلة <span class="gradient">بتتكرر.</span></h2></div>
 <div class="faq reveal" id="faq-container">
 <div class="faq-item"><div class="faq-q">إزاي أبدأ المذاكرة؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>اضغط على "تسجيل دخول" في أعلى الصفحة، وادخل الكود الخاص بك، وهيوديك مباشرة لصفحة المواد.</p></div></div>
-<div class="faq-item"><div class="faq-q">هل فيه تجربة مجانية؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>أيوه، التجربة المجانية متاحة حسب ترتيبات الإدارة. تواصل مع أحد الأدمنز.</p></div></div>
-<div class="faq-item"><div class="faq-q">أسعار الاشتراك كام؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>في باقتين: اشتراك شهري بـ150 جنيهًا، أو اشتراك 3 شهور بـ350 جنيهًا (توفير 100 جنيه عن الدفع الشهري). لا توجد باقات ترم أو سنة.</p></div></div>
-<div class="faq-item"><div class="faq-q">هل كل المواد بتظهر بعد الدخول؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>المواد اللي بتظهر مرتبطة بالصلاحيات والمحتوى المفعّل لحسابك من الإدارة.</p></div></div>
+<div class="faq-item"><div class="faq-q">هل فيه تجربة مجانية؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>.أيوه، التجربة المجانية متاحة إطلبها من الأدمن دلوقتي . .</p></div></div>
+<div class="faq-item"><div class="faq-q">أسعار الاشتراك كام؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>في باقتين: اشتراك شهري بـ150 جنيهًا، أو اشتراك 3 شهور بـ350 جنيهًا (توفير 100 جنيه عن الدفع الشهري). .</p></div></div>
+<div class="faq-item"><div class="faq-q">هل كل المواد بتظهر بعد الدخول؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>ايوة كل المواد هتظهرلك حسب السنة بتاعتك وشعبتك    .</p></div></div>
 </div></div></section>
 </main>
 
@@ -333,10 +334,10 @@ if (isLoggedIn) {
   const navBtn = $('smart-auth-btn');
   const navText = $('smart-auth-text');
   const heroBtn = $('hero-auth-btn');
-  const priceBtn = $('price-auth-btn');
+  const priceBtns = document.querySelectorAll('.price-cta'); // تم تحديثها لتشمل كل الأزرار
   if (navBtn && navText) { navBtn.href = 'subjects.html'; navText.textContent = 'اذهب لموادي'; }
   if (heroBtn) { heroBtn.href = 'subjects.html'; heroBtn.innerHTML = `أهلاً ${studentName || 'بك'} 👋 <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`; }
-  if (priceBtn) { priceBtn.href = 'subjects.html'; priceBtn.textContent = 'اذهب لموادي'; }
+  if (priceBtns) { priceBtns.forEach(btn => { btn.href = 'subjects.html'; btn.textContent = 'اذهب لموادي'; }); }
 }
 const progressBar = $('scroll-progress');
 const backToTop = $('back-to-top');
@@ -376,4 +377,4 @@ fetch('/api/track-visit', { method: 'POST' }).catch(() => {});
 </script>
 <script src="theme.js"></script>
 </body>
-  </html>
+</html>
