@@ -24,7 +24,6 @@ body{background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;overfl
 button{font:inherit;cursor:pointer;border:none;outline:none}
 a{text-decoration:none;color:inherit}
 
-/* شريط التقدم */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
 #scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
 
@@ -38,7 +37,6 @@ a{text-decoration:none;color:inherit}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
 
-/* تكبير البروفايل */
 .profile-wrap{position:relative}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
 .profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
@@ -71,27 +69,154 @@ a{text-decoration:none;color:inherit}
 .section-subtitle{font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
 .video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
 
-/* كارت الفيديو */
-.video-card{background:var(--video-card-bg);border:1px solid var(--line);border-radius:20px;overflow:hidden;transition:all .3s cubic-bezier(.4,0,.2,1);position:relative;display:flex;flex-direction:column;box-shadow:0 4px 12px rgba(108,99,255,.05)}
-.video-card:hover{transform:translateY(-5px);border-color:rgba(108,99,255,.35);box-shadow:0 15px 35px rgba(108,99,255,.15)}
-.video-thumb{position:relative;aspect-ratio:16/9;background:var(--placeholder-bg);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.video-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.85}
-.video-thumb::after{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(15,23,42,.7) 0%,transparent 50%)}
-.play-icon-circle{width:64px;height:64px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;box-shadow:0 4px 15px rgba(0,0,0,.3);transition:transform .2s}
-.video-card:hover .play-icon-circle{transform:scale(1.1)}
-.play-icon-circle svg{width:24px;height:24px;fill:var(--blue3);margin-left:4px}
-.badge-top-right{position:absolute;top:12px;right:12px;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.1);color:#fff;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:800;z-index:3}
-.badge-watched{position:absolute;top:12px;left:12px;background:var(--green);color:#fff;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:800;display:flex;align-items:center;gap:4px;z-index:3;box-shadow:0 4px 10px rgba(16,185,129,.4)}
-.badge-duration{position:absolute;bottom:12px;left:12px;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);color:#fff;padding:4px 8px;border-radius:6px;font-size:11px;font-weight:800;display:flex;align-items:center;gap:4px;z-index:3}
-.video-info{padding:20px;display:flex;flex-direction:column;flex:1}
-.video-title{font-size:17px;font-weight:800;line-height:1.5;margin-bottom:16px;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex:1}
+/* ========================================= */
+/* تصميم كارت الفيديو الجديد */
+/* ========================================= */
+.video-card {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 16/9; /* يخلي الكارت مربع زي الفيديو */
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0,0,0,.15);
+  transition: transform .3s ease, box-shadow .3s ease;
+  background: var(--placeholder-bg);
+}
 
-/* زرار التشغيل */
-.action-btn{width:100%;padding:12px;border-radius:12px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-weight:900;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s ease;box-shadow:0 4px 12px rgba(108,99,255,.2)}
-.action-btn:hover{box-shadow:0 8px 20px rgba(108,99,255,.35);transform:translateY(-1px)}
-.action-btn svg{width:16px;height:16px;fill:currentColor}
+.video-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 40px rgba(108,99,255,.25);
+}
 
-/* الملفات */
+/* صورة الخلفية */
+.video-card-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  transition: transform .5s ease;
+}
+.video-card:hover .video-card-bg {
+  transform: scale(1.05);
+}
+
+/* طبقة التظليل فوق الصورة عشان الكلام يبان */
+.video-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 40%, transparent 100%);
+  z-index: 2;
+}
+
+/* المحتوى اللي فوق الصورة */
+.video-card-content {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  padding: 20px;
+}
+
+/* الجزء العلوي (الرقم وعلامة المشاهدة) */
+.video-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.badge-number {
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(5px);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.badge-duration {
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(5px);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* زر التشغيل في النص */
+.play-btn-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .3s ease;
+  z-index: 4;
+}
+.video-card:hover .play-btn-overlay {
+  background: var(--blue);
+  border-color: var(--blue);
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow: 0 0 20px var(--blue);
+}
+.play-btn-overlay svg {
+  width: 24px;
+  height: 24px;
+  fill: #fff;
+  margin-right: 4px;
+}
+
+/* الجزء السفلي (العنوان وعلامة المشاهدة) */
+.video-card-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+}
+.video-card-title {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.4;
+  text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.watched-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--green);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  width: fit-content;
+  box-shadow: 0 4px 10px rgba(16,185,129,.3);
+}
+
+/* ========================================= */
+/* تصميم الملفات */
+/* ========================================= */
 .file-list{display:flex;flex-direction:column;gap:12px}
 .file-item{display:flex;align-items:center;justify-content:space-between;background:var(--video-card-bg);border:1px solid var(--line);border-radius:16px;padding:16px 20px;transition:all .2s ease}
 .file-item:hover{border-color:rgba(108,99,255,.35);background:var(--card-hover)}
@@ -138,7 +263,6 @@ const urlTeacher = qs.get('teacherName') || '';
 const urlChapter = qs.get('chapterName') || '';
 const urlSubject = qs.get('subjectName') || '';
 
-// تحديث شريط التقدم
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
 window.addEventListener('scroll', () => {
@@ -168,12 +292,6 @@ function formatDuration(seconds) {
 function isVideoWatched(videoId) {
   try { const saved = JSON.parse(localStorage.getItem('cstk_w_' + videoId) || 'null'); return saved && (saved.watched || saved.percent >= 90); } catch(e) { return false; }
 }
-
-// دالة النقل مع شريط التحميل
-window.goToVideo = function(url, cardEl) {
-  // هنا ممكن نضيف تأثير تحميل لو حابب، بس عشان هي بتفتح بلاير، ممكن نسيبها مباشرة
-  window.location.href = url;
-};
 
 async function load() {
   if (!lectureId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المحاضرة غير موجود في الرابط (lectureId).</div>'; return; }
@@ -212,17 +330,30 @@ async function load() {
         const isWatched = isVideoWatched(v.id);
         const duration = v.duration || v.duration_seconds || 0;
         const thumbnail = v.thumbnail || v.thumb || v.thumbnail_url || v.image_url || '';
-        html += `<div class="video-card">
-          <div class="video-thumb" ${thumbnail ? `style="background:url('${esc(thumbnail)}') center/cover;"` : ''}>
-            ${thumbnail ? `<img src="${esc(thumbnail)}" alt="Thumbnail" onerror="this.style.display='none'">` : ''}
-            <div class="badge-top-right">فيديو #${index + 1}</div>
-            ${isWatched ? `<div class="badge-watched"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم المشاهدة</div>` : ''}
-            <div class="badge-duration"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${formatDuration(duration)}</div>
-            <div class="play-icon-circle"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+        
+        // الكارت الجديد
+        html += `
+        <div class="video-card" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
+          ${thumbnail ? `<img src="${esc(thumbnail)}" class="video-card-bg" alt="Thumbnail" onerror="this.style.display='none'">` : ''}
+          <div class="video-card-overlay"></div>
+          
+          <div class="play-btn-overlay">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
           </div>
-          <div class="video-info">
-            <div class="video-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
-            <button class="action-btn" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> تشغيل الفيديو</button>
+
+          <div class="video-card-content">
+            <div class="video-card-top">
+              <span class="badge-number">فيديو #${index + 1}</span>
+              <span class="badge-duration">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                ${formatDuration(duration)}
+              </span>
+            </div>
+            
+            <div class="video-card-bottom">
+              <div class="video-card-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
+              ${isWatched ? `<div class="watched-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم المشاهدة</div>` : ''}
+            </div>
           </div>
         </div>`;
       });
