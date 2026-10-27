@@ -67,151 +67,154 @@ a{text-decoration:none;color:inherit}
 .section-title-icon{width:44px;height:44px;border-radius:14px;background:rgba(108,99,255,.10);color:var(--blue);display:grid;place-items:center}
 .section-title-icon svg{width:24px;height:24px}
 .section-subtitle{font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
-.video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
 
 /* ========================================= */
-/* تصميم كارت الفيديو الجديد */
+/* تصميم القائمة الأفقية (الشكل الجديد) */
 /* ========================================= */
-.video-card {
-  position: relative;
-  border-radius: 20px;
-  overflow: hidden;
+.video-list {
   display: flex;
   flex-direction: column;
-  aspect-ratio: 16/9; /* يخلي الكارت مربع زي الفيديو */
+  gap: 14px;
+}
+
+.video-row {
+  display: flex;
+  align-items: center;
+  background: var(--card-inner);
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  padding: 12px;
+  gap: 16px;
   cursor: pointer;
-  box-shadow: 0 10px 30px rgba(0,0,0,.15);
-  transition: transform .3s ease, box-shadow .3s ease;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.video-row:hover {
+  background: var(--card-hover);
+  border-color: var(--blue);
+  transform: translateX(-5px); /* حركة بسيطة لليسار */
+  box-shadow: 0 10px 25px rgba(108, 99, 255, 0.1);
+}
+
+/* توهج جانبي عند الوقوف */
+.video-row::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--blue);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.video-row:hover::before {
+  opacity: 1;
+}
+
+/* الصورة المصغرة */
+.v-thumb {
+  width: 140px;
+  height: 85px;
+  border-radius: 12px;
   background: var(--placeholder-bg);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
-.video-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 15px 40px rgba(108,99,255,.25);
-}
-
-/* صورة الخلفية */
-.video-card-bg {
+.v-thumb img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   z-index: 1;
-  transition: transform .5s ease;
 }
-.video-card:hover .video-card-bg {
-  transform: scale(1.05);
-}
-
-/* طبقة التظليل فوق الصورة عشان الكلام يبان */
-.video-card-overlay {
+.v-thumb::after {
+  content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 40%, transparent 100%);
+  background: rgba(0,0,0,0.2);
   z-index: 2;
 }
-
-/* المحتوى اللي فوق الصورة */
-.video-card-content {
+/* أيقونة التشغيل الصغيرة جوه الصورة */
+.v-play-icon {
   position: relative;
   z-index: 3;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 100%;
-  padding: 20px;
-}
-
-/* الجزء العلوي (الرقم وعلامة المشاهدة) */
-.video-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-.badge-number {
-  background: rgba(255,255,255,0.15);
-  backdrop-filter: blur(5px);
-  color: #fff;
-  padding: 4px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 800;
-}
-.badge-duration {
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(5px);
-  color: #fff;
-  padding: 4px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* زر التشغيل في النص */
-.play-btn-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 60px;
-  height: 60px;
-  background: rgba(255,255,255,0.2);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255,255,255,0.4);
+  width: 36px;
+  height: 36px;
+  background: rgba(255,255,255,0.9);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all .3s ease;
-  z-index: 4;
+  transition: transform 0.2s;
 }
-.video-card:hover .play-btn-overlay {
+.video-row:hover .v-play-icon {
+  transform: scale(1.1);
   background: var(--blue);
-  border-color: var(--blue);
-  transform: translate(-50%, -50%) scale(1.1);
-  box-shadow: 0 0 20px var(--blue);
+  color: #fff;
 }
-.play-btn-overlay svg {
-  width: 24px;
-  height: 24px;
-  fill: #fff;
-  margin-right: 4px;
+.v-play-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  margin-right: 2px;
 }
 
-/* الجزء السفلي (العنوان وعلامة المشاهدة) */
-.video-card-bottom {
+/* بيانات الفيديو */
+.v-details {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: auto;
+  gap: 6px;
 }
-.video-card-title {
-  color: #fff;
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 1.4;
-  text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+.v-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.watched-badge {
-  display: inline-flex;
+.v-meta {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  background: var(--green);
-  color: #fff;
-  padding: 4px 10px;
-  border-radius: 8px;
+  gap: 12px;
   font-size: 12px;
-  font-weight: 800;
-  width: fit-content;
-  box-shadow: 0 4px 10px rgba(16,185,129,.3);
+  color: var(--muted);
+  font-weight: 700;
+}
+.v-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* علامة تم المشاهدة */
+.v-watched {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--green);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+/* زر السهم في الآخر */
+.v-arrow {
+  color: var(--muted);
+  transition: transform 0.2s, color 0.2s;
+}
+.video-row:hover .v-arrow {
+  color: var(--blue);
+  transform: translateX(-5px);
 }
 
 /* ========================================= */
@@ -228,7 +231,16 @@ a{text-decoration:none;color:inherit}
 
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
 .spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
-@media(max-width:768px){.top-header{flex-direction:column;align-items:flex-start}.header-tags{justify-content:flex-start}.video-grid{grid-template-columns:1fr}.brand small{display:none}#scroll-progress-side{width:3px}}
+@media(max-width:768px){
+  .top-header{flex-direction:column;align-items:flex-start}.header-tags{justify-content:flex-start}.brand small{display:none}#scroll-progress-side{width:3px}
+  .video-row { padding: 10px; gap: 12px; }
+  .v-thumb { width: 100px; height: 60px; border-radius: 8px; }
+  .v-title { font-size: 14px; }
+  .v-play-icon { width: 28px; height: 28px; }
+  .v-play-icon svg { width: 12px; height: 12px; }
+  .v-meta { font-size: 11px; gap: 8px; }
+  .v-arrow { display: none; } /* إخفاء السهم في الموبايل عشان المساحة */
+}
 </style>
 </head>
 <body>
@@ -303,6 +315,7 @@ async function load() {
     const teacherName = urlTeacher || data.teacher_name || (data.teacher && data.teacher.name) || '';
     const chapterName = urlChapter || data.chapter_name || (data.chapter && data.chapter.name) || '';
     const subjectName = urlSubject || data.subject_name || (data.subject && data.subject.name) || '';
+    
     let tagsHtml = '';
     if (teacherName) tagsHtml += `<span class="tag active"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg> مع أ. ${esc(teacherName)}</span>`;
     if (chapterName) tagsHtml += `<span class="tag"><svg viewBox="0 0 24 24" style="color:#ef4444"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg> ${esc(chapterName)}</span>`;
@@ -321,40 +334,40 @@ async function load() {
     </div>
     <div class="section-box">
       <div class="section-head"><div><div class="section-title"><div class="section-title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></div><div><span>الفيديوهات</span><div class="section-subtitle">${videos.length} فيديو متاح</div></div></div></div></div>
-      <div class="video-grid">`;
+      
+      <!-- القائمة الأفقية الجديدة -->
+      <div class="video-list">`;
       
     if (videos.length === 0) {
-      html += `<div style="text-align:center;padding:20px;color:var(--muted);grid-column:1/-1">لا توجد فيديوهات في هذه المحاضرة.</div>`;
+      html += `<div style="text-align:center;padding:20px;color:var(--muted);">لا توجد فيديوهات في هذه المحاضرة.</div>`;
     } else {
       videos.forEach((v, index) => {
         const isWatched = isVideoWatched(v.id);
         const duration = v.duration || v.duration_seconds || 0;
         const thumbnail = v.thumbnail || v.thumb || v.thumbnail_url || v.image_url || '';
         
-        // الكارت الجديد
         html += `
-        <div class="video-card" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
-          ${thumbnail ? `<img src="${esc(thumbnail)}" class="video-card-bg" alt="Thumbnail" onerror="this.style.display='none'">` : ''}
-          <div class="video-card-overlay"></div>
+        <div class="video-row" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
           
-          <div class="play-btn-overlay">
-            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <div class="v-thumb">
+            ${thumbnail ? `<img src="${esc(thumbnail)}" alt="Thumbnail" onerror="this.style.display='none'">` : ''}
+            <div class="v-play-icon">
+              <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+          </div>
+          
+          <div class="v-details">
+            <div class="v-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
+            <div class="v-meta">
+              <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${formatDuration(duration)}</span>
+              ${isWatched ? `<span class="v-watched">تم المشاهدة ✓</span>` : ''}
+            </div>
           </div>
 
-          <div class="video-card-content">
-            <div class="video-card-top">
-              <span class="badge-number">فيديو #${index + 1}</span>
-              <span class="badge-duration">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                ${formatDuration(duration)}
-              </span>
-            </div>
-            
-            <div class="video-card-bottom">
-              <div class="video-card-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
-              ${isWatched ? `<div class="watched-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم المشاهدة</div>` : ''}
-            </div>
+          <div class="v-arrow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
           </div>
+
         </div>`;
       });
     }
