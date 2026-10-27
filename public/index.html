@@ -169,23 +169,26 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .trial-copy h2{margin:0 0 8px;font-size:clamp(23px,3vw,34px);font-weight:900;color:var(--text)}
 .trial-copy p{margin:0;color:var(--muted);line-height:2;font-size:13px;max-width:680px}
 
-/* --- التعديل الجديد الخاص بالهايلايت --- */
-.highlight-text {
-  font-size: 17px;
-  line-height: 2.2;
-  padding: 10px 15px;
-  border-radius: 12px;
-  background: linear-gradient(120deg, rgba(108, 99, 255, 0.15) 0%, rgba(0, 212, 255, 0.15) 100%);
-  border-right: 4px solid var(--blue);
-  color: var(--text);
-  font-weight: 600;
-  margin-top: 12px;
-  display: inline-block;
+/* --- التعديل الجديد: هايلايتر قلم فوسفوري --- */
+.marker-highlight {
+    font-size: 18px; /* تكبير الخط */
+    line-height: 1.8;
+    color: #0f172a; /* لون نص غامق عشان يبان على الهايلايت */
+    font-weight: 700;
+    background: linear-gradient(104deg, transparent 2%, rgba(0, 212, 255, 0.3) 4%, rgba(108, 99, 255, 0.35) 96%, transparent 98%);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 5px;
 }
+[data-theme="dark"] .marker-highlight {
+    color: #ffffff; /* لون النص في الوضع الداكن */
+    background: linear-gradient(104deg, transparent 2%, rgba(0, 212, 255, 0.2) 4%, rgba(108, 99, 255, 0.3) 96%, transparent 98%);
+}
+
 @media(max-width:650px){
-  .highlight-text {
-    font-size: 15px;
-    padding: 8px 12px;
+  .marker-highlight {
+    font-size: 16px;
   }
 }
 /* -------------------------------------- */
@@ -349,9 +352,9 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 
 <section class="trial" id="trial"><div class="container"><div class="trial-box reveal"><div class="trial-copy">
     <h2>طب وأنا إيش ضمني إنكم مش نصابين؟ 👀</h2>
-    <p>من حقك تطمّن قبل ما تشترك. متاح تجربة مجانية للموقع؛</p>
-    <span class="highlight-text">
-        جرّب براحتك، وكلم فريق الإدارة من روابط تيليجرام الموجودة هنا.
+    <!-- تم دمج النص كله هنا وتطبيق كلاس الهايلايتر -->
+    <span class="marker-highlight">
+        من حقك تطمّن قبل ما تشترك. متاح تجربة مجانية للموقع؛ جرّب براحتك، وكلم فريق الإدارة من روابط تيليجرام الموجودة هنا.
     </span>
 </div><div class="trial-cta"><a class="btn btn-lg" href="#admins">شوف طرق التواصل <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div>
 <div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمنز <span class="gradient">المتاحين للتواصل</span></h2><p>تواصل مع الإدارة مباشرة عبر تيليجرام.</p></div>
