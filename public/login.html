@@ -51,7 +51,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 .error-box.show{display:block}
 
 .otp-container{direction:ltr;display:flex;justify-content:center;gap:6px;margin-bottom:24px;width:100%}
-.otp-input{width:36px;height:48px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:20px;font-weight:800;text-align:center;transition:border-color .2s,background-color .2s,transform .2s,box-shadow .2s;outline:none;padding:0;caret-color:transparent;overflow:hidden;text-overflow:clip;white-space:nowrap;-moz-appearance:textfield}
+.otp-input{width:36px;height:48px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:20px;font-weight:800;text-align:center;transition:border-color .2s,background-color .2s,transform .2s,box-shadow .2s;outline:none;padding:0;caret-color:var(--blue);overflow:hidden;text-overflow:clip;white-space:nowrap;-moz-appearance:textfield;user-select:none;-webkit-user-select:none}
 .otp-input::-webkit-outer-spin-button,.otp-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .otp-input:focus{border-color:var(--blue);background:rgba(108,99,255,.08);box-shadow:0 0 0 3px rgba(108,99,255,.15);transform:translateY(-2px) scale(1.02)}
 .otp-input.filled{border-color:rgba(108,99,255,.5);background:rgba(108,99,255,.08);color:var(--blue);box-shadow:0 0 10px rgba(108,99,255,.25)}
@@ -415,7 +415,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       if (e.key === 'Backspace') stopErase();
     });
 
-    inp.addEventListener('focus', (e) => e.target.select());
+    // تم إزالة تحديد النص التلقائي (select) لمنع مشكلة "الرقم اللي بيقف متحدد"
   });
 
   document.addEventListener('mouseup', stopErase);
