@@ -23,18 +23,18 @@
 body{margin:0;background:var(--bg);background-image:var(--bg-pattern);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none;border:none}
 
-/* شريط التقدم العلوي */
+/* شريط التقدم */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
 
-/* توهج الاسم */
-@keyframes textGlow {
-  0% { text-shadow: 0 0 5px var(--blue), 0 0 10px var(--blue), 0 0 20px var(--blue2); }
-  50% { text-shadow: 0 0 10px var(--blue), 0 0 20px var(--blue2), 0 0 30px var(--blue2); }
-  100% { text-shadow: 0 0 5px var(--blue), 0 0 10px var(--blue), 0 0 20px var(--blue2); }
+/* توهج الاسم باللون الأخضر النيون */
+@keyframes textGlowGreen {
+  0% { text-shadow: 0 0 5px #10b981, 0 0 10px #10b981, 0 0 20px #34d399; }
+  50% { text-shadow: 0 0 10px #10b981, 0 0 20px #34d399, 0 0 30px #6ee7b7; }
+  100% { text-shadow: 0 0 5px #10b981, 0 0 10px #10b981, 0 0 20px #34d399; }
 }
 
 #toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:10px;width:90%;max-width:400px;pointer-events:none}
@@ -62,7 +62,15 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head{margin-bottom:20px;animation:fadeUp .4s ease}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
-.name-span{font-size:22px;font-weight:900;color:var(--blue2);animation: textGlow 1.5s ease-in-out infinite alternate}
+
+/* الاسم بلون أخضر متوهج */
+.name-span{
+  font-size:22px;
+  font-weight:900;
+  color: #10b981; /* اللون الأخضر */
+  animation: textGlowGreen 1.5s ease-in-out infinite alternate;
+}
+
 .page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
 .page-head h1 .count{font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:4px 14px;border-radius:99px;font-weight:900;box-shadow:0 4px 10px rgba(108,99,255,.3)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;margin-top:24px}
@@ -175,20 +183,21 @@ const api = async (path, opts = {}) => {
   return data.data;
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// تم شيل الإيموجي من هنا
 function setGreeting(name){
   const hour = new Date().getHours();
-  let greet = "صباح الخير", icon = "🌅";
-  if (hour >= 18 || hour < 4) { greet = "مساء الخير"; icon = "🌙"; }
-  $('greeting').innerHTML = `${icon} ${greet} يا <span class="name-span">${esc(name)}</span>`;
+  let greet = "صباح الخير"; 
+  if (hour >= 18 || hour < 4) { greet = "مساء الخير"; }
+  $('greeting').innerHTML = `${greet} يا <span class="name-span">${esc(name)}</span>`;
 }
 
 // دالة النقل
 window.goToTeachers = function(url, cardEl) {
   const barFill = cardEl.querySelector('.side-progress-bar .fill');
   if(barFill) {
-    barFill.style.height = '100%'; // بيتحرك لغاية تحت
+    barFill.style.height = '100%';
   }
-  // بنستنى ثانية إلا ربع عشان الشريط يتملى قدام المستخدم
   setTimeout(() => {
     window.location.href = url;
   }, 650);
