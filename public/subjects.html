@@ -23,18 +23,21 @@
 body{margin:0;background:var(--bg);background-image:var(--bg-pattern);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none;border:none}
 
-/* شريط التقدم */
+/* شريط التقدم العلوي */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
+
+/* شريط التقدم الجانبي */
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
 
-/* توهج الاسم باللون الأخضر النيون */
-@keyframes textGlowGreen {
-  0% { text-shadow: 0 0 5px #10b981, 0 0 10px #10b981, 0 0 20px #34d399; }
-  50% { text-shadow: 0 0 10px #10b981, 0 0 20px #34d399, 0 0 30px #6ee7b7; }
-  100% { text-shadow: 0 0 5px #10b981, 0 0 10px #10b981, 0 0 20px #34d399; }
+/* توهج الاسم باللون البنفسجي */
+@keyframes textGlowPurple {
+  0% { text-shadow: 0 0 5px #8b5cf6, 0 0 10px #8b5cf6, 0 0 20px #a78bfa; }
+  50% { text-shadow: 0 0 10px #8b5cf6, 0 0 20px #a78bfa, 0 0 30px #c4b5fd; }
+  100% { text-shadow: 0 0 5px #8b5cf6, 0 0 10px #8b5cf6, 0 0 20px #a78bfa; }
 }
 
 #toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:10px;width:90%;max-width:400px;pointer-events:none}
@@ -63,12 +66,12 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
 
-/* الاسم بلون أخضر متوهج */
+/* الاسم بلون بنفسجي متوهج */
 .name-span{
   font-size:22px;
   font-weight:900;
-  color: #10b981; /* اللون الأخضر */
-  animation: textGlowGreen 1.5s ease-in-out infinite alternate;
+  color: #a78bfa; /* اللون البنفسجي الفاتح */
+  animation: textGlowPurple 1.5s ease-in-out infinite alternate;
 }
 
 .page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
@@ -79,7 +82,7 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
 .card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
 
-/* الشريط الجانبي */
+/* الشريط الجانبي للكارت */
 .side-progress-bar {
   position: absolute;
   top: 0;
@@ -125,11 +128,13 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .empty-state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted)}
 .empty-state svg{width:60px;height:60px;margin-bottom:15px;opacity:.5;stroke:currentColor;fill:none;stroke-width:1.5}
 .empty-state h3{color:var(--ink);font-size:18px;font-weight:900;margin:0 0 8px}
-@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand small{display:none}}
+@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9;border-radius:20px 20px 0 0}.card-body{padding:16px;align-items:center;text-align:center}.card-body h3{font-size:20px}.action-btn{width:100%;padding:14px}.brand small{display:none}#scroll-progress-side{width:3px}}
 </style>
 </head>
 <body>
+<!-- شريط التقدم العلوي والجانبي -->
 <div id="scroll-progress"></div>
+<div id="scroll-progress-side"></div>
 
 <div id="toast-container"></div>
 <header class="app-nav"><div class="app-nav-in">
@@ -165,12 +170,15 @@ const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId') || '4';
 
+// تحديث شريط التقدم (العلوي والجانبي)
 const progressBar = $('scroll-progress');
+const progressBarSide = $('scroll-progress-side');
 window.addEventListener('scroll', () => {
   const scrollTop = window.scrollY;
   const docHeight = document.documentElement.scrollHeight - window.innerHeight;
   const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
   if (progressBar) progressBar.style.width = progress + '%';
+  if (progressBarSide) progressBarSide.style.height = progress + '%';
 }, { passive: true });
 
 const api = async (path, opts = {}) => {
@@ -184,7 +192,6 @@ const api = async (path, opts = {}) => {
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// تم شيل الإيموجي من هنا
 function setGreeting(name){
   const hour = new Date().getHours();
   let greet = "صباح الخير"; 
@@ -192,7 +199,6 @@ function setGreeting(name){
   $('greeting').innerHTML = `${greet} يا <span class="name-span">${esc(name)}</span>`;
 }
 
-// دالة النقل
 window.goToTeachers = function(url, cardEl) {
   const barFill = cardEl.querySelector('.side-progress-bar .fill');
   if(barFill) {
