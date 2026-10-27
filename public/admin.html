@@ -1736,26 +1736,33 @@ function drawVisits() {
     return;
   }
 
+  const devLabel = v => {
+    const parts = [v.deviceBrand, v.deviceModel, v.deviceType || (v.isMobile ? "موبايل" : "كمبيوتر"), v.os, v.osVersion].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "—";
+  };
+  const locLabel = v => {
+    const parts = [v.city, v.region, v.country].filter(Boolean);
+    return parts.length ? parts.join(" · ") : "—";
+  };
+
   if (S.vis.mode === "timeline") {
     body.innerHTML = `<div class="tw"><table><thead><tr>
-      <th>الوقت</th><th>IP</th><th>الموقع</th><th>الجهاز</th><th>المتصفح</th><th>المصدر</th>
+      <th>الوقت</th><th>IP</th><th>الموقع</th><th>الجهاز / الموديل</th><th>المتصفح</th><th>الشاشة</th><th>المصدر</th>
     </tr></thead><tbody>${list.map(v => {
-      const loc = [v.city, v.region, v.country].filter(Boolean).join(" · ") || "—";
-      const dev = [v.deviceType || (v.isMobile ? "موبايل" : "كمبيوتر"), v.deviceBrand, v.os, v.osVersion].filter(Boolean).join(" · ");
       const br = [v.browser, v.browserVersion].filter(Boolean).join(" ");
       return `<tr>
         <td><b>${fmt(v.time)}</b><div class="sm muted">${ago(v.time)}</div></td>
         <td class="mono ltr">${esc(v.ip || "—")}</td>
-        <td>${esc(loc)}${v.isp ? `<div class="sm muted">${esc(v.isp)}</div>` : ""}</td>
-        <td>${esc(dev || "—")}</td>
+        <td>${esc(locLabel(v))}${v.isp ? `<div class="sm muted">${esc(v.isp)}</div>` : ""}${v.lat != null && v.lon != null ? `<div class="sm muted ltr">${v.lat}, ${v.lon}</div>` : ""}</td>
+        <td>${esc(devLabel(v))}</td>
         <td>${esc(br || "—")}${v.language ? `<div class="sm muted">${esc(v.language)}</div>` : ""}</td>
+        <td class="sm">${esc(v.screen || "—")}${v.timezone ? `<div class="muted">${esc(v.timezone)}</div>` : ""}</td>
         <td class="sm" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v.referer || "")}">${v.referer ? esc(v.referer) : '<span class="muted">مباشر</span>'}</td>
       </tr>`;
     }).join("")}</tbody></table></div>`;
     return;
   }
 
-  // Grouped by IP
   const groups = {};
   list.forEach(v => {
     const key = v.ip || "unknown";
@@ -1768,8 +1775,6 @@ function drawVisits() {
 
   body.innerHTML = rows.map((g, idx) => {
     const latest = g.items.slice().sort((a, b) => toMs(b.time) - toMs(a.time))[0] || {};
-    const loc = [latest.city, latest.region, latest.country].filter(Boolean).join(" · ") || "—";
-    const dev = [latest.deviceType || (latest.isMobile ? "موبايل" : "كمبيوتر"), latest.deviceBrand, latest.os].filter(Boolean).join(" · ");
     const br = [latest.browser, latest.browserVersion].filter(Boolean).join(" ");
     const id = "vg-" + idx;
     return `<div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:12px">
@@ -1780,22 +1785,36 @@ function drawVisits() {
             <b class="mono ltr">${esc(g.ip)}</b>
             <span class="badge b-b nodot">${num(g.items.length)} زيارة</span>
             ${latest.country ? `<span class="badge nodot b-m">${esc(latest.countryCode || latest.country)}</span>` : ""}
+            ${latest.deviceBrand ? `<span class="badge nodot b-p">${esc(latest.deviceBrand)}</span>` : ""}
+            ${latest.deviceModel ? `<span class="badge nodot b-o">${esc(latest.deviceModel)}</span>` : ""}
           </div>
-          <div class="sm muted" style="margin-top:2px">${esc(loc)} · ${esc(dev || "—")} · ${esc(br || "—")} · آخر زيارة ${ago(g.last)}</div>
+          <div class="sm muted" style="margin-top:2px">${esc(locLabel(latest))} · ${esc(devLabel(latest))} · ${esc(br || "—")} · آخر زيارة ${ago(g.last)}</div>
         </div>
         <span class="muted sm">${fmt(g.last)}</span>
         ${ic("down", 16)}
       </button>
-      <div id="${id}" class="hide" style="padding:0 16px 12px;border-top:1px solid var(--line)">
-        <div class="tw"><table><thead><tr><th>الوقت بالضبط</th><th>الجهاز</th><th>المتصفح</th><th>اللغة</th><th>المصدر / الصفحة</th></tr></thead>
+      <div id="${id}" class="hide" style="padding:12px 16px;border-top:1px solid var(--line)">
+        <div class="kv" style="margin-bottom:14px;grid-template-columns:110px 1fr">
+          <span>IP</span><b class="mono ltr">${esc(g.ip)}</b>
+          <span>الموقع</span><b>${esc(locLabel(latest))}</b>
+          <span>الإحداثيات</span><b class="ltr">${latest.lat != null && latest.lon != null ? `${latest.lat}, ${latest.lon}` : "—"}</b>
+          <span>مزود الخدمة</span><b>${esc(latest.isp || "—")}</b>
+          <span>الجهاز</span><b>${esc(devLabel(latest))}</b>
+          <span>المتصفح</span><b>${esc(br || "—")}</b>
+          <span>الشاشة</span><b>${esc(latest.screen || "—")}</b>
+          <span>المنطقة الزمنية</span><b>${esc(latest.timezone || "—")}</b>
+          <span>اللغة</span><b>${esc(latest.language || "—")}</b>
+          <span>الاتصال</span><b>${esc(latest.connection || "—")}</b>
+        </div>
+        <h4 style="margin:0 0 8px;font-size:13px">كل مرات الدخول (${num(g.items.length)})</h4>
+        <div class="tw"><table><thead><tr><th>الوقت بالضبط</th><th>الجهاز / الموديل</th><th>المتصفح</th><th>الشاشة</th><th>المصدر / الصفحة</th></tr></thead>
         <tbody>${g.items.slice().sort((a,b)=>toMs(b.time)-toMs(a.time)).map(v => {
-          const d = [v.deviceType, v.deviceBrand, v.os, v.osVersion].filter(Boolean).join(" · ");
           const b = [v.browser, v.browserVersion].filter(Boolean).join(" ");
           return `<tr>
             <td><b>${fmt(v.time)}</b><div class="sm muted">${ago(v.time)}</div></td>
-            <td>${esc(d || "—")}</td>
-            <td>${esc(b || "—")}</td>
-            <td>${esc(v.language || "—")}</td>
+            <td>${esc(devLabel(v))}</td>
+            <td>${esc(b || "—")}${v.language ? `<div class="sm muted">${esc(v.language)}</div>` : ""}</td>
+            <td class="sm">${esc(v.screen || "—")}</td>
             <td class="sm">${v.page ? esc(v.page) + "<br>" : ""}${v.referer ? `<span class="muted" title="${esc(v.referer)}">${esc(String(v.referer).slice(0, 60))}</span>` : '<span class="muted">مباشر</span>'}</td>
           </tr>`;
         }).join("")}</tbody></table></div>
