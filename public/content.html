@@ -15,20 +15,23 @@
   } catch(e){}
 })();
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--nav-bg:rgba(7,11,20,.88);--back-btn-bg:#111a2b;--back-btn-bg-hover:#1a253a;--placeholder-bg:linear-gradient(135deg,#1e293b,#0f172a);--video-card-bg:#0d1424}
-[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--green:#10b981;--red:#ef4444;--nav-bg:rgba(255,255,255,.88);--back-btn-bg:#ffffff;--back-btn-bg-hover:#f1f5f9;--placeholder-bg:linear-gradient(135deg,#e2e8f0,#f1f5f9);--video-card-bg:#ffffff}
+:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--green:#10b981;--red:#ef4444;--nav-bg:rgba(7,11,20,.88);--back-btn-bg:#111a2b;--back-btn-bg-hover:#1a253a;--video-btn-bg:#0f172a;--video-btn-hover:#1e293b}
+[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--green:#10b981;--red:#ef4444;--nav-bg:rgba(255,255,255,.88);--back-btn-bg:#ffffff;--back-btn-bg-hover:#f1f5f9;--video-btn-bg:#0f172a;--video-btn-hover:#1e293b}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;overflow-x:hidden;transition:background-color .35s,color .35s}
+body{background:var(--bg);color:var(--ink);font-family:'Cairo',sans-serif;overflow-x:hidden;transition:background-color .35s,color .35s;line-height:1.5}
 button{font:inherit;cursor:pointer;border:none;outline:none}
 a{text-decoration:none;color:inherit}
 
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
-#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out}
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
+
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
@@ -49,128 +52,71 @@ a{text-decoration:none;color:inherit}
 .theme-toggle .icon-moon{display:block}
 [data-theme="dark"] .theme-toggle .icon-sun{display:block}
 [data-theme="dark"] .theme-toggle .icon-moon{display:none}
+
 .wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
-.header-action{display:flex;justify-content:flex-start;margin-bottom:20px}
-.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line-soft);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s}
-.back-btn:hover{background:var(--back-btn-bg-hover)}
+.header-action{display:flex;justify-content:flex-start;margin-bottom:24px}
+.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line-soft);color:var(--ink);border-radius:12px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,0.02)}
+.back-btn:hover{background:var(--back-btn-bg-hover);transform:translateX(-3px)}
 .back-btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.top-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;animation:fadeUp .4s ease both;flex-wrap:wrap;gap:16px}
-.header-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;width:100%;justify-content:flex-end;min-height:30px}
-.tag{background:var(--card-inner);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
-.tag.active{background:rgba(108,99,255,.10);color:var(--blue);border-color:rgba(108,99,255,.2)}
+
+.top-header{display:flex;flex-direction:column;margin-bottom:32px;animation:fadeUp .4s ease both;gap:12px}
+.header-tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{background:var(--card-inner);border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.tag.active{background:rgba(108,99,255,.1);color:var(--blue);border-color:rgba(108,99,255,.2)}
 .tag svg{width:14px;height:14px;fill:currentColor}
-.page-title{font-size:clamp(24px,4vw,32px);font-weight:900;display:flex;align-items:center;gap:10px;margin-bottom:8px;color:var(--ink)}
-.page-subtitle{color:var(--muted);font-size:14px;font-weight:600}
-.section-box{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;margin-bottom:24px;animation:fadeUp .5s ease both;box-shadow:0 4px 15px rgba(108,99,255,.05)}
-.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--line)}
-.section-title{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:900;color:var(--ink)}
-.section-title-icon{width:44px;height:44px;border-radius:14px;background:rgba(108,99,255,.10);color:var(--blue);display:grid;place-items:center}
+.page-title{font-size:clamp(24px,4vw,32px);font-weight:900;color:var(--ink);line-height:1.4}
+.page-subtitle{color:var(--muted);font-size:15px;font-weight:600}
+
+.section-box{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;margin-bottom:32px;animation:fadeUp .5s ease both;box-shadow:0 4px 20px rgba(0,0,0,0.03)}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.section-title{display:flex;align-items:center;gap:14px;font-size:20px;font-weight:900;color:var(--ink)}
+.section-title-icon{width:46px;height:46px;border-radius:14px;background:rgba(108,99,255,.1);color:var(--blue);display:grid;place-items:center;flex-shrink:0}
 .section-title-icon svg{width:24px;height:24px}
 .section-subtitle{font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
 
 /* ========================================= */
-/* التصميم الجديد للكارت (زي الصورة) */
+/* تصميم كروت الفيديوهات (الجديد) */
 /* ========================================= */
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
 }
 
 .video-card-new {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 20px;
   padding: 24px;
   display: flex;
   flex-direction: column;
   position: relative;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  cursor: pointer;
 }
 
 .video-card-new:hover {
   transform: translateY(-4px);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.05);
-  border-color: rgba(108,99,255,0.3);
+  box-shadow: 0 12px 25px rgba(108,99,255,0.08);
+  border-color: rgba(108,99,255,0.4);
 }
 
-/* رقم الفيديو */
 .v-badge {
   position: absolute;
   top: 20px;
   left: 20px;
-  background: rgba(108,99,255,0.08);
+  background: rgba(108,99,255,0.1);
   color: var(--blue);
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 800;
 }
 [data-theme="dark"] .v-badge {
   background: rgba(59,130,246,0.15);
 }
 
-/* عنوان الفيديو */
-.v-card-title {
-  font-size: 18px;
-  font-weight: 900;
-  color: var(--ink);
-  text-align: center;
-  margin: 15px 0 10px 0;
-  line-height: 1.6;
-  min-height: 58px; /* عشان الكروت تبقى متساوية */
-}
-
-/* المدة الزمنية */
-.v-card-duration {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 24px;
-}
-
-/* زرار التشغيل */
-.v-card-btn {
-  width: 100%;
-  background: #0f172a; /* لون كحلي غامق جداً زي الصورة */
-  color: #fff;
-  padding: 14px;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: background 0.2s;
-  margin-top: auto;
-}
-
-[data-theme="dark"] .v-card-btn {
-  background: #1e293b;
-}
-
-.v-card-btn:hover {
-  background: #1e293b;
-}
-[data-theme="dark"] .v-card-btn:hover {
-  background: #334155;
-}
-
-.v-card-btn svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-}
-
-/* علامة تم المشاهدة */
 .v-watched-badge {
   position: absolute;
   top: 20px;
@@ -179,29 +125,124 @@ a{text-decoration:none;color:inherit}
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
+  background: rgba(16,185,129,0.1);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.v-card-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--ink);
+  text-align: center;
+  margin: 35px 0 16px 0;
+  line-height: 1.6;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.v-card-duration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.v-card-btn {
+  width: 100%;
+  background: var(--video-btn-bg);
+  color: #fff;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background 0.2s;
+  margin-top: auto;
+}
+
+.v-card-btn:hover {
+  background: var(--video-btn-hover);
+}
+
+.v-card-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 /* ========================================= */
-/* تصميم الملفات */
+/* تصميم كروت الملفات (الجديد) */
 /* ========================================= */
 .file-list{display:flex;flex-direction:column;gap:12px}
-.file-item{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 20px;transition:all .2s ease}
-.file-item:hover{border-color:rgba(108,99,255,.35);background:var(--card-hover)}
+.file-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px 20px;
+  transition:all .2s ease;
+}
+.file-item:hover{
+  border-color:rgba(108,99,255,.4);
+  background:var(--card-hover);
+  transform:translateY(-2px);
+  box-shadow:0 4px 12px rgba(0,0,0,0.03);
+}
 .file-info{display:flex;align-items:center;gap:14px;flex:1}
-.file-icon{width:44px;height:44px;background:rgba(108,99,255,.10);color:var(--blue);border-radius:12px;display:flex;align-items:center;justify-content:center}
-.file-text{font-size:15px;font-weight:700;color:var(--ink)}
-.file-btn{background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.3);border-radius:10px;padding:8px 16px;font-weight:800;display:flex;align-items:center;gap:6px;transition:.2s}
+.file-icon{
+  width:46px;
+  height:46px;
+  background:rgba(108,99,255,.1);
+  color:var(--blue);
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.file-text{font-size:15px;font-weight:700;color:var(--ink);line-height:1.5}
+.file-btn{
+  background:rgba(108,99,255,.1);
+  color:var(--blue);
+  border:1px solid rgba(108,99,255,.2);
+  border-radius:12px;
+  padding:10px 18px;
+  font-weight:800;
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  transition:.2s;
+  white-space:nowrap;
+}
 .file-btn:hover{background:rgba(108,99,255,.2)}
 
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;color:var(--muted);font-weight:700}
 .spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
+
 @media(max-width:768px){
-  .top-header{flex-direction:column;align-items:flex-start}.header-tags{justify-content:flex-start}.brand small{display:none}#scroll-progress-side{width:3px}
+  .brand small{display:none}
+  #scroll-progress-side{width:3px}
   .video-grid { grid-template-columns: 1fr; gap: 16px; }
-  .video-card-new { padding: 20px 16px; }
-  .v-card-title { font-size: 16px; min-height: auto; }
+  .video-card-new { padding: 20px; }
+  .v-card-title { font-size: 16px; min-height: auto; margin-top: 35px; }
+  .section-box { padding: 20px 16px; border-radius: 20px; }
+  .file-item { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .file-btn { width: 100%; justify-content: center; }
 }
 </style>
 </head>
@@ -258,7 +299,6 @@ const api = async (path, opts = {}) => {
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// دالة تنسيق المدة الزمنية زي الصورة (ساعتين و 44 دقيقة)
 function formatDuration(seconds) {
   if (!seconds || isNaN(seconds)) return 'غير محدد';
   const h = Math.floor(seconds / 3600); 
@@ -293,17 +333,27 @@ async function load() {
     
     let html = `
     <div class="header-action"><button class="back-btn" onclick="history.back()"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمحاضرات</button></div>
+    
     <div class="top-header">
-      <div style="display:flex;flex-direction:column;gap:16px;align-items:flex-start;width:100%">
-        <div class="header-tags">${tagsHtml}</div>
-        <div>
-          <h1 class="page-title">${esc(lectureName)}</h1>
-          <p class="page-subtitle">ذاكر المحاضرة كاملة من فيديوهات وملفات.</p>
-        </div>
+      <div class="header-tags">${tagsHtml}</div>
+      <div>
+        <h1 class="page-title">${esc(lectureName)}</h1>
+        <p class="page-subtitle">ذاكر المحاضرة كاملة من الفيديوهات والملفات المرفقة.</p>
       </div>
     </div>
+    
     <div class="section-box">
-      <div class="section-head"><div><div class="section-title"><div class="section-title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></div><div><span>الفيديوهات</span><div class="section-subtitle">${videos.length} فيديو متاح</div></div></div></div></div>
+      <div class="section-head">
+        <div class="section-title">
+          <div class="section-title-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+          </div>
+          <div>
+            <span>الفيديوهات</span>
+            <div class="section-subtitle">${videos.length} فيديو متاح</div>
+          </div>
+        </div>
+      </div>
       
       <div class="video-grid">`;
       
@@ -318,7 +368,6 @@ async function load() {
         <div class="video-card-new" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
           
           <div class="v-badge">فيديو #${index + 1}</div>
-          
           ${isWatched ? `<div class="v-watched-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم</div>` : ''}
 
           <div class="v-card-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
@@ -339,20 +388,58 @@ async function load() {
     html += `</div></div>`;
     
     if (files.length > 0) {
-      html += `<div class="section-box"><div class="section-head"><div class="section-title"><div class="section-title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div><div><span>الملفات والمذكرات</span><div class="section-subtitle">${files.length} ملف متاح</div></div></div></div><div class="file-list">`;
+      html += `
+      <div class="section-box">
+        <div class="section-head">
+          <div class="section-title">
+            <div class="section-title-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <div>
+              <span>الملفات والمذكرات</span>
+              <div class="section-subtitle">${files.length} ملف متاح</div>
+            </div>
+          </div>
+        </div>
+        <div class="file-list">`;
+        
       files.forEach(f => {
         const fileName = f.title || f.name || f.file_name || f.filename || 'ملف مرفق';
         const rawUrl = f.file_url || f.url || f.link || f.path || f.download_url || '#';
         const fileUrl = rawUrl !== '#' ? ('/api/file-proxy/document.pdf?url=' + encodeURIComponent(rawUrl)) : '#';
-        html += `<div class="file-item"><div class="file-info"><div class="file-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg></div><div class="file-text">${esc(fileName)}</div></div><button class="file-btn" onclick="window.open('${esc(fileUrl)}', '_blank')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> فتح الملف</button></div>`;
+        
+        html += `
+        <div class="file-item">
+          <div class="file-info">
+            <div class="file-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            </div>
+            <div class="file-text">${esc(fileName)}</div>
+          </div>
+          <button class="file-btn" onclick="window.open('${esc(fileUrl)}', '_blank')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> 
+            فتح الملف
+          </button>
+        </div>`;
       });
       html += `</div></div>`;
     }
     $('main').innerHTML = html;
-  } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
+  } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;font-weight:700;">خطأ: ${e.message}</div>`; }
 }
-async function loadProfile(){try{const me=await api('/api/auth/me');if(me){$('nav-name').textContent=me.name||'طالب';$('nav-av').textContent=(me.name||'ط').charAt(0);}}catch(e){}}
-load(); loadProfile();
+
+async function loadProfile() {
+  try {
+    const me = await api('/api/auth/me');
+    if(me){ 
+      $('nav-name').textContent = me.name || 'طالب';
+      $('nav-av').textContent = (me.name || 'ط').charAt(0);
+    }
+  } catch(e){}
+}
+
+load(); 
+loadProfile();
 })();
 </script>
 <script src="theme.js"></script>
