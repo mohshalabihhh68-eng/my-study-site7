@@ -1101,8 +1101,15 @@ PAGES.home = { title:"نظرة عامة", render(){
      <button class="btn btn-g" data-act="st-export" data-all="1">${ic("download", 17)} تصدير الطلاب</button>`)}
   ${(() => {
     const d0h = startOfDay(now);
-    const todayVis = (S.visits || []).filter(v => toMs(v.time) >= d0h).length;
-    const uniqIp = new Set((S.visits || []).filter(v => toMs(v.time) >= d0h).map(v => v.ip)).size;
+    const visits = S.visits || [];
+    const todayVis = visits.filter(v => toMs(v.time) >= d0h).length;
+    const uniqIp = new Set(visits.filter(v => toMs(v.time) >= d0h).map(v => v.ip)).size;
+    const active24 = st.filter(s => toMs(s.lastSeen) >= now - 864e5).length;
+    const incomplete = st.filter(s => {
+      const ph = String(s.phone || "").replace(/\D/g, "");
+      const em = String(s.email || "").trim();
+      return ph.length < 10 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em);
+    }).length;
     return `<div class="grid g-kpi">
     ${kpi("c-o", "users", "إجمالي الطلاب", num(st.length), `${num(S.sections.length || DEFAULT_SECTIONS.length)} شعبة`, null, "students", "all")}
     ${kpi("c-g", "check", "اشتراكات سارية", num(on), `${Math.round(on/total*100)}% من الطلاب`, on/total*100, "students", "on")}
@@ -1111,6 +1118,8 @@ PAGES.home = { title:"نظرة عامة", render(){
     ${kpi("c-b", "phone", "الأجهزة المسجّلة", `${num(devs)}<span class="muted" style="font-size:15px;font-weight:600"> / ${num(cap)}</span>`, "المستخدم من الحد المسموح", cap ? devs/cap*100 : 0, "students", "full")}
     ${kpi("c-p", "msg", "رسائل غير مقروءة", num(S.unread), `${num(S.threads.length)} محادثة`, null, "messages", "")}
     ${kpi("c-b", "globe", "زيارات اليوم", num(todayVis), `${num(uniqIp)} زائر فريد`, null, "visits", "")}
+    ${kpi("c-g", "user", "نشط آخر 24 ساعة", num(active24), "حسب آخر ظهور للطالب", active24/total*100, "students", "all")}
+    ${kpi("c-a", "edit", "بيانات ناقصة", num(incomplete), "إيميل أو موبايل ناقص", incomplete/total*100, "students", "all")}
   </div>`;
   })()}
   <div class="grid g-main">
@@ -1119,6 +1128,34 @@ PAGES.home = { title:"نظرة عامة", render(){
       { label:"ساري", value:on - soon, color:"var(--green)" }, { label:"قرّب ينتهي", value:soon, color:"var(--amber)" },
       { label:"منتهي", value:exp, color:"var(--red)" }, { label:"موقوف", value:off, color:"var(--line2)" }], num(st.length), "طالب")}</div></div>
   </div>
+  ${(() => {
+    const visits = S.visits || [];
+    const d0h = startOfDay(now);
+    // زيارات آخر 7 أيام
+    const vSeries = [];
+    for (let i = 6; i >= 0; i--) {
+      const a = d0h - i * DAY;
+      const c = visits.filter(v => { const t = toMs(v.time); return t >= a && t < a + DAY; }).length;
+      vSeries.push({ v: c, l: String(new Date(a).getDate()), t: dayF.format(a), c: "var(--blue)" });
+    }
+    // دول
+    const ctry = {};
+    visits.forEach(v => { const k = v.country || "غير معروف"; ctry[k] = (ctry[k] || 0) + 1; });
+    const ctryItems = Object.keys(ctry).map(k => ({ label: k, value: ctry[k] })).sort((a,b) => b.value - a.value).slice(0, 6);
+    // موبايل vs كمبيوتر
+    let mob = 0, desk = 0;
+    visits.forEach(v => { if (v.isMobile) mob++; else desk++; });
+    const hasVis = visits.length > 0;
+    if (!hasVis) return "";
+    return `<div class="grid g-3" style="margin-bottom:16px">
+      <div class="card"><div class="card-h"><h3>زيارات آخر 7 أيام</h3><button class="btn btn-g btn-sm" data-act="goto" data-t="visits">السجل</button></div><div class="card-b">${columns(vSeries)}</div></div>
+      <div class="card"><div class="card-h"><h3>أكثر الدول زيارة</h3></div><div class="card-b">${ctryItems.length ? hbars(ctryItems) : empty("globe", "لا بيانات")}</div></div>
+      <div class="card"><div class="card-h"><h3>نوع الأجهزة (الزوار)</h3></div><div class="card-b">${donut([
+        { label: "موبايل", value: mob, color: "var(--green)" },
+        { label: "كمبيوتر", value: desk, color: "var(--blue)" }
+      ], num(mob + desk), "زيارة")}</div></div>
+    </div>`;
+  })()}
   <div class="grid g-3">
     <div class="card"><div class="card-h"><h3>الطلاب حسب الشعبة</h3></div><div class="card-b">${hbars(secItems)}</div></div>
     <div class="card"><div class="card-h"><h3>أنواع الاشتراك</h3></div><div class="card-b">${hbars(typeItems)}</div></div>
@@ -1212,7 +1249,7 @@ function drawStudents(){
       h += `<tr class="${f.sel.has(s.code) ? "sel" : ""}"><td class="c-chk"><input type="checkbox" class="chk" data-ch="st-sel" data-code="${c}" ${f.sel.has(s.code) ? "checked" : ""} aria-label="تحديد"></td>
         <td class="c-who"><div class="who2">${av(s.name, s.code)}<div><b>${esc(s.name || "—")}</b><button class="code" style="cursor:pointer;margin-top:2px;padding:0 8px;font-size:11.5px" data-act="st-copy" data-code="${c}" title="نسخ الكود">${c} ${ic("copy", 11)}</button><span class="mob-meta">${esc(sectionName(s.section))} · ${esc(TYPES[s.type] || "—")} · متبقي ${leftTxt(s)} · ${s.devices || 0}/${s.maxDevices || 1} جهاز · ${s.visitCount || 0} زيارة</span></div></div></td>
         <td class="c-sec">${esc(sectionName(s.section))}</td><td class="c-type"><span class="badge nodot b-b">${esc(TYPES[s.type] || s.type || "—")}</span></td>
-        <td class="c-lastseen"><div class="last-seen"><strong>${s.lastSeen ? fmtD(s.lastSeen) : '—'}</strong><span>${s.lastSeen ? ago(s.lastSeen) : ''}</span></div></td>
+        <td class="c-lastseen"><div class="last-seen"><strong>${s.lastSeen ? fmt(s.lastSeen) : '—'}</strong><span>${s.lastSeen ? ago(s.lastSeen) : ''}</span></div></td>
         <td class="c-visits" style="text-align:center"><span class="badge nodot b-b">${s.visitCount || 0}</span></td>
         <td class="c-exp">${fmtD(s.expiresAt)}</td><td class="c-left">${leftTxt(s)}</td>
         <td class="c-dev"><span class="${(s.devices || 0) >= (s.maxDevices || 1) ? "badge b-a" : "mono"}">${s.devices || 0}/${s.maxDevices || 1}</span></td>
@@ -1351,6 +1388,8 @@ ACT["st-new"] = () => {
       <div class="field hide" id="n-days-f"><label>عدد الأيام</label><input class="inp" id="n-days" type="number" min="1" max="3650" placeholder="45"></div>
       <div class="field"><label>حد الأجهزة</label><input class="inp" id="n-dev" type="number" min="1" max="10" value="1"></div>
       <div class="field"><label>كود يدوي (اختياري)</label><input class="inp mono" id="n-code" maxlength="9" inputmode="numeric" placeholder="9 أرقام أو سيبه فاضي"></div>
+      <div class="field"><label>موبايل / واتساب</label><input class="inp ltr" id="n-phone" inputmode="tel" placeholder="01xxxxxxxxx"></div>
+      <div class="field"><label>الإيميل</label><input class="inp ltr" id="n-email" type="email" placeholder="optional@email.com"></div>
     </div>
     <div class="hint" id="n-est">ينتهي تقريبًا: ${estExpiry("month")}</div></div>
     <div class="md-f"><button class="btn btn-g" data-act="mclose">إلغاء</button><button class="btn btn-p" id="n-go" data-act="st-create">${ic("check", 16)} إنشاء الكود</button></div>`);
@@ -1360,7 +1399,14 @@ ACT["st-new"] = () => {
 };
 ACT["st-create"] = async () => {
   const name = $("#n-name").value.trim(); if(!name){ toast("اكتب اسم الطالب", "err"); return; }
-  const type = $("#n-type").value, body = { name, section:$("#n-sec").value || null, type, maxDevices:Number($("#n-dev").value) || 1 };
+  const type = $("#n-type").value, body = {
+    name,
+    section: $("#n-sec").value || null,
+    type,
+    maxDevices: Number($("#n-dev").value) || 1,
+    phone: ($("#n-phone") && $("#n-phone").value.trim()) || "",
+    email: ($("#n-email") && $("#n-email").value.trim()) || ""
+  };
   if(type === "custom"){ const d = Number($("#n-days").value); if(!d){ toast("اكتب عدد الأيام", "err"); return; } body.days = d; }
   const c = $("#n-code").value.trim(); if(c){ if(!/^\d{9}$/.test(c)){ toast("الكود لازم 9 أرقام", "err"); return; } body.code = c; }
   const btn = $("#n-go"); btn.disabled = true;
@@ -1461,6 +1507,9 @@ ACT["st-view"] = async el => {
       <span>ينتهي</span><b>${fmt(lo)} <span class="muted sm">(${ago(lo)})</span></b><span>الأجهزة</span><b>${devs.length} / ${s.maxDevices || 1}</b>
       <span>مرات فتح الموقع</span><b>${num(s.visitCount || 0)}</b>
       <span>آخر ظهور</span><b>${s.lastSeen ? fmt(s.lastSeen) + ` <span class="muted sm">(${ago(s.lastSeen)})</span>` : "—"}</b>
+      <span>الموبايل</span><b class="ltr">${s.phone ? esc(s.phone) : "—"}</b>
+      <span>الإيميل</span><b class="ltr">${s.email ? esc(s.email) : "—"}</b>
+      <span>المحافظة</span><b>${s.governorate ? esc(s.governorate) : "—"}</b>
       ${toMs(s.createdAt) ? `<span>اتنشأ</span><b>${fmt(s.createdAt)}</b>` : ""}</div>
       <h4 style="margin:0 0 10px">الأجهزة المسجّلة</h4>
       ${devs.length ? devs.map(v => `<div class="dev"><span class="ib line">${ic("phone", 17)}</span><div class="m"><b>${esc(v.name || "جهاز")}</b><span class="mono">${esc(v.deviceId)}</span><br><span>آخر ظهور: ${fmt(v.lastSeen)} (${ago(v.lastSeen)})</span></div>
@@ -1514,6 +1563,9 @@ ACT["st-edit"] = el => {
       <div class="field"><label>الشعبة</label><select class="sel" id="e-sec">${sectionOptions(s.section || "")}</select></div>
       <div class="field"><label>حد الأجهزة</label><input class="inp" id="e-dev" type="number" min="1" max="10" value="${s.maxDevices || 1}"></div>
       <div class="field"><label>الحالة</label><select class="sel" id="e-act"><option value="1"${s.active !== false ? " selected" : ""}>نشط</option><option value="0"${s.active === false ? " selected" : ""}>موقوف</option></select></div>
+      <div class="field"><label>موبايل / واتساب</label><input class="inp ltr" id="e-phone" inputmode="tel" value="${esc(s.phone || "")}" placeholder="01xxxxxxxxx"></div>
+      <div class="field"><label>الإيميل</label><input class="inp ltr" id="e-email" type="email" value="${esc(s.email || "")}" placeholder="email@example.com"></div>
+      <div class="field"><label>المحافظة</label><input class="inp" id="e-gov" value="${esc(s.governorate || "")}" placeholder="اختياري"></div>
       <div class="field"><label>تجديد الاشتراك</label><select class="sel" id="e-type" data-ch="e-type"><option value="">— بدون —</option>${typeOptions("")}</select></div>
       <div class="field hide" id="e-days-f"><label>عدد الأيام</label><input class="inp" id="e-days" type="number" min="1" max="3650" placeholder="45"></div></div>
     <label class="row sm muted" style="gap:8px;cursor:pointer"><input type="checkbox" class="chk" id="e-ren"> تجديد المدة من الآن (مش من تاريخ الانتهاء)</label></div>
@@ -1521,7 +1573,15 @@ ACT["st-edit"] = el => {
 };
 CH["e-type"] = () => { $("#e-days-f").classList.toggle("hide", $("#e-type").value !== "custom"); };
 ACT["st-save"] = async el => {
-  const code = el.dataset.code, body = { name:$("#e-name").value.trim(), section:$("#e-sec").value || null, maxDevices:Number($("#e-dev").value) || 1, active:$("#e-act").value === "1" };
+  const code = el.dataset.code, body = {
+    name: $("#e-name").value.trim(),
+    section: $("#e-sec").value || null,
+    maxDevices: Number($("#e-dev").value) || 1,
+    active: $("#e-act").value === "1",
+    phone: ($("#e-phone") && $("#e-phone").value.trim()) || "",
+    email: ($("#e-email") && $("#e-email").value.trim()) || "",
+    governorate: ($("#e-gov") && $("#e-gov").value.trim()) || ""
+  };
   const t = $("#e-type").value; if(t){ body.type = t; body.renew = $("#e-ren").checked;
     if(t === "custom"){ const d = Number($("#e-days").value); if(!d || d < 1){ toast("اكتب عدد الأيام", "err"); return; } body.days = d; } }
   if(!body.name){ toast("الاسم مطلوب", "err"); return; }
@@ -1701,7 +1761,7 @@ PAGES.visits = {
       </div>
     </div>`;
   },
-  after() { drawVisits(); }
+  after() { loadVisits().then(() => drawVisits()); }
 };
 
 function visitsFiltered() {
@@ -1828,8 +1888,7 @@ CH["vis-filter"] = el => { S.vis.filter = el.value; drawVisits(); };
 CH["vis-mode"] = el => { S.vis.mode = el.value; drawVisits(); };
 ACT["vis-refresh"] = async () => {
   try {
-    const d = await api("/api/admin/visits");
-    S.visits = d.data || [];
+    await loadVisits(true);
     if (S.tab === "visits") renderView();
     else drawVisits();
     toast("تم تحديث الزيارات");
@@ -2625,7 +2684,19 @@ function route(){
 function go(tab){ if(location.hash === "#/" + tab) route(); else location.hash = "#/" + tab; }
 window.addEventListener("hashchange", () => { if(S.token) route(); });
 
+async function loadVisits(force){
+  if (!force && Array.isArray(S.visits) && S.visits.length && (Date.now() - (S._visitsAt || 0) < 60_000)) return S.visits;
+  try {
+    const d = await api("/api/admin/visits");
+    S.visits = d.data || [];
+    S._visitsAt = Date.now();
+  } catch {
+    S.visits = S.visits || [];
+  }
+  return S.visits;
+}
 async function loadAll(){
+  const needVisits = !S.loaded || S.tab === "home" || S.tab === "visits";
   await Promise.all([
     api("/api/admin/students").then(d => { S.students = d.data || []; }).catch(e => { S.students = S.students || []; if(!S.loaded) toast(e.message, "err"); }),
     api("/api/admin/sections").then(d => { S.sections = d.data || []; }).catch(() => {}),
@@ -2633,7 +2704,7 @@ async function loadAll(){
     api("/api/admin/runtime").then(d => { S.runtime = Object.assign({ packages:[], agents:[] }, d.data); syncTypes(); }).catch(() => {}),
     api("/api/admin/me").then(d => { S.me = Object.assign(S.me || {}, d.data); }).catch(() => {}),
     api("/api/admin/messages").then(d => { S.threads = d.data || []; S.unread = S.threads.reduce((a, t) => a + (Number(t.unreadAdmin) || 0), 0); }).catch(() => {}),
-    api("/api/admin/visits").then(d => { S.visits = d.data || []; }).catch(() => { S.visits = S.visits || []; })
+    needVisits ? loadVisits(true) : Promise.resolve()
   ]);
   S.loaded = true; updateBadges();
 }
@@ -2661,7 +2732,7 @@ function startPollers(){
       const before = S.unread; await loadThreads();
       if(S.unread > before) toast("وصلتك " + (S.unread - before) + " رسالة جديدة", "info");
     }
-  }, 25000);
+  }, 45000);
 }
 
 function showApp(){
