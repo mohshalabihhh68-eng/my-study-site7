@@ -1884,8 +1884,11 @@ function drawVisits() {
     return parts.length ? parts.join(" · ") : "—";
   };
   const locLabel = v => {
-    const parts = [v.city, v.region, v.country].filter(Boolean);
-    return parts.length ? parts.join(" · ") : "—";
+    // المنطقة الأدق أولاً: حي/منطقة → مدينة → محافظة → دولة
+    const parts = [v.district, v.city, v.region, v.country].filter((x, i, a) => x && a.indexOf(x) === i);
+    let s = parts.length ? parts.join(" · ") : "—";
+    if (v.postal) s += (s === "—" ? "" : " · ") + "رمز " + v.postal;
+    return s;
   };
 
   if (S.vis.mode === "timeline") {
@@ -1937,17 +1940,26 @@ function drawVisits() {
         ${ic("down", 16)}
       </button>
       <div id="${id}" class="hide" style="padding:12px 16px;border-top:1px solid var(--line)">
-        <div class="kv" style="margin-bottom:14px;grid-template-columns:110px 1fr">
+        <div class="kv" style="margin-bottom:14px;grid-template-columns:120px 1fr">
           <span>IP</span><b class="mono ltr">${esc(g.ip)}</b>
-          <span>الموقع</span><b>${esc(locLabel(latest))}</b>
+          <span>المنطقة</span><b>${esc(latest.district || "—")}</b>
+          <span>المدينة</span><b>${esc(latest.city || "—")}</b>
+          <span>المحافظة</span><b>${esc(latest.region || "—")}</b>
+          <span>الدولة</span><b>${esc(latest.country || "—")}${latest.countryCode ? " (" + esc(latest.countryCode) + ")" : ""}</b>
+          <span>الرمز البريدي</span><b class="ltr">${esc(latest.postal || "—")}</b>
           <span>الإحداثيات</span><b class="ltr">${latest.lat != null && latest.lon != null ? `${latest.lat}, ${latest.lon}` : "—"}</b>
           <span>مزود الخدمة</span><b>${esc(latest.isp || "—")}</b>
-          <span>الجهاز</span><b>${esc(devLabel(latest))}</b>
+          <span>ASN</span><b class="ltr">${esc(latest.as || "—")}</b>
+          <span>الجهاز / الموديل</span><b>${esc(devLabel(latest))}</b>
+          <span>المنصة</span><b>${esc(latest.platform || "—")}</b>
           <span>المتصفح</span><b>${esc(br || "—")}</b>
           <span>الشاشة</span><b>${esc(latest.screen || "—")}</b>
+          <span>المعالج/اللمس</span><b>${[latest.cores != null ? latest.cores + " نواة" : "", latest.touchPoints != null ? latest.touchPoints + " لمس" : ""].filter(Boolean).join(" · ") || "—"}</b>
+          <span>كرت الشاشة</span><b class="sm">${esc(latest.gpu || "—")}</b>
           <span>المنطقة الزمنية</span><b>${esc(latest.timezone || "—")}</b>
           <span>اللغة</span><b>${esc(latest.language || "—")}</b>
           <span>الاتصال</span><b>${esc(latest.connection || "—")}</b>
+          <span>User-Agent</span><b class="sm ltr" style="word-break:break-all;font-weight:500">${esc(latest.userAgent || "—")}</b>
         </div>
         <h4 style="margin:0 0 8px;font-size:13px">كل مرات الدخول (${num(g.items.length)})</h4>
         <div class="tw"><table><thead><tr><th>الوقت بالضبط</th><th>الجهاز / الموديل</th><th>المتصفح</th><th>الشاشة</th><th>المصدر / الصفحة</th></tr></thead>
