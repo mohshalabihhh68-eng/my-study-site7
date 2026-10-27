@@ -51,15 +51,13 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 .error-box.show{display:block}
 
 .otp-container{direction:ltr;display:flex;justify-content:center;gap:6px;margin-bottom:24px;width:100%}
-.otp-input{width:36px;height:48px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:20px;font-weight:800;text-align:center;transition:border-color .2s,background-color .2s,transform .2s,box-shadow .2s;outline:none;padding:0;caret-color:transparent}
+.otp-input{width:36px;height:48px;border-radius:10px;border:1.5px solid var(--otp-border);background:var(--otp-bg);color:var(--text);font-size:20px;font-weight:800;text-align:center;transition:border-color .2s,background-color .2s,transform .2s,box-shadow .2s;outline:none;padding:0;caret-color:transparent;overflow:hidden;text-overflow:clip;white-space:nowrap;-moz-appearance:textfield}
+.otp-input::-webkit-outer-spin-button,.otp-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .otp-input:focus{border-color:var(--blue);background:rgba(108,99,255,.08);box-shadow:0 0 0 3px rgba(108,99,255,.15);transform:translateY(-2px) scale(1.02)}
 .otp-input.filled{border-color:rgba(108,99,255,.5);background:rgba(108,99,255,.08);color:var(--blue);box-shadow:0 0 10px rgba(108,99,255,.25)}
-/* لمعة الخانات لما تتملي */
 .otp-input.pop{animation:pop .25s cubic-bezier(.2,.8,.2,1)}
 @keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.12)}100%{transform:scale(1)}}
-/* توهج المجموعة لما تكتمل */
 .otp-container.complete .otp-input{border-color:rgba(16,185,129,.55);box-shadow:0 0 12px rgba(16,185,129,.25)}
-/* اهتزاز عند النقص */
 .otp-container.shake{animation:shake .4s cubic-bezier(.36,.07,.19,.97) both}
 @keyframes shake{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(4px)}30%,50%,70%{transform:translateX(-6px)}40%,60%{transform:translateX(6px)}}
 
@@ -90,6 +88,22 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 [data-theme="dark"] .theme-toggle-floating .icon-sun{display:block}
 [data-theme="dark"] .theme-toggle-floating .icon-moon{display:none}
 
+/* ===== شاشة النجاح ===== */
+.success-overlay{position:fixed;inset:0;display:none;place-items:center;z-index:999;background:rgba(5,8,14,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:fadeIn .25s ease}
+[data-theme="light"] .success-overlay{background:rgba(248,250,252,.75)}
+.success-overlay.show{display:grid}
+.success-circle{width:110px;height:110px;border-radius:50%;display:grid;place-items:center;position:relative;background:radial-gradient(circle at 50% 40%,rgba(16,185,129,.25),rgba(16,185,129,.05));box-shadow:0 0 0 0 rgba(16,185,129,.45),0 0 40px rgba(16,185,129,.45);animation:successGlow 1.6s ease-in-out infinite}
+.success-circle::before{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid transparent;border-top-color:#10b981;border-right-color:#34d399;animation:ringSpin 1s linear infinite}
+.success-circle.done::before{border-color:#10b981;animation:none;opacity:.9}
+.success-circle svg{width:54px;height:54px;fill:none;stroke:#10b981;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:80;stroke-dashoffset:80}
+.success-circle.done svg{animation:drawCheck .5s .1s cubic-bezier(.65,0,.35,1) forwards}
+.success-text{margin-top:18px;color:#10b981;font-weight:900;font-size:18px;text-align:center;text-shadow:0 0 12px rgba(16,185,129,.5)}
+@keyframes ringSpin{to{transform:rotate(360deg)}}
+@keyframes drawCheck{to{stroke-dashoffset:0}}
+@keyframes successGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4),0 0 30px rgba(16,185,129,.35)}50%{box-shadow:0 0 0 10px rgba(16,185,129,0),0 0 55px rgba(16,185,129,.65)}}
+.btn-login.success-glow{background:linear-gradient(135deg,#10b981,#059669)!important;box-shadow:0 0 18px rgba(16,185,129,.6),0 0 40px rgba(16,185,129,.35);animation:btnGlow 1.2s ease-in-out infinite}
+@keyframes btnGlow{0%,100%{box-shadow:0 0 18px rgba(16,185,129,.55),0 0 34px rgba(16,185,129,.3)}50%{box-shadow:0 0 26px rgba(16,185,129,.85),0 0 55px rgba(16,185,129,.5)}}
+
 @media (max-width:400px){.login-container{padding:24px 16px}.otp-container{gap:4px}.otp-input{width:32px;height:44px;font-size:18px}.brand-text{font-size:22px}}
 @media (max-width:340px){.otp-container{gap:3px}.otp-input{width:28px;height:40px;font-size:16px}}
 </style>
@@ -117,27 +131,26 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   
   <div class="subtitle">دخل كودك هنا</div>
   
-  <!-- تم تعديل شكل التنبيه هنا -->
   <div class="warn-box" id="warn-box">
     <svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     <div>
       <strong>تنبيه هام</strong>
-      للأسف الكود دا متسجل قبل كدا على.لو غيرت جهازك وعاوز تنقل الكود كلم الأدمن   .
+      للأسف الكود دا متسجل قبل كدا .لو غيرت جهازك وعاوز تنقل الكود كلم الأدمن   .
     </div>
   </div>
 
   <div class="error-box" id="error-msg"></div>
   
   <div class="otp-container" id="otp-container">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
-    <input type="tel" class="otp-input" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input type="tel" class="otp-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" autocapitalize="off" spellcheck="false">
   </div>
   
   <div class="attempts" id="attempts">فاضلك <b id="attempts-num">5</b> محاولات قبل القفل المؤقت</div>
@@ -150,6 +163,15 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   <div class="footer-text">
     <span>عندك مشكلة؟</span>
     <a href="https://t.me/S7alaby7" target="_blank" rel="noopener">تواصل مع الأدمن</a>
+  </div>
+</div>
+
+<div class="success-overlay" id="success-overlay">
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div class="success-circle" id="success-circle">
+      <svg viewBox="0 0 52 52"><path d="M14 27l8 8 16-18"/></svg>
+    </div>
+    <div class="success-text">تم الدخول بنجاح</div>
   </div>
 </div>
 
@@ -202,8 +224,13 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   function init() {
     if (localStorage.getItem('student_token')) { window.location.href = 'subjects.html'; return; }
     const savedCode = localStorage.getItem(LAST_CODE_KEY);
-    if (savedCode && /^\d{9}$/.test(savedCode)) setInputValue(savedCode);
-    else setTimeout(() => inputs[0].focus(), 300);
+    if (savedCode && /^\d{9}$/.test(savedCode)) {
+      // الكود جاهز علطول وآخر خانة عليها التركيز عشان تضغط دخول على طول
+      setInputValue(savedCode);
+      inputs[inputs.length - 1].blur();
+    } else {
+      setTimeout(() => inputs[0].focus(), 300);
+    }
   }
 
   function showError(msg, seconds) {
@@ -231,11 +258,11 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     }
   }
 
-  // ===== توزيع الأرقام على الخانات (يستخدم للّصق والكتابة الجماعية) =====
-  function fillFrom(startIndex, digits) {
+  // ===== توزيع الأرقام على الخانات =====
+  function fillFrom(startIndex, digitsArr) {
     let idx = startIndex;
-    for (let d = 0; d < digits.length && idx < inputs.length; d++, idx++) {
-      inputs[idx].value = digits[d];
+    for (let d = 0; d < digitsArr.length && idx < inputs.length; d++, idx++) {
+      inputs[idx].value = digitsArr[d];
       inputs[idx].classList.add('filled');
       inputs[idx].classList.add('pop');
       (function(el){ setTimeout(() => el.classList.remove('pop'), 260); })(inputs[idx]);
@@ -246,14 +273,25 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     else inputs[inputs.length - 1].blur();
   }
 
+  // دالة موحدة لمعالجة أي إدخال (كتابة / لصق / drop / autofill)
+  function handleDigits(startIndex, digits) {
+    digits = String(digits).replace(/\D/g, '');
+    if (!digits) return;
+    if (startIndex == null || startIndex < 0) startIndex = 0;
+
+    if (digits.length > 1) {
+      inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+      startIndex = 0;
+    }
+
+    fillFrom(startIndex, digits.slice(0, inputs.length - startIndex).split(''));
+    updateContainerState();
+  }
+
   // ===== المسح المستمر (Long Backspace) =====
   let holdTimer = null, holdInterval = null, isHolding = false;
 
   function startErase() {
-    // امسح الخانة الحالية أو اللي قبلها فورًا
-    let idx = Array.from(inputs).findIndex(x => !x.value);
-    idx = idx === -1 ? inputs.length - 1 : Math.max(0, idx - 1);
-
     function eraseStep() {
       const cur = Array.from(inputs).findIndex(x => !x.value);
       let target = cur === -1 ? inputs.length - 1 : cur - 1;
@@ -264,14 +302,12 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
         vibrate(8);
         updateContainerState();
       }
-      // لو الخانة اللي بعدها مليانة امسحها كمان في نفس الدورة (تسريع)
       const after = target + 1;
       if (after < inputs.length && inputs[after].value) {
         inputs[after].value = '';
         inputs[after].classList.remove('filled');
         updateContainerState();
       }
-      // وقف لما الكل فاضي
       if (getCode().length === 0) stopErase();
     }
 
@@ -289,18 +325,23 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   }
 
   inputs.forEach((inp, i) => {
+    // 1) أي إدخال (كتابة / autofill / IME)
     inp.addEventListener('input', (e) => {
-      let val = e.target.value.replace(/\D/g, '');
-      if (!val) { inp.classList.remove('filled'); updateContainerState(); return; }
-      // لو دخل أو لصق أكتر من رقم في خانة واحدة، وزّعهم على الخانات
-      if (val.length > 1) {
+      const raw = e.target.value.replace(/\D/g, '');
+      if (!raw) {
         inp.value = '';
-        fillFrom(i, val.slice(0, inputs.length - i).split(''));
+        inp.classList.remove('filled');
+        updateContainerState();
+        return;
+      }
+      if (raw.length > 1) {
+        inp.value = '';
+        handleDigits(i, raw);
         warnBox.classList.remove('show');
         return;
       }
-      inp.value = val;
-      inp.classList.toggle('filled', true);
+      inp.value = raw;
+      inp.classList.add('filled');
       inp.classList.add('pop');
       setTimeout(() => inp.classList.remove('pop'), 260);
       vibrate(10);
@@ -309,9 +350,44 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       warnBox.classList.remove('show');
     });
 
+    // 2) اللصق — من أي خانة يوزّع من الأول
+    inp.addEventListener('paste', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+      const digits = text.replace(/\D/g, '').slice(0, 9);
+      if (!digits) return;
+      inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+      handleDigits(0, digits);
+      vibrate(20);
+      warnBox.classList.remove('show');
+    });
+
+    // 3) السحب والإفلات
+    inp.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const text = e.dataTransfer.getData('text') || '';
+      const digits = text.replace(/\D/g, '').slice(0, 9);
+      if (!digits) return;
+      inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+      handleDigits(0, digits);
+    });
+
+    // 4) beforeinput — يمسك الإدخال الجماعي الحديث
+    inp.addEventListener('beforeinput', (e) => {
+      if (e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop' || e.inputType === 'insertReplacementText') {
+        if (!e.data) return;
+        e.preventDefault();
+        const digits = String(e.data).replace(/\D/g, '').slice(0, 9);
+        if (!digits) return;
+        inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+        handleDigits(0, digits);
+      }
+    });
+
+    // 5) لوحة المفاتيح: Backspace المستمر + التنقل
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Backspace') {
-        // لو الخانة فيها قيمة: امسحها عادي وامنع السلوك الافتراضي (عشان التحكم الكامل)
         if (e.target.value) {
           e.preventDefault();
           e.target.value = '';
@@ -320,7 +396,6 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
           vibrate(8);
           return;
         }
-        // لو الخانة فاضية: ابدأ المسح المستمر
         e.preventDefault();
         if (!isHolding) startErase();
       }
@@ -334,24 +409,9 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
     });
 
     inp.addEventListener('focus', (e) => e.target.select());
-
-    // ===== اللصق (Paste) — يوزّع كل الأرقام من أول خانة =====
-    inp.addEventListener('paste', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const text = (e.clipboardData || window.clipboardData).getData('text') || '';
-      const digits = text.replace(/\D/g, '').slice(0, 9);
-      if (!digits) return;
-
-      inputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
-      fillFrom(0, digits.split(''));
-      vibrate(20);
-      warnBox.classList.remove('show');
-      updateContainerState();
-    });
   });
 
-  // إيقاف المسح المستمر لو المستخدم شال إيده من أي مكان
+  // إيقاف المسح المستمر لو المستخدم شال إيده
   document.addEventListener('mouseup', stopErase);
   document.addEventListener('touchend', stopErase);
   window.addEventListener('blur', stopErase);
@@ -383,10 +443,19 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
         localStorage.setItem(LAST_CODE_KEY, code);
         localStorage.setItem('student_token', data.data.token);
         localStorage.setItem('student_name', data.data.student.name);
+
+        // تأثير النجاح: توهج + دايرة بتلف ثم علامة صح
+        btnLogin.classList.add('success-glow');
         btnText.textContent = 'تم الدخول ✓';
-        btnLogin.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        btnArrow.style.display = 'none';
         vibrate([30, 50, 30]);
-        setTimeout(() => { window.location.href = 'subjects.html'; }, 600);
+
+        const overlay = $('success-overlay');
+        const circle = $('success-circle');
+        overlay.classList.add('show');
+        setTimeout(() => circle.classList.add('done'), 700);
+
+        setTimeout(() => { window.location.href = 'subjects.html'; }, 1800);
         return;
       }
 
