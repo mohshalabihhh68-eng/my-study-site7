@@ -1,16 +1,29 @@
 /**
- * Thanawya — تسجيل زيارة الموقع (شاشة + منطقة زمنية + اتصال + موديل الجهاز)
- * حط السكريبت في صفحات الموقع العامة:
- *   <script src="/track-visit.js" defer></script>
- * أو انسخ المحتوى جوه <script> في index.
+ * Thanawya — تسجيل زيارة مفصّلة
+ * <script src="/track-visit.js" defer></script>
  */
 (function () {
   if (window.__twVisitTracked) return;
   window.__twVisitTracked = true;
 
+  function gpuInfo() {
+    try {
+      var c = document.createElement("canvas");
+      var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      if (!gl) return "";
+      var ext = gl.getExtension("WEBGL_debug_renderer_info");
+      if (!ext) return "";
+      return String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || "").slice(0, 120);
+    } catch (e) {
+      return "";
+    }
+  }
+
   async function collect() {
     var model = "";
     var brand = "";
+    var platform = "";
+    var platformVersion = "";
     try {
       if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
         var ch = await navigator.userAgentData.getHighEntropyValues([
@@ -19,22 +32,39 @@
           "platformVersion",
           "architecture",
           "bitness",
-          "fullVersionList"
+          "fullVersionList",
+          "uaFullVersion"
         ]);
         model = ch.model || "";
+        platform = ch.platform || "";
+        platformVersion = ch.platformVersion || "";
         if (ch.fullVersionList && ch.fullVersionList.length) {
           var brands = ch.fullVersionList.map(function (b) { return b.brand; }).join(" ");
           if (/Samsung/i.test(brands)) brand = "Samsung";
-          else if (/Google/i.test(brands) && /Android/i.test(ch.platform || "")) brand = "Google";
+          else if (/Google Chrome/i.test(brands) === false && /Google/i.test(brands)) brand = "Google";
+          else if (/Huawei/i.test(brands)) brand = "Huawei";
         }
       }
     } catch (e) {}
+
+    // fallback من UA لو الموديل فاضي
+    if (!model || model === "K" || model.length < 2) {
+      try {
+        var ua = navigator.userAgent || "";
+        var m =
+          ua.match(/Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i) ||
+          ua.match(/\b((?:SM|RMX|CPH|V\d{4})-[A-Z0-9]+)\b/i);
+        if (m && m[1] && !/^(K|U|wv|Linux)$/i.test(m[1].trim())) {
+          model = m[1].replace(/\s*Build.*/i, "").trim();
+        }
+      } catch (e2) {}
+    }
 
     var connection = null;
     try {
       var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
       if (c) {
-        connection = [c.effectiveType, c.type, c.downlink != null ? c.downlink + "Mbps" : ""]
+        connection = [c.effectiveType, c.type, c.downlink != null ? c.downlink + "Mbps" : "", c.rtt != null ? c.rtt + "ms" : ""]
           .filter(Boolean)
           .join(" · ") || null;
       }
@@ -61,7 +91,13 @@
       connection: connection,
       referrer: document.referrer || "",
       model: model,
-      brand: brand
+      brand: brand,
+      platform: platform || navigator.platform || "",
+      platformVersion: platformVersion || "",
+      cores: navigator.hardwareConcurrency || null,
+      touchPoints: navigator.maxTouchPoints || 0,
+      vendor: navigator.vendor || "",
+      gpu: gpuInfo() || null
     };
   }
 
@@ -87,11 +123,8 @@
 
   collect().then(send).catch(function () {
     send({
-      screen: null,
-      timezone: null,
-      language: navigator.language || null,
       page: location.pathname,
-      connection: null,
+      language: navigator.language || null,
       referrer: document.referrer || ""
     });
   });
