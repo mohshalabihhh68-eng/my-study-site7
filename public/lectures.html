@@ -22,6 +22,13 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none}
+
+/* شريط التقدم العلوي */
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
+
+/* شريط التقدم الجانبي */
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
@@ -31,10 +38,13 @@ button{font:inherit;cursor:pointer;outline:none}
 .brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
+
+/* تكبير خانة البروفايل */
 .profile-wrap{position:relative}
-.profile-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px 5px 5px;cursor:pointer;font-weight:800;font-size:12px;color:var(--ink);transition:.2s}
-.profile-btn:hover{background:var(--card-hover)}
-.profile-btn .av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:13px}
+.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
+.profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
+.profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
+
 .theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
 .theme-toggle:hover{background:var(--card-hover);border-color:var(--blue);transform:rotate(15deg)}
 .theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;display:block}
@@ -52,9 +62,35 @@ button{font:inherit;cursor:pointer;outline:none}
 .page-head h1{margin:0;font-size:26px;font-weight:900;color:var(--ink)}
 .page-head p{margin:8px 0 0;color:var(--muted);font-size:13px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;align-items:stretch}
-.lecture-card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px;display:flex;flex-direction:column;gap:16px;transition:all .3s ease;animation:fadeUp .45s ease both;box-shadow:0 4px 15px rgba(108,99,255,.05);height:100%}
+
+/* الكارت */
+.lecture-card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px;display:flex;flex-direction:column;gap:16px;transition:all .3s ease;animation:fadeUp .45s ease both;box-shadow:0 4px 15px rgba(108,99,255,.05);height:100%;position:relative;overflow:hidden}
 .lecture-card:hover{border-color:rgba(108,99,255,.35);box-shadow:0 15px 40px rgba(108,99,255,.15);transform:translateY(-4px)}
-.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex:1}
+
+/* الشريط الجانبي للكارت */
+.side-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  z-index: 10;
+  border-radius: 24px 0 0 24px;
+}
+.side-progress-bar .fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0%;
+  background: linear-gradient(180deg, #10b981, #34d399, #6ee7b7);
+  box-shadow: 0 0 15px #34d399;
+  transition: height 0.5s ease-in-out;
+  border-radius: 24px 0 0 24px;
+}
+
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex:1;margin-right: 6px;}
 .card-text{flex:1;padding-top:4px;display:flex;flex-direction:column}
 .lecture-label{font-size:13px;font-weight:800;color:var(--blue);margin-bottom:4px;display:block}
 .lecture-title{font-size:18px;font-weight:900;color:var(--ink);line-height:1.5;margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:81px}
@@ -64,25 +100,30 @@ button{font:inherit;cursor:pointer;outline:none}
 .card-image img{width:100%;height:100%;object-fit:cover;border-radius:16px;position:relative;z-index:2;background:var(--card-inner)}
 .image-placeholder{width:100%;height:100%;border-radius:16px;background:var(--placeholder-bg);display:grid;place-items:center;color:var(--muted);position:relative;z-index:2}
 .image-placeholder svg{width:30px;height:30px;opacity:.6}
-.videos-bar{display:flex;align-items:center;justify-content:space-between;background:var(--card-inner);border:1px solid var(--line-soft);border-radius:14px;padding:12px 16px;margin-top:auto}
+.videos-bar{display:flex;align-items:center;justify-content:space-between;background:var(--card-inner);border:1px solid var(--line-soft);border-radius:14px;padding:12px 16px;margin-top:auto;margin-right: 6px;}
 .videos-bar-label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink)}
 .videos-bar-label svg{width:18px;height:18px;color:var(--blue)}
 .videos-badge{background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-size:14px;font-weight:900;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;box-shadow:0 4px 10px rgba(108,99,255,.3)}
-.view-btn{background:linear-gradient(90deg,var(--blue3),var(--blue));color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:all .2s ease;width:100%}
+.view-btn{background:linear-gradient(90deg,var(--blue3),var(--blue));color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:all .2s ease;width:100%;margin-right: 6px;}
 .view-btn:hover{background:linear-gradient(90deg,var(--blue),var(--blue2));box-shadow:0 6px 20px rgba(108,99,255,.35);transform:translateY(-2px)}
 .view-btn svg{width:18px;height:18px;fill:currentColor}
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
 .spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
-@media (max-width:768px){.grid{grid-template-columns:1fr}.brand small{display:none}}
+@media (max-width:768px){.grid{grid-template-columns:1fr}.brand small{display:none}#scroll-progress-side{width:3px}}
 </style>
 </head>
 <body>
+<!-- شريط التقدم العلوي والجانبي -->
+<div id="scroll-progress"></div>
+<div id="scroll-progress-side"></div>
+
 <header class="app-nav"><div class="app-nav-in">
   <div class="brand" onclick="window.location.href='index.html'">
     <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
     <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <div class="nav-right">
+    <!-- تم تكبير خانة البروفايل هنا -->
     <div class="profile-wrap"><button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
     <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
       <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
@@ -101,6 +142,18 @@ const chapterId = qs.get('chapterId');
 const chapterName = qs.get('chapterName') || '';
 const teacherName = qs.get('teacherName') || '';
 const subjectName = qs.get('subjectName') || '';
+
+// تحديث شريط التقدم (العلوي والجانبي)
+const progressBar = $('scroll-progress');
+const progressBarSide = $('scroll-progress-side');
+window.addEventListener('scroll', () => {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+  if (progressBar) progressBar.style.width = progress + '%';
+  if (progressBarSide) progressBarSide.style.height = progress + '%';
+}, { passive: true });
+
 const api = async (path, opts = {}) => {
   const headers = { Accept: 'application/json', ...opts.headers };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -111,20 +164,37 @@ const api = async (path, opts = {}) => {
   return data.data;
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+window.goToContent = function(url, cardEl) {
+  const barFill = cardEl.querySelector('.side-progress-bar .fill');
+  if(barFill) {
+    barFill.style.height = '100%';
+  }
+  setTimeout(() => {
+    window.location.href = url;
+  }, 650);
+};
+
 async function load() {
   if (!chapterId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف الفصل غير موجود.</div>'; return; }
   try {
     const lectures = await api('/api/chapters/' + chapterId + '/lectures');
     if (!lectures || !lectures.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد محاضرات.</div>'; return; }
+    
     let html = `
     <div class="header-action"><button class="back-btn" onclick="history.back()"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للفصول</button></div>
     <div class="page-head"><div class="badge">المحاضرات</div><h1>محاضرات الفصل</h1><p>اختار المحاضرة لفتح المحتوى</p></div>
     <div class="grid">`;
+    
     lectures.forEach((l, index) => {
       const imgUrl = l.image_url || '';
       const imgHtml = imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(l.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">` : '';
       const phHtml = `<div class="image-placeholder" style="display:${imgUrl?'none':'grid'};"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`;
-      html += `<div class="lecture-card">
+      
+      html += `<div class="lecture-card" id="card-${l.id}">
+        <div class="side-progress-bar">
+          <div class="fill"></div>
+        </div>
         <div class="card-top">
           <div class="card-text"><span class="lecture-label">المحاضرة ${index+1}</span><h2 class="lecture-title">${esc(l.name)}</h2><div class="lecture-meta">${l.video_count || l.count || 0} فيديو</div></div>
           <div class="card-image">${imgHtml}${phHtml}</div>
@@ -133,7 +203,7 @@ async function load() {
           <div class="videos-bar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>محتوى المحاضرة</div>
           <div class="videos-badge">${l.video_count || l.count || 0}</div>
         </div>
-        <button class="view-btn" onclick="window.location.href='content.html?lectureId=${l.id}&chapterName=${encodeURIComponent(chapterName)}&teacherName=${encodeURIComponent(teacherName)}&subjectName=${encodeURIComponent(subjectName)}&lectureName=${encodeURIComponent(l.name)}'">عرض المحتوى<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        <button class="view-btn" onclick="goToContent('content.html?lectureId=${l.id}&chapterName=${encodeURIComponent(chapterName)}&teacherName=${encodeURIComponent(teacherName)}&subjectName=${encodeURIComponent(subjectName)}&lectureName=${encodeURIComponent(l.name)}', document.getElementById('card-${l.id}'))">عرض المحتوى<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
       </div>`;
     });
     html += '</div>'; $('main').innerHTML = html;
