@@ -98,7 +98,7 @@ a{text-decoration:none;color:inherit}
 <main class="wrap">
   <div class="top-header">
     <span class="tag"><svg viewBox="0 0 24 24"><path d="m3 8 9-5 9 5-9 5-9-5Z"/></svg> المواد الدراسية</span>
-    <div class="page-title">مساء الخير يا <span class="name" id="main-name">—</span> 🌅</div>
+    <div class="page-title">صباح الخير يا <span class="name" id="main-name">—</span> 🌅</div>
     <div class="page-subtitle" id="subjects-count">جاري التحميل...</div>
   </div>
 
@@ -140,7 +140,15 @@ a{text-decoration:none;color:inherit}
   async function api(path, opts = {}) {
     const headers = { Accept: 'application/json', ...opts.headers };
     if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN;
-    const res = await fetch(API + path, { method: opts.method || 'GET', headers, body: opts.body });
+    
+    // تعديل مهم جداً للسيرفر: credentials: 'include'
+    const res = await fetch(API + path, { 
+      method: opts.method || 'GET', 
+      headers, 
+      body: opts.body,
+      credentials: 'include'
+    });
+    
     if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); window.location.replace('login.html'); return; }
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ في السيرفر');
@@ -153,7 +161,6 @@ a{text-decoration:none;color:inherit}
       if (me) {
         $('nav-name').textContent = me.name || 'طالب';
         $('nav-av').textContent = (me.name || 'ط').charAt(0);
-        // تحديث الاسم في العنوان
         const greetTextNode = document.querySelector('.page-title');
         greetTextNode.innerHTML = `${getGreeting()} <span class="name" id="main-name">${esc(me.name || 'طالب')}</span> 🌅`;
       }
@@ -162,7 +169,7 @@ a{text-decoration:none;color:inherit}
 
   async function loadSubjects() {
     try {
-      // تم إرجاع الرابط الأصلي اللي كان بيشتغل معاك
+      // رجعنا المسار للمسار الأصلي اللي السيرفر بيعرفه
       const data = await api('/api/lectures/student/subjects');
       const subjects = (data.subjects || data || []);
       const grid = $('subjectsGrid');
@@ -199,7 +206,6 @@ a{text-decoration:none;color:inherit}
     }
   }
 
-  // تشغيل التحميل
   $('main-name').textContent = localStorage.getItem('student_name') || 'طالب';
   const greetTextNode = document.querySelector('.page-title');
   greetTextNode.innerHTML = `${getGreeting()} <span class="name" id="main-name">${esc(localStorage.getItem('student_name') || 'طالب')}</span> 🌅`;
