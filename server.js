@@ -1139,41 +1139,236 @@ app.post("/api/auth/track", requireStudent, async (req, res) => {
   }
 });
 
-// ==================== تسجيل الزوار ====================
+// ==================== تسجيل الزوار (مُحسَّن) ====================
+function parseDeviceInfo(ua) {
+  const s = String(ua || "");
+  let os = "غير معروف";
+  let osVersion = "";
+  let deviceType = "كمبيوتر";
+  let deviceBrand = "";
+  let deviceModel = "";
+  let browser = "غير معروف";
+  let browserVersion = "";
+
+  if (/android/i.test(s)) {
+    os = "أندرويد";
+    const m = s.match(/Android\s+([\d.]+)/i);
+    if (m) osVersion = m[1];
+    deviceType = /mobile/i.test(s) ? "موبايل" : "تابلت";
+    // موديل أندرويد من الـ UA (إن وجد)
+    const modelMatch = s.match(/Android\s[\d.]+;\s*([^);]+)(?:\)|;)/i);
+    if (modelMatch) {
+      let raw = modelMatch[1].trim();
+      raw = raw.replace(/\s*Build\/.*$/i, "").replace(/^(?:SM|sm)-/i, "SM-").trim();
+      if (raw && !/^(wv|Linux|U|arm|aarch|en-|ar-)/i.test(raw) && raw.length < 50) {
+        deviceModel = raw;
+      }
+    }
+  } else if (/iphone/i.test(s)) {
+    os = "iOS";
+    const m = s.match(/OS\s+([\d_]+)/i);
+    if (m) osVersion = m[1].replace(/_/g, ".");
+    deviceType = "موبايل";
+    deviceBrand = "Apple";
+    deviceModel = "iPhone";
+  } else if (/ipad/i.test(s)) {
+    os = "iPadOS";
+    const m = s.match(/OS\s+([\d_]+)/i);
+    if (m) osVersion = m[1].replace(/_/g, ".");
+    deviceType = "تابلت";
+    deviceBrand = "Apple";
+    deviceModel = "iPad";
+  } else if (/windows nt 10/i.test(s)) {
+    os = "ويندوز 10/11";
+    deviceType = "كمبيوتر";
+  } else if (/windows nt 6\.3/i.test(s)) {
+    os = "ويندوز 8.1";
+    deviceType = "كمبيوتر";
+  } else if (/windows nt 6\.1/i.test(s)) {
+    os = "ويندوز 7";
+    deviceType = "كمبيوتر";
+  } else if (/windows/i.test(s)) {
+    os = "ويندوز";
+    deviceType = "كمبيوتر";
+  } else if (/macintosh|mac os x/i.test(s)) {
+    os = "ماك";
+    const m = s.match(/Mac OS X\s+([\d_]+)/i);
+    if (m) osVersion = m[1].replace(/_/g, ".");
+    deviceType = "كمبيوتر";
+    deviceBrand = "Apple";
+  } else if (/cros/i.test(s)) {
+    os = "Chrome OS";
+    deviceType = "كمبيوتر";
+  } else if (/linux/i.test(s)) {
+    os = "لينكس";
+    deviceType = "كمبيوتر";
+  }
+
+  const brandRules = [
+    [/samsung|sm-|gt-|galaxy/i, "Samsung"],
+    [/xiaomi|redmi|mi\s|poco/i, "Xiaomi"],
+    [/huawei|honor|hwa-|hwi-/i, "Huawei"],
+    [/oppo|cph|realme|rmx/i, "OPPO"],
+    [/vivo|v\d{4}/i, "Vivo"],
+    [/pixel/i, "Google"],
+    [/oneplus|one\s*plus/i, "OnePlus"],
+    [/nokia|ta-/i, "Nokia"],
+    [/motorola|moto\s/i, "Motorola"],
+    [/infinix|tecno|itel/i, "Infinix/Tecno"],
+    [/lenovo/i, "Lenovo"],
+    [/sony|xperia/i, "Sony"],
+    [/lg-|lm-/i, "LG"]
+  ];
+  if (!deviceBrand) {
+    for (const [re, name] of brandRules) {
+      if (re.test(s) || (deviceModel && re.test(deviceModel))) {
+        deviceBrand = name;
+        break;
+      }
+    }
+  }
+
+  if (/edg(?:e|a|ios)?\//i.test(s)) {
+    browser = "Edge";
+    const m = s.match(/Edg(?:e|a|iOS)?\/([\d.]+)/i);
+    if (m) browserVersion = m[1];
+  } else if (/opr\/|opera/i.test(s)) {
+    browser = "Opera";
+    const m = s.match(/(?:OPR|Opera)\/([\d.]+)/i);
+    if (m) browserVersion = m[1];
+  } else if (/firefox|fxios/i.test(s)) {
+    browser = "Firefox";
+    const m = s.match(/(?:Firefox|FxiOS)\/([\d.]+)/i);
+    if (m) browserVersion = m[1];
+  } else if (/samsungbrowser/i.test(s)) {
+    browser = "Samsung Internet";
+    const m = s.match(/SamsungBrowser\/([\d.]+)/i);
+    if (m) browserVersion = m[1];
+  } else if (/chrome|crios|crmo/i.test(s) && !/edg/i.test(s)) {
+    browser = "Chrome";
+    const m = s.match(/(?:Chrome|CriOS|CrMo)\/([\d.]+)/i);
+    if (m) browserVersion = m[1];
+  } else if (/safari/i.test(s) && !/chrome|crios|chromium/i.test(s)) {
+    browser = "Safari";
+    const m = s.match(/Version\/([\d.]+)/i);
+    if (m) browserVersion = m[1];
+  }
+
+  const isMobile = deviceType === "موبايل" || deviceType === "تابلت";
+  return { os, osVersion, deviceType, deviceBrand, deviceModel, browser, browserVersion, isMobile };
+}
+
+async function lookupGeo(ip) {
+  try {
+    if (!ip || ip === "unknown" || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.") || ip === "::1") {
+      return { country: "محلي", countryCode: "", city: "", region: "", isp: "", lat: null, lon: null };
+    }
+    const cleanIp = String(ip).replace(/^::ffff:/, "");
+    const r = await fetchT(
+      `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,lat,lon,isp,org,as,query&lang=ar`,
+      { headers: { Accept: "application/json" } },
+      { timeout: 4500, retries: 0 }
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j.status !== "success") return null;
+    return {
+      country: j.country || "",
+      countryCode: j.countryCode || "",
+      city: j.city || "",
+      region: j.regionName || "",
+      isp: j.isp || j.org || "",
+      as: j.as || "",
+      lat: j.lat ?? null,
+      lon: j.lon ?? null
+    };
+  } catch {
+    return null;
+  }
+}
+
 app.post("/api/track-visit", async (req, res) => {
   try {
     const ip = clientIp(req);
     const ua = req.headers["user-agent"] || "Unknown";
     const nowTime = now();
-    
-    let os = "غير معروف";
-    if (/android/i.test(ua)) os = "أندرويد";
-    else if (/iphone|ipad|ipod/i.test(ua)) os = "آيفون / آيباد";
-    else if (/windows/i.test(ua)) os = "ويندوز";
-    else if (/macintosh|mac os x/i.test(ua)) os = "ماك";
-    else if (/linux/i.test(ua)) os = "لينكس";
+    const body = req.body || {};
 
-    let browser = "غير معروف";
-    if (/edg/i.test(ua)) browser = "Edge";
-    else if (/chrome|crios/i.test(ua)) browser = "Chrome";
-    else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
-    else if (/safari/i.test(ua)) browser = "Safari";
-    else if (/opr|opera/i.test(ua)) browser = "Opera";
+    const device = parseDeviceInfo(ua);
 
-    const isMobile = /mobile|android|iphone|ipad/i.test(ua);
-    
+    // Client Hints من الهيدرز (لو المتصفح بيبعتها)
+    const chModel = String(req.headers["sec-ch-ua-model"] || "").replace(/"/g, "").trim();
+    const chPlatform = String(req.headers["sec-ch-ua-platform"] || "").replace(/"/g, "").trim();
+    const chPlatformVer = String(req.headers["sec-ch-ua-platform-version"] || "").replace(/"/g, "").trim();
+    const chMobile = String(req.headers["sec-ch-ua-mobile"] || "").replace(/"/g, "").trim();
+
+    // بيانات إضافية من الفرونت
+    const screen = body.screen ? String(body.screen).slice(0, 40) : null;
+    const timezone = body.timezone ? String(body.timezone).slice(0, 60) : null;
+    const language = body.language
+      ? String(body.language).slice(0, 20)
+      : String(req.headers["accept-language"] || "").split(",")[0].trim().slice(0, 20) || null;
+    const page = body.page ? String(body.page).slice(0, 200) : null;
+    const connection = body.connection ? String(body.connection).slice(0, 40) : null;
+    const referer = String(req.headers["referer"] || req.headers["referrer"] || body.referrer || "").slice(0, 400);
+    const clientModel = body.model ? String(body.model).slice(0, 80) : "";
+    const clientBrand = body.brand ? String(body.brand).slice(0, 40) : "";
+
+    // أفضل موديل متاح
+    let deviceModel = clientModel || (chModel && chModel !== "?0" && chModel !== "?1" ? chModel : "") || device.deviceModel || "";
+    let deviceBrand = clientBrand || device.deviceBrand || "";
+    if (!deviceBrand && deviceModel) {
+      if (/iphone|ipad|mac/i.test(deviceModel)) deviceBrand = "Apple";
+      else if (/sm-|galaxy|samsung/i.test(deviceModel)) deviceBrand = "Samsung";
+      else if (/redmi|xiaomi|poco|mi\s/i.test(deviceModel)) deviceBrand = "Xiaomi";
+    }
+    if (chPlatform && device.os === "غير معروف") {
+      // تجاهل — عندنا parse من UA
+    }
+    if (chMobile === "?1" && device.deviceType === "كمبيوتر") {
+      device.deviceType = "موبايل";
+      device.isMobile = true;
+    }
+    if (chPlatformVer && !device.osVersion && /android|ios|windows/i.test(chPlatform || device.os)) {
+      device.osVersion = chPlatformVer.replace(/_/g, ".");
+    }
+
+    let geo = null;
+    try { geo = await lookupGeo(ip); } catch {}
+
     const visitKey = `visits/${nowTime}_${Math.random().toString(36).slice(2, 8)}`;
-    await fbSet(visitKey, {
-      ip: ip,
-      os: os,
-      browser: browser,
-      isMobile: isMobile,
+    const record = {
+      ip,
+      os: device.os,
+      osVersion: device.osVersion || null,
+      deviceType: device.deviceType,
+      deviceBrand: deviceBrand || null,
+      deviceModel: deviceModel || null,
+      browser: device.browser,
+      browserVersion: device.browserVersion || null,
+      isMobile: device.isMobile,
+      language: language || null,
+      referer: referer || null,
+      screen: screen || null,
+      timezone: timezone || null,
+      page: page || null,
+      connection: connection || null,
+      country: geo?.country || null,
+      countryCode: geo?.countryCode || null,
+      city: geo?.city || null,
+      region: geo?.region || null,
+      isp: geo?.isp || null,
+      as: geo?.as || null,
+      lat: geo?.lat ?? null,
+      lon: geo?.lon ?? null,
       userAgent: ua,
       time: nowTime
-    });
-    
+    };
+
+    await fbSet(visitKey, record);
     res.json({ success: true });
   } catch (e) {
+    console.warn("[track-visit]", e.message);
     res.json({ success: false });
   }
 });
