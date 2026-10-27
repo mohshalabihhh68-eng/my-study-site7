@@ -69,152 +69,147 @@ a{text-decoration:none;color:inherit}
 .section-subtitle{font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
 
 /* ========================================= */
-/* تصميم القائمة الأفقية (الشكل الجديد) */
+/* تصميم الكارت العريض (البطاقة) */
 /* ========================================= */
-.video-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  gap: 20px;
 }
 
-.video-row {
+.video-card-wide {
   display: flex;
-  align-items: center;
   background: var(--card-inner);
   border: 1px solid var(--line-soft);
-  border-radius: 16px;
-  padding: 12px;
-  gap: 16px;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  position: relative;
+  border-radius: 20px;
   overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
 }
 
-.video-row:hover {
-  background: var(--card-hover);
-  border-color: var(--blue);
-  transform: translateX(-5px); /* حركة بسيطة لليسار */
-  box-shadow: 0 10px 25px rgba(108, 99, 255, 0.1);
+.video-card-wide:hover {
+  transform: translateY(-5px);
+  border-color: rgba(108, 99, 255, 0.4);
+  box-shadow: 0 15px 35px rgba(108, 99, 255, 0.15);
 }
 
-/* توهج جانبي عند الوقوف */
-.video-row::before {
+/* الخط الأزرق اللي بيظهر تحت الكارت */
+.video-card-wide::after {
   content: '';
   position: absolute;
-  right: 0;
-  top: 0;
   bottom: 0;
-  width: 4px;
-  background: var(--blue);
-  opacity: 0;
-  transition: opacity 0.25s;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--blue), var(--blue2));
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+  transform-origin: right;
 }
-.video-row:hover::before {
-  opacity: 1;
+.video-card-wide:hover::after {
+  transform: scaleX(1);
 }
 
-/* الصورة المصغرة */
-.v-thumb {
-  width: 140px;
-  height: 85px;
-  border-radius: 12px;
+/* الصورة المصغرة (على اليمين) */
+.wide-thumb {
+  width: 220px;
   background: var(--placeholder-bg);
-  flex-shrink: 0;
   position: relative;
+  flex-shrink: 0;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.v-thumb img {
+
+.wide-thumb img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   z-index: 1;
+  transition: transform 0.4s ease;
 }
-.v-thumb::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.2);
-  z-index: 2;
+
+.video-card-wide:hover .wide-thumb img {
+  transform: scale(1.08);
 }
-/* أيقونة التشغيل الصغيرة جوه الصورة */
-.v-play-icon {
+
+/* أيقونة التشغيل فوق الصورة */
+.wide-play {
   position: relative;
-  z-index: 3;
-  width: 36px;
-  height: 36px;
-  background: rgba(255,255,255,0.9);
+  z-index: 2;
+  width: 48px;
+  height: 48px;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(5px);
+  border: 2px solid rgba(255,255,255,0.4);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s;
-}
-.video-row:hover .v-play-icon {
-  transform: scale(1.1);
-  background: var(--blue);
   color: #fff;
-}
-.v-play-icon svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-  margin-right: 2px;
+  transition: all 0.2s;
 }
 
-/* بيانات الفيديو */
-.v-details {
-  flex: 1;
+.video-card-wide:hover .wide-play {
+  background: var(--blue);
+  border-color: var(--blue);
+  transform: scale(1.1);
+  box-shadow: 0 0 15px var(--blue);
+}
+
+.wide-play svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  margin-right: 3px;
+}
+
+/* بيانات الفيديو (على الشمال) */
+.wide-info {
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  justify-content: center;
+  flex: 1;
 }
-.v-title {
-  font-size: 16px;
-  font-weight: 800;
+
+.wide-title {
+  font-size: 18px;
+  font-weight: 900;
   color: var(--ink);
   line-height: 1.5;
+  margin-bottom: 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.v-meta {
+
+.wide-meta {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 13px;
   font-weight: 700;
+  color: var(--muted);
 }
-.v-meta span {
+
+.wide-meta .meta-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  background: rgba(255,255,255,0.05);
+  padding: 4px 10px;
+  border-radius: 8px;
 }
 
-/* علامة تم المشاهدة */
-.v-watched {
-  background: rgba(16, 185, 129, 0.15);
+.wide-meta .watched {
+  background: rgba(16,185,129,0.1);
   color: var(--green);
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-}
-
-/* زر السهم في الآخر */
-.v-arrow {
-  color: var(--muted);
-  transition: transform 0.2s, color 0.2s;
-}
-.video-row:hover .v-arrow {
-  color: var(--blue);
-  transform: translateX(-5px);
 }
 
 /* ========================================= */
@@ -233,13 +228,11 @@ a{text-decoration:none;color:inherit}
 .spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
 @media(max-width:768px){
   .top-header{flex-direction:column;align-items:flex-start}.header-tags{justify-content:flex-start}.brand small{display:none}#scroll-progress-side{width:3px}
-  .video-row { padding: 10px; gap: 12px; }
-  .v-thumb { width: 100px; height: 60px; border-radius: 8px; }
-  .v-title { font-size: 14px; }
-  .v-play-icon { width: 28px; height: 28px; }
-  .v-play-icon svg { width: 12px; height: 12px; }
-  .v-meta { font-size: 11px; gap: 8px; }
-  .v-arrow { display: none; } /* إخفاء السهم في الموبايل عشان المساحة */
+  .video-grid { grid-template-columns: 1fr; }
+  .video-card-wide { flex-direction: column; }
+  .wide-thumb { width: 100%; height: 180px; }
+  .wide-info { padding: 16px; }
+  .wide-title { font-size: 16px; }
 }
 </style>
 </head>
@@ -335,8 +328,8 @@ async function load() {
     <div class="section-box">
       <div class="section-head"><div><div class="section-title"><div class="section-title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></div><div><span>الفيديوهات</span><div class="section-subtitle">${videos.length} فيديو متاح</div></div></div></div></div>
       
-      <!-- القائمة الأفقية الجديدة -->
-      <div class="video-list">`;
+      <!-- كارت الفيديو العريض -->
+      <div class="video-grid">`;
       
     if (videos.length === 0) {
       html += `<div style="text-align:center;padding:20px;color:var(--muted);">لا توجد فيديوهات في هذه المحاضرة.</div>`;
@@ -347,25 +340,24 @@ async function load() {
         const thumbnail = v.thumbnail || v.thumb || v.thumbnail_url || v.image_url || '';
         
         html += `
-        <div class="video-row" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
+        <div class="video-card-wide" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
           
-          <div class="v-thumb">
+          <div class="wide-thumb">
             ${thumbnail ? `<img src="${esc(thumbnail)}" alt="Thumbnail" onerror="this.style.display='none'">` : ''}
-            <div class="v-play-icon">
+            <div class="wide-play">
               <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             </div>
           </div>
           
-          <div class="v-details">
-            <div class="v-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
-            <div class="v-meta">
-              <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${formatDuration(duration)}</span>
-              ${isWatched ? `<span class="v-watched">تم المشاهدة ✓</span>` : ''}
+          <div class="wide-info">
+            <div class="wide-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
+            <div class="wide-meta">
+              <span class="meta-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 
+                ${formatDuration(duration)}
+              </span>
+              ${isWatched ? `<span class="meta-item watched">تم المشاهدة ✓</span>` : ''}
             </div>
-          </div>
-
-          <div class="v-arrow">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
           </div>
 
         </div>`;
