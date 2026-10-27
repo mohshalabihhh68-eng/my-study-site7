@@ -144,6 +144,16 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .price-card li{display:flex;align-items:center;gap:9px;color:var(--text);font-size:12px;font-weight:700}
 .price-card li svg{color:var(--mint);width:17px;height:17px;flex:none}
 .price-card .btn{width:100%;margin-top:auto}
+
+/* تنسيق مميز جداً لوفّر 100 جنيه */
+.save-badge{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(16,185,129,.15);color:var(--mint);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:900;margin-top:8px;border:1px solid rgba(16,185,129,.3)}
+.save-badge svg{width:16px;height:16px;stroke-width:2.5}
+
+/* تنسيق الـ 4 مميزات اللي تحت الباقات */
+.features-under-prices{max-width:900px;margin:35px auto 0;display:grid;grid-template-columns:repeat(2,1fr);gap:16px;background:var(--panel);border:1px solid var(--line);padding:24px;border-radius:22px;box-shadow:var(--shadow)}
+.feat-item{display:flex;align-items:center;gap:12px;color:var(--text);font-size:14px;font-weight:800}
+.feat-item svg{width:20px;height:20px;color:var(--mint);flex:none;stroke-width:3}
+
 .note{margin:18px auto 0;text-align:center;color:var(--muted);font-size:11px;line-height:1.8}
 
 .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -194,7 +204,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 #back-to-top:hover{transform:translateY(-4px) scale(1.05);box-shadow:0 15px 35px rgba(108,99,255,.5)}
 #back-to-top svg{width:22px;height:22px;stroke-width:2.5}
 
-@media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:20px}.hero-copy{text-align:center}.hero-copy .eyebrow{margin-inline:auto}.hero-copy p{margin-inline:auto}.hero-actions,.trust{justify-content:center}.hero-art{min-height:420px}.dashboard{width:min(100%,420px)}.tag-one{left:2%}.tag-two{right:2%}.features{grid-template-columns:repeat(2,1fr)}.prices{gap:12px}.price-card{padding:22px 17px}}
+@media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:20px}.hero-copy{text-align:center}.hero-copy .eyebrow{margin-inline:auto}.hero-copy p{margin-inline:auto}.hero-actions,.trust{justify-content:center}.hero-art{min-height:420px}.dashboard{width:min(100%,420px)}.tag-one{left:2%}.tag-two{right:2%}.features{grid-template-columns:repeat(2,1fr)}.prices{gap:12px}.price-card{padding:22px 17px}.features-under-prices{grid-template-columns:1fr;padding:20px}}
 @media(max-width:650px){.container{width:min(100% - 28px,1160px)}.navin{height:66px}.navlinks{display:none}.brand{font-size:16px}.logo{width:39px;height:39px}.brand small{display:none}.navactions .btn{padding:10px 12px;font-size:11px}.hero{padding:52px 0 42px}.hero h1{font-size:clamp(34px,10vw,47px);letter-spacing:-.8px}.hero p{font-size:14px}.hero-art{min-height:365px}.orb{width:270px;height:270px}.dashboard{padding:16px;border-radius:22px}.tag-one{top:8px;left:0}.tag-two{bottom:4px;right:0}.float-tag{font-size:10px;padding:9px 11px}.stats-grid{gap:8px}.stat{padding:15px 7px}.stat b{font-size:20px}.stat span{font-size:10px}.section{padding:49px 0}.quote-card{border-radius:22px}.quote-card p{font-size:13px}.prices{grid-template-columns:1fr}.price-card .desc{min-height:0}.price-card.featured{order:-1}.features{grid-template-columns:1fr}.feature{padding:20px}.trial-box{grid-template-columns:1fr;text-align:center}.trial-cta .btn{width:100%}.admins{grid-template-columns:1fr}.admin-card{text-align:right}.footer-in{justify-content:center;text-align:center}.footer-in>div{width:100%}.navactions .btn-soft{display:none}#back-to-top{bottom:16px;left:16px;width:42px;height:42px}.theme-toggle{width:36px;height:36px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.reveal{opacity:1;transform:none}}
 </style>
@@ -276,7 +286,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
   <ul>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>مدة الاشتراك شهر واحد</li>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>الوصول للمحتوى المفعّل لحسابك</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الأدمن عند الحاجة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الإدارة عند الحاجة</li>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تجديد يدوي أو تلقائي حسب الاتفاق</li>
   </ul>
   <a class="btn btn-soft price-cta" href="login.html">معايا كود</a>
@@ -288,25 +298,50 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
   <h3>اشتراك 3 شهور</h3>
   <p class="desc">اشترك 3 شهور مرة واحدة ووفّر 100 جنيه عن الشهري.</p>
   <div class="price">350 <small>جنيه / 3 شهور</small></div>
-  <div class="price-note">يعادل 116.6 جنيه شهريًا · وفّر 100 جنيه</div>
+  
+  <div class="save-badge">
+    <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    وفّر 100 جنيه
+  </div>
+
   <ul>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>مدة الاشتراك 3 شهور</li>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>الوصول للمحتوى المفعّل لحسابك</li>
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>توفير 100 جنيه عن الدفع الشهري</li>
-    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الأدمن عند الحاجة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>تواصل مع الإدارة عند الحاجة</li>
   </ul>
   <a class="btn btn-primary price-cta" href="login.html" id="price-auth-btn">معايا كود</a>
 </article>
 </div>
-<p class="note">الباقات المتاحة حاليًا: شهري 150 جنيهًا، و3 شهور 350 جنيهًا.</p>
+
+<!-- المميزات الجديدة تحت الباقات -->
+<div class="features-under-prices reveal">
+  <div class="feat-item">
+    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
+    <span>محاضرات كل المدرسين في كل مواد شعبتك</span>
+  </div>
+  <div class="feat-item">
+    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
+    <span>ارجع لأي محاضرة وقت ما تحب طول مدة اشتراكك</span>
+  </div>
+  <div class="feat-item">
+    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
+    <span>المنصة بتحفظ مكانك في كل محاضرة</span>
+  </div>
+  <div class="feat-item">
+    <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
+    <span>دعم لو قابلتك أي مشكلة</span>
+  </div>
+</div>
+
 </div></section>
 
 <section class="section"><div class="container"><div class="section-head reveal"><div class="eyebrow">ليه ثانوية club؟</div><h2>مذاكرتك تبقى <span class="gradient">أبسط وأرتب.</span></h2><p>بنرتّب تجربة استخدام تساعدك توصل للمحتوى من غير لف كتير.</p></div>
 <div class="features"><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h7M7 16h5"/></svg></div><h3>كل مادة في مكانها</h3><p>تقسيم واضح للمواد والفصول والمحاضرات عشان توصل للي محتاجه بسهولة.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="m10 9 5 3-5 3V9Z"/></svg></div><h3>تابع المحاضرات</h3><p>افتح المحاضرة من حسابك وكمّل مذاكرتك حسب المحتوى المتاح ليك.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3>سعر واضح</h3><p>باقات ثابتة وواضحة: شهري 150 جنيه، أو 3 شهور 350 جنيه.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>دخول مباشر</h3><p>ادخل على موادك مباشرة من غير أي خطوات إضافية.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/></svg></div><h3>تواصل مع الإدارة</h3><p>لو حابب تجربة مجانية، تقدر تكلم أحد الأدمن بعد إضافة بيانات التواصل الرسمية.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div><h3>تجربة قبل الاشتراك</h3><p>اسأل الإدارة عن التجربة المجانية المتاحة قبل اتخاذ قرار الاشتراك.</p></article></div>
 </div></section>
 
-<section class="trial" id="trial"><div class="container"><div class="trial-box reveal"><div class="trial-copy"><h2>طب وأنا إيش ضمني إنكم مش نصابين؟ 👀</h2><p> من حقك تطمّن قبل ما تشترك. متاح تجربة مجانية للموقع؛ جرّب براحتك، وكلم الأدمن من رابط التيليجرام الموجود هنا  .</p></div><div class="trial-cta"><a class="btn btn-lg" href="#admins">شوف طرق التواصل <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div>
-<div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمن <span class="gradient">المتاح للتواصل</span></h2><p>تواصل مع الأدمن مباشرة عبر تيليجرام.</p></div>
+<section class="trial" id="trial"><div class="container"><div class="trial-box reveal"><div class="trial-copy"><h2>طب وأنا إيش ضمني إنكم مش نصابين؟ 👀</h2><p>من حقك تطمّن قبل ما تشترك. متاح تجربة مجانية للموقع؛ جرّب براحتك، وكلم فريق الإدارة من روابط تيليجرام الموجودة هنا.</p></div><div class="trial-cta"><a class="btn btn-lg" href="#admins">شوف طرق التواصل <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div>
+<div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمنز <span class="gradient">المتاحين للتواصل</span></h2><p>تواصل مع الإدارة مباشرة عبر تيليجرام.</p></div>
 <div class="admins" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr))">
 <a class="admin-card" href="https://t.me/S7alaby7" target="_blank" rel="noopener noreferrer"><div class="admin-avatar"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div><div><b>@S7alaby7</b><small>تواصل على تيليجرام ↗</small></div></a>
 </div></div></div></section>
@@ -314,9 +349,9 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 <section class="section" id="faq"><div class="container"><div class="section-head reveal"><div class="eyebrow">محتاج تعرف إيه؟</div><h2>أسئلة <span class="gradient">بتتكرر.</span></h2></div>
 <div class="faq reveal" id="faq-container">
 <div class="faq-item"><div class="faq-q">إزاي أبدأ المذاكرة؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>اضغط على "تسجيل دخول" في أعلى الصفحة، وادخل الكود الخاص بك، وهيوديك مباشرة لصفحة المواد.</p></div></div>
-<div class="faq-item"><div class="faq-q">هل فيه تجربة مجانية؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>.أيوه، التجربة المجانية متاحة إطلبها من الأدمن دلوقتي . .</p></div></div>
-<div class="faq-item"><div class="faq-q">أسعار الاشتراك كام؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>في باقتين: اشتراك شهري بـ150 جنيهًا، أو اشتراك 3 شهور بـ350 جنيهًا (توفير 100 جنيه عن الدفع الشهري). .</p></div></div>
-<div class="faq-item"><div class="faq-q">هل كل المواد بتظهر بعد الدخول؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>ايوة كل المواد هتظهرلك حسب السنة بتاعتك وشعبتك    .</p></div></div>
+<div class="faq-item"><div class="faq-q">هل فيه تجربة مجانية؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>أيوه، التجربة المجانية متاحة حسب ترتيبات الإدارة. تواصل مع أحد الأدمنز.</p></div></div>
+<div class="faq-item"><div class="faq-q">أسعار الاشتراك كام؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>في باقتين: اشتراك شهري بـ150 جنيهًا، أو اشتراك 3 شهور بـ350 جنيهًا (توفير 100 جنيه عن الدفع الشهري). لا توجد باقات ترم أو سنة.</p></div></div>
+<div class="faq-item"><div class="faq-q">هل كل المواد بتظهر بعد الدخول؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>المواد اللي بتظهر مرتبطة بالصلاحيات والمحتوى المفعّل لحسابك من الإدارة.</p></div></div>
 </div></div></section>
 </main>
 
@@ -334,7 +369,7 @@ if (isLoggedIn) {
   const navBtn = $('smart-auth-btn');
   const navText = $('smart-auth-text');
   const heroBtn = $('hero-auth-btn');
-  const priceBtns = document.querySelectorAll('.price-cta'); // تم تحديثها لتشمل كل الأزرار
+  const priceBtns = document.querySelectorAll('.price-cta');
   if (navBtn && navText) { navBtn.href = 'subjects.html'; navText.textContent = 'اذهب لموادي'; }
   if (heroBtn) { heroBtn.href = 'subjects.html'; heroBtn.innerHTML = `أهلاً ${studentName || 'بك'} 👋 <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`; }
   if (priceBtns) { priceBtns.forEach(btn => { btn.href = 'subjects.html'; btn.textContent = 'اذهب لموادي'; }); }
