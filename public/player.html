@@ -72,6 +72,7 @@ img{display:block;max-width:100%}
 .screen.yt-mode video{display:none}
 .screen.yt-mode #ytFrame{display:block}
 
+/* ✅ إخفاء كل أزرار التحكم غير المدعومة في يوتيوب (بما فيها زر التحميل pdl) */
 .screen.yt-mode .seekwrap,
 .screen.yt-mode .skchip,
 .screen.yt-mode #pb,
@@ -81,7 +82,8 @@ img{display:block;max-width:100%}
 .screen.yt-mode #ppip,
 .screen.yt-mode .ptime,
 .screen.yt-mode #pnx,
-.screen.yt-mode #pdl{display:none !important}
+.screen.yt-mode #pdl { display: none !important; }
+
 .screen.yt-mode #pmenu .mrow[data-go="quality"],
 .screen.yt-mode #pmenu .mrow[data-tg="autonext"]{display:none !important}
 
@@ -889,7 +891,6 @@ function extractYouTubeId(url){
   return m2?m2[1]:null;
 }
 
-/* ✅ تدمير مشغل يوتيوب بأمان */
 function destroyYT(){
   stopYtPoll();
   if(ytPlayer){
@@ -898,7 +899,6 @@ function destroyYT(){
   }
 }
 
-/* ✅ تحميل فيديو يوتيوب - إنشاء iframe جديد تماماً */
 async function loadYouTube(videoId, autoplay, resumeAt){
   isYtMode=true;
   ytEnded=false;
@@ -908,8 +908,9 @@ async function loadYouTube(videoId, autoplay, resumeAt){
   try{video.load()}catch(e){}
   $('ppip').style.display='none';
   
-  // ✅ إخفاء زر التحميل فوراً
-  if($('pdl')) $('pdl').style.display='none';
+  // ✅ إخفاء صارم وقسري لزر التحميل
+  const dlBtn = $('pdl');
+  if(dlBtn) { dlBtn.style.display = 'none'; dlBtn.remove(); }
   
   setLoading(true, 'جاري تحميل فيديو يوتيوب…');
 
@@ -920,13 +921,11 @@ async function loadYouTube(videoId, autoplay, resumeAt){
     return;
   }
 
-  // تدمير القديم
   if(ytPlayer){
     try{ ytPlayer.destroy(); }catch(e){}
     ytPlayer = null;
   }
 
-  // إزالة الـ iframe القديم وإنشاء جديد
   let oldFrame = document.getElementById('ytFrame');
   if(oldFrame) oldFrame.remove();
   const newFrame = document.createElement('iframe');
@@ -1490,8 +1489,8 @@ function cleanup(){
     screenEl.classList.remove('yt-mode');
     $('ppip').style.display='';
     
-    // ✅ إعادة إظهار زر التحميل عند الخروج من وضع يوتيوب
-    if($('pdl')) $('pdl').style.display='';
+    // إعادة إظهار زر التحميل إذا لزم الأمر
+    if(isOwner && !$('pdl')) { addDownloadBtn(); }
     setDlBtn();
   }
 }
@@ -1545,7 +1544,6 @@ async function playIndex(i,autoplay){
     }
     if (my !== playToken) return;
 
-    /* ✅ يوتيوب داخل iframe */
     if (playData && (playData.type === 'youtube' || playData.youtube_url)) {
       const yt = playData.youtube_url || playData.url;
       const ytId = extractYouTubeId(yt);
@@ -2378,17 +2376,12 @@ function addDownloadBtn(){
   b.onclick=e=>{e.stopPropagation();openDlModal()};
   document.querySelector('.prow').insertBefore(b,$('plist'));
   
-  // ✅ إخفاء الزر فوراً إذا كان الفيديو الحالي يوتيوب
   if(isYtMode) b.style.display='none';
   setDlBtn();
 }
 function setDlBtn(){
   const b=$('pdl');if(!b)return;
-  // ✅ إخفاء الزر تماماً في وضع اليوتيوب
-  if(isYtMode){
-    b.style.display='none';
-    return;
-  }
+  if(isYtMode){ b.style.display='none'; return; }
   b.style.display='';
   
   const show=dl.id!=null&&dl.st!=='idle'&&(isActive()||(String(dl.id)===curId()&&dl.st!=='done'));
@@ -2717,4 +2710,4 @@ init();
 })();
 </script>
 </body>
-  </html>
+              </html>
