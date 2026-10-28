@@ -1718,7 +1718,7 @@ function rememberIpStudent(ip, code, name, deviceId) {
 // ===== بافر زيارات: تجميع كتابات Firebase كل 4 ثواني (خفّة + سرعة) =====
 const visitWriteQueue = [];
 let visitFlushTimer = null;
-const VISIT_FLUSH_MS = 4000;
+const VISIT_FLUSH_MS = 800;
 const VISIT_QUEUE_MAX = 80;
 
 async function flushVisitQueue() {
@@ -1840,10 +1840,10 @@ app.post("/api/track-visit", async (req, res) => {
         const st = await fbGetCached("students/" + studentLink.studentCode, 60_000);
         if (st) {
           if (!studentLink.studentName && st.name) studentLink.studentName = st.name;
-          studentPhone = st.phone || null;
-          studentEmail = st.email || null;
+          studentPhone = st.phone || st.mobile || st.tel || st.whatsapp || null;
+          studentEmail = st.email || st.mail || st.gmail || null;
           studentSection = st.section || null;
-          studentGov = st.governorate || null;
+          studentGov = st.governorate || st.gov || null;
         }
       } catch (e) {}
     }
@@ -1924,9 +1924,12 @@ app.post("/api/track-visit", async (req, res) => {
       colorDepth: body.colorDepth != null ? Number(body.colorDepth) || null : null,
       orientation: body.orientation ? String(body.orientation).slice(0, 20) : null,
       userAgent: ua,
-      time: nowTime
+      time: nowTime,
+      timeISO: new Date(nowTime).toISOString(),
+      timeCairo: new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date(nowTime))
     };
 
+    const visitKey = "visits/" + nowTime + "_" + Math.random().toString(36).slice(2, 8);
     enqueueVisit(visitKey, record);
   } catch (e) {
     console.warn("[track-visit]", e && e.message);
