@@ -1906,6 +1906,13 @@ app.post("/api/track-visit", async (req, res) => {
       matchedBy: (studentLink && studentLink.matchedBy) || null,
       chUa: chUa || null,
       acceptLang: String(req.headers["accept-language"] || "").slice(0, 80) || null,
+      deviceMemory: body.deviceMemory != null ? Number(body.deviceMemory) || null : null,
+      downlink: body.downlink != null ? Number(body.downlink) || null : null,
+      effectiveType: body.effectiveType ? String(body.effectiveType).slice(0, 20) : null,
+      saveData: body.saveData === true || body.saveData === "true",
+      hardwareConcurrency: cores,
+      colorDepth: body.colorDepth != null ? Number(body.colorDepth) || null : null,
+      orientation: body.orientation ? String(body.orientation).slice(0, 20) : null,
       userAgent: ua,
       time: nowTime
     };
@@ -1916,13 +1923,103 @@ app.post("/api/track-visit", async (req, res) => {
   }
 });
 
-app.get("/api/admin/visits", requireAdmin("students_view"), async (_req, res) => {
+app.get("/api/admin/visits/summary", requireAdmin("students_view"), async (_req, res) => {
   try {
+    const visits = (await fbGetCached("visits", 15_000)) || {};
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    const dayStart = d0.getTime();
+    let today = 0, mobileToday = 0, studentsToday = 0;
+    const ips = new Set();
+    const ipsToday = new Set();
+    for (const v of Object.values(visits)) {
+      if (!v) continue;
+      const t = Number(v.time) || 0;
+      if (v.ip) ips.add(v.ip);
+      if (t >= dayStart) {
+        today++;
+        if (v.ip) ipsToday.add(v.ip);
+        if (v.isMobile) mobileToday++;
+        if (v.isStudent || v.studentCode) studentsToday++;
+      }
+    }
+    res.json({
+      success: true,
+      data: {
+        total: Object.keys(visits).length,
+        uniqueIps: ips.size,
+        today,
+        uniqueToday: ipsToday.size,
+        mobileToday,
+        studentsToday
+      }
+    });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.get("/api/admin/visits", requireAdmin("students_view"), async (req, res) => {
+  try {
+    const limit = Math.min(1000, Math.max(50, Number(req.query.limit) || 400));
+    const onlyStudents = String(req.query.students || "") === "1";
     const visits = (await fbGet("visits")) || {};
-    const list = Object.entries(visits).map(([id, v]) => ({ id, ...v }));
+    let list = Object.entries(visits).map(([id, v]) => ({ id, ...v }));
     list.sort((a, b) => (Number(b.time) || 0) - (Number(a.time) || 0));
-    // كل الزوار — بدون قص
-    res.json({ success: true, data: list, total: list.length });
+    if (onlyStudents) list = list.filter((v) => v.isStudent || v.studentCode);
+    const total = list.length;
+    list = list.slice(0, limit);
+
+    // إثراء بيانات الطالب (إيميل/تليفون/اسم) من السجل الحي — حتى لو الزيارة القديمة ناقصة
+    const codes = [...new Set(list.map((v) => v.studentCode).filter(Boolean))];
+    const studentMap = new Map();
+    await Promise.all(codes.slice(0, 80).map(async (code) => {
+      try {
+        const st = await fbGetCached("students/" + code, 60_000);
+        if (st) studentMap.set(String(code), st);
+      } catch {}
+    }));
+
+    // ربط إضافي: زيارات بدون studentCode لكن IP معروف في الذاكرة
+    for (const v of list) {
+      if (!v.studentCode && v.ip) {
+        const mem = ipToStudent.get(v.ip);
+        if (mem && mem.code) {
+          v.studentCode = mem.code;
+          v.studentName = v.studentName || mem.name || null;
+          v.isStudent = true;
+          v.matchedBy = v.matchedBy || "ip-memory-live";
+          if (!studentMap.has(mem.code)) {
+            try {
+              const st = await fbGetCached("students/" + mem.code, 60_000);
+              if (st) studentMap.set(mem.code, st);
+            } catch {}
+          }
+        }
+      }
+    }
+
+    list = list.map((v) => {
+      const st = v.studentCode ? studentMap.get(String(v.studentCode)) : null;
+      if (st) {
+        v.isStudent = true;
+        v.studentName = v.studentName || st.name || null;
+        v.studentPhone = v.studentPhone || st.phone || null;
+        v.studentEmail = v.studentEmail || st.email || null;
+        v.studentSection = v.studentSection || st.section || null;
+        v.studentGov = v.studentGov || st.governorate || null;
+        // بيانات إضافية من ملف الطالب
+        v.studentType = st.type || null;
+        v.studentExpiresAt = st.expiresAt || null;
+        v.studentActive = st.active !== false;
+        v.studentVisitCount = st.visitCount || null;
+        v.studentMaxDevices = st.maxDevices || null;
+        v.studentDevicesCount = st.devices ? Object.keys(st.devices).length : null;
+        v.studentLastSeen = st.lastSeen || null;
+      }
+      return v;
+    });
+
+    res.json({ success: true, data: list, total, limited: total > list.length });
   } catch (e) {
     jsonError(res, 500, e.message);
   }
