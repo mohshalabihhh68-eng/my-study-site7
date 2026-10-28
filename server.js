@@ -1339,6 +1339,16 @@ app.post("/api/auth/track", requireStudent, async (req, res) => {
     }
     try { cacheDel("stu:" + code); } catch {}
     lastSeenTouch.set(String(code), nowTime);
+    try {
+      const ip = clientIp(req);
+      rememberIpStudent(ip, code, student.name || (req.session && req.session.name) || "", deviceId);
+      const tok = getBearer(req);
+      if (tok && studentSessions.has(tok)) {
+        const s = studentSessions.get(tok);
+        s.lastIp = ip;
+        s.lastSeen = nowTime;
+      }
+    } catch (e) {}
 
     res.json({ success: true, visitCount, lastSeen: nowTime });
   } catch (e) {
@@ -1475,6 +1485,29 @@ function parseDeviceInfo(ua) {
   return { os, osVersion, deviceType, deviceBrand, deviceModel, browser, browserVersion, isMobile };
 }
 
+// ==================== Geo cache + lookup (صاروخي) ====================
+const geoCache = new Map(); // ip -> { data, exp }
+const GEO_CACHE_TTL = 12 * 3600 * 1000; // 12 ساعة
+const GEO_CACHE_MAX = 8000;
+
+function geoCacheGet(ip) {
+  const e = geoCache.get(ip);
+  if (!e) return null;
+  if (Date.now() > e.exp) { geoCache.delete(ip); return null; }
+  return e.data;
+}
+function geoCacheSet(ip, data) {
+  if (!ip || !data) return;
+  if (geoCache.size >= GEO_CACHE_MAX) {
+    let n = Math.ceil(GEO_CACHE_MAX * 0.1);
+    for (const k of geoCache.keys()) {
+      geoCache.delete(k);
+      if (--n <= 0) break;
+    }
+  }
+  geoCache.set(ip, { data, exp: Date.now() + GEO_CACHE_TTL });
+}
+
 async function lookupGeo(ip) {
   try {
     const cleanIp = String(ip || "").replace(/^::ffff:/, "").trim();
@@ -1487,92 +1520,192 @@ async function lookupGeo(ip) {
       cleanIp.startsWith("10.") ||
       /^172\.(1[6-9]|2\d|3[0-1])\./.test(cleanIp)
     ) {
-      return { country: "محلي", countryCode: "", city: "", region: "", district: "", postal: "", timezone: "", isp: "", as: "", lat: null, lon: null, query: cleanIp };
+      return {
+        country: "محلي", countryCode: "", city: "", region: "", district: "",
+        postal: "", timezone: "", isp: "", as: "", lat: null, lon: null,
+        query: cleanIp, proxy: false, hosting: false, mobile: false
+      };
     }
 
-    // 1) ipwho.is
-    try {
-      const r1 = await fetchT(`https://ipwho.is/${encodeURIComponent(cleanIp)}`, { headers: { Accept: "application/json" } }, { timeout: 4500, retries: 0 });
-      if (r1.ok) {
-        const j = await r1.json();
-        if (j && j.success !== false && (j.country || j.city)) {
-          return {
-            country: j.country || "",
-            countryCode: j.country_code || "",
-            city: j.city || "",
-            region: j.region || j.region_code || "",
-            district: j.district || j.city || "",
-            postal: j.postal || j.zip || "",
-            timezone: (j.timezone && (j.timezone.id || j.timezone)) || "",
-            isp: (j.connection && (j.connection.isp || j.connection.org)) || j.isp || j.org || "",
-            as: (j.connection && j.connection.asn != null) ? String(j.connection.asn) : "",
-            lat: j.latitude ?? null,
-            lon: j.longitude ?? null,
-            query: j.ip || cleanIp
-          };
-        }
-      }
-    } catch {}
+    const cached = geoCacheGet(cleanIp);
+    if (cached) return cached;
 
-    // 2) ipapi.co
-    try {
-      const r2 = await fetchT(`https://ipapi.co/${encodeURIComponent(cleanIp)}/json/`, { headers: { Accept: "application/json" } }, { timeout: 4500, retries: 0 });
-      if (r2.ok) {
-        const j = await r2.json();
-        if (j && !j.error && (j.country_name || j.country)) {
-          return {
-            country: j.country_name || j.country || "",
-            countryCode: j.country_code || "",
-            city: j.city || "",
-            region: j.region || j.region_code || "",
-            district: j.city || "",
-            postal: j.postal || "",
-            timezone: j.timezone || "",
-            isp: j.org || j.asn || "",
-            as: j.asn || "",
-            lat: j.latitude ?? null,
-            lon: j.longitude ?? null,
-            query: j.ip || cleanIp
-          };
-        }
-      }
-    } catch {}
+    const normalize = (raw) => {
+      if (!raw) return null;
+      return {
+        country: raw.country || "",
+        countryCode: raw.countryCode || "",
+        city: raw.city || "",
+        region: raw.region || "",
+        district: raw.district || raw.city || "",
+        postal: raw.postal || "",
+        timezone: raw.timezone || "",
+        isp: raw.isp || "",
+        as: raw.as || "",
+        lat: raw.lat ?? null,
+        lon: raw.lon ?? null,
+        query: raw.query || cleanIp,
+        proxy: Boolean(raw.proxy),
+        hosting: Boolean(raw.hosting),
+        mobile: Boolean(raw.mobile)
+      };
+    };
 
-    // 3) ip-api.com — فيه district في بعض الردود
-    try {
-      const r3 = await fetchT(
-        `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,district,zip,lat,lon,timezone,isp,org,as,query&lang=ar`,
+    const race = async (fn) => {
+      try { return await fn(); } catch { return null; }
+    };
+
+    const p1 = race(async () => {
+      const r = await fetchT(`https://ipwho.is/${encodeURIComponent(cleanIp)}`, { headers: { Accept: "application/json" } }, { timeout: 2800, retries: 0 });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || j.success === false || !(j.country || j.city)) return null;
+      return normalize({
+        country: j.country || "",
+        countryCode: j.country_code || "",
+        city: j.city || "",
+        region: j.region || j.region_code || "",
+        district: j.district || j.city || "",
+        postal: j.postal || j.zip || "",
+        timezone: (j.timezone && (j.timezone.id || j.timezone)) || "",
+        isp: (j.connection && (j.connection.isp || j.connection.org)) || j.isp || j.org || "",
+        as: (j.connection && j.connection.asn != null) ? String(j.connection.asn) : (j.asn || ""),
+        lat: j.latitude ?? null,
+        lon: j.longitude ?? null,
+        query: j.ip || cleanIp,
+        proxy: Boolean(j.security && (j.security.vpn || j.security.proxy || j.security.tor)),
+        hosting: Boolean(j.security && j.security.hosting),
+        mobile: Boolean(j.connection && j.connection.mobile)
+      });
+    });
+
+    const p2 = race(async () => {
+      const r = await fetchT(`https://ipapi.co/${encodeURIComponent(cleanIp)}/json/`, { headers: { Accept: "application/json" } }, { timeout: 2800, retries: 0 });
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || j.error || !(j.country_name || j.country)) return null;
+      return normalize({
+        country: j.country_name || j.country || "",
+        countryCode: j.country_code || "",
+        city: j.city || "",
+        region: j.region || j.region_code || "",
+        district: j.city || "",
+        postal: j.postal || "",
+        timezone: j.timezone || "",
+        isp: j.org || j.asn || "",
+        as: j.asn || "",
+        lat: j.latitude ?? null,
+        lon: j.longitude ?? null,
+        query: j.ip || cleanIp,
+        proxy: false,
+        hosting: false,
+        mobile: false
+      });
+    });
+
+    const p3 = race(async () => {
+      const r = await fetchT(
+        `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,district,zip,lat,lon,timezone,isp,org,as,query,proxy,hosting,mobile&lang=ar`,
         { headers: { Accept: "application/json" } },
-        { timeout: 4500, retries: 0 }
+        { timeout: 2800, retries: 0 }
       );
-      if (r3.ok) {
-        const j = await r3.json();
-        if (j.status === "success") {
-          return {
-            country: j.country || "",
-            countryCode: j.countryCode || "",
-            city: j.city || "",
-            region: j.regionName || "",
-            district: j.district || j.city || "",
-            postal: j.zip || "",
-            timezone: j.timezone || "",
-            isp: j.isp || j.org || "",
-            as: j.as || "",
-            lat: j.lat ?? null,
-            lon: j.lon ?? null,
-            query: j.query || cleanIp
-          };
-        }
-      }
-    } catch {}
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || j.status !== "success") return null;
+      return normalize({
+        country: j.country || "",
+        countryCode: j.countryCode || "",
+        city: j.city || "",
+        region: j.regionName || "",
+        district: j.district || j.city || "",
+        postal: j.zip || "",
+        timezone: j.timezone || "",
+        isp: j.isp || j.org || "",
+        as: j.as || "",
+        lat: j.lat ?? null,
+        lon: j.lon ?? null,
+        query: j.query || cleanIp,
+        proxy: Boolean(j.proxy),
+        hosting: Boolean(j.hosting),
+        mobile: Boolean(j.mobile)
+      });
+    });
 
+    const result = await Promise.any([
+      p1.then(v => v || Promise.reject()),
+      p2.then(v => v || Promise.reject()),
+      p3.then(v => v || Promise.reject())
+    ]).catch(() => null);
+
+    if (result) {
+      geoCacheSet(cleanIp, result);
+      return result;
+    }
     return null;
   } catch {
     return null;
   }
 }
 
+/** يحاول يربط الزيارة بطالب مسجّل (توكن أو جلسة نشطة بنفس الـ IP) */
+function resolveStudentFromVisit(req, ip) {
+  try {
+    const auth = String(req.headers.authorization || "").trim();
+    let token = "";
+    if (auth.toLowerCase().startsWith("bearer ")) token = auth.slice(7).trim();
+    if (!token) token = String(req.headers["x-student-token"] || (req.query && req.query.token) || "").trim();
+    if (token) {
+      const sess = studentSessions.get(token);
+      if (sess && (!sess.expiresAt || sess.expiresAt > Date.now())) {
+        return {
+          studentCode: String(sess.code || ""),
+          studentName: String(sess.name || ""),
+          deviceId: String(sess.deviceId || ""),
+          matchedBy: "token"
+        };
+      }
+    }
+
+    const nowT = Date.now();
+    let best = null;
+    for (const sess of studentSessions.values()) {
+      if (!sess || !sess.code) continue;
+      if (sess.expiresAt && sess.expiresAt < nowT) continue;
+      if (sess.lastIp && sess.lastIp === ip) {
+        if (!best || (sess.lastSeen || 0) > (best.lastSeen || 0)) {
+          best = Object.assign({}, sess, { matchedBy: "session-ip" });
+        }
+      }
+    }
+    if (best) {
+      return {
+        studentCode: String(best.code || ""),
+        studentName: String(best.name || ""),
+        deviceId: String(best.deviceId || ""),
+        matchedBy: best.matchedBy || "session-ip"
+      };
+    }
+  } catch (e) {}
+  return null;
+}
+
+// خريطة IP → آخر طالب (تتحدّث من تسجيل الدخول والـ heartbeat)
+const ipToStudent = new Map(); // ip -> { code, name, deviceId, at }
+const IP_STUDENT_TTL = 45 * 60 * 1000;
+
+function rememberIpStudent(ip, code, name, deviceId) {
+  if (!ip || !code) return;
+  ipToStudent.set(ip, { code: String(code), name: String(name || ""), deviceId: String(deviceId || ""), at: Date.now() });
+  if (ipToStudent.size > 15000) {
+    const cutoff = Date.now() - IP_STUDENT_TTL;
+    for (const [k, v] of ipToStudent) if (v.at < cutoff) ipToStudent.delete(k);
+  }
+}
+
 app.post("/api/track-visit", async (req, res) => {
+  // رد فوري — الشغل الثقيل في الخلفية عشان الموقع يبقى زي الصاروخ
+  res.json({ success: true });
+
   try {
     const ip = clientIp(req);
     const ua = req.headers["user-agent"] || "Unknown";
@@ -1581,13 +1714,12 @@ app.post("/api/track-visit", async (req, res) => {
 
     const device = parseDeviceInfo(ua);
 
-    // Client Hints من الهيدرز (لو المتصفح بيبعتها)
     const chModel = String(req.headers["sec-ch-ua-model"] || "").replace(/"/g, "").trim();
     const chPlatform = String(req.headers["sec-ch-ua-platform"] || "").replace(/"/g, "").trim();
     const chPlatformVer = String(req.headers["sec-ch-ua-platform-version"] || "").replace(/"/g, "").trim();
     const chMobile = String(req.headers["sec-ch-ua-mobile"] || "").replace(/"/g, "").trim();
+    const chUa = String(req.headers["sec-ch-ua"] || "").slice(0, 200);
 
-    // بيانات إضافية من الفرونت
     const screen = body.screen ? String(body.screen).slice(0, 40) : null;
     const timezoneBody = body.timezone ? String(body.timezone).slice(0, 60) : null;
     const language = body.language
@@ -1603,6 +1735,7 @@ app.post("/api/track-visit", async (req, res) => {
     const touchPoints = body.touchPoints != null ? Number(body.touchPoints) || null : null;
     const gpu = body.gpu ? String(body.gpu).slice(0, 120) : null;
     const vendor = body.vendor ? String(body.vendor).slice(0, 60) : null;
+    const platformVersion = body.platformVersion ? String(body.platformVersion).slice(0, 30) : (chPlatformVer || null);
 
     const cleanModel = (m) => {
       const x = String(m || "").trim();
@@ -1610,7 +1743,6 @@ app.post("/api/track-visit", async (req, res) => {
       return x;
     };
 
-    // أفضل موديل متاح: Client Hints / فرونت أولاً ثم UA
     let deviceModel = cleanModel(clientModel) || cleanModel(chModel) || cleanModel(device.deviceModel) || "";
     let deviceBrand = clientBrand || device.deviceBrand || "";
     if (!deviceBrand && deviceModel) {
@@ -1621,6 +1753,7 @@ app.post("/api/track-visit", async (req, res) => {
       else if (/infinix|tecno|itel/i.test(deviceModel)) deviceBrand = "Infinix/Tecno";
       else if (/pixel/i.test(deviceModel)) deviceBrand = "Google";
       else if (/vivo|v\d{4}/i.test(deviceModel)) deviceBrand = "Vivo";
+      else if (/huawei|honor|ane-|lya-|clt-/i.test(deviceModel)) deviceBrand = "Huawei";
     }
     if (chMobile === "?1" && device.deviceType === "كمبيوتر") {
       device.deviceType = "موبايل";
@@ -1630,14 +1763,54 @@ app.post("/api/track-visit", async (req, res) => {
       device.osVersion = String(chPlatformVer).replace(/_/g, ".").slice(0, 20);
     }
 
+    let studentLink = resolveStudentFromVisit(req, ip);
+    if (!studentLink) {
+      const mem = ipToStudent.get(ip);
+      if (mem && (Date.now() - mem.at) < IP_STUDENT_TTL) {
+        studentLink = {
+          studentCode: mem.code,
+          studentName: mem.name,
+          deviceId: mem.deviceId,
+          matchedBy: "ip-memory"
+        };
+      }
+    }
+
+    if (!studentLink && body.studentCode) {
+      const sc = String(body.studentCode).replace(/\D/g, "").slice(0, 12);
+      if (sc.length >= 6) {
+        studentLink = {
+          studentCode: sc,
+          studentName: String(body.studentName || "").slice(0, 80),
+          deviceId: String(body.deviceId || "").slice(0, 80),
+          matchedBy: "client"
+        };
+      }
+    }
+
+    let studentPhone = null;
+    let studentSection = null;
+    let studentGov = null;
+    if (studentLink && studentLink.studentCode) {
+      try {
+        const st = await fbGetCached("students/" + studentLink.studentCode, 60_000);
+        if (st) {
+          if (!studentLink.studentName && st.name) studentLink.studentName = st.name;
+          studentPhone = st.phone || null;
+          studentSection = st.section || null;
+          studentGov = st.governorate || null;
+        }
+      } catch (e) {}
+    }
+
     let geo = null;
-    try { geo = await lookupGeo(ip); } catch {}
+    try { geo = await lookupGeo(ip); } catch (e) {}
 
     const visitKey = `visits/${nowTime}_${Math.random().toString(36).slice(2, 8)}`;
     const record = {
       ip,
       os: device.os,
-      osVersion: device.osVersion || null,
+      osVersion: device.osVersion || platformVersion || null,
       deviceType: device.deviceType,
       deviceBrand: deviceBrand || null,
       deviceModel: deviceModel || null,
@@ -1647,33 +1820,45 @@ app.post("/api/track-visit", async (req, res) => {
       language: language || null,
       referer: referer || null,
       screen: screen || null,
-      timezone: timezoneBody || geo?.timezone || null,
+      timezone: timezoneBody || (geo && geo.timezone) || null,
       page: page || null,
       connection: connection || null,
       platform: platform || null,
+      platformVersion: platformVersion || null,
       cores: cores,
       touchPoints: touchPoints,
       gpu: gpu || null,
       vendor: vendor || null,
-      country: geo?.country || null,
-      countryCode: geo?.countryCode || null,
-      city: geo?.city || null,
-      region: geo?.region || null,
-      district: geo?.district || null,
-      postal: geo?.postal || null,
-      isp: geo?.isp || null,
-      as: geo?.as || null,
-      lat: geo?.lat ?? null,
-      lon: geo?.lon ?? null,
+      country: (geo && geo.country) || null,
+      countryCode: (geo && geo.countryCode) || null,
+      city: (geo && geo.city) || null,
+      region: (geo && geo.region) || null,
+      district: (geo && geo.district) || null,
+      postal: (geo && geo.postal) || null,
+      isp: (geo && geo.isp) || null,
+      as: (geo && geo.as) || null,
+      lat: geo ? geo.lat : null,
+      lon: geo ? geo.lon : null,
+      proxy: geo ? geo.proxy : null,
+      hosting: geo ? geo.hosting : null,
+      mobileNet: geo ? geo.mobile : null,
+      isStudent: Boolean(studentLink && studentLink.studentCode),
+      studentCode: (studentLink && studentLink.studentCode) || null,
+      studentName: (studentLink && studentLink.studentName) || null,
+      studentDeviceId: (studentLink && studentLink.deviceId) || null,
+      studentPhone: studentPhone || null,
+      studentSection: studentSection || null,
+      studentGov: studentGov || null,
+      matchedBy: (studentLink && studentLink.matchedBy) || null,
+      chUa: chUa || null,
+      acceptLang: String(req.headers["accept-language"] || "").slice(0, 80) || null,
       userAgent: ua,
       time: nowTime
     };
 
     await fbSet(visitKey, record);
-    res.json({ success: true });
   } catch (e) {
-    console.warn("[track-visit]", e.message);
-    res.json({ success: false });
+    console.warn("[track-visit]", e && e.message);
   }
 });
 
@@ -1816,9 +2001,10 @@ app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "stude
     const expiresAt = now() + sessionTtl;
     // توكن JWT طويل بنفس شكل المنصات الأخرى
     const token = makeStudentJwt({ code, deviceId, name: student.name, expiresAt });
-    const sess = { token, code, deviceId, name: student.name, section: student.section || null, createdAt: now(), expiresAt };
+    const sess = { token, code, deviceId, name: student.name, section: student.section || null, createdAt: now(), expiresAt, lastIp: ip, lastSeen: now() };
     studentSessions.set(token, sess);
     try { await fbSet(`sessions/${sessionStoreKey(token)}`, sess); } catch (e) { console.warn("[login] session fb:", e.message); }
+    try { rememberIpStudent(ip, code, student.name, deviceId); } catch (e) {}
     clearLoginFailBoth("student", deviceId, ip, code);
 
     let subjectIds = [];
