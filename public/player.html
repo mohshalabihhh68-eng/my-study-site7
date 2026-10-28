@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080d18">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://player.stream-weave.com">
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<link rel="dns-prefetch" href="https://player.stream-weave.com">
 <title>مشغل المحاضرة | ثانوية club</title>
 <script>
 (function(){
@@ -725,6 +729,27 @@ const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
 const initialVideoId = qs.get('videoId');
 
+/* ===== Play Session Cache + Prefetch ===== */
+const playCache = new Map();
+const PLAY_CACHE_TTL = 45000;
+
+async function getPlayCached(videoId) {
+  const c = playCache.get(String(videoId));
+  if (c && Date.now() - c.ts < PLAY_CACHE_TTL) return c.data;
+  return null;
+}
+
+async function prefetchPlay(videoId) {
+  if (!videoId) return;
+  const id = String(videoId);
+  const c = playCache.get(id);
+  if (c && Date.now() - c.ts < PLAY_CACHE_TTL) return;
+  try {
+    const data = await api('/api/play/' + encodeURIComponent(id), { method: 'POST' });
+    playCache.set(id, { data, ts: Date.now() });
+  } catch (e) { /* silent */ }
+}
+
 /* Stream-Weave crypto + playlist helpers */
 let cryptoUtils = null;
 let currentKeyBlobUrl = null;
@@ -1265,7 +1290,11 @@ async function playIndex(i,autoplay){
   try{
     let playData = null;
     try {
-      playData = await api('/api/play/' + encodeURIComponent(item.id), { method: 'POST' });
+      playData = await getPlayCached(item.id);
+      if (!playData) {
+        playData = await api('/api/play/' + encodeURIComponent(item.id), { method: 'POST' });
+        playCache.set(String(item.id), { data: playData, ts: Date.now() });
+      }
     } catch (e1) {
       if (!(e1.status === 404 || e1.status === 403 || /غير موجود|not found/i.test(e1.message||''))) {
         if (e1.kind === 'auth' || e1.kind === 'network') throw e1;
@@ -1320,6 +1349,13 @@ async function playIndex(i,autoplay){
       throw new Error('الجلسة ناقصة (مفيش token أو video_id أو play_url)');
     }
 
+    /* ابدأ تحميل الـ key بالتوازي مع باقي الطلبات (default path فقط) */
+    const defaultKeyPath = 'videos/' + swVideoId + '/key';
+    const defaultKeyUrl = '/api/stream?path=' + encodeURIComponent(defaultKeyPath) + '&t=' + encodeURIComponent(streamToken);
+    const keyPromise = fetch(defaultKeyUrl, { credentials: 'include' })
+      .then(function(r){ return r.ok ? r.arrayBuffer() : null; })
+      .catch(function(){ return null; });
+
     setLoading(true,'تحميل أدوات فك التشفير…');
     if(!cryptoUtils) cryptoUtils = await loadPlayerScript();
     if(my!==playToken)return;
@@ -1368,7 +1404,7 @@ async function playIndex(i,autoplay){
 
     setLoading(true,'فك المفتاح…');
     const keyLine = variantText.split('\n').find(l=>l.indexOf('EXT-X-KEY')!==-1);
-    let keyPath = 'videos/' + swVideoId + '/key';
+    let keyPath = defaultKeyPath;
     let ivHex = null;
     if(keyLine){
       const keyUriMatch = keyLine.match(/URI="([^"]+)"/);
@@ -1388,10 +1424,21 @@ async function playIndex(i,autoplay){
       }
     }
 
-    const keyUrl = '/api/stream?path=' + encodeURIComponent(keyPath) + '&t=' + encodeURIComponent(streamToken);
-    const keyRes = await fetch(keyUrl, { credentials: 'include' });
-    if(!keyRes.ok) throw new Error('key → HTTP ' + keyRes.status);
-    const keyBuf = await keyRes.arrayBuffer();
+    let keyBuf;
+    if (keyPath === defaultKeyPath) {
+      keyBuf = await keyPromise;
+      if (!keyBuf) {
+        const keyUrl = '/api/stream?path=' + encodeURIComponent(keyPath) + '&t=' + encodeURIComponent(streamToken);
+        const keyRes = await fetch(keyUrl, { credentials: 'include' });
+        if(!keyRes.ok) throw new Error('key → HTTP ' + keyRes.status);
+        keyBuf = await keyRes.arrayBuffer();
+      }
+    } else {
+      const keyUrl = '/api/stream?path=' + encodeURIComponent(keyPath) + '&t=' + encodeURIComponent(streamToken);
+      const keyRes = await fetch(keyUrl, { credentials: 'include' });
+      if(!keyRes.ok) throw new Error('key → HTTP ' + keyRes.status);
+      keyBuf = await keyRes.arrayBuffer();
+    }
     if(my!==playToken)return;
 
     let plainKey;
@@ -1449,6 +1496,17 @@ async function playIndex(i,autoplay){
   }
 }
 
+/* Prefetch الفيديو التالي بمجرد ما المشاهدة تبدأ */
+let prefetchedFor = -1;
+video.addEventListener('playing', function(){
+  if (prefetchedFor === current) return;
+  if ((video.currentTime || 0) < 3) return;
+  prefetchedFor = current;
+  if (current >= 0 && current < videos.length - 1) {
+    prefetchPlay(videos[current + 1].id);
+  }
+});
+
 async function startHls(playUrl, my, autoplay, item){
   setLoading(true,'تحميل الفيديو…');
   const saved = readProgress(item.id) || {};
@@ -1503,7 +1561,6 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
 
     hls.on(Hls.Events.MANIFEST_PARSED, function(){
       if(my!==playToken)return;
-      setLoading(false);
       if(autoplay) video.play().catch(function(){});
       showUI(true);
       resolve();
@@ -2522,4 +2579,4 @@ init();
 })();
 </script>
 </body>
-  </html>
+                                                                               </html>
