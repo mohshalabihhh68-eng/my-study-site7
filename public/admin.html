@@ -1830,6 +1830,7 @@ PAGES.visits = {
         <select class="sel" id="vis-filter" data-ch="vis-filter">
           <option value="all" ${S.vis.filter === "all" ? "selected" : ""}>كل الزيارات</option>
           <option value="today" ${S.vis.filter === "today" ? "selected" : ""}>اليوم فقط</option>
+          <option value="students" ${S.vis.filter === "students" ? "selected" : ""}>طلاب مسجّلين فقط</option>
           <option value="mobile" ${S.vis.filter === "mobile" ? "selected" : ""}>موبايل</option>
           <option value="desktop" ${S.vis.filter === "desktop" ? "selected" : ""}>كمبيوتر</option>
         </select>
@@ -1852,6 +1853,7 @@ function visitsFiltered() {
   const d0 = startOfDay(Date.now());
   const f = S.vis.filter || "all";
   if (f === "today") list = list.filter(v => toMs(v.time) >= d0);
+  else if (f === "students") list = list.filter(v => v.isStudent || v.studentCode);
   else if (f === "mobile") list = list.filter(v => v.isMobile);
   else if (f === "desktop") list = list.filter(v => !v.isMobile);
   const q = (S.vis.q || "").toLowerCase().trim();
@@ -1864,8 +1866,12 @@ function visitsFiltered() {
       String(v.browser || "").toLowerCase().includes(q) ||
       String(v.os || "").toLowerCase().includes(q) ||
       String(v.deviceBrand || "").toLowerCase().includes(q) ||
+      String(v.deviceModel || "").toLowerCase().includes(q) ||
       String(v.isp || "").toLowerCase().includes(q) ||
-      String(v.referer || "").toLowerCase().includes(q)
+      String(v.referer || "").toLowerCase().includes(q) ||
+      String(v.studentCode || "").includes(q) ||
+      String(v.studentName || "").toLowerCase().includes(q) ||
+      String(v.studentPhone || "").includes(q)
     );
   }
   return list.slice().sort((a, b) => toMs(b.time) - toMs(a.time));
@@ -1893,12 +1899,12 @@ function drawVisits() {
 
   if (S.vis.mode === "timeline") {
     body.innerHTML = `<div class="tw"><table><thead><tr>
-      <th>الوقت</th><th>IP</th><th>الموقع</th><th>الجهاز / الموديل</th><th>المتصفح</th><th>الشاشة</th><th>المصدر</th>
+      <th>الوقت</th><th>IP / الطالب</th><th>الموقع</th><th>الجهاز / الموديل</th><th>المتصفح</th><th>الشاشة</th><th>المصدر</th>
     </tr></thead><tbody>${list.map(v => {
       const br = [v.browser, v.browserVersion].filter(Boolean).join(" ");
       return `<tr>
         <td><b>${fmt(v.time)}</b><div class="sm muted">${ago(v.time)}</div></td>
-        <td class="mono ltr">${esc(v.ip || "—")}</td>
+        <td class="mono ltr">${esc(v.ip || "—")}${(v.isStudent || v.studentCode) ? `<div><span class="badge b-g nodot" style="margin-top:3px">${esc(v.studentName || v.studentCode)}</span></div>` : ""}${v.proxy ? `<div class="sm" style="color:var(--amber)">VPN</div>` : ""}</td>
         <td>${esc(locLabel(v))}${v.isp ? `<div class="sm muted">${esc(v.isp)}</div>` : ""}${v.lat != null && v.lon != null ? `<div class="sm muted ltr">${v.lat}, ${v.lon}</div>` : ""}</td>
         <td>${esc(devLabel(v))}</td>
         <td>${esc(br || "—")}${v.language ? `<div class="sm muted">${esc(v.language)}</div>` : ""}</td>
@@ -1930,9 +1936,11 @@ function drawVisits() {
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
             <b class="mono ltr">${esc(g.ip)}</b>
             <span class="badge b-b nodot">${num(g.items.length)} زيارة</span>
+            ${latest.isStudent || latest.studentCode ? `<span class="badge b-g nodot">طالب · ${esc(latest.studentName || latest.studentCode || "")}</span>` : ""}
             ${latest.country ? `<span class="badge nodot b-m">${esc(latest.countryCode || latest.country)}</span>` : ""}
             ${latest.deviceBrand ? `<span class="badge nodot b-p">${esc(latest.deviceBrand)}</span>` : ""}
             ${latest.deviceModel ? `<span class="badge nodot b-o">${esc(latest.deviceModel)}</span>` : ""}
+            ${latest.proxy ? `<span class="badge b-a nodot">VPN/Proxy</span>` : ""}
           </div>
           <div class="sm muted" style="margin-top:2px">${esc(locLabel(latest))} · ${esc(devLabel(latest))} · ${esc(br || "—")} · آخر زيارة ${ago(g.last)}</div>
         </div>
@@ -1942,7 +1950,14 @@ function drawVisits() {
       <div id="${id}" class="hide" style="padding:12px 16px;border-top:1px solid var(--line)">
         <div class="kv" style="margin-bottom:14px;grid-template-columns:120px 1fr">
           <span>IP</span><b class="mono ltr">${esc(g.ip)}</b>
-          <span>المنطقة</span><b>${esc(latest.district || "—")}</b>
+          ${(latest.isStudent || latest.studentCode) ? `
+          <span>طالب مسجّل</span><b><span class="badge b-g nodot">نعم</span> · ${esc(latest.studentName || "—")} · كود <span class="code ltr">${esc(latest.studentCode || "")}</span></b>
+          <span>تليفون الطالب</span><b class="ltr">${esc(latest.studentPhone || "—")}</b>
+          <span>شعبة الطالب</span><b>${esc(latest.studentSection || "—")}</b>
+          <span>محافظة الطالب</span><b>${esc(latest.studentGov || "—")}</b>
+          <span>طريقة الربط</span><b>${esc({token:"توكن جلسة", "session-ip":"جلسة بنفس الـ IP", "ip-memory":"آخر نشاط على نفس الـ IP", client:"من المتصفح"}[latest.matchedBy] || latest.matchedBy || "—")}</b>
+          ` : `<span>طالب مسجّل</span><b class="muted">لا — زائر عادي</b>`}
+          <span>المنطقة / الحي</span><b>${esc(latest.district || "—")}</b>
           <span>المدينة</span><b>${esc(latest.city || "—")}</b>
           <span>المحافظة</span><b>${esc(latest.region || "—")}</b>
           <span>الدولة</span><b>${esc(latest.country || "—")}${latest.countryCode ? " (" + esc(latest.countryCode) + ")" : ""}</b>
@@ -1950,8 +1965,9 @@ function drawVisits() {
           <span>الإحداثيات</span><b class="ltr">${latest.lat != null && latest.lon != null ? `${latest.lat}, ${latest.lon}` : "—"}</b>
           <span>مزود الخدمة</span><b>${esc(latest.isp || "—")}</b>
           <span>ASN</span><b class="ltr">${esc(latest.as || "—")}</b>
+          <span>شبكة</span><b>${[latest.proxy ? "VPN/Proxy" : "", latest.hosting ? "Hosting/DC" : "", latest.mobileNet ? "Mobile ISP" : ""].filter(Boolean).join(" · ") || "عادية"}</b>
           <span>الجهاز / الموديل</span><b>${esc(devLabel(latest))}</b>
-          <span>المنصة</span><b>${esc(latest.platform || "—")}</b>
+          <span>المنصة</span><b>${esc(latest.platform || "—")}${latest.platformVersion ? " · " + esc(latest.platformVersion) : ""}</b>
           <span>المتصفح</span><b>${esc(br || "—")}</b>
           <span>الشاشة</span><b>${esc(latest.screen || "—")}</b>
           <span>المعالج/اللمس</span><b>${[latest.cores != null ? latest.cores + " نواة" : "", latest.touchPoints != null ? latest.touchPoints + " لمس" : ""].filter(Boolean).join(" · ") || "—"}</b>
