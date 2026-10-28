@@ -1871,7 +1871,8 @@ function visitsFiltered() {
       String(v.referer || "").toLowerCase().includes(q) ||
       String(v.studentCode || "").includes(q) ||
       String(v.studentName || "").toLowerCase().includes(q) ||
-      String(v.studentPhone || "").includes(q)
+      String(v.studentPhone || "").includes(q) ||
+      String(v.studentEmail || "").toLowerCase().includes(q)
     );
   }
   return list.slice().sort((a, b) => toMs(b.time) - toMs(a.time));
@@ -1953,6 +1954,7 @@ function drawVisits() {
           ${(latest.isStudent || latest.studentCode) ? `
           <span>طالب مسجّل</span><b><span class="badge b-g nodot">نعم</span> · ${esc(latest.studentName || "—")} · كود <span class="code ltr">${esc(latest.studentCode || "")}</span></b>
           <span>تليفون الطالب</span><b class="ltr">${esc(latest.studentPhone || "—")}</b>
+          <span>إيميل الطالب</span><b class="ltr">${esc(latest.studentEmail || "—")}</b>
           <span>شعبة الطالب</span><b>${esc(latest.studentSection || "—")}</b>
           <span>محافظة الطالب</span><b>${esc(latest.studentGov || "—")}</b>
           <span>طريقة الربط</span><b>${esc({token:"توكن جلسة", "session-ip":"جلسة بنفس الـ IP", "ip-memory":"آخر نشاط على نفس الـ IP", client:"من المتصفح"}[latest.matchedBy] || latest.matchedBy || "—")}</b>
@@ -1962,7 +1964,9 @@ function drawVisits() {
           <span>المحافظة</span><b>${esc(latest.region || "—")}</b>
           <span>الدولة</span><b>${esc(latest.country || "—")}${latest.countryCode ? " (" + esc(latest.countryCode) + ")" : ""}</b>
           <span>الرمز البريدي</span><b class="ltr">${esc(latest.postal || "—")}</b>
-          <span>الإحداثيات</span><b class="ltr">${latest.lat != null && latest.lon != null ? `${latest.lat}, ${latest.lon}` : "—"}</b>
+          <span>الإحداثيات (IP)</span><b class="ltr">${latest.lat != null && latest.lon != null ? `${latest.lat}, ${latest.lon}` : "—"}</b>
+          <span>موقع GPS دقيق</span><b class="ltr">${latest.preciseLat != null && latest.preciseLon != null ? `${latest.preciseLat}, ${latest.preciseLon}${latest.preciseAcc != null ? " (±" + Math.round(latest.preciseAcc) + "m)" : ""}` : "—"}</b>
+          <span>خريطة</span><b>${(latest.preciseLat != null && latest.preciseLon != null) || (latest.lat != null && latest.lon != null) ? `<a class="ltr" href="https://www.openstreetmap.org/?mlat=${latest.preciseLat ?? latest.lat}&mlon=${latest.preciseLon ?? latest.lon}#map=16/${latest.preciseLat ?? latest.lat}/${latest.preciseLon ?? latest.lon}" target="_blank" rel="noopener">فتح على الخريطة</a>` : "—"}</b>
           <span>مزود الخدمة</span><b>${esc(latest.isp || "—")}</b>
           <span>ASN</span><b class="ltr">${esc(latest.as || "—")}</b>
           <span>شبكة</span><b>${[latest.proxy ? "VPN/Proxy" : "", latest.hosting ? "Hosting/DC" : "", latest.mobileNet ? "Mobile ISP" : ""].filter(Boolean).join(" · ") || "عادية"}</b>
