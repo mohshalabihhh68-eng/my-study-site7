@@ -1116,8 +1116,9 @@ PAGES.home = { title:"نظرة عامة", render(){
   ${(() => {
     const d0h = startOfDay(now);
     const visits = S.visits || [];
-    const todayVis = visits.filter(v => toMs(v.time) >= d0h).length;
-    const uniqIp = new Set(visits.filter(v => toMs(v.time) >= d0h).map(v => v.ip)).size;
+    const vs = S.visitSummary || {};
+    const todayVis = vs.today != null ? vs.today : visits.filter(v => toMs(v.time) >= d0h).length;
+    const uniqIp = vs.uniqueToday != null ? vs.uniqueToday : new Set(visits.filter(v => toMs(v.time) >= d0h).map(v => v.ip)).size;
     const active24 = st.filter(s => toMs(s.lastSeen) >= now - 864e5).length;
     const incomplete = st.filter(s => {
       const ph = String(s.phone || "").replace(/\D/g, "");
@@ -1817,7 +1818,7 @@ PAGES.visits = {
     const today = list.filter(v => toMs(v.time) >= d0).length;
     const uniqToday = new Set(list.filter(v => toMs(v.time) >= d0).map(v => v.ip)).size;
     const uniqAll = new Set(list.map(v => v.ip)).size;
-    return `${pageHead("سجل الزوار", "كل زيارة للموقع: الدولة، الجهاز، والمتصفح — مع عدد مرات الدخول والوقت بالضبط.",
+    return `${pageHead("سجل الزوار", "آخر الزيارات مع ربط الطلاب (إيميل/تليفون/أجهزة) — والبيانات التفصيلية لكل جهاز.",
       `<button class="btn btn-g" data-act="vis-refresh">${ic("refresh", 17)} تحديث</button>`)}
     <div class="grid g-kpi" style="margin-bottom:16px">
       <div class="card kpi nohov"><div class="top"><span>زيارات اليوم</span><span class="ico c-b">${ic("globe", 18)}</span></div><b>${num(today)}</b><div class="sub">${num(uniqToday)} زائر فريد اليوم</div></div>
@@ -1878,9 +1879,31 @@ function visitsFiltered() {
   return list.slice().sort((a, b) => toMs(b.time) - toMs(a.time));
 }
 
+function enrichVisitStudent(v) {
+  if (!v) return v;
+  const code = v.studentCode || null;
+  if (!code) return v;
+  const st = (S.students || []).find(s => String(s.code) === String(code));
+  if (!st) return v;
+  v.isStudent = true;
+  v.studentName = v.studentName || st.name || null;
+  v.studentPhone = v.studentPhone || st.phone || null;
+  v.studentEmail = v.studentEmail || st.email || null;
+  v.studentSection = v.studentSection || st.section || null;
+  v.studentGov = v.studentGov || st.governorate || null;
+  v.studentType = v.studentType || st.type || null;
+  v.studentVisitCount = v.studentVisitCount != null ? v.studentVisitCount : (st.visitCount || null);
+  v.studentMaxDevices = v.studentMaxDevices != null ? v.studentMaxDevices : (st.maxDevices || null);
+  v.studentDevicesCount = v.studentDevicesCount != null ? v.studentDevicesCount : (st.devices || null);
+  v.studentLastSeen = v.studentLastSeen || st.lastSeen || null;
+  v.studentExpiresAt = v.studentExpiresAt || st.expiresAt || null;
+  v.studentActive = v.studentActive != null ? v.studentActive : (st.active !== false);
+  return v;
+}
+
 function drawVisits() {
   const body = $("#vis-body"); if (!body) return;
-  const list = visitsFiltered();
+  let list = visitsFiltered().map(enrichVisitStudent);
   if (!list.length) {
     body.innerHTML = `<div class="empty">${ic("globe", 44)}<b>مفيش زيارات</b><span>لما حد يفتح الموقع هتظهر هنا تلقائيًا.</span></div>`;
     return;
@@ -1957,7 +1980,12 @@ function drawVisits() {
           <span>إيميل الطالب</span><b class="ltr">${esc(latest.studentEmail || "—")}</b>
           <span>شعبة الطالب</span><b>${esc(latest.studentSection || "—")}</b>
           <span>محافظة الطالب</span><b>${esc(latest.studentGov || "—")}</b>
-          <span>طريقة الربط</span><b>${esc({token:"توكن جلسة", "session-ip":"جلسة بنفس الـ IP", "ip-memory":"آخر نشاط على نفس الـ IP", client:"من المتصفح"}[latest.matchedBy] || latest.matchedBy || "—")}</b>
+          <span>نوع الاشتراك</span><b>${esc(latest.studentType || "—")}</b>
+          <span>أجهزة الطالب</span><b>${latest.studentDevicesCount != null ? num(latest.studentDevicesCount) + (latest.studentMaxDevices != null ? " / " + num(latest.studentMaxDevices) : "") : "—"}</b>
+          <span>زيارات الطالب</span><b>${latest.studentVisitCount != null ? num(latest.studentVisitCount) : "—"}</b>
+          <span>آخر ظهور للطالب</span><b>${latest.studentLastSeen ? ago(latest.studentLastSeen) : "—"}</b>
+          <span>حالة الاشتراك</span><b>${latest.studentActive === false ? '<span class="badge b-r nodot">موقوف</span>' : (latest.studentExpiresAt && toMs(latest.studentExpiresAt) < Date.now() ? '<span class="badge b-a nodot">منتهي</span>' : '<span class="badge b-g nodot">ساري</span>')}</b>
+          <span>طريقة الربط</span><b>${esc({token:"توكن جلسة", "session-ip":"جلسة بنفس الـ IP", "ip-memory":"آخر نشاط على نفس الـ IP", "ip-memory-live":"ربط مباشر من الـ IP", client:"من المتصفح"}[latest.matchedBy] || latest.matchedBy || "—")}</b>
           ` : `<span>طالب مسجّل</span><b class="muted">لا — زائر عادي</b>`}
           <span>المنطقة / الحي</span><b>${esc(latest.district || "—")}</b>
           <span>المدينة</span><b>${esc(latest.city || "—")}</b>
@@ -1978,7 +2006,10 @@ function drawVisits() {
           <span>كرت الشاشة</span><b class="sm">${esc(latest.gpu || "—")}</b>
           <span>المنطقة الزمنية</span><b>${esc(latest.timezone || "—")}</b>
           <span>اللغة</span><b>${esc(latest.language || "—")}</b>
-          <span>الاتصال</span><b>${esc(latest.connection || "—")}</b>
+          <span>الاتصال</span><b>${esc(latest.connection || "—")}${latest.effectiveType ? " · " + esc(latest.effectiveType) : ""}${latest.downlink != null ? " · " + latest.downlink + "Mbps" : ""}</b>
+          <span>ذاكرة الجهاز</span><b>${latest.deviceMemory != null ? latest.deviceMemory + " GB" : "—"}</b>
+          <span>عمق الألوان / الاتجاه</span><b>${[latest.colorDepth != null ? latest.colorDepth + "bit" : "", latest.orientation || ""].filter(Boolean).join(" · ") || "—"}</b>
+          <span>Save-Data</span><b>${latest.saveData ? "مفعّل" : "—"}</b>
           <span>User-Agent</span><b class="sm ltr" style="word-break:break-all;font-weight:500">${esc(latest.userAgent || "—")}</b>
         </div>
         <h4 style="margin:0 0 8px;font-size:13px">كل مرات الدخول (${num(g.items.length)})</h4>
@@ -2799,19 +2830,32 @@ function route(){
 function go(tab){ if(location.hash === "#/" + tab) route(); else location.hash = "#/" + tab; }
 window.addEventListener("hashchange", () => { if(S.token) route(); });
 
+async function loadVisitSummary(force){
+  if (!force && S.visitSummary && (Date.now() - (S._visitSumAt || 0) < 45_000)) return S.visitSummary;
+  try {
+    const d = await api("/api/admin/visits/summary");
+    S.visitSummary = d.data || {};
+    S._visitSumAt = Date.now();
+  } catch {
+    S.visitSummary = S.visitSummary || {};
+  }
+  return S.visitSummary;
+}
 async function loadVisits(force){
   if (!force && Array.isArray(S.visits) && S.visits.length && (Date.now() - (S._visitsAt || 0) < 60_000)) return S.visits;
   try {
-    const d = await api("/api/admin/visits");
+    const d = await api("/api/admin/visits?limit=400");
     S.visits = d.data || [];
     S._visitsAt = Date.now();
+    S._visitsTotal = d.total || S.visits.length;
   } catch {
     S.visits = S.visits || [];
   }
   return S.visits;
 }
 async function loadAll(){
-  const needVisits = !S.loaded || S.tab === "home" || S.tab === "visits";
+  const needFullVisits = S.tab === "visits";
+  const needSum = !S.loaded || S.tab === "home" || S.tab === "visits";
   await Promise.all([
     api("/api/admin/students").then(d => { S.students = d.data || []; }).catch(e => { S.students = S.students || []; if(!S.loaded) toast(e.message, "err"); }),
     api("/api/admin/sections").then(d => { S.sections = d.data || []; }).catch(() => {}),
@@ -2819,7 +2863,8 @@ async function loadAll(){
     api("/api/admin/runtime").then(d => { S.runtime = Object.assign({ packages:[], agents:[] }, d.data); syncTypes(); }).catch(() => {}),
     api("/api/admin/me").then(d => { S.me = Object.assign(S.me || {}, d.data); }).catch(() => {}),
     api("/api/admin/messages").then(d => { S.threads = d.data || []; S.unread = S.threads.reduce((a, t) => a + (Number(t.unreadAdmin) || 0), 0); }).catch(() => {}),
-    needVisits ? loadVisits(true) : Promise.resolve()
+    needFullVisits ? loadVisits(true) : Promise.resolve(),
+    needSum ? loadVisitSummary(true) : Promise.resolve()
   ]);
   S.loaded = true; updateBadges();
 }
