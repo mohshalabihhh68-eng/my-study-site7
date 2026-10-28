@@ -10,11 +10,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #080d19; /* لون الخلفية الأساسي */
-  --panel: #101a2b; /* لون الكروت */
+  --bg: #080d19;
+  --panel: #101a2b;
   --text: #f4f7ff;
   --muted: #a1aec5;
-  --blue: #3b82f6; /* الأزرق الأساسي */
+  --blue: #3b82f6;
   --blue-light: #60a5fa;
   --line: rgba(255,255,255,0.08);
   --card-bg: #ffffff05;
@@ -85,7 +85,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 /* كارت الفيديو */
 .video-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 15px; display: flex; align-items: center; gap: 20px; transition: 0.2s; cursor: pointer; }
 .video-card:hover { background: #152238; border-color: rgba(255,255,255,0.15); }
-.video-play-icon { width: 45px; height: 45px; border-radius: 50%; background: rgba(59, 130, 246, 0.15); color: var(--blue); display: grid; place-items: center; flex-shrink: 0; transition: 0.2s; order: -1; /* لجعل الأيقونة على اليسار */ }
+.video-play-icon { width: 45px; height: 45px; border-radius: 50%; background: rgba(59, 130, 246, 0.15); color: var(--blue); display: grid; place-items: center; flex-shrink: 0; transition: 0.2s; order: -1; }
 .video-info { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .video-title { font-size: 15px; font-weight: 700; margin: 0; }
 .video-tag { background: rgba(255,255,255,0.08); color: #cbd5e1; font-size: 11px; padding: 4px 12px; border-radius: 6px; font-weight: 700; }
@@ -129,7 +129,6 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 </head>
 <body>
 
-<!-- الهيدر -->
 <header class="top-nav">
   <div class="container nav-inner">
     <div class="brand">
@@ -150,7 +149,6 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 </header>
 
 <main class="container">
-  <!-- المسار -->
   <div class="breadcrumb">
     <span>السنين</span> <span>›</span>
     <span>المواد 2027</span> <span>›</span>
@@ -161,14 +159,12 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
     <strong>الأسبوع الثاني</strong>
   </div>
 
-  <!-- زر المحتوى -->
   <div class="content-btn-wrap">
     <button class="content-btn">
       المحتوى
     </button>
   </div>
 
-  <!-- عنوان الصفحة والإحصائيات -->
   <div class="page-header">
     <h1 class="page-title">Unit 3 | الأسبوع الثاني 📚</h1>
     <p class="page-desc">دي فيديوهات وملفات محاضرة Unit 3 | الأسبوع الثاني</p>
@@ -186,7 +182,6 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <b>110</b> دقيقة
       </div>
-      <!-- التعديل المطلوب -->
       <div class="stat-badge watched">
         <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         <b>0/3</b> فيديو شوفته
@@ -194,7 +189,6 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
     </div>
   </div>
 
-  <!-- كارت استكمال المشاهدة -->
   <div class="resume-card">
     <div class="resume-info">
       <h4>إبدأ المحاضرة</h4>
@@ -209,25 +203,21 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
         <div class="progress-text">0 من 3 فيديو • 0%</div>
       </div>
     </div>
-    <!-- ضع دالة التشغيل الخاصة بك هنا في الـ onclick أو استبدله بـ <a> -->
     <button class="btn-play">
       <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:currentColor;stroke:none;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       تشغيل
     </button>
   </div>
 
-  <!-- تنبيه الاستكمال التلقائي -->
   <div class="auto-resume-note">
     <svg viewBox="0 0 24 24" style="width:20px;height:20px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/></svg>
     الفيديو بيكمل تلقائي من آخر نقطة وقفت عندها 👌
   </div>
 
-  <!-- قسم الفيديوهات -->
   <h2 class="section-title">فيديوهات المحاضرة</h2>
   <div class="list-container">
     
-    <!-- فيديو 1 (هنا تحط onclick أو تغلفه بـ <a>) -->
-    <div class="video-card" onclick="yourVideoFunction('video1.mp4')">
+    <div class="video-card">
       <div class="video-thumbnail thumb-blue">
         <div class="thumb-num">1</div>
         <div class="thumb-play">
@@ -244,8 +234,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
       </div>
     </div>
 
-    <!-- فيديو 2 -->
-    <div class="video-card" onclick="yourVideoFunction('video2.mp4')">
+    <div class="video-card">
       <div class="video-thumbnail thumb-purple">
         <div class="thumb-num">2</div>
         <div class="thumb-play">
@@ -262,8 +251,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
       </div>
     </div>
 
-    <!-- فيديو 3 -->
-    <div class="video-card" onclick="yourVideoFunction('video3.mp4')">
+    <div class="video-card">
       <div class="video-thumbnail thumb-green">
         <div class="thumb-num">3</div>
         <div class="thumb-play">
@@ -282,11 +270,9 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 
   </div>
 
-  <!-- قسم الملفات -->
   <h2 class="section-title">ملفات وملازم PDF</h2>
   <div class="list-container">
     
-    <!-- كارت الـ PDF (حط اللينك بتاعك في الـ href) -->
     <div class="pdf-card">
       <div class="pdf-info">
         <div class="pdf-icon">
@@ -297,14 +283,13 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
           <span class="video-tag">PDF</span>
         </div>
       </div>
-      <a href="YOUR_PDF_LINK_HERE" target="_blank" class="btn-open" style="text-decoration: none;">فتح</a>
+      <a href="#" class="btn-open" style="text-decoration: none;">فتح</a>
     </div>
 
   </div>
 
 </main>
 
-<!-- زرار التواصل العائم -->
 <button class="fab">
   <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
   تواصل مع الأدمن
