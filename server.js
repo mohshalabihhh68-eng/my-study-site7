@@ -98,15 +98,18 @@ app.use(
 );
 
 app.use(express.static(path.join(__dirname, "public"), {
-  maxAge: process.env.NODE_ENV === "production" ? "7d" : 0,
+  maxAge: process.env.NODE_ENV === "production" ? "30d" : 0,
   etag: true,
   lastModified: true,
   setHeaders(res, filePath) {
-    if (/\.(?:js|css|png|jpg|jpeg|webp|svg|woff2?)$/i.test(filePath)) {
-      res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+    if (/\.(?:js|css|png|jpg|jpeg|webp|svg|woff2?|ico)$/i.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
     } else if (/\.html?$/i.test(filePath)) {
-      res.setHeader("Cache-Control", "public, max-age=60");
+      res.setHeader("Cache-Control", "public, max-age=120, must-revalidate");
+    } else {
+      res.setHeader("Cache-Control", "public, max-age=3600");
     }
+    res.setHeader("X-Content-Type-Options", "nosniff");
   }
 }));
 
@@ -1702,6 +1705,36 @@ function rememberIpStudent(ip, code, name, deviceId) {
   }
 }
 
+// ===== بافر زيارات: تجميع كتابات Firebase كل 4 ثواني (خفّة + سرعة) =====
+const visitWriteQueue = [];
+let visitFlushTimer = null;
+const VISIT_FLUSH_MS = 4000;
+const VISIT_QUEUE_MAX = 80;
+
+async function flushVisitQueue() {
+  visitFlushTimer = null;
+  if (!visitWriteQueue.length) return;
+  const batch = visitWriteQueue.splice(0, VISIT_QUEUE_MAX);
+  await Promise.allSettled(batch.map(({ key, record }) => fbSet(key, record).catch((e) => {
+    console.warn("[visit-flush]", e && e.message);
+  })));
+  // لو لسه فيه طابور، كمّل
+  if (visitWriteQueue.length) scheduleVisitFlush(500);
+}
+function scheduleVisitFlush(ms = VISIT_FLUSH_MS) {
+  if (visitFlushTimer) return;
+  visitFlushTimer = setTimeout(() => { flushVisitQueue().catch(() => {}); }, ms);
+  if (visitFlushTimer.unref) visitFlushTimer.unref();
+}
+function enqueueVisit(key, record) {
+  visitWriteQueue.push({ key, record });
+  if (visitWriteQueue.length >= VISIT_QUEUE_MAX) {
+    flushVisitQueue().catch(() => {});
+  } else {
+    scheduleVisitFlush();
+  }
+}
+
 app.post("/api/track-visit", async (req, res) => {
   // رد فوري — الشغل الثقيل في الخلفية عشان الموقع يبقى زي الصاروخ
   res.json({ success: true });
@@ -1789,6 +1822,7 @@ app.post("/api/track-visit", async (req, res) => {
     }
 
     let studentPhone = null;
+    let studentEmail = null;
     let studentSection = null;
     let studentGov = null;
     if (studentLink && studentLink.studentCode) {
@@ -1797,6 +1831,7 @@ app.post("/api/track-visit", async (req, res) => {
         if (st) {
           if (!studentLink.studentName && st.name) studentLink.studentName = st.name;
           studentPhone = st.phone || null;
+          studentEmail = st.email || null;
           studentSection = st.section || null;
           studentGov = st.governorate || null;
         }
@@ -1806,7 +1841,21 @@ app.post("/api/track-visit", async (req, res) => {
     let geo = null;
     try { geo = await lookupGeo(ip); } catch (e) {}
 
-    const visitKey = `visits/${nowTime}_${Math.random().toString(36).slice(2, 8)}`;
+    let preciseLat = null;
+    let preciseLon = null;
+    let preciseAcc = null;
+    try {
+      if (body.lat != null && body.lon != null) {
+        const la = Number(body.lat);
+        const lo = Number(body.lon);
+        if (Number.isFinite(la) && Number.isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180) {
+          preciseLat = la;
+          preciseLon = lo;
+          preciseAcc = body.accuracy != null ? Number(body.accuracy) || null : null;
+        }
+      }
+    } catch (e) {}
+
     const record = {
       ip,
       os: device.os,
@@ -1839,6 +1888,10 @@ app.post("/api/track-visit", async (req, res) => {
       as: (geo && geo.as) || null,
       lat: geo ? geo.lat : null,
       lon: geo ? geo.lon : null,
+      preciseLat: preciseLat,
+      preciseLon: preciseLon,
+      preciseAcc: preciseAcc,
+      locationSource: preciseLat != null ? "gps" : (geo && geo.lat != null ? "ip" : null),
       proxy: geo ? geo.proxy : null,
       hosting: geo ? geo.hosting : null,
       mobileNet: geo ? geo.mobile : null,
@@ -1847,6 +1900,7 @@ app.post("/api/track-visit", async (req, res) => {
       studentName: (studentLink && studentLink.studentName) || null,
       studentDeviceId: (studentLink && studentLink.deviceId) || null,
       studentPhone: studentPhone || null,
+      studentEmail: studentEmail || null,
       studentSection: studentSection || null,
       studentGov: studentGov || null,
       matchedBy: (studentLink && studentLink.matchedBy) || null,
@@ -1856,7 +1910,7 @@ app.post("/api/track-visit", async (req, res) => {
       time: nowTime
     };
 
-    await fbSet(visitKey, record);
+    enqueueVisit(visitKey, record);
   } catch (e) {
     console.warn("[track-visit]", e && e.message);
   }
