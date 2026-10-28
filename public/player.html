@@ -80,7 +80,8 @@ img{display:block;max-width:100%}
 .screen.yt-mode #pspeed,
 .screen.yt-mode #ppip,
 .screen.yt-mode .ptime,
-.screen.yt-mode #pnx{display:none !important}
+.screen.yt-mode #pnx,
+.screen.yt-mode #pdl{display:none !important}
 .screen.yt-mode #pmenu .mrow[data-go="quality"],
 .screen.yt-mode #pmenu .mrow[data-tg="autonext"]{display:none !important}
 
@@ -906,6 +907,10 @@ async function loadYouTube(videoId, autoplay, resumeAt){
   video.removeAttribute('src');
   try{video.load()}catch(e){}
   $('ppip').style.display='none';
+  
+  // ✅ إخفاء زر التحميل فوراً
+  if($('pdl')) $('pdl').style.display='none';
+  
   setLoading(true, 'جاري تحميل فيديو يوتيوب…');
 
   const YT = await loadYouTubeAPI();
@@ -935,7 +940,7 @@ async function loadYouTube(videoId, autoplay, resumeAt){
   });
   if(resumeAt && resumeAt>0) params.set('start', String(Math.floor(resumeAt)));
   newFrame.src = 'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(videoId)+'?'+params.toString();
-  // ضعه بعد الـ video
+  
   const vidNode = document.getElementById('video');
   if(vidNode && vidNode.parentNode === screenEl) screenEl.insertBefore(newFrame, vidNode.nextSibling);
   else screenEl.insertBefore(newFrame, screenEl.firstChild);
@@ -1484,6 +1489,10 @@ function cleanup(){
     ytCurrentTime=0;
     screenEl.classList.remove('yt-mode');
     $('ppip').style.display='';
+    
+    // ✅ إعادة إظهار زر التحميل عند الخروج من وضع يوتيوب
+    if($('pdl')) $('pdl').style.display='';
+    setDlBtn();
   }
 }
 function updateMediaSession(){
@@ -2368,12 +2377,20 @@ function addDownloadBtn(){
   b.innerHTML=DL_ICON+'<span class="dlp"></span>';
   b.onclick=e=>{e.stopPropagation();openDlModal()};
   document.querySelector('.prow').insertBefore(b,$('plist'));
+  
+  // ✅ إخفاء الزر فوراً إذا كان الفيديو الحالي يوتيوب
+  if(isYtMode) b.style.display='none';
   setDlBtn();
 }
 function setDlBtn(){
   const b=$('pdl');if(!b)return;
-  if(isYtMode){ b.style.display='none'; return; }
+  // ✅ إخفاء الزر تماماً في وضع اليوتيوب
+  if(isYtMode){
+    b.style.display='none';
+    return;
+  }
   b.style.display='';
+  
   const show=dl.id!=null&&dl.st!=='idle'&&(isActive()||(String(dl.id)===curId()&&dl.st!=='done'));
   b.classList.toggle('busy',!!show);
   b.classList.toggle('paused',!!show&&!isActive());
@@ -2700,4 +2717,4 @@ init();
 })();
 </script>
 </body>
-</html>
+  </html>
