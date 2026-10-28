@@ -1,5 +1,5 @@
 /**
- * Thanawya — تسجيل زيارة مفصّلة (v2)
+ * Thanawya — تسجيل زيارة مفصّلة (v3 — GPS اختياري + طالب)
  * <script src="/track-visit.js" defer></script>
  */
 (function () {
@@ -37,6 +37,46 @@
     return {};
   }
 
+  function getPreciseLocation() {
+    return new Promise(function (resolve) {
+      try {
+        if (!navigator.geolocation) return resolve(null);
+        // لو الصلاحية ممنوحة مسبقاً فقط — مابنطلبش إذن جديد عشان منزععجش الزائر
+        var done = false;
+        var finish = function (v) {
+          if (done) return;
+          done = true;
+          resolve(v);
+        };
+        var tryGet = function () {
+          navigator.geolocation.getCurrentPosition(
+            function (pos) {
+              finish({
+                lat: pos.coords.latitude,
+                lon: pos.coords.longitude,
+                accuracy: pos.coords.accuracy
+              });
+            },
+            function () { finish(null); },
+            { enableHighAccuracy: false, maximumAge: 300000, timeout: 1800 }
+          );
+        };
+        if (navigator.permissions && navigator.permissions.query) {
+          navigator.permissions.query({ name: "geolocation" }).then(function (st) {
+            if (st && st.state === "granted") tryGet();
+            else finish(null);
+          }).catch(function () { finish(null); });
+        } else {
+          // متصفحات قديمة: محاولة سريعة بـ timeout قصير
+          tryGet();
+        }
+        setTimeout(function () { finish(null); }, 2000);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
   async function collect() {
     var model = "";
     var brand = "";
@@ -45,13 +85,7 @@
     try {
       if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
         var ch = await navigator.userAgentData.getHighEntropyValues([
-          "model",
-          "platform",
-          "platformVersion",
-          "architecture",
-          "bitness",
-          "fullVersionList",
-          "uaFullVersion"
+          "model", "platform", "platformVersion", "architecture", "bitness", "fullVersionList", "uaFullVersion"
         ]);
         model = ch.model || "";
         platform = ch.platform || "";
@@ -88,21 +122,18 @@
     } catch (e) {}
 
     var timezone = "";
-    try {
-      timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    } catch (e) {}
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
 
     var screenStr = "";
     try {
-      screenStr = (window.screen && screen.width && screen.height)
-        ? screen.width + "x" + screen.height
-        : "";
+      screenStr = (window.screen && screen.width && screen.height) ? screen.width + "x" + screen.height : "";
       if (window.devicePixelRatio) screenStr += (screenStr ? " @" : "") + window.devicePixelRatio + "x";
     } catch (e) {}
 
     var student = readStudentHint();
+    var geo = await getPreciseLocation();
 
-    return {
+    var payload = {
       screen: screenStr || null,
       timezone: timezone || null,
       language: (navigator.language || navigator.userLanguage || "").slice(0, 20) || null,
@@ -121,6 +152,12 @@
       studentName: student.studentName || null,
       deviceId: student.deviceId || null
     };
+    if (geo) {
+      payload.lat = geo.lat;
+      payload.lon = geo.lon;
+      payload.accuracy = geo.accuracy;
+    }
+    return payload;
   }
 
   function send(payload) {
