@@ -23,10 +23,7 @@
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none}
 
-/* شريط التقدم العلوي */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
-
-/* شريط التقدم الجانبي */
 #scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
@@ -39,7 +36,6 @@ button{font:inherit;cursor:pointer;outline:none}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
 
-/* تكبير خانة البروفايل */
 .profile-wrap{position:relative}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
 .profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
@@ -63,11 +59,9 @@ button{font:inherit;cursor:pointer;outline:none}
 .page-head p{margin:8px 0 0;color:var(--muted);font-size:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}
 
-/* الكارت */
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:all .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
 .card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
 
-/* الشريط الجانبي للكارت */
 .side-progress-bar {
   position: absolute;
   top: 0;
@@ -98,7 +92,6 @@ button{font:inherit;cursor:pointer;outline:none}
 .card-body h3{margin:0;font-size:18px;font-weight:900;margin-bottom:4px;color:var(--ink)}
 .card-body .sub{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px}
 
-/* الزرار */
 .action-btn{width:100%;padding:12px;border:0;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(108,99,255,.2)}
 .action-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(108,99,255,.35)}
 .action-btn svg{width:16px;height:16px;fill:currentColor}
@@ -108,7 +101,6 @@ button{font:inherit;cursor:pointer;outline:none}
 </style>
 </head>
 <body>
-<!-- شريط التقدم العلوي والجانبي -->
 <div id="scroll-progress"></div>
 <div id="scroll-progress-side"></div>
 
@@ -135,6 +127,9 @@ const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId');
 const subjectName = qs.get('subjectName') || '';
 
+// قائمة أسماء المدرسين المراد إخفاؤهم
+const HIDDEN_TEACHERS = ['عبدالله الحبشي', 'احمد رضوان', 'شريف المصري'];
+
 // تحديث شريط التقدم (العلوي والجانبي)
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
@@ -157,6 +152,20 @@ const api = async (path, opts = {}) => {
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+// دالة تطبيع الاسم للمقارنة (إزالة المسافات الزائدة والهمزات)
+const normalizeName = (name) => String(name || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .replace(/[أإآ]/g, 'ا')
+  .replace(/ى/g, 'ي')
+  .replace(/ة/g, 'ه');
+
+// دالة التحقق إذا كان المدرس مطلوب إخفاؤه
+const isHiddenTeacher = (name) => {
+  const n = normalizeName(name);
+  return HIDDEN_TEACHERS.some(h => normalizeName(h) === n);
+};
+
 window.goToChapters = function(url, cardEl) {
   const barFill = cardEl.querySelector('.side-progress-bar .fill');
   if(barFill) {
@@ -171,14 +180,18 @@ async function load() {
   if (!subjectId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المادة غير موجود.</div>'; return; }
   try {
     const data = await api('/api/subjects/' + subjectId + '/teachers');
-    const teachers = data.teachers || data || [];
+    let teachers = data.teachers || data || [];
+
+    // فلترة المدرسين المخفيين
+    teachers = teachers.filter(t => !isHiddenTeacher(t.name));
+
     if (!teachers.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>'; return; }
-    
+
     let html = `
     <div class="header-action"><button class="back-btn" onclick="window.location.href='subjects.html'"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمواد</button></div>
     <div class="page-head"><div class="badge">المدرسين</div><h1>اختر المدرس</h1><p>دول المدرسين المتاحين لمادة ${esc(subjectName)}</p></div>
     <div class="grid">`;
-    
+
     teachers.forEach(t => {
       html += `<div class="card" id="card-${t.id}">
         <div class="side-progress-bar">
