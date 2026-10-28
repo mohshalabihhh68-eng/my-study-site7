@@ -72,7 +72,6 @@ img{display:block;max-width:100%}
 .screen.yt-mode video{display:none}
 .screen.yt-mode #ytFrame{display:block}
 
-/* ✅ إخفاء كل أزرار التحكم غير المدعومة في يوتيوب (بما فيها زر التحميل pdl) */
 .screen.yt-mode .seekwrap,
 .screen.yt-mode .skchip,
 .screen.yt-mode #pb,
@@ -908,7 +907,7 @@ async function loadYouTube(videoId, autoplay, resumeAt){
   try{video.load()}catch(e){}
   $('ppip').style.display='none';
   
-  // ✅ إخفاء صارم وقسري لزر التحميل
+  // إخفاء صارم وقسري لزر التحميل
   const dlBtn = $('pdl');
   if(dlBtn) { dlBtn.style.display = 'none'; dlBtn.remove(); }
   
@@ -973,6 +972,7 @@ async function loadYouTube(videoId, autoplay, resumeAt){
                 startYtPoll();
                 showUI();
                 setYtPlayIcon(false);
+                setLoading(false); // ✅ إخفاء شاشة التحميل
               } else if(ev.data===S.PAUSED){
                 screenEl.classList.add('paused');
                 document.body.classList.add('vpaused');
@@ -980,6 +980,7 @@ async function loadYouTube(videoId, autoplay, resumeAt){
                 saveProgressYt();
                 setYtPlayIcon(true);
                 showUI(true);
+                setLoading(false);
               } else if(ev.data===S.ENDED){
                 ytEnded=true;
                 stopYtPoll();
@@ -1037,6 +1038,10 @@ function startYtPoll(){
       ytCurrentTime = ytPlayer.getCurrentTime()||0;
       ytDuration = ytPlayer.getDuration()||ytDuration;
       paintYtProgress();
+      // ✅ إخفاء شاشة التحميل قسرياً إذا كان الفيديو يعمل
+      if(setLoading && $('loading').classList.contains('show') && ytPlayer.getPlayerState() === window.YT.PlayerState.PLAYING) {
+          setLoading(false);
+      }
     }catch(e){}
   }, 400);
 }
@@ -1488,10 +1493,7 @@ function cleanup(){
     ytCurrentTime=0;
     screenEl.classList.remove('yt-mode');
     $('ppip').style.display='';
-    
-    // إعادة إظهار زر التحميل إذا لزم الأمر
-    if(isOwner && !$('pdl')) { addDownloadBtn(); }
-    setDlBtn();
+    setDlBtn(); // إعادة إظهار زر التحميل إذا لزم
   }
 }
 function updateMediaSession(){
@@ -1775,6 +1777,8 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
       if(my!==playToken)return;
       if(autoplay) video.play().catch(function(){});
       showUI(true);
+      // ✅ إخفاء شاشة التحميل بمجرد جاهزية الـ Manifest
+      setLoading(false); 
       resolve();
     });
     hls.on(Hls.Events.FRAG_BUFFERED, function(){ hlsRetry.net = 0; });
@@ -2710,4 +2714,4 @@ init();
 })();
 </script>
 </body>
-              </html>
+  </html>
