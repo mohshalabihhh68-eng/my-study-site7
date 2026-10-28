@@ -127,7 +127,7 @@ const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId');
 const subjectName = qs.get('subjectName') || '';
 
-// قائمة أسماء المدرسين المراد إخفاؤهم
+// قائمة أسماء المدرسين المراد إخفاؤهم (بأي شكل من أشكال الكتابة)
 const HIDDEN_TEACHERS = ['عبدالله الحبشي', 'احمد رضوان', 'شريف المصري'];
 
 // تحديث شريط التقدم (العلوي والجانبي)
@@ -152,18 +152,25 @@ const api = async (path, opts = {}) => {
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// دالة تطبيع الاسم للمقارنة (إزالة المسافات الزائدة والهمزات)
+// دالة تطبيع قوية: توحّد الهمزات، التاء المربوطة، الياء، المسافات، التشكيل، والرموز
 const normalizeName = (name) => String(name || '')
-  .trim()
-  .replace(/\s+/g, ' ')
-  .replace(/[أإآ]/g, 'ا')
-  .replace(/ى/g, 'ي')
-  .replace(/ة/g, 'ه');
+  .replace(/[\u064B-\u0652\u0640]/g, '')   // إزالة التشكيل والتطويل
+  .replace(/[أإآٱ]/g, 'ا')                  // توحيد الهمزات
+  .replace(/ى/g, 'ي')                        // الألف المقصورة
+  .replace(/ة/g, 'ه')                        // التاء المربوطة
+  .replace(/ؤ/g, 'و')
+  .replace(/ئ/g, 'ي')
+  .replace(/[^\p{L}\p{N}\s]/gu, '')          // إزالة أي رموز
+  .replace(/\s+/g, '')                        // إزالة كل المسافات (عشان "عبد الله" = "عبدالله")
+  .toLowerCase()
+  .trim();
 
-// دالة التحقق إذا كان المدرس مطلوب إخفاؤه
+// الكلمات المفتاحية المراد حجب أي اسم يحتوي عليها
+const HIDDEN_KEYWORDS = ['عبداللهالحبشي', 'احمدرضوان', 'شريفالمصري'];
+
 const isHiddenTeacher = (name) => {
   const n = normalizeName(name);
-  return HIDDEN_TEACHERS.some(h => normalizeName(h) === n);
+  return HIDDEN_KEYWORDS.some(k => n.includes(k)) || HIDDEN_TEACHERS.some(h => normalizeName(h) === n);
 };
 
 window.goToChapters = function(url, cardEl) {
@@ -183,7 +190,9 @@ async function load() {
     let teachers = data.teachers || data || [];
 
     // فلترة المدرسين المخفيين
+    const before = teachers.length;
     teachers = teachers.filter(t => !isHiddenTeacher(t.name));
+    console.log('[filter] before:', before, 'after:', teachers.length, teachers.map(t=>t.name));
 
     if (!teachers.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>'; return; }
 
