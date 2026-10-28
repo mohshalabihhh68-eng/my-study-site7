@@ -79,13 +79,13 @@ body{
 button{font:inherit;cursor:pointer;border:none;outline:none}
 a{text-decoration:none;color:inherit}
 
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out}
-#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out}
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear}
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .05s linear}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
 .brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
@@ -108,7 +108,7 @@ a{text-decoration:none;color:inherit}
 
 .wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
 .header-action{display:flex;justify-content:flex-start;margin-bottom:24px}
-.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,0.02)}
+.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s;box-shadow:0 2px 8px rgba(0,0,0,0.02)}
 .back-btn:hover{background:var(--back-btn-bg-hover);transform:translateX(-3px)}
 .back-btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
@@ -253,7 +253,7 @@ a{text-decoration:none;color:inherit}
   border:1px solid var(--line);
   border-radius:16px;
   padding:16px 20px;
-  transition:all .2s ease;
+  transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s ease;
 }
 .file-item:hover{
   border-color:rgba(108,99,255,.4);
@@ -309,6 +309,19 @@ a{text-decoration:none;color:inherit}
   .file-item { flex-direction: column; align-items: flex-start; gap: 16px; }
   .file-btn { width: 100%; justify-content: center; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+.grid > *, .video-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 280px;
+}
+
 </style>
 </head>
 <body>
@@ -345,12 +358,18 @@ const urlSubject = qs.get('subjectName') || '';
 
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
+let scrollTicking = false;
 window.addEventListener('scroll', () => {
-  const scrollTop = window.scrollY;
-  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-  const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
-  if (progressBar) progressBar.style.width = progress + '%';
-  if (progressBarSide) progressBarSide.style.height = progress + '%';
+  if (scrollTicking) return;
+  scrollTicking = true;
+  requestAnimationFrame(() => {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+    if (progressBar) progressBar.style.width = progress + '%';
+    if (progressBarSide) progressBarSide.style.height = progress + '%';
+    scrollTicking = false;
+  });
 }, { passive: true });
 
 const api = async (path, opts = {}) => {
@@ -366,13 +385,11 @@ const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 
 function formatDuration(seconds) {
   if (!seconds || isNaN(seconds)) return 'غير محدد';
-  const h = Math.floor(seconds / 3600); 
-  const m = Math.floor((seconds % 3600) / 60); 
-  
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   let parts = [];
-  if (h > 0) parts.push(`ساعتين`);
-  if (m > 0) parts.push(`${m} دقيقة`);
-  
+  if (h > 0) parts.push(h === 1 ? 'ساعة' : h === 2 ? 'ساعتين' : h + ' ساعات');
+  if (m > 0) parts.push(m + ' دقيقة');
   return parts.join(' و ') || 'أقل من دقيقة';
 }
 
