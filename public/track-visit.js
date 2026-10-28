@@ -41,36 +41,34 @@
     return new Promise(function (resolve) {
       try {
         if (!navigator.geolocation) return resolve(null);
-        // لو الصلاحية ممنوحة مسبقاً فقط — مابنطلبش إذن جديد عشان منزععجش الزائر
         var done = false;
         var finish = function (v) {
           if (done) return;
           done = true;
           resolve(v);
         };
-        var tryGet = function () {
-          navigator.geolocation.getCurrentPosition(
-            function (pos) {
-              finish({
-                lat: pos.coords.latitude,
-                lon: pos.coords.longitude,
-                accuracy: pos.coords.accuracy
-              });
-            },
-            function () { finish(null); },
-            { enableHighAccuracy: false, maximumAge: 300000, timeout: 1800 }
-          );
-        };
-        if (navigator.permissions && navigator.permissions.query) {
-          navigator.permissions.query({ name: "geolocation" }).then(function (st) {
-            if (st && st.state === "granted") tryGet();
-            else finish(null);
-          }).catch(function () { finish(null); });
-        } else {
-          // متصفحات قديمة: محاولة سريعة بـ timeout قصير
-          tryGet();
-        }
-        setTimeout(function () { finish(null); }, 2000);
+        // محاولة GPS — لو المستخدم رفض مرة مش هنتكرر كل تحميل
+        var denied = false;
+        try { denied = localStorage.getItem("tw_geo_denied") === "1"; } catch (e) {}
+        if (denied) return finish(null);
+
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            finish({
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              accuracy: pos.coords.accuracy
+            });
+          },
+          function (err) {
+            if (err && err.code === 1) {
+              try { localStorage.setItem("tw_geo_denied", "1"); } catch (e2) {}
+            }
+            finish(null);
+          },
+          { enableHighAccuracy: true, maximumAge: 120000, timeout: 2500 }
+        );
+        setTimeout(function () { finish(null); }, 2800);
       } catch (e) {
         resolve(null);
       }
