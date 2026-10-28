@@ -779,7 +779,10 @@ const num = n => nF.format(Number(n) || 0);
 const toMs = v => { if(v == null || v === "") return 0; if(typeof v === "number") return v < 1e11 ? v*1000 : v; const t = Date.parse(v); return isNaN(t) ? 0 : t; };
 const fmt  = ms => { ms = toMs(ms); return ms ? dtF.format(ms) : "—"; };
 const dtFsec = mkFmt(Intl.DateTimeFormat, { day:"numeric", month:"short", year:"numeric", hour:"numeric", minute:"2-digit", second:"2-digit", hour12: true });
-const fmtVisit = ms => { ms = toMs(ms); return ms ? dtFsec.format(ms) : "—"; };
+const fmtVisit = (ms, row) => {
+  if (row && row.timeCairo) return row.timeCairo.replace(/,/g, " · ");
+  ms = toMs(ms); return ms ? dtFsec.format(ms) : "—";
+};
 const fmtD = ms => { ms = toMs(ms); return ms ? dF.format(ms) : "—"; };
 window.ago = function(ms){
   ms = toMs(ms); if(!ms) return "";
@@ -792,12 +795,24 @@ window.ago = function(ms){
 };
 const startOfDay = ms => {
   try {
-    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date(ms || Date.now()));
-    const g = k => (parts.find(p => p.type === k) || {}).value;
-    const t = Date.parse(`${g("year")}-${g("month")}-${g("day")}T00:00:00+02:00`);
-    if (!isNaN(t)) return t;
-  } catch (e) {}
-  const d = new Date(ms); d.setHours(0,0,0,0); return d.getTime();
+    const d = new Date(ms || Date.now());
+    // احسب بداية اليوم في Africa/Cairo بدون offset ثابت
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year:"numeric", month:"2-digit", day:"2-digit" });
+    const dayStr = fmt.format(d); // YYYY-MM-DD
+    // ندور على UTC timestamp اللي يوافق 00:00 في القاهرة
+    let guess = Date.parse(dayStr + "T00:00:00Z");
+    for (let i = 0; i < 48; i++) {
+      const tryMs = guess + i * 1800000 - 3 * 3600000; // نافذة حول اليوم
+      if (fmt.format(new Date(tryMs)) === dayStr && fmt.format(new Date(tryMs - 60000)) !== dayStr) return tryMs;
+    }
+    // fallback: استخدم فرق القاهرة الحالي
+    const cairoNow = new Date(d.toLocaleString("en-US", { timeZone: "Africa/Cairo" }));
+    cairoNow.setHours(0,0,0,0);
+    const offset = d.getTime() - new Date(d.toLocaleString("en-US", { timeZone: "Africa/Cairo" })).getTime();
+    return cairoNow.getTime() + offset;
+  } catch (e) {
+    const d = new Date(ms); d.setHours(0,0,0,0); return d.getTime();
+  }
 };
 const debounce = (fn, ms=180) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const hashN = s => { let h = 0; s = String(s); for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -1937,7 +1952,7 @@ function drawVisits() {
     </tr></thead><tbody>${list.map(v => {
       const br = [v.browser, v.browserVersion].filter(Boolean).join(" ");
       return `<tr>
-        <td><b>${fmtVisit(v.time)}</b><div class="sm muted">${ago(v.time)}</div></td>
+        <td><b>${fmtVisit(v.time, v)}</b><div class="sm muted">${ago(v.time)}</div></td>
         <td class="mono ltr">${esc(v.ip || "—")}${(v.isStudent || v.studentCode) ? `<div><span class="badge b-g nodot" style="margin-top:3px">${esc(v.studentName || v.studentCode)}</span></div>` : ""}${v.proxy ? `<div class="sm" style="color:var(--amber)">VPN</div>` : ""}</td>
         <td>${esc(locLabel(v))}${v.isp ? `<div class="sm muted">${esc(v.isp)}</div>` : ""}${v.lat != null && v.lon != null ? `<div class="sm muted ltr">${v.lat}, ${v.lon}</div>` : ""}</td>
         <td>${esc(devLabel(v))}</td>
@@ -1978,16 +1993,18 @@ function drawVisits() {
           </div>
           <div class="sm muted" style="margin-top:2px">${esc(locLabel(latest))} · ${esc(devLabel(latest))} · ${esc(br || "—")} · آخر زيارة ${ago(g.last)}</div>
         </div>
-        <span class="muted sm" title="${fmtVisit(g.last)}">${fmtVisit(g.last)}</span>
+        <span class="muted sm" title="${fmtVisit(g.last, latest)}">${fmtVisit(g.last, latest)}</span>
         ${ic("down", 16)}
       </button>
       <div id="${id}" class="hide" style="padding:12px 16px;border-top:1px solid var(--line)">
         <div class="kv" style="margin-bottom:14px;grid-template-columns:120px 1fr">
           <span>IP</span><b class="mono ltr">${esc(g.ip)}</b>
+          <span>آخر زيارة (مصر)</span><b>${fmtVisit(g.last, latest)} <span class="muted sm">(${ago(g.last)})</span></b>
+          <span>time ISO</span><b class="ltr sm">${esc(latest.timeISO || (toMs(latest.time) ? new Date(toMs(latest.time)).toISOString() : "—"))}</b>
           ${(latest.isStudent || latest.studentCode) ? `
           <span>طالب مسجّل</span><b><span class="badge b-g nodot">نعم</span> · ${esc(latest.studentName || "—")} · كود <span class="code ltr">${esc(latest.studentCode || "")}</span></b>
-          <span>تليفون الطالب</span><b class="ltr">${esc(latest.studentPhone || "—")}</b>
-          <span>إيميل الطالب</span><b class="ltr">${esc(latest.studentEmail || "—")}</b>
+          <span>تليفون الطالب</span><b class="ltr">${latest.studentPhone ? esc(latest.studentPhone) : '<span class="muted">غير مسجّل على ملف الطالب</span>'}</b>
+          <span>إيميل الطالب</span><b class="ltr">${latest.studentEmail ? esc(latest.studentEmail) : '<span class="muted">غير مسجّل على ملف الطالب</span>'}</b>
           <span>شعبة الطالب</span><b>${esc(latest.studentSection || "—")}</b>
           <span>محافظة الطالب</span><b>${esc(latest.studentGov || "—")}</b>
           <span>نوع الاشتراك</span><b>${esc(latest.studentType || "—")}</b>
@@ -2002,7 +2019,8 @@ function drawVisits() {
           <span>المحافظة</span><b>${esc(latest.region || "—")}</b>
           <span>الدولة</span><b>${esc(latest.country || "—")}${latest.countryCode ? " (" + esc(latest.countryCode) + ")" : ""}</b>
           <span>الرمز البريدي</span><b class="ltr">${esc(latest.postal || "—")}</b>
-          <span>مصدر الموقع</span><b>${latest.locationSource === "gps" || (latest.preciseLat != null) ? '<span class="badge b-g nodot">GPS من الجهاز</span>' : (latest.lat != null ? '<span class="badge b-a nodot">تقريبي من الـ IP</span>' : "—")}</b>
+          <span>مصدر الموقع</span><b>${latest.locationSource === "gps" || (latest.preciseLat != null) ? '<span class="badge b-g nodot">GPS دقيق من الجهاز</span>' : (latest.lat != null ? '<span class="badge b-a nodot">تقريبي من الـ IP (مش عنوان بالظبط)</span>' : "—")}</b>
+          <span>تنويه</span><b class="sm muted">${latest.preciseLat != null ? "الموقع من GPS الجهاز" : "شبكات الموبايل في مصر غالبًا بتظهر القاهرة أو برج مركزي — مش الشارع الحقيقي"}</b>
           <span>الإحداثيات (IP)</span><b class="ltr">${latest.lat != null && latest.lon != null ? `${Number(latest.lat).toFixed(5)}, ${Number(latest.lon).toFixed(5)}` : "—"}</b>
           <span>موقع GPS دقيق</span><b class="ltr">${latest.preciseLat != null && latest.preciseLon != null ? `${Number(latest.preciseLat).toFixed(6)}, ${Number(latest.preciseLon).toFixed(6)}${latest.preciseAcc != null ? " (±" + Math.round(latest.preciseAcc) + "m)" : ""}` : "—"}</b>
           <span>خريطة</span><b>${(() => {
