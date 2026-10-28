@@ -907,7 +907,6 @@ async function loadYouTube(videoId, autoplay, resumeAt){
   try{video.load()}catch(e){}
   $('ppip').style.display='none';
   
-  // إخفاء صارم وقسري لزر التحميل
   const dlBtn = $('pdl');
   if(dlBtn) { dlBtn.style.display = 'none'; dlBtn.remove(); }
   
@@ -972,7 +971,7 @@ async function loadYouTube(videoId, autoplay, resumeAt){
                 startYtPoll();
                 showUI();
                 setYtPlayIcon(false);
-                setLoading(false); // ✅ إخفاء شاشة التحميل
+                setLoading(false);
               } else if(ev.data===S.PAUSED){
                 screenEl.classList.add('paused');
                 document.body.classList.add('vpaused');
@@ -1038,7 +1037,6 @@ function startYtPoll(){
       ytCurrentTime = ytPlayer.getCurrentTime()||0;
       ytDuration = ytPlayer.getDuration()||ytDuration;
       paintYtProgress();
-      // ✅ إخفاء شاشة التحميل قسرياً إذا كان الفيديو يعمل
       if(setLoading && $('loading').classList.contains('show') && ytPlayer.getPlayerState() === window.YT.PlayerState.PLAYING) {
           setLoading(false);
       }
@@ -1493,7 +1491,7 @@ function cleanup(){
     ytCurrentTime=0;
     screenEl.classList.remove('yt-mode');
     $('ppip').style.display='';
-    setDlBtn(); // إعادة إظهار زر التحميل إذا لزم
+    setDlBtn();
   }
 }
 function updateMediaSession(){
@@ -1594,16 +1592,16 @@ async function playIndex(i,autoplay){
 
     const defaultKeyPath = 'videos/' + swVideoId + '/key';
     const defaultKeyUrl = '/api/stream?path=' + encodeURIComponent(defaultKeyPath) + '&t=' + encodeURIComponent(streamToken);
+    
+    // ✅ تحميل المفتاح والـ Master بالتوازي لتسريع الفتح
     const keyPromise = fetch(defaultKeyUrl, { credentials: 'include' })
       .then(function(r){ return r.ok ? r.arrayBuffer() : null; })
       .catch(function(){ return null; });
 
-    setLoading(true,'تحميل أدوات فك التشفير…');
-    if(!cryptoUtils) cryptoUtils = await loadPlayerScript();
-    if(my!==playToken)return;
-
     setLoading(true,'جلب قائمة التشغيل…');
     const masterUrl = '/api/stream?path=' + encodeURIComponent('videos/' + swVideoId + '/stream/master.m3u8') + '&t=' + encodeURIComponent(streamToken);
+    
+    // ✅ نطلب الـ Master والـ Variant مع بعض
     const masterRes = await fetch(masterUrl, { credentials: 'include' });
     if(!masterRes.ok) throw new Error('master.m3u8 → HTTP ' + masterRes.status);
     const masterText = await masterRes.text();
@@ -1648,6 +1646,8 @@ async function playIndex(i,autoplay){
         }else if(uri.indexOf('http')!==0 && uri.indexOf('/api/cdn')!==0){ keyPath = uri.replace(/^\//,''); }
       }
     }
+    
+    // ✅ استخدام المفتاح المحمل مسبقاً إذا كان هو نفسه المطلوب
     let keyBuf;
     if (keyPath === defaultKeyPath) {
       keyBuf = await keyPromise;
@@ -1665,6 +1665,8 @@ async function playIndex(i,autoplay){
     }
     if(my!==playToken)return;
 
+    if(!cryptoUtils) cryptoUtils = await loadPlayerScript();
+    
     let plainKey;
     try {
       const dec = await cryptoUtils.decryptPlaybackKey(new Uint8Array(keyBuf), String(swVideoId));
@@ -1760,9 +1762,10 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
     }
     hls = new Hls({
       enableWorker: true,
-      maxBufferLength: 40,
-      maxMaxBufferLength: 80,
-      backBufferLength: 20,
+      lowLatencyMode: true,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      backBufferLength: 30,
       startPosition: (resumeAt && resumeAt > 0) ? resumeAt : -1,
       xhrSetup: function(xhr, url){
         try {
@@ -1777,7 +1780,6 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
       if(my!==playToken)return;
       if(autoplay) video.play().catch(function(){});
       showUI(true);
-      // ✅ إخفاء شاشة التحميل بمجرد جاهزية الـ Manifest
       setLoading(false); 
       resolve();
     });
@@ -2714,4 +2716,4 @@ init();
 })();
 </script>
 </body>
-  </html>
+                                                                                                                                                      </html>
