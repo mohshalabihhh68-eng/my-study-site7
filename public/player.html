@@ -34,7 +34,6 @@ button,select,input{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
 img{display:block;max-width:100%}
 
-/* ============ TOP BAR ============ */
 .top{position:sticky;top:0;z-index:100;background:#080d18ef;backdrop-filter:blur(16px);border-bottom:1px solid #ffffff12}
 .topin{max-width:1180px;margin:auto;padding:10px 16px;display:flex;align-items:center;gap:10px}
 .brand{font-weight:900;display:flex;align-items:center;gap:10px;min-width:0}
@@ -50,7 +49,6 @@ img{display:block;max-width:100%}
 .btn:active{transform:scale(.96)}
 .btn svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
-/* ============ THEME TOGGLE ============ */
 .theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
 .theme-toggle:hover{background:var(--panel2);border-color:var(--blue);transform:rotate(15deg)}
 .theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;display:block}
@@ -59,25 +57,21 @@ img{display:block;max-width:100%}
 [data-theme="dark"] .theme-toggle .icon-sun{display:block}
 [data-theme="dark"] .theme-toggle .icon-moon{display:none}
 
-/* ============ LAYOUT ============ */
 .wrap{max-width:1180px;margin:auto;padding:16px 14px 60px}
 .crumb{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
 .main{min-width:0}
 
-/* ============ PLAYER ============ */
 .player-card{background:linear-gradient(180deg,#131d30,#0f1726);border:1px solid #ffffff16;border-radius:20px;overflow:hidden;box-shadow:0 25px 80px #0004}
 .screen{position:relative;background:#000;aspect-ratio:16/9;overflow:hidden;isolation:isolate;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;outline:none}
 .screen:fullscreen,.screen:-webkit-full-screen{aspect-ratio:auto;width:100%;height:100%;border-radius:0}
 .screen:not(.show-ui):not(.paused){cursor:none}
 .screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1;transition:transform .25s cubic-bezier(.2,.8,.2,1)}
 
-/* ✅ iframe يوتيوب */
 #ytFrame{position:absolute;inset:0;width:100%;height:100%;z-index:3;display:none;background:#000;border:0}
 .screen.yt-mode video{display:none}
 .screen.yt-mode #ytFrame{display:block}
 
-/* إخفاء عناصر التحكم غير المدعومة في وضع يوتيوب */
 .screen.yt-mode .seekwrap,
 .screen.yt-mode .skchip,
 .screen.yt-mode #pb,
@@ -90,22 +84,18 @@ img{display:block;max-width:100%}
 .screen.yt-mode #pmenu .mrow[data-go="quality"],
 .screen.yt-mode #pmenu .mrow[data-tg="autonext"]{display:none !important}
 
-/* طبقة اللمس */
 .ptap{position:absolute;inset:0;z-index:2;background:transparent;-webkit-touch-callout:none;touch-action:none}
-.screen.yt-mode .ptap{z-index:4} /* فوق iframe عشان نقدر نستقبل اللمس */
+.screen.yt-mode .ptap{z-index:4}
 
-/* إظهار / إخفاء الواجهة */
 .ptop,.pcenter,.pctrl{position:absolute;opacity:0;transition:opacity .22s;pointer-events:none}
 .screen.show-ui .ptop,.screen.show-ui .pcenter,.screen.show-ui .pctrl{opacity:1}
 .screen.show-ui .ptop>*,.screen.show-ui .pcenter>*,.screen.show-ui .pctrl>*{pointer-events:auto}
 .screen.holding .ptop,.screen.holding .pcenter,.screen.holding .pctrl{opacity:0!important}
 
-/* شريط علوي */
 .ptop{top:0;left:0;right:0;z-index:7;display:flex;align-items:center;gap:10px;padding:10px 12px 30px;background:linear-gradient(#000b,transparent)}
 .ptitle{flex:1;min-width:0;color:#fff;font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .plive{font-size:10px;font-weight:900;background:#3b82f633;color:#93c5fd;border-radius:99px;padding:4px 9px;flex:none}
 
-/* الأزرار الدائرية */
 .ib{--ibs:40px;width:var(--ibs);height:var(--ibs);flex:none;border:0;border-radius:50%;background:#ffffff1f;color:#fff;display:grid;place-items:center;position:relative;transition:transform .15s,background .15s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .ib:hover{background:#ffffff2e}
 .ib:active{transform:scale(.92)}
@@ -114,7 +104,6 @@ img{display:block;max-width:100%}
 .ib svg.f,.bigplay svg.f{fill:currentColor}
 .ib.active{background:var(--blue)}
 
-/* المنتصف */
 .pcenter{inset:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:clamp(20px,7vw,60px);direction:ltr}
 .bigplay{width:66px;height:66px;border-radius:50%;background:linear-gradient(145deg,#5b8cff,#2563eb);color:#fff;display:grid;place-items:center;box-shadow:0 10px 34px #3b82f670,inset 0 1px 0 #ffffff40;transition:transform .18s;position:relative}
 .bigplay:active{transform:scale(.92)}
@@ -136,7 +125,7 @@ img{display:block;max-width:100%}
 #pbuf{background:#ffffff4d}
 #pplayed{background:linear-gradient(90deg,#38bdf8,#5b8cff 55%,#a78bfa)}
 #pknob{position:absolute;top:50%;left:0;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px #5b8cff44,0 2px 10px #0009;transform:scale(0);transition:transform .15s}
-.seekwrap:hover #pknob,.seekwrap.drag #pknob,.seekwrap:focus-visible #pknob{transform:scale(1)}
+.seekwrap:hover #pknob,.seekwrap.drag #pknob,.seewrap:focus-visible #pknob{transform:scale(1)}
 @media (pointer:coarse){#pknob{transform:scale(.85)}.seekwrap.drag #pknob{transform:scale(1.3)}}
 .ptip{position:absolute;bottom:30px;left:0;transform:translateX(-50%);background:#0b1220f5;border:1px solid #ffffff26;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:800;color:#fff;opacity:0;pointer-events:none;white-space:nowrap;transition:opacity .12s;font-variant-numeric:tabular-nums}
 .seekwrap:hover .ptip,.seekwrap.drag .ptip{opacity:1}
@@ -347,7 +336,6 @@ body.vpaused .eq i{animation-play-state:paused}
   *,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
 
-/* درج + نافذة تحميل */
 .screen.drawer-open{cursor:auto!important}
 
 .pdrawer{position:absolute;top:0;right:0;bottom:0;width:min(350px,90%);z-index:22;background:#0b1322;border-left:1px solid #ffffff22;display:flex;flex-direction:column;direction:rtl;color:#fff;box-shadow:-16px 0 44px #000a;transform:translateX(105%);visibility:hidden;transition:transform .26s cubic-bezier(.2,.8,.2,1),visibility 0s .26s}
@@ -437,7 +425,6 @@ body.vpaused .eq i{animation-play-state:paused}
   .dl-pct{font-size:34px}
 }
 
-/* LIGHT THEME */
 [data-theme="light"]{
   --bg:#f8fafc;--panel:#ffffff;--panel2:#f1f5f9;--line:rgba(108,99,255,.10);
   --text:#1e293b;--muted:#64748b;--blue:#6c63ff;--blue2:#00d4ff;--green:#10b981;
@@ -557,7 +544,6 @@ body.vpaused .eq i{animation-play-state:paused}
       <article class="player-card">
         <div class="screen paused" id="screen">
           <video id="video" playsinline webkit-playsinline preload="metadata" controlslist="nodownload noplaybackrate" oncontextmenu="return false"></video>
-          <!-- ✅ iframe يوتيوب -->
           <iframe id="ytFrame" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen frameborder="0"></iframe>
           <div class="ptap" id="ptap"></div>
           <div class="fx l" id="fxl"></div>
@@ -698,7 +684,6 @@ body.vpaused .eq i{animation-play-state:paused}
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
 <script>
-/* ============ THEME TOGGLE HANDLER ============ */
 (function(){
   var toggles = document.querySelectorAll('[data-theme-toggle]');
   if(!toggles.length) return;
@@ -718,14 +703,12 @@ body.vpaused .eq i{animation-play-state:paused}
 (function(){
 'use strict';
 
-/* ============ CONFIG ============ */
 const API = '';
 const token = localStorage.getItem('student_token') || localStorage.getItem('cstk_tok') || '';
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
 const initialVideoId = qs.get('videoId');
 
-/* ===== Play Session Cache + Prefetch ===== */
 const playCache = new Map();
 const PLAY_CACHE_TTL = 45000;
 
@@ -734,7 +717,6 @@ async function getPlayCached(videoId) {
   if (c && Date.now() - c.ts < PLAY_CACHE_TTL) return c.data;
   return null;
 }
-
 async function prefetchPlay(videoId) {
   if (!videoId) return;
   const id = String(videoId);
@@ -743,31 +725,25 @@ async function prefetchPlay(videoId) {
   try {
     const data = await api('/api/play/' + encodeURIComponent(id), { method: 'POST' });
     playCache.set(id, { data, ts: Date.now() });
-  } catch (e) { /* silent */ }
+  } catch (e) {}
 }
 
-/* Stream-Weave crypto + playlist helpers */
 let cryptoUtils = null;
 let currentKeyBlobUrl = null;
 let currentPlaylistBlobUrl = null;
 let hbTimer = null;
 
 function findCrypto() {
-  if (window.DecryptionUtils && typeof window.DecryptionUtils.decryptPlaybackKey === 'function') {
-    return window.DecryptionUtils;
-  }
+  if (window.DecryptionUtils && typeof window.DecryptionUtils.decryptPlaybackKey === 'function') return window.DecryptionUtils;
   var names = Object.getOwnPropertyNames(window);
   for (var i = 0; i < names.length; i++) {
     try {
       var obj = window[names[i]];
-      if (obj && typeof obj === 'object' && typeof obj.decryptPlaybackKey === 'function') {
-        return obj;
-      }
+      if (obj && typeof obj === 'object' && typeof obj.decryptPlaybackKey === 'function') return obj;
     } catch (e) {}
   }
   return null;
 }
-
 function loadPlayerScript() {
   return new Promise(function (resolve, reject) {
     if (findCrypto()) return resolve(findCrypto());
@@ -795,16 +771,8 @@ function loadPlayerScript() {
     document.head.appendChild(s);
   });
 }
-
-function toB64url(str) {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-function fromB64url(value) {
-  var s = String(value).replace(/-/g, '+').replace(/_/g, '/');
-  while (s.length % 4) s += '=';
-  return decodeURIComponent(escape(atob(s)));
-}
+function toB64url(str) { return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); }
+function fromB64url(value) { var s = String(value).replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return decodeURIComponent(escape(atob(s))); }
 function joinRel(base, rel) {
   var q = '', relPath = String(rel);
   var qi = relPath.indexOf('?');
@@ -837,13 +805,8 @@ function resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) {
       var parts = pu.pathname.split('/').filter(Boolean);
       var vi = parts.indexOf('videos');
       if (vi >= 0 && parts.length >= vi + 3) {
-        var vid = parts[vi + 1];
-        var quality = parts[vi + 2];
-        var fname = (parts[vi + 3] || '').split('?')[0];
-        if (vid && quality && fname) {
-          var swPath = 'videos/' + vid + '/stream/' + quality + '/' + fname;
-          return origin + '/api/stream?path=' + encodeURIComponent(swPath) + '&t=' + encodeURIComponent(streamToken);
-        }
+        var vid = parts[vi + 1], quality = parts[vi + 2], fname = (parts[vi + 3] || '').split('?')[0];
+        if (vid && quality && fname) return origin + '/api/stream?path=' + encodeURIComponent('videos/' + vid + '/stream/' + quality + '/' + fname) + '&t=' + encodeURIComponent(streamToken);
       }
     } catch (e) {}
     return uri;
@@ -861,23 +824,17 @@ function rewritePlaylist(text, streamToken, keyBlobUrl, variantBasePath, variant
     var s = line.trim();
     if (!s) return line;
     if (s.charAt(0) === '#') {
-      if (s.indexOf('#EXT-X-KEY:') === 0 && keyBlobUrl) {
-        return s.replace(/URI="[^"]+"/, 'URI="' + keyBlobUrl + '"');
-      }
-      return s.replace(/URI="([^"]+)"/g, function (_m, uri) {
-        return 'URI="' + resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) + '"';
-      });
+      if (s.indexOf('#EXT-X-KEY:') === 0 && keyBlobUrl) return s.replace(/URI="[^"]+"/, 'URI="' + keyBlobUrl + '"');
+      return s.replace(/URI="([^"]+)"/g, function (_m, uri) { return 'URI="' + resolveMedia(uri, variantBasePath, streamToken, variantFileUrl) + '"'; });
     }
     return resolveMedia(s, variantBasePath, streamToken, variantFileUrl);
   }).join('\n');
 }
-
 loadPlayerScript().then(function (c) { cryptoUtils = c; }).catch(function () {});
 
 const $=id=>document.getElementById(id);
 const video=$('video');
 const screenEl=$('screen');
-const ytFrame=$('ytFrame');
 
 const PREF_KEY='cstk_player_pref';
 function readPref(){try{return JSON.parse(localStorage.getItem(PREF_KEY)||'{}')||{}}catch(e){return {}}}
@@ -888,45 +845,34 @@ let videos=[],current=-1,hls=null,lastSaved=0,toastTimer=0,ready=false;
 let lectureTitle='المحاضرة',listFilter='all',listQuery='',pendingRestore=-1;
 
 /* ============ YOUTUBE STATE ============ */
-let ytPlayer=null;              // مرجع مشغل يوتيوب
-let ytApiLoading=false;         // هل بنحمّل الـ API حالياً؟
-let isYtMode=false;             // هل الفيديو الحالي يوتيوب؟
-let ytDuration=0;               // مدة فيديو يوتيوب
-let ytCurrentTime=0;            // الوقت الحالي (من الـ polling)
-let ytPollTimer=0;              // مؤقت تحديث الوقت
-let ytEnded=false;              // هل انتهى؟
+let ytPlayer=null;
+let ytApiLoading=false;
+let isYtMode=false;
+let ytDuration=0;
+let ytCurrentTime=0;
+let ytPollTimer=0;
+let ytEnded=false;
 
-/* تحميل YouTube IFrame API مرة واحدة */
 function loadYouTubeAPI(){
   return new Promise((resolve)=>{
     if(window.YT && window.YT.Player) return resolve(window.YT);
     if(ytApiLoading){
-      // انتظر آخر تحميل
-      const t=setInterval(()=>{
-        if(window.YT && window.YT.Player){clearInterval(t);resolve(window.YT);}
-      },200);
+      const t=setInterval(()=>{ if(window.YT && window.YT.Player){clearInterval(t);resolve(window.YT);} },200);
       return;
     }
     ytApiLoading=true;
-    // دالة رد الـ API
     const prev=window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady=function(){
       if(typeof prev==='function'){try{prev()}catch(e){}}
       resolve(window.YT);
     };
-    // لو كانت محملة مسبقاً
-    if(document.querySelector('script[src*="youtube.com/iframe_api"]')){
-      ytApiLoading=false;
-      return;
-    }
+    if(document.querySelector('script[src*="youtube.com/iframe_api"]')){ ytApiLoading=false; return; }
     const s=document.createElement('script');
     s.src='https://www.youtube.com/iframe_api';
     s.onerror=()=>{ytApiLoading=false;resolve(null);};
     document.head.appendChild(s);
   });
 }
-
-/* استخراج ID من رابط يوتيوب */
 function extractYouTubeId(url){
   if(!url) return null;
   const u=String(url).trim();
@@ -938,30 +884,20 @@ function extractYouTubeId(url){
     const m=p.pathname.match(/\/(embed|shorts|v|live)\/([\w-]{11})/);
     if(m) return m[2];
   }catch(e){}
-  // regex احتياطي
   const m2=u.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);
   return m2?m2[1]:null;
 }
 
-/* تدمير مشغل يوتيوب نهائياً */
+/* ✅ تدمير مشغل يوتيوب بأمان */
 function destroyYT(){
   stopYtPoll();
   if(ytPlayer){
     try{ytPlayer.destroy()}catch(e){}
     ytPlayer=null;
   }
-  // إعادة تعيين الـ iframe
-  try{
-    const f=document.createElement('iframe');
-    f.id='ytFrame';
-    f.setAttribute('allow','accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
-    f.setAttribute('allowfullscreen','');
-    f.setAttribute('frameborder','0');
-    if(ytFrame&&ytFrame.parentNode) ytFrame.parentNode.replaceChild(f, ytFrame);
-  }catch(e){}
 }
 
-/* تحميل فيديو يوتيوب داخل iframe */
+/* ✅ تحميل فيديو يوتيوب - إنشاء iframe جديد تماماً */
 async function loadYouTube(videoId, autoplay, resumeAt){
   isYtMode=true;
   ytEnded=false;
@@ -970,8 +906,6 @@ async function loadYouTube(videoId, autoplay, resumeAt){
   video.removeAttribute('src');
   try{video.load()}catch(e){}
   $('ppip').style.display='none';
-
-  // أخفِ الأزرار غير المدعومة في وضع يوتيوب
   setLoading(true, 'جاري تحميل فيديو يوتيوب…');
 
   const YT = await loadYouTubeAPI();
@@ -981,27 +915,34 @@ async function loadYouTube(videoId, autoplay, resumeAt){
     return;
   }
 
-  // جهّز iframe جديد لكل فيديو
-  const frame = document.getElementById('ytFrame');
-  const origin = encodeURIComponent(location.origin);
+  // تدمير القديم
+  if(ytPlayer){
+    try{ ytPlayer.destroy(); }catch(e){}
+    ytPlayer = null;
+  }
+
+  // إزالة الـ iframe القديم وإنشاء جديد
+  let oldFrame = document.getElementById('ytFrame');
+  if(oldFrame) oldFrame.remove();
+  const newFrame = document.createElement('iframe');
+  newFrame.id = 'ytFrame';
+  newFrame.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
+  newFrame.setAttribute('allowfullscreen', '');
+  newFrame.setAttribute('frameborder', '0');
   const params = new URLSearchParams({
-    enablejsapi:'1',
-    rel:'0',
-    modestbranding:'1',
-    playsinline:'1',
-    origin: decodeURIComponent(origin),
-    autoplay: autoplay ? '1' : '0'
+    enablejsapi:'1', rel:'0', modestbranding:'1', playsinline:'1',
+    origin: location.origin, autoplay: autoplay ? '1' : '0'
   });
   if(resumeAt && resumeAt>0) params.set('start', String(Math.floor(resumeAt)));
+  newFrame.src = 'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(videoId)+'?'+params.toString();
+  // ضعه بعد الـ video
+  const vidNode = document.getElementById('video');
+  if(vidNode && vidNode.parentNode === screenEl) screenEl.insertBefore(newFrame, vidNode.nextSibling);
+  else screenEl.insertBefore(newFrame, screenEl.firstChild);
 
-  // استخدم iframe مع src
-  frame.src = 'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(videoId)+'?'+params.toString();
-
-  // انتظر التحميل ثم اربط الـ API
   await new Promise((resolve)=>{
     const check=setInterval(()=>{
       if(!window.YT || !window.YT.Player) return;
-      // تأكد أن الـ iframe موجود
       const f=document.getElementById('ytFrame');
       if(!f) return;
       clearInterval(check);
@@ -1073,7 +1014,6 @@ function setYtPlayIcon(paused){
   const lbl=paused?'تشغيل':'إيقاف مؤقت';
   $('pplay').setAttribute('aria-label',lbl); $('pc').setAttribute('aria-label',lbl);
 }
-
 function syncYtState(){
   if(!isYtMode||!ytPlayer) return;
   try{
@@ -1085,7 +1025,6 @@ function syncYtState(){
     }
   }catch(e){}
 }
-
 function startYtPoll(){
   stopYtPoll();
   ytPollTimer=setInterval(()=>{
@@ -1098,7 +1037,6 @@ function startYtPoll(){
   }, 400);
 }
 function stopYtPoll(){ if(ytPollTimer){clearInterval(ytPollTimer);ytPollTimer=0;} }
-
 function paintYtProgress(){
   const d=ytDuration||0, t=ytCurrentTime||0;
   const p=d?Math.max(0,Math.min(100,t/d*100)):0;
@@ -1106,8 +1044,6 @@ function paintYtProgress(){
   $('pknob').style.left=p+'%';
   $('ptime').textContent=fmt(t)+' / '+fmt(d);
 }
-
-/* حفظ تقدم يوتيوب */
 function saveProgressYt(fromEnd){
   if(!isYtMode||current<0) return;
   const v=videos[current]; if(!v) return;
@@ -1123,7 +1059,6 @@ function saveProgressYt(fromEnd){
   updateCurrentItemUI();
   renderStats();
 }
-
 function updateMediaSessionYt(){
   if(!('mediaSession' in navigator)||current<0) return;
   try{
@@ -1134,7 +1069,6 @@ function updateMediaSessionYt(){
     });
   }catch(e){}
 }
-
 function handleYtEnded(){
   if(prefs.autonext && current<videos.length-1){
     showToast('خلصت الفيديو ✓ — التالي حالًا');
@@ -1145,8 +1079,6 @@ function handleYtEnded(){
     showUI(true);
   }
 }
-
-/* تشغيل/إيقاف في وضع يوتيوب */
 function ytTogglePlay(){
   if(!ytPlayer||!window.YT) return;
   try{
@@ -1166,7 +1098,6 @@ function ytSeekBy(d){
   }catch(e){return false}
 }
 
-/* ============ باقي الكود الأصلي ============ */
 const storeKey=id=>'cstk_w_'+String(id);
 function readProgress(id){try{return JSON.parse(localStorage.getItem(storeKey(id))||'null')}catch(e){return null}}
 function saveProgress(){
@@ -1271,7 +1202,6 @@ function renderStats(){
   $('cAll').textContent=total;$('cProg').textContent=prog;$('cDone').textContent=done;
   $('lprogI').style.width=(total?Math.round(done/total*100):0)+'%';
 }
-
 function itemHTML(v,i,p){
   const s=statusOf(p),active=i===current;
   const th=v.thumbnail?`<img src="${esc(v.thumbnail)}" alt="" loading="lazy" onerror="this.remove()">`:'';
@@ -1286,10 +1216,7 @@ function itemHTML(v,i,p){
 }
 function renderList(){
   const list=$('videoList');
-  if(!videos.length){
-    list.innerHTML='<div class="empty">لا توجد فيديوهات في المحاضرة دي.</div>';
-    return;
-  }
+  if(!videos.length){ list.innerHTML='<div class="empty">لا توجد فيديوهات في المحاضرة دي.</div>'; return; }
   const query=listQuery.trim().toLocaleLowerCase();
   const filtered=videos.map((v,i)=>({v,i,p:readProgress(v.id)||{}})).filter(({v,p})=>{
     const done=!!p.watched||(+p.percent||0)>=90;
@@ -1297,10 +1224,7 @@ function renderList(){
     const matchF=listFilter==='all'||(listFilter==='done'?done:(!done&&(+p.percent||0)>0));
     return matchQ&&matchF;
   });
-  if(!filtered.length){
-    list.innerHTML='<div class="empty">مفيش فيديوهات مطابقة للبحث أو التصفية.</div>';
-    return;
-  }
+  if(!filtered.length){ list.innerHTML='<div class="empty">مفيش فيديوهات مطابقة للبحث أو التصفية.</div>'; return; }
   list.innerHTML=filtered.map(({v,i,p})=>itemHTML(v,i,p)).join('');
   list.querySelectorAll('[data-i]').forEach(el=>{
     el.addEventListener('click',()=>playIndex(+el.dataset.i,true));
@@ -1325,13 +1249,8 @@ function showUI(pin){
   if(pin||isPaused()||isOpen()||drawerOpen()||scrub||hold.active)return;
   uiTimer=setTimeout(()=>{if(!isPaused()&&!isOpen()&&!drawerOpen()&&!scrub)hideUI()},3000);
 }
-function hideUI(){
-  screenEl.classList.remove('show-ui');
-  clearTimeout(uiTimer);
-}
-function toggleUI(){
-  if(screenEl.classList.contains('show-ui'))hideUI();else showUI();
-}
+function hideUI(){ screenEl.classList.remove('show-ui'); clearTimeout(uiTimer); }
+function toggleUI(){ if(screenEl.classList.contains('show-ui'))hideUI();else showUI(); }
 function isPaused(){
   if(isYtMode&&ytPlayer&&window.YT){
     try{return ytPlayer.getPlayerState()!==window.YT.PlayerState.PLAYING}catch(e){}
@@ -1352,7 +1271,6 @@ function seekBy(d){
   video.currentTime=Math.max(0,Math.min(video.duration,(video.currentTime||0)+d));
   return true;
 }
-
 function paintProgress(){
   if(isYtMode){paintYtProgress();return;}
   const d=Number(video.duration)||0;
@@ -1437,11 +1355,7 @@ video.addEventListener('volumechange',()=>{
 $('pvol').addEventListener('input',e=>{
   e.stopPropagation();
   if(isYtMode&&ytPlayer&&window.YT){
-    try{
-      ytPlayer.unMute();
-      ytPlayer.setVolume(Math.round(+e.target.value*100));
-      $('pvol').style.setProperty('--v',(+e.target.value*100)+'%');
-    }catch(err){}
+    try{ ytPlayer.unMute(); ytPlayer.setVolume(Math.round(+e.target.value*100)); $('pvol').style.setProperty('--v',(+e.target.value*100)+'%'); }catch(err){}
     return;
   }
   video.muted=false;
@@ -1450,13 +1364,8 @@ $('pvol').addEventListener('input',e=>{
 $('pmute').onclick=e=>{
   e.stopPropagation();
   if(isYtMode&&ytPlayer&&window.YT){
-    try{
-      if(ytPlayer.isMuted()) ytPlayer.unMute();
-      else ytPlayer.mute();
-      syncVolume();
-    }catch(err){}
-    showUI();
-    return;
+    try{ if(ytPlayer.isMuted()) ytPlayer.unMute(); else ytPlayer.mute(); syncVolume(); }catch(err){}
+    showUI(); return;
   }
   if(video.muted||video.volume===0){video.muted=false;if(video.volume===0)video.volume=.5}
   else video.muted=true;
@@ -1464,10 +1373,7 @@ $('pmute').onclick=e=>{
 };
 
 function applyRate(){
-  if(isYtMode&&ytPlayer&&window.YT){
-    try{ytPlayer.setPlaybackRate(rate)}catch(e){}
-    return;
-  }
+  if(isYtMode&&ytPlayer&&window.YT){ try{ytPlayer.setPlaybackRate(rate)}catch(e){} return; }
   video.defaultPlaybackRate=rate;video.playbackRate=rate;
 }
 function setRate(x,quiet){
@@ -1482,7 +1388,6 @@ function stepRate(dir){
   i=Math.max(0,Math.min(RATES.length-1,i+dir));
   setRate(RATES[i]);
 }
-
 function qualityLevels(){
   if(isYtMode) return null;
   if(!hls||!hls.levels||hls.levels.length<2)return null;
@@ -1571,7 +1476,6 @@ function cleanup(){
   try{video.load()}catch(e){}
   qualityIdx=-1;
   curManifest=null;
-  // ✅ تنظيف يوتيوب
   if(isYtMode || ytPlayer){
     destroyYT();
     isYtMode=false;
@@ -1632,14 +1536,11 @@ async function playIndex(i,autoplay){
     }
     if (my !== playToken) return;
 
-    /* ============ ✅ يوتيوب داخل iframe ============ */
+    /* ✅ يوتيوب داخل iframe */
     if (playData && (playData.type === 'youtube' || playData.youtube_url)) {
       const yt = playData.youtube_url || playData.url;
       const ytId = extractYouTubeId(yt);
-      if (!ytId) {
-        showError('رابط يوتيوب غير صالح.','خطأ في الفيديو');
-        return;
-      }
+      if (!ytId) { showError('رابط يوتيوب غير صالح.','خطأ في الفيديو'); return; }
       const saved = readProgress(item.id) || {};
       const resumeAt = saved.currentTime > 2 && !saved.watched ? +saved.currentTime : 0;
       setLoading(false);
@@ -1680,10 +1581,7 @@ async function playIndex(i,autoplay){
       await startHls(playUrl, my, autoplay, item);
       return;
     }
-
-    if(!streamToken || !swVideoId){
-      throw new Error('الجلسة ناقصة (مفيش token أو video_id أو play_url)');
-    }
+    if(!streamToken || !swVideoId){ throw new Error('الجلسة ناقصة (مفيش token أو video_id أو play_url)'); }
 
     const defaultKeyPath = 'videos/' + swVideoId + '/key';
     const defaultKeyUrl = '/api/stream?path=' + encodeURIComponent(defaultKeyPath) + '&t=' + encodeURIComponent(streamToken);
@@ -1696,11 +1594,7 @@ async function playIndex(i,autoplay){
     if(my!==playToken)return;
 
     setLoading(true,'جلب قائمة التشغيل…');
-    const masterUrl =
-      '/api/stream?path=' +
-      encodeURIComponent('videos/' + swVideoId + '/stream/master.m3u8') +
-      '&t=' + encodeURIComponent(streamToken);
-
+    const masterUrl = '/api/stream?path=' + encodeURIComponent('videos/' + swVideoId + '/stream/master.m3u8') + '&t=' + encodeURIComponent(streamToken);
     const masterRes = await fetch(masterUrl, { credentials: 'include' });
     if(!masterRes.ok) throw new Error('master.m3u8 → HTTP ' + masterRes.status);
     const masterText = await masterRes.text();
@@ -1710,26 +1604,19 @@ async function playIndex(i,autoplay){
     if(!variantRel) throw new Error('مفيش variant في الـ master');
 
     let variantUrl, variantBasePath = 'videos/' + swVideoId + '/stream/', variantFileUrl = null;
-
     if(variantRel.indexOf('/api/stream')===0 || variantRel.indexOf('/api/cdn')===0){
       variantUrl = variantRel;
       try{
         const vu = new URL(variantRel, location.origin);
-        if(vu.pathname.indexOf('/api/stream')===0 && vu.searchParams.get('path')){
-          variantBasePath = vu.searchParams.get('path');
-        }
-        if(vu.pathname.indexOf('/api/cdn')===0 && vu.searchParams.get('u')){
-          variantFileUrl = fromB64url(vu.searchParams.get('u'));
-        }
+        if(vu.pathname.indexOf('/api/stream')===0 && vu.searchParams.get('path')) variantBasePath = vu.searchParams.get('path');
+        if(vu.pathname.indexOf('/api/cdn')===0 && vu.searchParams.get('u')) variantFileUrl = fromB64url(vu.searchParams.get('u'));
       }catch(e){}
     }else if(variantRel.indexOf('http')===0){
       variantFileUrl = variantRel;
       variantUrl = '/api/cdn?u=' + toB64url(variantRel);
     }else{
       variantBasePath = 'videos/' + swVideoId + '/stream/' + variantRel;
-      variantUrl =
-        '/api/stream?path=' + encodeURIComponent(variantBasePath) +
-        '&t=' + encodeURIComponent(streamToken);
+      variantUrl = '/api/stream?path=' + encodeURIComponent(variantBasePath) + '&t=' + encodeURIComponent(streamToken);
     }
 
     const variantRes = await fetch(variantUrl, { credentials: 'include' });
@@ -1748,17 +1635,10 @@ async function playIndex(i,autoplay){
       if(keyUriMatch){
         const uri = keyUriMatch[1];
         if(uri.indexOf('/api/stream')===0 || uri.indexOf(location.origin + '/api/stream')===0){
-          try{
-            const u = new URL(uri, location.origin);
-            const pth = u.searchParams.get('path');
-            if(pth) keyPath = pth;
-          }catch(e){}
-        }else if(uri.indexOf('http')!==0 && uri.indexOf('/api/cdn')!==0){
-          keyPath = uri.replace(/^\//,'');
-        }
+          try{ const u = new URL(uri, location.origin); const pth = u.searchParams.get('path'); if(pth) keyPath = pth; }catch(e){}
+        }else if(uri.indexOf('http')!==0 && uri.indexOf('/api/cdn')!==0){ keyPath = uri.replace(/^\//,''); }
       }
     }
-
     let keyBuf;
     if (keyPath === defaultKeyPath) {
       keyBuf = await keyPromise;
@@ -1797,11 +1677,7 @@ async function playIndex(i,autoplay){
     if (hbUrl && streamToken) {
       clearInterval(hbTimer);
       hbTimer = setInterval(function(){
-        fetch('/api/heartbeat', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ url: hbUrl, token: streamToken })
-        }).catch(function(){});
+        fetch('/api/heartbeat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: hbUrl, token: streamToken }) }).catch(function(){});
       }, 30000);
     }
 
@@ -1831,7 +1707,6 @@ async function playIndex(i,autoplay){
   }
 }
 
-/* Prefetch التالي */
 let prefetchedFor = -1;
 video.addEventListener('playing', function(){
   if (prefetchedFor === current) return;
@@ -1859,7 +1734,6 @@ async function startHls(playUrl, my, autoplay, item){
   }, {once:true});
   await attachHlsSource(playUrl, my, autoplay, resumeAt);
 }
-
 function attachHlsSource(srcUrl, my, autoplay, resumeAt){
   return new Promise(function(resolve, reject){
     if(!(window.Hls && Hls.isSupported())){
@@ -1875,7 +1749,6 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
       reject(new Error('no hls'));
       return;
     }
-
     hls = new Hls({
       enableWorker: true,
       maxBufferLength: 40,
@@ -1891,59 +1764,39 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
         } catch (e) {}
       }
     });
-
     hls.on(Hls.Events.MANIFEST_PARSED, function(){
       if(my!==playToken)return;
       if(autoplay) video.play().catch(function(){});
       showUI(true);
       resolve();
     });
-
     hls.on(Hls.Events.FRAG_BUFFERED, function(){ hlsRetry.net = 0; });
-
     hls.on(Hls.Events.ERROR, function(_e, d){
       if(my!==playToken || !d || !d.fatal) return;
       const code = d.response && d.response.code;
-      if(code === 401){
-        showError('جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.','انتهت الجلسة','leave');
-        return;
-      }
-      if(code === 403){
-        showError('السيرفر أو الـ CDN رفض تحميل مقطع الفيديو (403). جرّب من شبكة تانية أو حدّث الصفحة.','فشل تحميل المقطع');
-        return;
-      }
+      if(code === 401){ showError('جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.','انتهت الجلسة','leave'); return; }
+      if(code === 403){ showError('السيرفر أو الـ CDN رفض تحميل مقطع الفيديو (403). جرّب من شبكة تانية أو حدّث الصفحة.','فشل تحميل المقطع'); return; }
       if(d.type === Hls.ErrorTypes.NETWORK_ERROR){
         if(hlsRetry.net++ < 3){
           setLoading(true,'النت ضعيف… بحاول تاني', false);
           setTimeout(function(){
             if(my!==playToken || !hls) return;
-            if(d.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || d.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT){
-              hls.loadSource(srcUrl);
-            } else {
-              hls.startLoad();
-            }
+            if(d.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || d.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT){ hls.loadSource(srcUrl); }
+            else { hls.startLoad(); }
           }, 700 * hlsRetry.net);
-        } else {
-          showError('النت ضعيف أو مقطوع. اتأكد من الاتصال وجرّب تاني.','مشكلة في الاتصال');
-        }
+        } else { showError('النت ضعيف أو مقطوع. اتأكد من الاتصال وجرّب تاني.','مشكلة في الاتصال'); }
       } else if(d.type === Hls.ErrorTypes.MEDIA_ERROR){
         if(hlsRetry.media++ < 2) hls.recoverMediaError();
         else showError('الفيديو مش بيشتغل على جهازك أو المتصفح ده. جرّب متصفح تاني.','تعذّر تشغيل الفيديو');
-      } else {
-        showError('حصلت مشكلة أثناء تحميل الفيديو. جرّب تاني.','تعذّر تحميل الفيديو');
-      }
+      } else { showError('حصلت مشكلة أثناء تحميل الفيديو. جرّب تاني.','تعذّر تحميل الفيديو'); }
     });
-
     hls.loadSource(srcUrl);
     hls.attachMedia(video);
   });
 }
 
 async function init(){
-  if(!lectureId){
-    showError('رابط المشغل ناقصه رقم المحاضرة. افتح الفيديو من صفحة المواد.','رابط ناقص','leave');
-    return;
-  }
+  if(!lectureId){ showError('رابط المشغل ناقصه رقم المحاضرة. افتح الفيديو من صفحة المواد.','رابط ناقص','leave'); return; }
   checkOwner();
   try{
     const r=await api('/api/lectures/'+encodeURIComponent(lectureId)+'/content');
@@ -1975,14 +1828,8 @@ async function init(){
   }
 }
 
-function fracAt(e){
-  const r=seek.getBoundingClientRect();
-  return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
-}
-function placeTip(x){
-  const tip=$('ptip'),w=seek.clientWidth,h=tip.offsetWidth/2;
-  tip.style.left=Math.max(h,Math.min(w-h,x*w))+'px';
-}
+function fracAt(e){ const r=seek.getBoundingClientRect(); return Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)); }
+function placeTip(x){ const tip=$('ptip'),w=seek.clientWidth,h=tip.offsetWidth/2; tip.style.left=Math.max(h,Math.min(w-h,x*w))+'px'; }
 seek.addEventListener('pointerdown',e=>{
   const dur = isYtMode ? ytDuration : video.duration;
   if(!(dur>0))return;
@@ -2006,17 +1853,11 @@ seek.addEventListener('pointerup',()=>{
   if(!scrub)return;
   const t=scrub.t;scrub=null;
   seek.classList.remove('drag');
-  if(isYtMode&&ytPlayer&&window.YT){
-    try{ytPlayer.seekTo(t,true);ytCurrentTime=t}catch(e){}
-  } else {
-    video.currentTime=t;
-  }
+  if(isYtMode&&ytPlayer&&window.YT){ try{ytPlayer.seekTo(t,true);ytCurrentTime=t}catch(e){} }
+  else { video.currentTime=t; }
   paintProgress();showUI();
 });
-seek.addEventListener('pointercancel',()=>{
-  if(!scrub)return;
-  scrub=null;seek.classList.remove('drag');paintProgress();showUI();
-});
+seek.addEventListener('pointercancel',()=>{ if(!scrub)return; scrub=null;seek.classList.remove('drag');paintProgress();showUI(); });
 seek.addEventListener('keydown',e=>{
   const dur = isYtMode ? ytDuration : video.duration;
   if(!(dur>0))return;
@@ -2028,14 +1869,10 @@ seek.addEventListener('keydown',e=>{
   else if(e.key==='Home')t=0;
   else if(e.key==='End')t=dur;
   else return;
-  e.preventDefault();
-  e.stopPropagation();
+  e.preventDefault(); e.stopPropagation();
   const nt=Math.max(0,Math.min(dur,t));
-  if(isYtMode&&ytPlayer&&window.YT){
-    try{ytPlayer.seekTo(nt,true);ytCurrentTime=nt}catch(e){}
-  } else {
-    video.currentTime=nt;
-  }
+  if(isYtMode&&ytPlayer&&window.YT){ try{ytPlayer.seekTo(nt,true);ytCurrentTime=nt}catch(e){} }
+  else { video.currentTime=nt; }
   showUI();
 });
 
@@ -2080,10 +1917,7 @@ function onFsChange(){
 ['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,onFsChange));
 $('pfs').onclick=e=>{e.stopPropagation();toggleFs()};
 
-const goBack=()=>{
-  if(history.length>1)history.back();
-  else location.href='subjects.html';
-};
+const goBack=()=>{ if(history.length>1)history.back(); else location.href='subjects.html'; };
 $('pback').onclick=e=>{e.stopPropagation();goBack()};
 $('backBtn').onclick=goBack;
 
@@ -2094,12 +1928,8 @@ function startHold(e){
   clearTimeout(hold.timer);
   hold.timer=setTimeout(()=>{
     if(isPaused()||isOpen()||drawerOpen())return;
-    if(isYtMode){
-      if(ytPlayer&&window.YT){try{ytPlayer.setPlaybackRate(2)}catch(e){}}
-    } else {
-      if(!(video.duration>0))return;
-      video.playbackRate=2;
-    }
+    if(isYtMode){ if(ytPlayer&&window.YT){try{ytPlayer.setPlaybackRate(2)}catch(e){}} }
+    else { if(!(video.duration>0))return; video.playbackRate=2; }
     hold.active=true;
     hideUI();
     screenEl.classList.add('holding');
@@ -2118,9 +1948,7 @@ function endHold(){
 }
 const ptap=$('ptap');
 ptap.addEventListener('pointerdown',e=>{lastPtype=e.pointerType||'mouse';startHold(e)});
-ptap.addEventListener('pointermove',e=>{
-  if(!hold.active&&hold.timer&&Math.hypot(e.clientX-hold.x,e.clientY-hold.y)>40)clearTimeout(hold.timer);
-});
+ptap.addEventListener('pointermove',e=>{ if(!hold.active&&hold.timer&&Math.hypot(e.clientX-hold.x,e.clientY-hold.y)>40)clearTimeout(hold.timer); });
 ['pointerup','pointercancel','lostpointercapture'].forEach(n=>ptap.addEventListener(n,endHold));
 ptap.addEventListener('touchmove',e=>{if(hold.active&&e.cancelable)e.preventDefault()},{passive:false});
 window.addEventListener('blur',endHold);
@@ -2136,39 +1964,22 @@ function flashFx(side){
   fx.innerHTML=(side==='left'?SVG_RW:SVG_FF)+'<span>'+(side==='left'?'−':'+')+fxAcc+' ث</span>';
   fx.classList.remove('go');void fx.offsetWidth;fx.classList.add('go');
 }
-function doubleSeek(side){
-  if(seekBy(side==='left'?-10:10))flashFx(side);
-}
+function doubleSeek(side){ if(seekBy(side==='left'?-10:10))flashFx(side); }
 ptap.addEventListener('click',e=>{
   const now=Date.now();
   if(now-hold.endedAt<400||now-menuClosedAt<400)return;
-  if(lastPtype==='mouse'){
-    clearTimeout(tap.timer);
-    tap.timer=setTimeout(togglePlay,220);
-    return;
-  }
+  if(lastPtype==='mouse'){ clearTimeout(tap.timer); tap.timer=setTimeout(togglePlay,220); return; }
   const r=screenEl.getBoundingClientRect();
   const side=(e.clientX-r.left)<r.width/2?'left':'right';
-  if(now<tap.seekUntil&&tap.side===side){
-    clearTimeout(tap.timer);doubleSeek(side);tap.seekUntil=now+700;return;
-  }
-  if(tap.side===side&&now-tap.t<DOUBLE_TAP_DELAY){
-    clearTimeout(tap.timer);doubleSeek(side);
-    tap.seekUntil=now+700;tap.t=0;return;
-  }
+  if(now<tap.seekUntil&&tap.side===side){ clearTimeout(tap.timer);doubleSeek(side);tap.seekUntil=now+700;return; }
+  if(tap.side===side&&now-tap.t<DOUBLE_TAP_DELAY){ clearTimeout(tap.timer);doubleSeek(side); tap.seekUntil=now+700;tap.t=0;return; }
   tap.t=now;tap.side=side;
   clearTimeout(tap.timer);
   tap.timer=setTimeout(()=>{tap.side='';toggleUI()},DOUBLE_TAP_DELAY);
 });
-ptap.addEventListener('dblclick',e=>{
-  if(lastPtype==='mouse'){clearTimeout(tap.timer);toggleFs()}
-});
-screenEl.addEventListener('pointermove',e=>{
-  if(e.pointerType==='mouse'&&!hold.active)showUI();
-});
-screenEl.addEventListener('pointerleave',e=>{
-  if(e.pointerType==='mouse'&&!isPaused()&&!isOpen()&&!scrub)hideUI();
-});
+ptap.addEventListener('dblclick',e=>{ if(lastPtype==='mouse'){clearTimeout(tap.timer);toggleFs()} });
+screenEl.addEventListener('pointermove',e=>{ if(e.pointerType==='mouse'&&!hold.active)showUI(); });
+screenEl.addEventListener('pointerleave',e=>{ if(e.pointerType==='mouse'&&!isPaused()&&!isOpen()&&!scrub)hideUI(); });
 
 ['loadedmetadata','resize'].forEach(ev=>video.addEventListener(ev,()=>{if(isOpen()&&menuView==='main')renderMenu()}));
 ['progress','loadedmetadata','durationchange','seeked'].forEach(ev=>video.addEventListener(ev,()=>{paintBuffered();paintProgress()}));
@@ -2197,10 +2008,7 @@ video.addEventListener('ended',()=>{
     showToast('خلصت الفيديو ✓ — التالي حالًا');
     const my=playToken;
     setTimeout(()=>{if(my===playToken)playIndex(current+1,true)},1500);
-  }else{
-    showToast('خلصت الفيديو 👏');
-    showUI(true);
-  }
+  }else{ showToast('خلصت الفيديو 👏'); showUI(true); }
 });
 window.addEventListener('pagehide',()=>{saveProgress();});
 window.addEventListener('offline',()=>showToast('النت اتقطع'));
@@ -2270,10 +2078,7 @@ syncVolume();
 syncPlayState();
 $('pfs').innerHTML=SVG_FS_ON;
 
-$('videoSearch').addEventListener('input',e=>{
-  listQuery=e.target.value;
-  renderList();
-});
+$('videoSearch').addEventListener('input',e=>{ listQuery=e.target.value; renderList(); });
 document.querySelectorAll('[data-filter]').forEach(b=>{
   b.addEventListener('click',()=>{
     listFilter=b.dataset.filter;
@@ -2281,27 +2086,18 @@ document.querySelectorAll('[data-filter]').forEach(b=>{
     renderList();
   });
 });
-
 $('prevBtn').onclick=()=>{if(current>0)playIndex(current-1,true)};
 $('nextBtn').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)};
-
 $('retryBtn').onclick=()=>{
   if(errAction==='leave'){location.href='subjects.html';return}
   hideError();
   if(current>=0)playIndex(current,true);else init();
 };
-$('skipBtn').onclick=()=>{
-  if(current<videos.length-1){hideError();playIndex(current+1,true)}
-};
+$('skipBtn').onclick=()=>{ if(current<videos.length-1){hideError();playIndex(current+1,true)} };
 
-/* ============ تسجيل المشاهدة ============ */
 let trackViewTimer = 0;
 let lastTracked = { videoId: null, time: 0 };
-
-if (token) {
-  fetch('/api/auth/track', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(() => {});
-}
-
+if (token) { fetch('/api/auth/track', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(() => {}); }
 function trackView(videoId, videoTitle, force) {
     if (!token || current < 0 || !videos[current]) return;
     const curTime = isYtMode ? ytCurrentTime : (Number(video.currentTime) || 0);
@@ -2320,28 +2116,18 @@ function trackView(videoId, videoTitle, force) {
         })
     }).catch(() => {});
 }
-
-video.addEventListener('loadedmetadata', function() {
-    if (current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, true);
-});
+video.addEventListener('loadedmetadata', function() { if (current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, true); });
 video.addEventListener('play', function() {
     clearInterval(trackViewTimer);
-    trackViewTimer = setInterval(() => {
-        if (!video.paused && current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, false);
-    }, 20000);
+    trackViewTimer = setInterval(() => { if (!video.paused && current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, false); }, 20000);
 });
-video.addEventListener('pause', function() {
-    if (current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, true);
-});
+video.addEventListener('pause', function() { if (current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, true); });
 video.addEventListener('ended', function() {
     clearInterval(trackViewTimer);
     if (current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, true);
 });
-window.addEventListener('pagehide', function() {
-    if (current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, true);
-});
+window.addEventListener('pagehide', function() { if (current >= 0 && videos[current]) trackView(videos[current].id, videos[current].title, true); });
 
-/* ============ درج الفيديوهات ============ */
 let drawQuery='';
 function drawerOpen(){return $('pdrawer').classList.contains('open')}
 function renderDrawer(){
@@ -2388,7 +2174,7 @@ ptap.addEventListener('click',e=>{
   if(drawerOpen()){e.stopImmediatePropagation();closeDrawer();menuClosedAt=Date.now()}
 },true);
 
-/* ============ مدير التحميل ============ */
+/* ============ Download Manager ============ */
 const OWNER_CODE='1111111';
 const DL_ICON='<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/></svg>';
 const X_ICON='<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -2565,7 +2351,6 @@ async function cleanOpfs(){
     }
   }catch(e){}
 }
-
 async function checkOwner(){
   if(!token||isOwner)return;
   try{
@@ -2587,6 +2372,8 @@ function addDownloadBtn(){
 }
 function setDlBtn(){
   const b=$('pdl');if(!b)return;
+  if(isYtMode){ b.style.display='none'; return; }
+  b.style.display='';
   const show=dl.id!=null&&dl.st!=='idle'&&(isActive()||(String(dl.id)===curId()&&dl.st!=='done'));
   b.classList.toggle('busy',!!show);
   b.classList.toggle('paused',!!show&&!isActive());
@@ -2598,8 +2385,8 @@ function dlHook(){
   if(dlOpen()){syncView();renderDl();loadVariants()}
   setDlBtn();
 }
-
 function openDlModal(){
+  if(isYtMode){ showToast('تحميل فيديوهات يوتيوب غير متاح'); return; }
   try{if(fsEl())(document.exitFullscreen||document.webkitExitFullscreen).call(document)}catch(_){}
   closeMenu(true);closeDrawer(true);
   syncView();
@@ -2735,7 +2522,6 @@ $('dlBody').addEventListener('click',e=>{
     if(confirmTwice('del'+id)){const m=readMeta(id);wipe(id,m&&m.fname).then(()=>{renderDl()})}
   }
 });
-
 async function startNew(){
   if(isActive()){showToast('فيه تحميل شغال دلوقتي');return}
   if(isYtMode){showToast('تحميل يوتيوب غير متاح');return}
@@ -2768,11 +2554,7 @@ async function resumeDl(){
   runDl();
 }
 async function cancelDl(){
-  if(isActive()){
-    dl.intent='cancel';
-    if(dl.abort)dl.abort.abort();
-    return;
-  }
+  if(isActive()){ dl.intent='cancel'; if(dl.abort)dl.abort.abort(); return; }
   await wipe(dl.id,dl.fname);
   Object.assign(dl,blankDl());
   renderDl();setDlBtn();showToast('تم الحذف');
@@ -2804,7 +2586,6 @@ function dlCalcSpeed(){
   const win=Math.max(1,Math.min(8,(now-dl.t0)/1000));
   dl.speed=sum/win;
 }
-
 async function runDl(){
   const ac=new AbortController(),signal=ac.signal;
   dl.abort=ac;dl.intent='';dl.err='';dl.st='preparing';dl.speed=0;dl.samples=[];dl.t0=Date.now();
@@ -2831,7 +2612,6 @@ async function runDl(){
     dl.total=segs.length;dl.ext=ext;dl.totalDur=totalDur;
     dl.name=(String(dl.title||'video').replace(/[\\/:*?"<>|]+/g,'-').trim()||'video')+'.'+ext;
     dl.fname='dlv_'+String(dl.id).replace(/[^\w-]/g,'_')+'_'+(dl.h||0)+'.'+ext;
-
     if(!dl.memMode&&navigator.storage&&navigator.storage.getDirectory){
       try{
         opfs=await navigator.storage.getDirectory();
@@ -2843,9 +2623,7 @@ async function runDl(){
         await wr.truncate(dl.bytes);await wr.seek(dl.bytes);
       }catch(e){wr=null;fh=null}
     }
-    if(!wr){
-      if(!dl.memMode){dl.idx=0;dl.bytes=0;dl.doneDur=0;dl.mem=[];dl.memMode=true}
-    }
+    if(!wr){ if(!dl.memMode){dl.idx=0;dl.bytes=0;dl.doneDur=0;dl.mem=[];dl.memMode=true} }
     const out=async buf=>{if(wr)await wr.write(buf);else dl.mem.push(buf)};
     if(dl.idx===0){
       dl.bytes=0;dl.doneDur=0;
@@ -2855,7 +2633,6 @@ async function runDl(){
     dl.cp={idx:dl.idx,bytes:dl.bytes,dur:dl.doneDur};
     dl.st='downloading';
     saveMeta();renderDl();setDlBtn();
-
     const N=4;
     while(dl.idx<segs.length){
       if(dl.intent)throw new DOMException('Aborted','AbortError');
@@ -2918,10 +2695,9 @@ async function runDl(){
 window.addEventListener('online',()=>{if(dl.st==='error'&&dl.netErr)resumeDl()});
 window.addEventListener('beforeunload',e=>{if(isActive()){e.preventDefault();e.returnValue=''}});
 
-/* ============ START ============ */
 init();
 
 })();
 </script>
 </body>
-  </html>
+</html>
