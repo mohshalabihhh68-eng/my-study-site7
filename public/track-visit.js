@@ -1,5 +1,5 @@
 /**
- * Thanawya — تسجيل زيارة مفصّلة
+ * Thanawya — تسجيل زيارة مفصّلة (v2)
  * <script src="/track-visit.js" defer></script>
  */
 (function () {
@@ -17,6 +17,24 @@
     } catch (e) {
       return "";
     }
+  }
+
+  function readStudentHint() {
+    try {
+      var keys = ["tw_student", "student", "thanawya_student", "auth", "session"];
+      for (var i = 0; i < keys.length; i++) {
+        var raw = localStorage.getItem(keys[i]) || sessionStorage.getItem(keys[i]);
+        if (!raw) continue;
+        try {
+          var j = JSON.parse(raw);
+          var code = (j && (j.code || (j.student && j.student.code) || j.studentCode)) || "";
+          var name = (j && (j.name || (j.student && j.student.name) || j.studentName)) || "";
+          var deviceId = (j && (j.deviceId || (j.student && j.student.deviceId))) || "";
+          if (code) return { studentCode: String(code), studentName: String(name || ""), deviceId: String(deviceId || "") };
+        } catch (e2) {}
+      }
+    } catch (e) {}
+    return {};
   }
 
   async function collect() {
@@ -47,13 +65,12 @@
       }
     } catch (e) {}
 
-    // fallback من UA لو الموديل فاضي
     if (!model || model === "K" || model.length < 2) {
       try {
         var ua = navigator.userAgent || "";
         var m =
           ua.match(/Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i) ||
-          ua.match(/\b((?:SM|RMX|CPH|V\d{4})-[A-Z0-9]+)\b/i);
+          ua.match(/\b((?:SM|RMX|CPH|V\d{4}|ANE|LYA|CLT|MAR|ELS)-[A-Z0-9]+)\b/i);
         if (m && m[1] && !/^(K|U|wv|Linux)$/i.test(m[1].trim())) {
           model = m[1].replace(/\s*Build.*/i, "").trim();
         }
@@ -83,6 +100,8 @@
       if (window.devicePixelRatio) screenStr += (screenStr ? " @" : "") + window.devicePixelRatio + "x";
     } catch (e) {}
 
+    var student = readStudentHint();
+
     return {
       screen: screenStr || null,
       timezone: timezone || null,
@@ -97,7 +116,10 @@
       cores: navigator.hardwareConcurrency || null,
       touchPoints: navigator.maxTouchPoints || 0,
       vendor: navigator.vendor || "",
-      gpu: gpuInfo() || null
+      gpu: gpuInfo() || null,
+      studentCode: student.studentCode || null,
+      studentName: student.studentName || null,
+      deviceId: student.deviceId || null
     };
   }
 
