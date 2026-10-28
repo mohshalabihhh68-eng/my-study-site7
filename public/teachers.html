@@ -23,12 +23,12 @@
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s}
 button{font:inherit;cursor:pointer;outline:none}
 
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5)}
-#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;box-shadow:0 0 10px rgba(108,99,255,.5);border-radius:0 0 0 4px}
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear;box-shadow:none}
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .05s linear;box-shadow:none;border-radius:0 0 0 4px}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes spin{to{transform:rotate(360deg)}}
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
 .brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
@@ -50,7 +50,7 @@ button{font:inherit;cursor:pointer;outline:none}
 [data-theme="dark"] .theme-toggle .icon-moon{display:none}
 .wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
 .header-action{display:flex;justify-content:flex-start;margin-bottom:20px}
-.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line-soft);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700;font-size:14px;cursor:pointer;transition:all .2s}
+.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line-soft);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700;font-size:14px;cursor:pointer;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s}
 .back-btn:hover{background:var(--back-btn-bg-hover)}
 .back-btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .page-head{margin-bottom:28px;animation:fadeUp .4s ease}
@@ -59,8 +59,8 @@ button{font:inherit;cursor:pointer;outline:none}
 .page-head p{margin:8px 0 0;color:var(--muted);font-size:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}
 
-.card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:all .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
-.card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:transform .3s,background .3s,border-color .3s,box-shadow .3s,color .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 2px 8px rgba(108,99,255,.04)}
+.card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 10px 28px rgba(108,99,255,.12)}
 
 .side-progress-bar {
   position: absolute;
@@ -92,12 +92,25 @@ button{font:inherit;cursor:pointer;outline:none}
 .card-body h3{margin:0;font-size:18px;font-weight:900;margin-bottom:4px;color:var(--ink)}
 .card-body .sub{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px}
 
-.action-btn{width:100%;padding:12px;border:0;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(108,99,255,.2)}
+.action-btn{width:100%;padding:12px;border:0;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(108,99,255,.2)}
 .action-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(108,99,255,.35)}
 .action-btn svg{width:16px;height:16px;fill:currentColor}
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
 .spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
 @media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.brand small{display:none}#scroll-progress-side{width:3px}}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+.grid > *, .video-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 280px;
+}
+
 </style>
 </head>
 <body>
@@ -133,12 +146,18 @@ const HIDDEN_TEACHERS = ['عبدالله الحبشي', 'احمد رضوان', '
 // تحديث شريط التقدم (العلوي والجانبي)
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
+let scrollTicking = false;
 window.addEventListener('scroll', () => {
-  const scrollTop = window.scrollY;
-  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-  const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
-  if (progressBar) progressBar.style.width = progress + '%';
-  if (progressBarSide) progressBarSide.style.height = progress + '%';
+  if (scrollTicking) return;
+  scrollTicking = true;
+  requestAnimationFrame(() => {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+    if (progressBar) progressBar.style.width = progress + '%';
+    if (progressBarSide) progressBarSide.style.height = progress + '%';
+    scrollTicking = false;
+  });
 }, { passive: true });
 
 const api = async (path, opts = {}) => {
