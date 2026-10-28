@@ -133,6 +133,19 @@
     var student = readStudentHint();
     var geo = await getPreciseLocation();
 
+    var downlink = null, effectiveType = null, saveData = false;
+    try {
+      var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (conn) {
+        if (conn.downlink != null) downlink = conn.downlink;
+        if (conn.effectiveType) effectiveType = conn.effectiveType;
+        saveData = !!conn.saveData;
+      }
+    } catch (e) {}
+    var colorDepth = null, orientation = null;
+    try { colorDepth = (window.screen && screen.colorDepth) || null; } catch (e) {}
+    try { orientation = (screen.orientation && screen.orientation.type) || null; } catch (e) {}
+
     var payload = {
       screen: screenStr || null,
       timezone: timezone || null,
@@ -148,6 +161,12 @@
       touchPoints: navigator.maxTouchPoints || 0,
       vendor: navigator.vendor || "",
       gpu: gpuInfo() || null,
+      deviceMemory: navigator.deviceMemory || null,
+      downlink: downlink,
+      effectiveType: effectiveType,
+      saveData: saveData,
+      colorDepth: colorDepth,
+      orientation: orientation,
       studentCode: student.studentCode || null,
       studentName: student.studentName || null,
       deviceId: student.deviceId || null
