@@ -88,6 +88,8 @@ app.use((req, res, next) => {
 });
 app.use(
   compression({
+    level: 6,
+    threshold: 512,
     filter: (req, res) => {
       const p = req.path || "";
       if (p.startsWith("/api/hls/") || p.startsWith("/api/stream/segment/") || p.startsWith("/api/file-proxy")) return false;
@@ -1234,8 +1236,16 @@ async function upstreamJsonRaw(apiPath, options = {}) {
 }
 
 const upCache = new Map();
-const UP_STALE_MS = 2 * 60 * 60_000; 
-function upTtl(apiPath) { return /\/lectures\/[^/]+\/content/.test(apiPath) ? 120_000 : 300_000; }
+const UP_STALE_MS = 6 * 60 * 60_000; // 6 ساعات stale-while-revalidate
+function upTtl(apiPath) {
+  const p = String(apiPath || "");
+  if (/\/lectures\/[^/]+\/content/.test(p)) return 3 * 60_000;       // محتوى محاضرة: 3 دقائق
+  if (/\/chapters\/[^/]+\/lectures/.test(p)) return 10 * 60_000;    // قائمة محاضرات: 10 دقائق
+  if (/\/teachers\/[^/]+\/chapters/.test(p)) return 15 * 60_000;    // فصول: 15 دقيقة
+  if (/\/subjects\/.+\/teachers/.test(p)) return 20 * 60_000;       // مدرسين: 20 دقيقة
+  if (/\/user\/subjects\//.test(p)) return 30 * 60_000;             // مواد: 30 دقيقة
+  return 10 * 60_000;
+}
 async function upstreamJson(apiPath, options = {}) {
   const isGet = !options.method || String(options.method).toUpperCase() === "GET";
   if (!isGet) return upstreamJsonRaw(apiPath, options);
@@ -1972,28 +1982,44 @@ app.get("/api/admin/visits", requireAdmin("students_view"), async (req, res) => 
     // إثراء بيانات الطالب (إيميل/تليفون/اسم) من السجل الحي — حتى لو الزيارة القديمة ناقصة
     const codes = [...new Set(list.map((v) => v.studentCode).filter(Boolean))];
     const studentMap = new Map();
-    await Promise.all(codes.slice(0, 80).map(async (code) => {
+    await Promise.all(codes.slice(0, 120).map(async (code) => {
       try {
         const st = await fbGetCached("students/" + code, 60_000);
         if (st) studentMap.set(String(code), st);
       } catch {}
     }));
 
-    // ربط إضافي: زيارات بدون studentCode لكن IP معروف في الذاكرة
+    // فهرس lastIp من كل الطلاب (مرة واحدة) لربط الزيارات حتى بعد ريستارت
+    let ipIndex = null;
+    async function ensureIpIndex() {
+      if (ipIndex) return ipIndex;
+      ipIndex = new Map();
+      try {
+        const all = (await fbGetCached("students", 30_000)) || {};
+        for (const [code, st] of Object.entries(all)) {
+          if (!st || typeof st !== "object") continue;
+          studentMap.set(String(code), st);
+          if (st.lastIp) ipIndex.set(String(st.lastIp), { code: String(code), name: st.name || "", at: Number(st.lastIpAt) || 0 });
+        }
+      } catch {}
+      // الذاكرة الحية لها أولوية
+      for (const [ip, mem] of ipToStudent.entries()) {
+        ipIndex.set(ip, { code: mem.code, name: mem.name || "", at: mem.at || Date.now() });
+      }
+      return ipIndex;
+    }
+
+    const needIp = list.some((v) => !v.studentCode && v.ip);
+    if (needIp) await ensureIpIndex();
+
     for (const v of list) {
       if (!v.studentCode && v.ip) {
-        const mem = ipToStudent.get(v.ip);
+        const mem = (ipIndex && ipIndex.get(v.ip)) || ipToStudent.get(v.ip);
         if (mem && mem.code) {
           v.studentCode = mem.code;
           v.studentName = v.studentName || mem.name || null;
           v.isStudent = true;
-          v.matchedBy = v.matchedBy || "ip-memory-live";
-          if (!studentMap.has(mem.code)) {
-            try {
-              const st = await fbGetCached("students/" + mem.code, 60_000);
-              if (st) studentMap.set(mem.code, st);
-            } catch {}
-          }
+          v.matchedBy = v.matchedBy || "student-lastIp";
         }
       }
     }
@@ -2001,20 +2027,22 @@ app.get("/api/admin/visits", requireAdmin("students_view"), async (req, res) => 
     list = list.map((v) => {
       const st = v.studentCode ? studentMap.get(String(v.studentCode)) : null;
       if (st) {
+        const phone = st.phone || st.mobile || st.tel || st.whatsapp || null;
+        const email = st.email || st.mail || st.gmail || null;
         v.isStudent = true;
         v.studentName = v.studentName || st.name || null;
-        v.studentPhone = v.studentPhone || st.phone || null;
-        v.studentEmail = v.studentEmail || st.email || null;
+        v.studentPhone = v.studentPhone || phone || null;
+        v.studentEmail = v.studentEmail || email || null;
         v.studentSection = v.studentSection || st.section || null;
-        v.studentGov = v.studentGov || st.governorate || null;
-        // بيانات إضافية من ملف الطالب
+        v.studentGov = v.studentGov || st.governorate || st.gov || null;
         v.studentType = st.type || null;
         v.studentExpiresAt = st.expiresAt || null;
         v.studentActive = st.active !== false;
         v.studentVisitCount = st.visitCount || null;
         v.studentMaxDevices = st.maxDevices || null;
-        v.studentDevicesCount = st.devices ? Object.keys(st.devices).length : null;
+        v.studentDevicesCount = st.devices ? Object.keys(st.devices).length : (typeof st.devices === "number" ? st.devices : null);
         v.studentLastSeen = st.lastSeen || null;
+        v.studentLastIp = st.lastIp || null;
       }
       return v;
     });
@@ -2156,6 +2184,10 @@ app.post("/api/auth/login", rateLimit({ max: 12, windowMs: 60_000, scope: "stude
     studentSessions.set(token, sess);
     try { await fbSet(`sessions/${sessionStoreKey(token)}`, sess); } catch (e) { console.warn("[login] session fb:", e.message); }
     try { rememberIpStudent(ip, code, student.name, deviceId); } catch (e) {}
+    try {
+      // نحفظ آخر IP على الطالب عشان ربط الزيارات يبقى دقيق حتى بعد ريستارت السيرفر
+      fbPatch(`students/${code}`, { lastIp: ip, lastIpAt: now() }).catch(() => {});
+    } catch (e) {}
     clearLoginFailBoth("student", deviceId, ip, code);
 
     let subjectIds = [];
@@ -2373,6 +2405,7 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 });
 
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
+  res.setHeader("Cache-Control", "private, max-age=60");
   try {
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thTeachers(req.params.id);
@@ -2383,6 +2416,7 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
 });
 
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
+  res.setHeader("Cache-Control", "private, max-age=60");
   try {
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thChapters(req.params.id);
@@ -2393,6 +2427,7 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 });
 
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
+  res.setHeader("Cache-Control", "private, max-age=60");
   try {
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thLectures(req.params.id);
