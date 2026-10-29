@@ -28,7 +28,7 @@
   --card-inner: #0d1424;
   --ink: #eef2ff;
   --muted: #8b9bb8;
-  --line: rgba(148,163,184,.15); /* حدود أوضح شوية */
+  --line: rgba(148,163,184,.15);
   --line-soft: rgba(255,255,255,.05);
   --blue: #3b82f6;
   --blue2: #60a5fa;
@@ -37,7 +37,7 @@
   --nav-bg: rgba(7,11,20,.88);
   --back-btn-bg: #111a2b;
   --back-btn-bg-hover: #1a253a;
-  --video-btn-bg: #1e293b; /* لون أفتح للزرار في الدارك مود */
+  --video-btn-bg: #1e293b;
   --video-btn-hover: #334155;
   --v-badge-bg: rgba(59,130,246,0.15);
 }
@@ -68,7 +68,7 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{
   background: var(--bg);
-  background-image: var(--bg-gradient); /* ضفنا التدرج */
+  background-image: var(--bg-gradient);
   color:var(--ink);
   font-family:'Cairo',sans-serif;
   overflow-x:hidden;
@@ -149,7 +149,6 @@ a{text-decoration:none;color:inherit}
   cursor: pointer;
 }
 
-/* تأثير الـ Hover */
 .video-card-new:hover {
   transform: translateY(-4px);
   box-shadow: 0 12px 25px rgba(0,0,0,0.08);
@@ -228,7 +227,7 @@ a{text-decoration:none;color:inherit}
   border: 1px solid transparent;
 }
 [data-theme="dark"] .v-card-btn {
-  border-color: rgba(255,255,255,0.05); /* حدود خفيفة للزرار في الدارك */
+  border-color: rgba(255,255,255,0.05);
 }
 
 .v-card-btn:hover {
@@ -393,8 +392,66 @@ function formatDuration(seconds) {
   return parts.join(' و ') || 'أقل من دقيقة';
 }
 
-function isVideoWatched(videoId) {
-  try { const saved = JSON.parse(localStorage.getItem('cstk_w_' + videoId) || 'null'); return saved && (saved.watched || saved.percent >= 90); } catch(e) { return false; }
+// 1. الدالة الجديدة لجلب حالة الفيديو
+function getVideoProgress(videoId) {
+  try { 
+    const saved = JSON.parse(localStorage.getItem('cstk_w_' + videoId) || 'null'); 
+    if (!saved) return { watched: false, remaining: null };
+    
+    const isFinished = saved.watched || saved.percent >= 90;
+    
+    let remainingText = null;
+    if (!isFinished && saved.duration && saved.currentTime) {
+      const remainingSeconds = saved.duration - saved.currentTime;
+      if (remainingSeconds > 0) {
+        const h = Math.floor(remainingSeconds / 3600);
+        const m = Math.floor((remainingSeconds % 3600) / 60);
+        let parts = [];
+        if (h > 0) parts.push(h + ' ساعة');
+        if (m > 0) parts.push(m + ' دقيقة');
+        remainingText = parts.join(' و ') || 'أقل من دقيقة';
+      }
+    }
+    
+    return { watched: isFinished, remaining: remainingText };
+  } catch(e) { 
+    return { watched: false, remaining: null }; 
+  }
+}
+
+// 2. الدالة الجديدة لتحديث الكروت فوراً
+function updateVideoCardsUI() {
+  const cards = document.querySelectorAll('.video-card-new');
+  cards.forEach(card => {
+    const videoId = card.getAttribute('data-video-id');
+    if (!videoId) return;
+
+    const progress = getVideoProgress(videoId);
+    
+    // تحديث علامة "تم"
+    const watchedBadge = card.querySelector('.v-watched-badge');
+    if (progress.watched) {
+      if (!watchedBadge) {
+        const badgeHTML = `<div class="v-watched-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم</div>`;
+        card.insertAdjacentHTML('afterbegin', badgeHTML);
+      }
+    } else {
+      if (watchedBadge) watchedBadge.remove();
+    }
+
+    // تحديث المدة / الوقت المتبقي
+    const durationDiv = card.querySelector('.v-card-duration');
+    if (durationDiv) {
+      const originalDuration = card.getAttribute('data-duration');
+      if (progress.watched) {
+        durationDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${originalDuration}`;
+      } else if (progress.remaining) {
+        durationDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span style="color:#f59e0b">فاضلك ${progress.remaining}</span>`;
+      } else {
+        durationDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${originalDuration}`;
+      }
+    }
+  });
 }
 
 async function load() {
@@ -443,20 +500,29 @@ async function load() {
       html += `<div style="text-align:center;padding:20px;color:var(--muted);">لا توجد فيديوهات في هذه المحاضرة.</div>`;
     } else {
       videos.forEach((v, index) => {
-        const isWatched = isVideoWatched(v.id);
+        // هنا استخدمنا الدالة الجديدة
+        const progress = getVideoProgress(v.id); 
         const duration = v.duration || v.duration_seconds || 0;
+        const durationText = formatDuration(duration);
         
+        let durationHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${durationText}`;
+        
+        if (progress.watched) {
+          durationHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${durationText}`;
+        } else if (progress.remaining) {
+          durationHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span style="color:#f59e0b">فاضلك ${progress.remaining}</span>`;
+        }
+
         html += `
-        <div class="video-card-new" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
+        <div class="video-card-new" data-video-id="${v.id}" data-duration="${durationText}" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
           
           <div class="v-badge">فيديو #${index + 1}</div>
-          ${isWatched ? `<div class="v-watched-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم</div>` : ''}
+          ${progress.watched ? `<div class="v-watched-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم</div>` : ''}
 
           <div class="v-card-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
           
           <div class="v-card-duration">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            ${formatDuration(duration)}
+            ${durationHtml}
           </div>
 
           <div class="v-card-btn">
@@ -522,8 +588,20 @@ async function loadProfile() {
 
 load(); 
 loadProfile();
+
+// 3. إضافة مستمعي الأحداث عشان التحديث يحصل فوراً لما ترجع من صفحة الفيديو
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    updateVideoCardsUI();
+  }
+});
+
+window.addEventListener('focus', () => {
+  updateVideoCardsUI();
+});
+
 })();
 </script>
 <script src="theme.js"></script>
 </body>
-</html>
+  </html>
