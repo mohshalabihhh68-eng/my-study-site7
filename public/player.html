@@ -1062,6 +1062,8 @@ function saveProgressYt(fromEnd){
       videoId:String(v.id), title:v.title, currentTime:t, duration:dur,
       percent:Math.round(p), watched:p>=90, updatedAt:Date.now(), source:'youtube'
     }));
+    // السطر الجديد ده عشان يبلغ صفحة المحتوى فوراً
+    localStorage.setItem('cstk_progress_updated', Date.now().toString());
   }catch(e){}
   updateCurrentItemUI();
   renderStats();
@@ -1118,6 +1120,8 @@ function saveProgress(){
     videoId:String(v.id),title:v.title,currentTime:t,duration:dur,
     percent:Math.round(p),watched:p>=90,updatedAt:Date.now()
   }))}catch(e){}
+  // السطر الجديد ده عشان يبلغ صفحة المحتوى فوراً
+  try { localStorage.setItem('cstk_progress_updated', Date.now().toString()); } catch(e){}
   lastSaved=t;
   updateCurrentItemUI();
   renderStats();
@@ -2716,4 +2720,4 @@ init();
 })();
 </script>
 </body>
-                                                                                                                                                      </html>
+  </html>
