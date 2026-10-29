@@ -600,8 +600,15 @@ window.addEventListener('focus', () => {
   updateVideoCardsUI();
 });
 
+// 4. الاستماع لتحديثات المشغل (بدون ريفريش)
+window.addEventListener('storage', (e) => {
+  if (e.key === 'cstk_progress_updated') {
+    updateVideoCardsUI();
+  }
+});
+
 })();
 </script>
 <script src="theme.js"></script>
 </body>
-  </html>
+</html>
