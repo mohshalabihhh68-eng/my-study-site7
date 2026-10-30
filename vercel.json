@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{thanawica.js,thanawica_decrypt.wasm,thanawica_cookies.txt,data/**}",
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/login", "destination": "/login.html" },
+    { "source": "/subjects", "destination": "/subjects.html" },
+    { "source": "/teachers", "destination": "/teachers.html" },
+    { "source": "/chapters", "destination": "/chapters.html" },
+    { "source": "/lectures", "destination": "/lectures.html" },
+    { "source": "/content", "destination": "/content.html" },
+    { "source": "/player", "destination": "/player.html" },
+    { "source": "/profile", "destination": "/profile.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,PATCH,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization,Content-Type,Accept" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.(js|css|wasm|png|jpg|jpeg|webp|svg|ico|woff2?)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=2592000, immutable" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "thanawya-club",
+  "version": "1.7.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "vercel-dev": "vercel dev"
+  },
+  "dependencies": {
+    "compression": "^1.7.5",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "undici": "^6.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
