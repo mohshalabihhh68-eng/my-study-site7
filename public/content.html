@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ar-EG" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f8fafc">
+<title>محتوى المحاضرة | ثانوية club</title>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem('thanawya_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute('content', t === 'dark' ? '#070b14' : '#f8fafc');
+  } catch(e){}
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ======== ألوان الوضع الداكن المحسنة ======== */
+:root, [data-theme="dark"] {
+  --bg: #070b14;
+  --bg-gradient: radial-gradient(circle at 50% 0%, #111a2e 0%, #070b14 60%);
+  --card: #121a2b; 
+  --card-hover: #182338;
+  --card-inner: #0d1424;
+  --ink: #eef2ff;
+  --muted: #8b9bb8;
+  --line: rgba(148,163,184,.15);
+  --line-soft: rgba(255,255,255,.05);
+  --blue: #3b82f6;
+  --blue2: #60a5fa;
+  --green: #10b981;
+  --red: #ef4444;
+  --nav-bg: rgba(7,11,20,.88);
+  --back-btn-bg: #111a2b;
+  --back-btn-bg-hover: #1a253a;
+  --video-btn-bg: #1e293b;
+  --video-btn-hover: #334155;
+  --v-badge-bg: rgba(59,130,246,0.15);
+}
+
+/* ======== ألوان الوضع الفاتح ======== */
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --bg-gradient: none;
+  --card: #ffffff;
+  --card-hover: #f1f5f9;
+  --card-inner: #f1f5f9;
+  --ink: #1e293b;
+  --muted: #64748b;
+  --line: rgba(108,99,255,.10);
+  --line-soft: rgba(108,99,255,.05);
+  --blue: #6c63ff;
+  --blue2: #00d4ff;
+  --green: #10b981;
+  --red: #ef4444;
+  --nav-bg: rgba(255,255,255,.88);
+  --back-btn-bg: #ffffff;
+  --back-btn-bg-hover: #f1f5f9;
+  --video-btn-bg: #0f172a;
+  --video-btn-hover: #1e293b;
+  --v-badge-bg: rgba(108,99,255,0.1);
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  background: var(--bg);
+  background-image: var(--bg-gradient);
+  color:var(--ink);
+  font-family:'Cairo',sans-serif;
+  overflow-x:hidden;
+  transition:background-color .35s,color .35s;
+  line-height:1.5;
+  background-attachment: fixed;
+}
+button{font:inherit;cursor:pointer;border:none;outline:none}
+a{text-decoration:none;color:inherit}
+
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear}
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .05s linear}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
+.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
+.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
+.nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
+
+.profile-wrap{position:relative}
+.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
+.profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
+.profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
+
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
+.theme-toggle:hover{background:var(--card-hover);border-color:var(--blue);transform:rotate(15deg)}
+.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;display:block}
+.theme-toggle .icon-sun{display:none}
+.theme-toggle .icon-moon{display:block}
+[data-theme="dark"] .theme-toggle .icon-sun{display:block}
+[data-theme="dark"] .theme-toggle .icon-moon{display:none}
+
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
+.header-action{display:flex;justify-content:flex-start;margin-bottom:24px}
+.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s;box-shadow:0 2px 8px rgba(0,0,0,0.02)}
+.back-btn:hover{background:var(--back-btn-bg-hover);transform:translateX(-3px)}
+.back-btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+.top-header{display:flex;flex-direction:column;margin-bottom:32px;animation:fadeUp .4s ease both;gap:12px}
+.header-tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{background:var(--card-inner);border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.tag.active{background:var(--v-badge-bg);color:var(--blue);border-color:rgba(108,99,255,.2)}
+.tag svg{width:14px;height:14px;fill:currentColor}
+.page-title{font-size:clamp(24px,4vw,32px);font-weight:900;color:var(--ink);line-height:1.4}
+.page-subtitle{color:var(--muted);font-size:15px;font-weight:600}
+
+.section-box{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;margin-bottom:32px;animation:fadeUp .5s ease both;box-shadow:0 4px 20px rgba(0,0,0,0.03)}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.section-title{display:flex;align-items:center;gap:14px;font-size:20px;font-weight:900;color:var(--ink)}
+.section-title-icon{width:46px;height:46px;border-radius:14px;background:var(--v-badge-bg);color:var(--blue);display:grid;place-items:center;flex-shrink:0}
+.section-title-icon svg{width:24px;height:24px}
+.section-subtitle{font-size:13px;color:var(--muted);font-weight:700;margin-top:4px}
+
+/* ========================================= */
+/* تصميم كروت الفيديوهات */
+/* ========================================= */
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.video-card-new {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  cursor: pointer;
+}
+
+.video-card-new:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 25px rgba(0,0,0,0.08);
+  border-color: rgba(108,99,255,0.5);
+}
+[data-theme="dark"] .video-card-new:hover {
+  box-shadow: 0 12px 25px rgba(0,0,0,0.3);
+  border-color: rgba(59,130,246,0.5);
+}
+
+.v-badge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: var(--v-badge-bg);
+  color: var(--blue);
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.v-watched-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  background: rgba(16,185,129,0.1);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.v-card-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--ink);
+  text-align: center;
+  margin: 35px 0 16px 0;
+  line-height: 1.6;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.v-card-duration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.v-card-btn {
+  width: 100%;
+  background: var(--video-btn-bg);
+  color: #fff;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: background 0.2s;
+  margin-top: auto;
+  border: 1px solid transparent;
+}
+[data-theme="dark"] .v-card-btn {
+  border-color: rgba(255,255,255,0.05);
+}
+
+.v-card-btn:hover {
+  background: var(--video-btn-hover);
+}
+
+.v-card-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* ========================================= */
+/* تصميم كروت الملفات */
+/* ========================================= */
+.file-list{display:flex;flex-direction:column;gap:12px}
+.file-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px 20px;
+  transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s ease;
+}
+.file-item:hover{
+  border-color:rgba(108,99,255,.4);
+  background:var(--card-hover);
+  transform:translateY(-2px);
+  box-shadow:0 4px 12px rgba(0,0,0,0.05);
+}
+.file-info{display:flex;align-items:center;gap:14px;flex:1}
+.file-icon{
+  width:46px;
+  height:46px;
+  background:var(--v-badge-bg);
+  color:var(--blue);
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.file-text{font-size:15px;font-weight:700;color:var(--ink);line-height:1.5}
+.file-btn{
+  background:var(--v-badge-bg);
+  color:var(--blue);
+  border:1px solid rgba(108,99,255,.2);
+  border-radius:12px;
+  padding:10px 18px;
+  font-weight:800;
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  transition:.2s;
+  white-space:nowrap;
+}
+.file-btn:hover{background:rgba(108,99,255,.2)}
+[data-theme="dark"] .file-btn {
+  border-color: rgba(59,130,246,0.3);
+}
+[data-theme="dark"] .file-btn:hover {
+  background: rgba(59,130,246,0.2);
+}
+
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;color:var(--muted);font-weight:700}
+.spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
+
+@media(max-width:768px){
+  .brand small{display:none}
+  #scroll-progress-side{width:3px}
+  .video-grid { grid-template-columns: 1fr; gap: 16px; }
+  .video-card-new { padding: 20px; }
+  .v-card-title { font-size: 16px; min-height: auto; margin-top: 35px; }
+  .section-box { padding: 20px 16px; border-radius: 20px; }
+  .file-item { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .file-btn { width: 100%; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+.grid > *, .video-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 280px;
+}
+
+</style>
+</head>
+<body>
+<div id="scroll-progress"></div>
+<div id="scroll-progress-side"></div>
+
+<header class="app-nav">
+  <div class="app-nav-in">
+    <div class="brand" onclick="window.location.href='index.html'">
+      <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
+      <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
+    </div>
+    <div class="nav-right">
+      <div class="profile-wrap"><button class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
+      <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
+        <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+<main class="wrap" id="main"><div class="loading"><div class="spinner"></div><p>جاري تحميل المحتوى...</p></div></main>
+<script>
+(function(){
+'use strict';
+const API_BASE = ''; const TOKEN_KEY = 'student_token'; const token = localStorage.getItem(TOKEN_KEY);
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const lectureId = qs.get('lectureId');
+const urlLectureName = qs.get('lectureName') || '';
+const urlTeacher = qs.get('teacherName') || '';
+const urlChapter = qs.get('chapterName') || '';
+const urlSubject = qs.get('subjectName') || '';
+
+const progressBar = $('scroll-progress');
+const progressBarSide = $('scroll-progress-side');
+let scrollTicking = false;
+window.addEventListener('scroll', () => {
+  if (scrollTicking) return;
+  scrollTicking = true;
+  requestAnimationFrame(() => {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+    if (progressBar) progressBar.style.width = progress + '%';
+    if (progressBarSide) progressBarSide.style.height = progress + '%';
+    scrollTicking = false;
+  });
+}, { passive: true });
+
+const api = async (path, opts = {}) => {
+  const headers = { Accept: 'application/json', ...opts.headers };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body });
+  if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); window.location.replace('login.html'); return; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ في السيرفر');
+  return data.data;
+};
+const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function formatDuration(seconds) {
+  if (!seconds || isNaN(seconds)) return 'غير محدد';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  let parts = [];
+  if (h > 0) parts.push(h === 1 ? 'ساعة' : h === 2 ? 'ساعتين' : h + ' ساعات');
+  if (m > 0) parts.push(m + ' دقيقة');
+  return parts.join(' و ') || 'أقل من دقيقة';
+}
+
+// 1. الدالة الجديدة لجلب حالة الفيديو
+function getVideoProgress(videoId) {
+  try { 
+    const saved = JSON.parse(localStorage.getItem('cstk_w_' + videoId) || 'null'); 
+    if (!saved) return { watched: false, remaining: null };
+    
+    const isFinished = saved.watched || saved.percent >= 90;
+    
+    let remainingText = null;
+    if (!isFinished && saved.duration && saved.currentTime) {
+      const remainingSeconds = saved.duration - saved.currentTime;
+      if (remainingSeconds > 0) {
+        const h = Math.floor(remainingSeconds / 3600);
+        const m = Math.floor((remainingSeconds % 3600) / 60);
+        let parts = [];
+        if (h > 0) parts.push(h + ' ساعة');
+        if (m > 0) parts.push(m + ' دقيقة');
+        remainingText = parts.join(' و ') || 'أقل من دقيقة';
+      }
+    }
+    
+    return { watched: isFinished, remaining: remainingText };
+  } catch(e) { 
+    return { watched: false, remaining: null }; 
+  }
+}
+
+// 2. الدالة الجديدة لتحديث الكروت فوراً
+function updateVideoCardsUI() {
+  const cards = document.querySelectorAll('.video-card-new');
+  cards.forEach(card => {
+    const videoId = card.getAttribute('data-video-id');
+    if (!videoId) return;
+
+    const progress = getVideoProgress(videoId);
+    
+    // تحديث علامة "تم"
+    const watchedBadge = card.querySelector('.v-watched-badge');
+    if (progress.watched) {
+      if (!watchedBadge) {
+        const badgeHTML = `<div class="v-watched-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم</div>`;
+        card.insertAdjacentHTML('afterbegin', badgeHTML);
+      }
+    } else {
+      if (watchedBadge) watchedBadge.remove();
+    }
+
+    // تحديث المدة / الوقت المتبقي
+    const durationDiv = card.querySelector('.v-card-duration');
+    if (durationDiv) {
+      const originalDuration = card.getAttribute('data-duration');
+      if (progress.watched) {
+        durationDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${originalDuration}`;
+      } else if (progress.remaining) {
+        durationDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span style="color:#f59e0b">فاضلك ${progress.remaining}</span>`;
+      } else {
+        durationDiv.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${originalDuration}`;
+      }
+    }
+  });
+}
+
+async function load() {
+  if (!lectureId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المحاضرة غير موجود في الرابط (lectureId).</div>'; return; }
+  try {
+    const data = await api('/api/lectures/' + lectureId + '/content');
+    const videos = data.videos || data.video || [];
+    const files = data.files || data.file || data.attachments || data.pdfs || data.documents || [];
+    const lectureName = urlLectureName || (data.lecture && data.lecture.name) || data.lecture_name || data.name || data.title || 'محتوى المحاضرة';
+    const teacherName = urlTeacher || data.teacher_name || (data.teacher && data.teacher.name) || '';
+    const chapterName = urlChapter || data.chapter_name || (data.chapter && data.chapter.name) || '';
+    const subjectName = urlSubject || data.subject_name || (data.subject && data.subject.name) || '';
+    
+    let tagsHtml = '';
+    if (teacherName) tagsHtml += `<span class="tag active"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg> مع أ. ${esc(teacherName)}</span>`;
+    if (chapterName) tagsHtml += `<span class="tag"><svg viewBox="0 0 24 24" style="color:#ef4444"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg> ${esc(chapterName)}</span>`;
+    if (subjectName) tagsHtml += `<span class="tag">${esc(subjectName)}</span>`;
+    
+    let html = `
+    <div class="header-action"><button class="back-btn" onclick="history.back()"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمحاضرات</button></div>
+    
+    <div class="top-header">
+      <div class="header-tags">${tagsHtml}</div>
+      <div>
+        <h1 class="page-title">${esc(lectureName)}</h1>
+        <p class="page-subtitle">ذاكر المحاضرة كاملة من الفيديوهات والملفات المرفقة.</p>
+      </div>
+    </div>
+    
+    <div class="section-box">
+      <div class="section-head">
+        <div class="section-title">
+          <div class="section-title-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+          </div>
+          <div>
+            <span>الفيديوهات</span>
+            <div class="section-subtitle">${videos.length} فيديو متاح</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="video-grid">`;
+      
+    if (videos.length === 0) {
+      html += `<div style="text-align:center;padding:20px;color:var(--muted);">لا توجد فيديوهات في هذه المحاضرة.</div>`;
+    } else {
+      videos.forEach((v, index) => {
+        // هنا استخدمنا الدالة الجديدة
+        const progress = getVideoProgress(v.id); 
+        const duration = v.duration || v.duration_seconds || 0;
+        const durationText = formatDuration(duration);
+        
+        let durationHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${durationText}`;
+        
+        if (progress.watched) {
+          durationHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${durationText}`;
+        } else if (progress.remaining) {
+          durationHtml = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span style="color:#f59e0b">فاضلك ${progress.remaining}</span>`;
+        }
+
+        html += `
+        <div class="video-card-new" data-video-id="${v.id}" data-duration="${durationText}" onclick="window.location.href='player.html?lectureId=${lectureId}&videoId=${v.id}'">
+          
+          <div class="v-badge">فيديو #${index + 1}</div>
+          ${progress.watched ? `<div class="v-watched-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> تم</div>` : ''}
+
+          <div class="v-card-title">${esc(v.title || v.name || 'فيديو بدون عنوان')}</div>
+          
+          <div class="v-card-duration">
+            ${durationHtml}
+          </div>
+
+          <div class="v-card-btn">
+            تشغيل الفيديو
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+
+        </div>`;
+      });
+    }
+    html += `</div></div>`;
+    
+    if (files.length > 0) {
+      html += `
+      <div class="section-box">
+        <div class="section-head">
+          <div class="section-title">
+            <div class="section-title-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <div>
+              <span>الملفات والمذكرات</span>
+              <div class="section-subtitle">${files.length} ملف متاح</div>
+            </div>
+          </div>
+        </div>
+        <div class="file-list">`;
+        
+      files.forEach(f => {
+        const fileName = f.title || f.name || f.file_name || f.filename || 'ملف مرفق';
+        const rawUrl = f.file_url || f.url || f.link || f.path || f.download_url || '#';
+        const fileUrl = rawUrl !== '#' ? ('/api/file-proxy/document.pdf?url=' + encodeURIComponent(rawUrl)) : '#';
+        
+        html += `
+        <div class="file-item">
+          <div class="file-info">
+            <div class="file-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            </div>
+            <div class="file-text">${esc(fileName)}</div>
+          </div>
+          <button class="file-btn" onclick="window.open('${esc(fileUrl)}', '_blank')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> 
+            فتح الملف
+          </button>
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
+    $('main').innerHTML = html;
+  } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;font-weight:700;">خطأ: ${e.message}</div>`; }
+}
+
+async function loadProfile() {
+  try {
+    const me = await api('/api/auth/me');
+    if(me){ 
+      $('nav-name').textContent = me.name || 'طالب';
+      $('nav-av').textContent = (me.name || 'ط').charAt(0);
+    }
+  } catch(e){}
+}
+
+load(); 
+loadProfile();
+
+// 3. إضافة مستمعي الأحداث عشان التحديث يحصل فوراً لما ترجع من صفحة الفيديو
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    updateVideoCardsUI();
+  }
+});
+
+window.addEventListener('focus', () => {
+  updateVideoCardsUI();
+});
+
+// 4. الاستماع لتحديثات المشغل (بدون ريفريش)
+window.addEventListener('storage', (e) => {
+  if (e.key === 'cstk_progress_updated') {
+    updateVideoCardsUI();
+  }
+});
+
+})();
+</script>
+<script src="theme.js"></script>
+</body>
+</html>
