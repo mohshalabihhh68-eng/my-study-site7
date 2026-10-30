@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ar-EG" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f8fafc">
+<title>ثانوية club — كل محاضراتك في مكان واحد</title>
+<script>
+(function(){
+  try {
+    var t = localStorage.getItem('thanawya_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', t);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute('content', t === 'dark' ? '#070b14' : '#f8fafc');
+  } catch(e){}
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root, [data-theme="dark"]{--bg:#080d19;--panel:#101a2b;--panel2:#14223a;--text:#f4f7ff;--muted:#a1aec5;--blue:#4285ff;--blue2:#76a9ff;--mint:#59e0b3;--line:rgba(160,183,220,.15);--shadow:0 12px 36px rgba(0,0,0,.25);--nav-bg:rgba(8,13,25,.85);--nav-bg-scrolled:rgba(8,13,25,.95);--card-bg:#ffffff08;--card-bg-hover:#ffffff10;--hero-body-bg:radial-gradient(ellipse at 78% 0%,#1e4c9a30,transparent 35%),radial-gradient(ellipse at 5% 48%,#3e76e01a,transparent 30%),linear-gradient(180deg,#080d19,#0a1120 60%,#080d19)}
+[data-theme="light"]{--bg:#f8fafc;--panel:#ffffff;--panel2:#f1f5f9;--text:#1e293b;--muted:#64748b;--blue:#6c63ff;--blue2:#00d4ff;--mint:#10b981;--line:rgba(108,99,255,.10);--shadow:0 8px 24px rgba(108,99,255,.12);--nav-bg:rgba(255,255,255,.85);--nav-bg-scrolled:rgba(255,255,255,.95);--card-bg:rgba(108,99,255,.04);--card-bg-hover:rgba(108,99,255,.08);--hero-body-bg:radial-gradient(ellipse at 78% 0%,rgba(108,99,255,.08),transparent 35%),radial-gradient(ellipse at 5% 48%,rgba(0,212,255,.05),transparent 30%),linear-gradient(180deg,#f8fafc,#f1f5f9 60%,#f8fafc)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Cairo,system-ui,sans-serif;overflow-x:hidden;transition:background-color .35s,color .35s}
+a{color:inherit;text-decoration:none}
+button,input{font:inherit}
+button{cursor:pointer;outline:none}
+.container{width:min(1160px,calc(100% - 40px));margin:auto}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;background:var(--hero-body-bg)}
+svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* شريط التقدم الأفقي (فوق) */
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:1000;transition:width .05s linear;box-shadow:none}
+
+/* شريط التقدم الرأسي (على اليمين) */
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:1000;transition:height .05s linear;box-shadow:none;border-radius:0 0 0 4px}
+
+.nav{position:sticky;top:0;z-index:30;background:var(--nav-bg);border-bottom:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .35s,box-shadow .3s}
+.nav.scrolled{background:var(--nav-bg-scrolled);box-shadow:0 10px 30px rgba(108,99,255,.10)}
+.navin{height:76px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{display:flex;align-items:center;gap:11px;font-size:18px;font-weight:900}
+.logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white;transition:transform .3s}
+.brand:hover .logo{transform:rotate(-5deg) scale(1.05)}
+.logo svg{width:25px;height:25px}
+.brand small{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:-3px}
+.navlinks{display:flex;gap:26px;color:var(--muted);font-size:13px;font-weight:700}
+.navlinks a{position:relative;padding:6px 0;transition:color .2s}
+.navlinks a::after{content:"";position:absolute;bottom:0;left:0;width:0;height:2px;background:linear-gradient(90deg,#6c63ff,#00d4ff);transition:width .3s}
+.navlinks a:hover{color:var(--blue)}
+.navlinks a:hover::after,.navlinks a.active::after{width:100%}
+.navlinks a.active{color:var(--blue)}
+.navactions{display:flex;align-items:center;gap:10px}
+
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card-bg);color:var(--text);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
+.theme-toggle:hover{background:var(--card-bg-hover);border-color:var(--blue);transform:rotate(15deg)}
+.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.theme-toggle .icon-sun{display:none}
+.theme-toggle .icon-moon{display:block}
+[data-theme="dark"] .theme-toggle .icon-sun{display:block}
+[data-theme="dark"] .theme-toggle .icon-moon{display:none}
+
+.btn{border:1px solid transparent;border-radius:14px;padding:12px 18px;font-weight:900;font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:9px;transition:transform .2s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,border-color .2s,background .2s;background:none;color:var(--text);position:relative;overflow:hidden}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:linear-gradient(135deg,#6c63ff,#00d4ff);box-shadow:0 10px 28px rgba(108,99,255,.3);color:#fff}
+.btn-primary:hover{box-shadow:0 15px 35px rgba(108,99,255,.45)}
+.btn-soft{background:var(--card-bg);border-color:var(--line)}
+.btn-soft:hover{border-color:var(--blue);background:var(--card-bg-hover)}
+.btn-lg{padding:15px 22px;border-radius:16px;font-size:14px}
+
+.hero{padding:76px 0 64px;position:relative}
+.hero-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:46px;align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border:1px solid rgba(108,99,255,.2);border-radius:99px;background:rgba(108,99,255,.08);color:var(--blue);font-size:12px;font-weight:800}
+.eyebrow i{width:7px;height:7px;background:var(--mint);border-radius:50%;box-shadow:0 0 0 5px rgba(16,185,129,.1);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 5px rgba(16,185,129,.1)}50%{box-shadow:0 0 0 8px rgba(16,185,129,.18)}}
+.hero h1{font-size:clamp(36px,5.2vw,64px);line-height:1.25;letter-spacing:-1.5px;margin:20px 0 17px;font-weight:900;color:var(--text)}
+.gradient{background:linear-gradient(100deg,#6c63ff 5%,#00d4ff 100%);background-clip:text;-webkit-background-clip:text;color:transparent}
+.hero p{font-size:16px;color:var(--muted);line-height:2.05;max-width:600px;margin:0}
+.hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.trust{display:flex;align-items:center;gap:13px;margin-top:26px;color:var(--muted);font-size:12px;font-weight:700}
+.avatars{display:flex;direction:ltr}
+.avatars span{width:30px;height:30px;margin-left:-8px;border:2px solid var(--bg);border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#6c63ff,#00d4ff);font-size:11px;color:#fff}
+.avatars span:nth-child(2){background:linear-gradient(135deg,#10b981,#34d399)}
+.avatars span:nth-child(3){background:linear-gradient(135deg,#ff6584,#ff9a8b)}
+.hero-art{position:relative;min-height:450px;display:grid;place-items:center}
+.orb{position:absolute;width:330px;height:330px;border-radius:50%;background:linear-gradient(135deg,rgba(108,99,255,.15),rgba(0,212,255,.08));filter:none;border:1px solid rgba(108,99,255,.15);animation:float 8s ease-in-out infinite;will-change:transform}
+
+.dashboard{position:relative;width:min(100%,430px);padding:21px;border-radius:27px;border:1px solid var(--line);background:linear-gradient(150deg,var(--panel2),var(--panel));box-shadow:var(--shadow);animation:rise .8s ease both;transition:transform .3s,box-shadow .3s}
+.dashboard:hover{transform:translateY(-5px);box-shadow:0 20px 50px rgba(108,99,255,.2)}
+.dash-top{display:flex;justify-content:space-between;align-items:center;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.dash-title{font-size:14px;font-weight:900;color:var(--text)}
+.dash-sub{font-size:10px;color:var(--muted);margin-top:3px}
+.live-pill{font-size:10px;padding:6px 9px;background:rgba(16,185,129,.1);color:var(--mint);border-radius:99px;font-weight:900}
+.dash-welcome{margin:18px 0 15px;padding:17px;border-radius:17px;background:linear-gradient(120deg,rgba(108,99,255,.12),rgba(0,212,255,.06));border:1px solid rgba(108,99,255,.15)}
+.dash-welcome small{color:var(--blue);font-size:11px;font-weight:800}
+.dash-welcome b{display:block;font-size:18px;margin-top:4px;color:var(--text)}
+.mini-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.mini-card{padding:13px;border:1px solid var(--line);background:var(--card-bg);border-radius:15px;transition:background .2s,border-color .2s}
+.mini-card:hover{background:var(--card-bg-hover);border-color:rgba(108,99,255,.25)}
+.mini-icon{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:rgba(108,99,255,.10);color:var(--blue);margin-bottom:10px}
+.mini-card:nth-child(2) .mini-icon{background:rgba(16,185,129,.1);color:var(--mint)}
+.mini-card:nth-child(3) .mini-icon{background:rgba(245,184,74,.1);color:#f59e0b}
+.mini-card:nth-child(4) .mini-icon{background:rgba(139,92,246,.1);color:#8b5cf6}
+.mini-card b{font-size:12px;display:block;color:var(--text)}
+.mini-card small{font-size:10px;color:var(--muted)}
+.dash-bottom{margin-top:12px;padding:12px 14px;border-radius:13px;background:var(--panel);display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text);border:1px solid var(--line)}
+.dash-bottom strong{color:var(--blue)}
+.float-tag{position:absolute;z-index:2;display:flex;align-items:center;gap:9px;padding:12px 15px;border-radius:15px;background:var(--panel2);border:1px solid var(--line);box-shadow:var(--shadow);font-size:12px;font-weight:900;animation:float 7s ease-in-out infinite;will-change:transform;color:var(--text)}
+.float-tag svg{color:var(--mint)}
+.tag-one{top:48px;left:-8px}
+.tag-two{bottom:43px;right:-6px;animation-delay:-2s}
+.float-tag small{display:block;font-size:10px;color:var(--muted);font-weight:600}
+
+.stats{padding:0 0 64px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.stat{padding:22px;border:1px solid var(--line);border-radius:19px;background:var(--card-bg);text-align:center;transition:transform .3s,border-color .3s}
+.stat:hover{transform:translateY(-4px);border-color:rgba(108,99,255,.25)}
+.stat b{font-size:25px;font-weight:900;color:var(--blue)}
+.stat span{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-top:3px}
+
+.section{padding:68px 0}
+.section-head{text-align:center;max-width:700px;margin:0 auto 34px}
+.section-head .eyebrow{margin-bottom:13px}
+.section-head h2{font-size:clamp(27px,3.5vw,42px);line-height:1.4;margin:0 0 12px;font-weight:900;color:var(--text)}
+.section-head p{color:var(--muted);line-height:1.9;font-size:14px;margin:0}
+
+.quote-card{max-width:930px;margin:auto;padding:clamp(24px,4vw,43px);border-radius:28px;background:linear-gradient(135deg,var(--panel2),var(--panel) 72%);border:1px solid var(--line);box-shadow:var(--shadow);position:relative;overflow:hidden}
+.quote-card:after{content:"100";position:absolute;left:-5px;bottom:-68px;font-size:190px;line-height:1;font-weight:900;color:rgba(108,99,255,.04);pointer-events:none}
+.quote-mark{width:48px;height:48px;border-radius:15px;background:rgba(108,99,255,.10);color:var(--blue);display:grid;place-items:center;margin-bottom:18px}
+.quote-card h3{font-size:clamp(21px,3vw,30px);line-height:1.6;margin:0 0 14px;font-weight:900;position:relative;z-index:1;color:var(--text)}
+.quote-card p{color:var(--muted);line-height:2.15;font-size:15px;margin:0;position:relative;z-index:1}
+.quote-card strong{color:var(--blue)}
+
+.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.price-card{position:relative;padding:26px 23px;border:1px solid var(--line);background:linear-gradient(160deg,var(--panel2),var(--panel));border-radius:24px;transition:transform .25s,border-color .25s;overflow:hidden;display:flex;flex-direction:column}
+.price-card:hover{transform:translateY(-7px);border-color:rgba(108,99,255,.4)}
+.price-card.featured{border-color:rgba(108,99,255,.4);background:linear-gradient(155deg,var(--panel2),var(--panel));box-shadow:0 18px 50px rgba(108,99,255,.15)}
+.popular{position:absolute;top:17px;left:17px;background:rgba(108,99,255,.15);color:var(--blue);padding:5px 9px;border-radius:99px;font-size:10px;font-weight:900}
+.price-icon{width:47px;height:47px;display:grid;place-items:center;border-radius:15px;background:rgba(108,99,255,.10);color:var(--blue);margin-bottom:17px}
+.price-card h3{font-size:19px;margin:0;font-weight:900;color:var(--text)}
+.price-card .desc{color:var(--muted);font-size:12px;min-height:43px;line-height:1.8;margin:6px 0 17px}
+.price{font-size:37px;line-height:1.3;font-weight:900;letter-spacing:-1px;color:var(--text)}
+.price small{font-size:13px;color:var(--muted);letter-spacing:0}
+.price-note{font-size:11px;color:var(--muted);margin-top:3px;min-height:18px}
+.price-card ul{padding:0;list-style:none;margin:22px 0 22px;display:grid;gap:12px;flex:1}
+.price-card li{display:flex;align-items:center;gap:9px;color:var(--text);font-size:12px;font-weight:700}
+.price-card li svg{color:var(--mint);width:17px;height:17px;flex:none}
+.price-card .btn{width:100%;margin-top:auto}
+
+/* تنسيق مميز جداً لوفّر 100 جنيه */
+.save-badge{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:rgba(16,185,129,.15);color:var(--mint);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:900;margin-top:8px;border:1px solid rgba(16,185,129,.3)}
+.save-badge svg{width:16px;height:16px;stroke-width:2.5}
+
+.note{margin:18px auto 0;text-align:center;color:var(--muted);font-size:11px;line-height:1.8}
+
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feature{padding:24px;border:1px solid var(--line);border-radius:22px;background:var(--card-bg);transition:.25s}
+.feature:hover{transform:translateY(-5px);background:var(--card-bg-hover);border-color:rgba(108,99,255,.25)}
+.feature-icon{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;color:var(--blue);background:rgba(108,99,255,.10);margin-bottom:18px}
+.feature h3{margin:0 0 8px;font-size:16px;color:var(--text)}
+.feature p{margin:0;color:var(--muted);font-size:12px;line-height:2}
+
+.trial{padding:0 0 78px}
+.trial-box{position:relative;overflow:hidden;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;padding:clamp(25px,4vw,42px);border-radius:28px;border:1px solid rgba(16,185,129,.2);background:linear-gradient(120deg,rgba(209,250,229,.7),rgba(219,234,254,.7) 58%,rgba(224,234,255,.7))}
+[data-theme="dark"] .trial-box{background:linear-gradient(120deg,rgba(19,59,58,.9),rgba(17,38,59,.9) 58%,rgba(21,40,74,.9))}
+.trial-copy,.trial-cta{position:relative;z-index:1}
+.trial-copy h2{margin:0 0 8px;font-size:clamp(23px,3vw,34px);font-weight:900;color:var(--text)}
+.trial-copy p{margin:0;color:var(--muted);line-height:2;font-size:13px;max-width:680px}
+
+/* --- التعديل الجديد: هايلايتر قلم فوسفوري --- */
+.marker-highlight {
+    font-size: 18px; /* تكبير الخط */
+    line-height: 1.8;
+    color: #0f172a; /* لون نص غامق عشان يبان على الهايلايت */
+    font-weight: 700;
+    background: linear-gradient(104deg, transparent 2%, rgba(0, 212, 255, 0.3) 4%, rgba(108, 99, 255, 0.35) 96%, transparent 98%);
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 5px;
+}
+[data-theme="dark"] .marker-highlight {
+    color: #ffffff; /* لون النص في الوضع الداكن */
+    background: linear-gradient(104deg, transparent 2%, rgba(0, 212, 255, 0.2) 4%, rgba(108, 99, 255, 0.3) 96%, transparent 98%);
+}
+
+@media(max-width:650px){
+  .marker-highlight {
+    font-size: 16px;
+  }
+}
+/* -------------------------------------- */
+
+.trial-cta .btn{white-space:nowrap;background:var(--mint);color:#06241f;box-shadow:0 10px 25px rgba(16,185,129,.15)}
+.admins{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:23px}
+.admin-card{padding:19px;border:1px dashed var(--line);border-radius:18px;background:var(--card-bg);display:flex;align-items:center;gap:12px;transition:transform .22s,border-color .22s,background .22s}
+.admin-card:hover{transform:translateY(-4px);border-color:rgba(108,99,255,.4);background:var(--card-bg-hover)}
+.admin-avatar{width:43px;height:43px;border-radius:14px;display:grid;place-items:center;background:rgba(108,99,255,.10);color:var(--blue)}
+.admin-card b{font-size:13px;display:block;color:var(--text)}
+.admin-card small{font-size:10px;color:var(--muted);display:block;margin-top:3px}
+
+.faq{max-width:800px;margin:auto;display:grid;gap:11px}
+.faq-item{border:1px solid var(--line);background:var(--card-bg);border-radius:16px;overflow:hidden;transition:border-color .2s,background .2s}
+.faq-item:hover{background:var(--card-bg-hover)}
+.faq-item.open{border-color:rgba(108,99,255,.4);background:var(--card-bg-hover)}
+.faq-q{cursor:pointer;list-style:none;padding:18px 20px;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:space-between;gap:12px;user-select:none;color:var(--text)}
+.faq-icon{width:24px;height:24px;flex-shrink:0;border-radius:50%;background:var(--card-bg-hover);display:grid;place-items:center;transition:transform .3s,background .3s}
+.faq-icon svg{width:14px;height:14px;stroke:currentColor;transition:transform .3s}
+.faq-item.open .faq-icon{background:var(--blue);color:#fff;transform:rotate(180deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .4s cubic-bezier(.4,0,.2,1),padding .3s ease}
+.faq-item.open .faq-a{max-height:300px;padding:0 20px 20px}
+.faq-a p{color:var(--muted);font-size:13px;line-height:2;margin:0}
+
+.footer{border-top:1px solid var(--line);padding:27px 0 35px;color:var(--muted);font-size:11px}
+.footer-in{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.footer b{color:var(--text)}
+.reveal{opacity:0;transform:translateY(22px);transition:opacity .65s ease,transform .65s cubic-bezier(.2,.8,.2,1)}
+.reveal.visible{opacity:1;transform:none}
+.reveal:nth-child(2){transition-delay:.07s}
+.reveal:nth-child(3){transition-delay:.14s}
+.reveal:nth-child(4){transition-delay:.21s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-11px)}}
+@keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+#back-to-top{position:fixed;bottom:24px;left:24px;width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#6c63ff,#00d4ff);color:#fff;border:none;display:grid;place-items:center;box-shadow:0 10px 25px rgba(108,99,255,.4);cursor:pointer;opacity:0;visibility:hidden;transform:translateY(20px) scale(.9);transition:transform .35s,background .35s,border-color .35s,box-shadow .35s,color .35s cubic-bezier(.2,.8,.2,1);z-index:100}
+#back-to-top.show{opacity:1;visibility:visible;transform:translateY(0) scale(1)}
+#back-to-top:hover{transform:translateY(-4px) scale(1.05);box-shadow:0 15px 35px rgba(108,99,255,.5)}
+#back-to-top svg{width:22px;height:22px;stroke-width:2.5}
+
+@media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:20px}.hero-copy{text-align:center}.hero-copy .eyebrow{margin-inline:auto}.hero-copy p{margin-inline:auto}.hero-actions,.trust{justify-content:center}.hero-art{min-height:420px}.dashboard{width:min(100%,420px)}.tag-one{left:2%}.tag-two{right:2%}.features{grid-template-columns:repeat(2,1fr)}.prices{gap:12px}.price-card{padding:22px 17px}}
+@media(max-width:650px){.container{width:min(100% - 28px,1160px)}.navin{height:66px}.navlinks{display:none}.brand{font-size:16px}.logo{width:39px;height:39px}.brand small{display:none}.navactions .btn{padding:10px 12px;font-size:11px}.hero{padding:52px 0 42px}.hero h1{font-size:clamp(34px,10vw,47px);letter-spacing:-.8px}.hero p{font-size:14px}.hero-art{min-height:365px}.orb{width:270px;height:270px}.dashboard{padding:16px;border-radius:22px}.tag-one{top:8px;left:0}.tag-two{bottom:4px;right:0}.float-tag{font-size:10px;padding:9px 11px}.stats-grid{gap:8px}.stat{padding:15px 7px}.stat b{font-size:20px}.stat span{font-size:10px}.section{padding:49px 0}.quote-card{border-radius:22px}.quote-card p{font-size:13px}.prices{grid-template-columns:1fr}.price-card .desc{min-height:0}.price-card.featured{order:-1}.features{grid-template-columns:1fr}.feature{padding:20px}.trial-box{grid-template-columns:1fr;text-align:center}.trial-cta .btn{width:100%}.admins{grid-template-columns:1fr}.admin-card{text-align:right}.footer-in{justify-content:center;text-align:center}.footer-in>div{width:100%}.navactions .btn-soft{display:none}#back-to-top{bottom:16px;left:16px;width:42px;height:42px}.theme-toggle{width:36px;height:36px}#scroll-progress-side{width:3px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<!-- شريط التقدم العلوي والجانبي -->
+<div id="scroll-progress"></div>
+<div id="scroll-progress-side"></div>
+
+<button id="back-to-top" aria-label="العودة لأعلى"><svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg></button>
+
+<header class="nav" id="main-nav"><div class="container navin">
+  <a class="brand" href="#home" aria-label="ثانوية club الرئيسية">
+    <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
+    <span>ثانوية <span class="gradient">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
+  </a>
+  <nav class="navlinks" id="nav-links">
+    <a href="#about" class="nav-link">عن المنصة</a>
+    <a href="#plans" class="nav-link">الاشتراك</a>
+    <a href="#trial" class="nav-link">التجربة المجانية</a>
+    <a href="#faq" class="nav-link">الأسئلة الشائعة</a>
+  </nav>
+  <div class="navactions">
+    <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
+      <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+    <a class="btn btn-soft" href="#plans">شوف الأسعار</a>
+    <a class="btn btn-primary" href="login.html" id="smart-auth-btn">
+      <span id="smart-auth-text">تسجيل دخول</span>
+      <svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"/></svg>
+    </a>
+  </div>
+</div></header>
+
+<main id="home">
+<section class="hero"><div class="container hero-grid">
+<div class="hero-copy">
+<div class="eyebrow"><i></i> ثانوية club · كل اللي محتاجه في مكان واحد</div>
+<h1>كل محاضراتك،<br><span class="gradient">بسعر على قدّك.</span></h1>
+<p>بدل ما تتشتت بين منصات كتير، اجمع محتوى المدرسين والشعب في مكان واحد. اختار خطتك (شهري بـ150 جنيه أو 3 شهور بـ350 جنيه)، تابع محاضراتك، وركّز في اللي يهمك: <strong>مستقبلك.</strong></p>
+<div class="hero-actions">
+  <a class="btn btn-primary btn-lg" href="login.html" id="hero-auth-btn">سجل دخولك <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+  <a class="btn btn-soft btn-lg" href="#plans"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> اعرف باقات الاشتراك</a>
+</div>
+<div class="trust"><div class="avatars"><span>✓</span><span>✓</span><span>✓</span></div><span>سعر واضح · تجربة مجانية · دعم من الأدمن</span></div>
+</div>
+<div class="hero-art"><div class="orb"></div>
+<div class="float-tag tag-one"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg><span>كل حاجة منظمة<small>المواد والمحاضرات في مكان واحد</small></span></div>
+<div class="dashboard"><div class="dash-top"><div><div class="dash-title">مساحة مذاكرتك</div><div class="dash-sub">ثانوية club التعليمية</div></div><span class="live-pill">● جاهز للمذاكرة</span></div>
+<div class="dash-welcome"><small>أهلاً بيك في رحلتك</small><b>ابدأ محاضرتك الجاية ✨</b></div>
+<div class="mini-cards">
+<div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><path d="m3 8 9-5 9 5-9 5-9-5Z"/><path d="M7 11v5c3 2 7 2 10 0v-5"/></svg></div><b>المواد الدراسية</b><small>كل مادة في قسمها</small></div>
+<div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 9 5 3-5 3V9Z"/></svg></div><b>المحاضرات</b><small>تابع وقت ما تحب</small></div>
+<div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg></div><b>نظّم وقتك</b><small>كمّل من حيث وقفت</small></div>
+<div class="mini-card"><div class="mini-icon"><svg viewBox="0 0 24 24"><path d="M12 3 15 9l6 .9-4.5 4.3 1.1 6.1L12 17.4l-5.6 2.9 1.1-6.1L3 9.9 9 9l3-6Z"/></svg></div><b>باقات اشتراك</b><small>شهري أو 3 شهور</small></div>
+</div><div class="dash-bottom"><span>خطوتك الجاية؟ افتح موادك وابدأ</span><strong>يلا نذاكر ←</strong></div></div>
+<div class="float-tag tag-two"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg><span>باقات متاحة<small>شهري 150 · 3 شهور 350</small></span></div>
+</div></div></section>
+
+<section class="stats"><div class="container stats-grid reveal">
+<div class="stat"><b>150 جنيه</b><span>اشتراك شهري</span></div>
+<div class="stat"><b>350 جنيه</b><span>اشتراك 3 شهور (وفّر 100)</span></div>
+<div class="stat"><b>دعم مباشر</b><span>تواصل مع فريق الإدارة</span></div>
+</div></section>
+
+<section class="section" id="about"><div class="container"><div class="section-head reveal"><div class="eyebrow">حكاية ثانوية club</div><h2>اشتراك واضح وبسعر ثابت <span class="gradient">من غير تعقيد.</span></h2><p>فكرتنا بسيطة: نخلي الوصول للمحتوى الدراسي أوضح وأسهل، باشتراك شهري ثابت 150 جنيه أو اشتراك 3 شهور بـ350 جنيه.</p></div>
+<div class="quote-card reveal"><div class="quote-mark"><svg viewBox="0 0 24 24"><path d="M4 19c4-2 6-6 6-12H4v7h4M14 19c4-2 6-6 6-12h-6v7h4"/></svg></div>
+<h3>مذاكرتك في مكان واحد، بباقات اشتراك تناسبك.</h3>
+<p>إحنا في ثانوية club بنسهّل عليك الوصول للمحتوى الدراسي من مكان واحد. اختار بين الاشتراك الشهري بـ150 جنيه، أو وفّر أكثر باشتراك 3 شهور بـ350 جنيه (توفير 100 جنيه عن الدفع الشهري).</p>
+</div></div></section>
+
+<section class="section" id="plans"><div class="container"><div class="section-head reveal"><div class="eyebrow">باقات الاشتراك</div><h2>باقتين متاحتين <span class="gradient">على قدّك.</span></h2><p>اختار اللي يناسبك: شهر واحد بـ150 جنيه، أو 3 شهور بـ350 جنيه مع توفير 100 جنيه.</p></div>
+<div class="prices" style="grid-template-columns:repeat(2,minmax(0,1fr));max-width:900px;margin:0 auto">
+<article class="price-card reveal">
+  <div class="price-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></div>
+  <h3>اشتراك شهر</h3>
+  <p class="desc">كل شهر بتجدد براحتك، بسعر ثابت وواضح.</p>
+  <div class="price">150 <small>جنيه / شهر</small></div>
+  <div class="price-note">مدة الاشتراك شهر واحد</div>
+  
+  <ul>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>محاضرات كل المدرسين في كل مواد شعبتك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>ارجع لأي محاضرة وقت ما تحب طول مدة اشتراكك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>المنصة بتحفظ مكانك في كل محاضرة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>دعم لو قابلتك أي مشكلة</li>
+  </ul>
+
+  <!-- التعديل هنا: تحويل الزرار لـ primary -->
+  <a class="btn btn-primary price-cta" href="login.html">معايا كود</a>
+</article>
+
+<article class="price-card featured reveal">
+  <span class="popular">وفّر أكتر</span>
+  <div class="price-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></div>
+  <h3>اشتراك 3 شهور</h3>
+  <p class="desc">اشترك 3 شهور مرة واحدة ووفّر 100 جنيه عن الشهري.</p>
+  <div class="price">350 <small>جنيه / 3 شهور</small></div>
+  
+  <div class="save-badge">
+    <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    وفّر 100 جنيه
+  </div>
+
+  <ul>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>محاضرات كل المدرسين في كل مواد شعبتك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>ارجع لأي محاضرة وقت ما تحب طول مدة اشتراكك</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>المنصة بتحفظ مكانك في كل محاضرة</li>
+    <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>دعم لو قابلتك أي مشكلة</li>
+  </ul>
+
+  <a class="btn btn-primary price-cta" href="login.html" id="price-auth-btn">معايا كود</a>
+</article>
+</div>
+
+<!-- إضافة النص الجديد هنا (تم إزالة كلاس reveal) -->
+<div style="text-align: center; margin-top: 35px; margin-bottom: 20px; padding: 0 15px;">
+    <span class="marker-highlight">لو انت مشترك في باقة الشهر وعاوز تحوّل لباقة الـ 3 شهور وتدفع الفرق، كلم الأدمن.</span>
+</div>
+<!-- نهاية الإضافة -->
+
+</div></section>
+
+<section class="section"><div class="container"><div class="section-head reveal"><div class="eyebrow">ليه ثانوية club؟</div><h2>مذاكرتك تبقى <span class="gradient">أبسط وأرتب.</span></h2><p>بنرتّب تجربة استخدام تساعدك توصل للمحتوى من غير لف كتير.</p></div>
+<div class="features"><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h7M7 16h5"/></svg></div><h3>كل مادة في مكانها</h3><p>تقسيم واضح للمواد والفصول والمحاضرات عشان توصل للي محتاجه بسهولة.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="m10 9 5 3-5 3V9Z"/></svg></div><h3>تابع المحاضرات</h3><p>افتح المحاضرة من حسابك وكمّل مذاكرتك حسب المحتوى المتاح ليك.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><h3>سعر واضح</h3><p>باقات ثابتة وواضحة: شهري 150 جنيه، أو 3 شهور 350 جنيه.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></svg></div><h3>دخول مباشر</h3><p>ادخل على موادك مباشرة من غير أي خطوات إضافية.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/></svg></div><h3>تواصل مع الإدارة</h3><p>لو حابب تجربة مجانية، تقدر تكلم أحد الأدمن بعد إضافة بيانات التواصل الرسمية.</p></article><article class="feature reveal"><div class="feature-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></div><h3>تجربة قبل الاشتراك</h3><p>اسأل الإدارة عن التجربة المجانية المتاحة قبل اتخاذ قرار الاشتراك.</p></article></div>
+</div></section>
+
+<section class="trial" id="trial"><div class="container"><div class="trial-box reveal"><div class="trial-copy">
+    <h2>طب وأنا إيش ضمني إنك مش نصاب؟ 👀</h2>
+    <!-- تم دمج النص كله هنا وتطبيق كلاس الهايلايتر -->
+    <span class="marker-highlight">
+        من حقك تطمّن قبل ما تشترك. متاح تجربة مجانية للموقع؛ جرّب براحتك، وكلم الأدمن من رابط التيليجرام الموجود هنا.
+    </span>
+</div><div class="trial-cta"><a class="btn btn-lg" href="#admins">شوف طرق التواصل <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div>
+<div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمن <span class="gradient">المتاح للتواصل</span></h2><p>تواصل مع الأدمن مباشرة عبر تيليجرام.</p></div>
+<div class="admins" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:420px;margin-inline:auto">
+<a class="admin-card" href="https://t.me/S7alaby7" target="_blank" rel="noopener noreferrer"><div class="admin-avatar"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div><div><b>@S7alaby7</b><small>تواصل على تيليجرام ↗</small></div></a>
+</div></div></div></section>
+
+<section class="section" id="faq"><div class="container"><div class="section-head reveal"><div class="eyebrow">محتاج تعرف إيه؟</div><h2>أسئلة <span class="gradient">بتتكرر.</span></h2></div>
+<div class="faq reveal" id="faq-container">
+<div class="faq-item"><div class="faq-q">إزاي أبدأ المذاكرة؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>اضغط على "تسجيل دخول" في أعلى الصفحة، وادخل الكود الخاص بك، وهيوديك مباشرة لصفحة المواد.</p></div></div>
+<div class="faq-item"><div class="faq-q">هل فيه تجربة مجانية؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p> اه طبعا فيه تجربة مجانية اطلبها من الادمن دلوقتي    .</p></div></div>
+<div class="faq-item"><div class="faq-q">أسعار الاشتراك كام؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>في باقتين: اشتراك شهري بـ150 جنيهًا، أو اشتراك 3 شهور بـ350 جنيهًا (توفير 100 جنيه عن الدفع الشهري).   .</p></div></div>
+<div class="faq-item"><div class="faq-q">هل كل المواد بتظهر بعد الدخول؟ <span class="faq-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></div><div class="faq-a"><p>بالظبط كدا كل المواد هتظهر حسب السنة بتاعتك وشُعبتك .</p></div></div>
+</div></div></section>
+</main>
+
+<footer class="footer"><div class="container footer-in"><div><b>ثانوية club</b> — خلّي مذاكرتك في مكان واحد.</div><div>الأسعار بالجنيه المصري · © <span id="year"></span> ثانوية club</div><a href="#home">الرجوع لفوق ↑</a></div></footer>
+
+<script>
+(function(){
+'use strict';
+const $ = id => document.getElementById(id);
+const yearSpan = $('year');
+if (yearSpan) yearSpan.textContent = new Date().getFullYear();
+const isLoggedIn = !!localStorage.getItem('student_token');
+const studentName = localStorage.getItem('student_name') || '';
+if (isLoggedIn) {
+  const navBtn = $('smart-auth-btn');
+  const navText = $('smart-auth-text');
+  const heroBtn = $('hero-auth-btn');
+  const priceBtns = document.querySelectorAll('.price-cta');
+  if (navBtn && navText) { navBtn.href = 'subjects.html'; navText.textContent = 'اذهب لموادي'; }
+  if (heroBtn) { heroBtn.href = 'subjects.html'; heroBtn.innerHTML = `أهلاً ${studentName || 'بك'} 👋 <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`; }
+  if (priceBtns) { priceBtns.forEach(btn => { btn.href = 'subjects.html'; btn.textContent = 'اذهب لموادي'; }); }
+}
+const progressBar = $('scroll-progress');
+const progressBarSide = $('scroll-progress-side'); // الشريط الجانبي
+const backToTop = $('back-to-top');
+const mainNav = $('main-nav');
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav-link');
+
+let scrollTicking = false;
+function onScroll() {
+  if (scrollTicking) return;
+  scrollTicking = true;
+  requestAnimationFrame(() => {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+    if (progressBar) progressBar.style.width = progress + '%';
+    if (progressBarSide) progressBarSide.style.height = progress + '%';
+    if (mainNav) mainNav.classList.toggle('scrolled', scrollTop > 50);
+    if (backToTop) backToTop.classList.toggle('show', scrollTop > 400);
+    let current = '';
+    sections.forEach(s => { if (scrollTop >= s.offsetTop - 120) current = s.getAttribute('id'); });
+    navLinks.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + current));
+    scrollTicking = false;
+  });
+}
+
+window.addEventListener('scroll', onScroll, { passive: true });
+onScroll();
+if (backToTop) backToTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+document.querySelectorAll('.faq-item').forEach(item => {
+  const q = item.querySelector('.faq-q');
+  q.addEventListener('click', () => {
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(o => { o.classList.remove('open'); const a = o.querySelector('.faq-a'); if (a) a.style.maxHeight = null; });
+    if (!isOpen) { item.classList.add('open'); const a = item.querySelector('.faq-a'); if (a) a.style.maxHeight = a.scrollHeight + 30 + 'px'; }
+  });
+});
+if ('IntersectionObserver' in window) {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+} else { document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible')); }
+fetch('/api/track-visit', { method: 'POST' }).catch(() => {});
+})();
+</script>
+<script src="theme.js"></script>
+</body>
+</html>
