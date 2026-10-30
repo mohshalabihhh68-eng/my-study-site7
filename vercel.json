@@ -1,14 +1,13 @@
 {
   "version": 2,
   "functions": {
-    "api/index.js": {
+    "api/[...path].js": {
       "includeFiles": "{thanawica.js,thanawica_decrypt.wasm,thanawica_cookies.txt,data/**}",
       "maxDuration": 60,
       "memory": 1024
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/admin", "destination": "/admin.html" },
     { "source": "/login", "destination": "/login.html" },
     { "source": "/subjects", "destination": "/subjects.html" },
