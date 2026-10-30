@@ -1,4 +1,0 @@
-run = "npm start"
-
-[deployment]
-run = ["npm", "start"]
