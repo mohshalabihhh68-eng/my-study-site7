@@ -1733,8 +1733,8 @@ async function flushVisitQueue() {
 }
 function scheduleVisitFlush(ms = VISIT_FLUSH_MS) {
   if (visitFlushTimer) return;
+  // لا تستخدم unref — كان بيسمح للعملية تتقفل قبل ما الزيارات تتكتب
   visitFlushTimer = setTimeout(() => { flushVisitQueue().catch(() => {}); }, ms);
-  if (visitFlushTimer.unref) visitFlushTimer.unref();
 }
 function enqueueVisit(key, record) {
   visitWriteQueue.push({ key, record });
@@ -1746,9 +1746,8 @@ function enqueueVisit(key, record) {
 }
 
 app.post("/api/track-visit", async (req, res) => {
-  // رد فوري — الشغل الثقيل في الخلفية عشان الموقع يبقى زي الصاروخ
-  res.json({ success: true });
-
+  // مهم: لازم نكمّل الكتابة قبل الرد — الرد المبكر + طابور unref كان بيضيع الزيارات
+  // (خصوصًا على serverless أو لو العملية اتقفلت قبل الـ flush)
   try {
     const ip = clientIp(req);
     const ua = req.headers["user-agent"] || "Unknown";
@@ -1930,10 +1929,18 @@ app.post("/api/track-visit", async (req, res) => {
     };
 
     const visitKey = "visits/" + nowTime + "_" + Math.random().toString(36).slice(2, 8);
-    enqueueVisit(visitKey, record);
+    // كتابة مباشرة ومتزامنة — مفيش تأخير setTimeout يضيع الزيارة
+    try {
+      await fbSet(visitKey, record);
+      try { fbInvalidate("visits"); } catch {}
+    } catch (writeErr) {
+      console.warn("[track-visit] write:", writeErr && writeErr.message);
+      try { enqueueVisit(visitKey, record); } catch {}
+    }
   } catch (e) {
     console.warn("[track-visit]", e && e.message);
   }
+  if (!res.headersSent) res.json({ success: true });
 });
 
 app.get("/api/admin/visits/summary", requireAdmin("students_view"), async (_req, res) => {
