@@ -180,21 +180,29 @@
   function send(payload) {
     var url = "/api/track-visit";
     var body = JSON.stringify(payload);
-    try {
-      if (navigator.sendBeacon) {
-        var blob = new Blob([body], { type: "application/json" });
-        if (navigator.sendBeacon(url, blob)) return;
-      }
-    } catch (e) {}
+    // fetch أولاً (Content-Type مضمون + keepalive) — sendBeacon كان بيرجع true
+    // من غير ما الـ body يتفسّر JSON أحيانًا، فالسيرفر بيسجّل زيارة فاضية/ناقصة
     try {
       fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: body,
         keepalive: true,
         credentials: "same-origin"
-      }).catch(function () {});
+      }).catch(function () {
+        try {
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+          }
+        } catch (e2) {}
+      });
+      return;
     } catch (e) {}
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+      }
+    } catch (e3) {}
   }
 
   collect().then(send).catch(function () {
