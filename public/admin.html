@@ -1973,12 +1973,40 @@ function drawVisits() {
     return;
   }
 
+  // استخراج موديل من User-Agent المحفوظ (للزيارات القديمة)
+  const modelFromUA = ua => {
+    const s = String(ua || "");
+    if (!s) return null;
+    const patterns = [
+      /Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i,
+      /\b((?:SM|GT|SC|SGH|SCH|SHV)-[A-Z0-9]+)\b/i,
+      /\b((?:RMX|CPH|V\d{4}|ANE|LYA|CLT|MAR|ELS)-[A-Z0-9]+)\b/i,
+      /\b(SM-[A-Z0-9]+)\b/i,
+      /\b((?:Redmi|POCO)\s+[^);/]{2,30})\b/i,
+      /\b(Mi\s+\d[^);/]{0,20})\b/i,
+      /\b((?:Infinix|TECNO|ITEL)[\s\-][^);/]{2,25})\b/i,
+      /\b(Pixel\s?\d[^);/]{0,12})\b/i,
+      /\b(Galaxy\s+[^);/]{2,25})\b/i
+    ];
+    for (const re of patterns) {
+      const m = s.match(re);
+      if (m && m[1]) {
+        const raw = m[1].replace(/\s*Build.*/i, "").replace(/\/.*$/, "").trim();
+        if (raw && raw.length > 1 && !/^(K|U|wv|Linux|Android|Mobile)$/i.test(raw)) return raw;
+      }
+    }
+    if (/iPhone/i.test(s)) return "iPhone";
+    if (/iPad/i.test(s)) return "iPad";
+    return null;
+  };
   // اسم ودي محلي (لو الزيارة القديمة مفيهاش deviceLabel من السيرفر)
   const phoneName = v => {
     if (!v) return "";
     if (v.deviceLabel) return v.deviceLabel;
-    const m = String(v.deviceModel || "").toUpperCase();
-    const b = v.deviceBrand || "";
+    // لو مفيش deviceModel — حاول من الـ User-Agent المحفوظ
+    let model = v.deviceModel || modelFromUA(v.userAgent) || "";
+    let b = v.deviceBrand || "";
+    const m = String(model || "").toUpperCase();
     const map = {
       "SM-X216": "Galaxy Tab A9", "SM-X210": "Galaxy Tab A9", "SM-X215": "Galaxy Tab A9",
       "SM-X200": "Galaxy Tab A8", "SM-X205": "Galaxy Tab A8",
@@ -1991,15 +2019,22 @@ function drawVisits() {
       "CPH2387": "OPPO A17", "CPH2477": "OPPO A77s", "CPH2637": "OPPO A3x"
     };
     for (const [code, name] of Object.entries(map)) {
-      if (m.startsWith(code) || m.includes(code)) return (b || (code.startsWith("CPH") ? "OPPO" : "Samsung")) + " " + name + " (" + (v.deviceModel || code) + ")";
+      if (m.startsWith(code) || m.includes(code)) return (b || (code.startsWith("CPH") ? "OPPO" : "Samsung")) + " " + name + " (" + (model || code) + ")";
     }
-    if (m.startsWith("SM-")) return (b || "Samsung") + " " + (v.deviceModel || m);
-    if (m.startsWith("RMX")) return (b || "Realme") + " " + (v.deviceModel || m);
-    if (m.startsWith("CPH")) return (b || "OPPO") + " " + (v.deviceModel || m);
-    if (v.deviceBrand && v.deviceModel) return v.deviceBrand + " " + v.deviceModel;
-    if (v.deviceModel) return v.deviceModel;
-    if (v.deviceBrand) return v.deviceBrand;
-    // مفيش موديل في البيانات — وصف من نوع الجهاز/النظام بدل «غير معروف»
+    if (!b && m) {
+      if (m.startsWith("SM-") || m.includes("GALAXY")) b = "Samsung";
+      else if (m.startsWith("RMX")) b = "Realme";
+      else if (m.startsWith("CPH")) b = "OPPO";
+      else if (/REDMI|POCO|MI\s/.test(m)) b = "Xiaomi";
+      else if (/IPHONE|IPAD/.test(m)) b = "Apple";
+    }
+    if (m.startsWith("SM-")) return (b || "Samsung") + " " + model;
+    if (m.startsWith("RMX")) return (b || "Realme") + " " + model;
+    if (m.startsWith("CPH")) return (b || "OPPO") + " " + model;
+    if (b && model) return b + " " + model;
+    if (model) return model;
+    if (b) return b;
+    // مفيش موديل حتى في الـ UA — وصف من نوع الجهاز/النظام
     const kind = v.deviceType || (v.isMobile ? "موبايل" : "كمبيوتر");
     const osBit = [v.os, v.osVersion].filter(Boolean).join(" ");
     const brBit = [v.browser, v.browserVersion].filter(Boolean).join(" ");
