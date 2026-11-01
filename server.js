@@ -1979,6 +1979,26 @@ app.post("/api/track-visit", async (req, res) => {
           studentEmail = st.email || st.mail || st.gmail || null;
           studentSection = st.section || null;
           studentGov = st.governorate || st.gov || null;
+          // لو مفيش موديل من المتصفح — خده من أجهزة الطالب المسجّلة (لو الاسم فيه كود موديل)
+          if (!deviceModel && st.devices && typeof st.devices === "object") {
+            const devs = Object.values(st.devices);
+            const prefer = studentLink.deviceId && st.devices[studentLink.deviceId]
+              ? [st.devices[studentLink.deviceId], ...devs]
+              : devs;
+            for (const d of prefer) {
+              const nm = String((d && (d.name || d.model || d.deviceModel)) || "");
+              if (/\b(SM-[A-Z0-9]+|RMX[0-9]+|CPH[0-9]+|Pixel\s?\d+|iPhone|iPad|Redmi|POCO|Infinix|TECNO)\b/i.test(nm)) {
+                deviceModel = nm.replace(/^.*?\b((?:SM-[A-Z0-9]+|RMX[0-9]+|CPH[0-9]+))\b.*$/i, "$1") || nm;
+                if (!deviceBrand) {
+                  if (/SM-/i.test(nm)) deviceBrand = "Samsung";
+                  else if (/RMX|CPH|OPPO|Realme/i.test(nm)) deviceBrand = "OPPO/Realme";
+                  else if (/Redmi|POCO|Xiaomi|Mi\s/i.test(nm)) deviceBrand = "Xiaomi";
+                  else if (/iPhone|iPad/i.test(nm)) deviceBrand = "Apple";
+                }
+                break;
+              }
+            }
+          }
         }
       } catch (e) {}
     }
@@ -2021,7 +2041,10 @@ app.post("/api/track-visit", async (req, res) => {
     }
 
     const deviceLabel = friendlyDeviceName(deviceBrand, deviceModel) ||
-      [deviceBrand, deviceModel].filter(Boolean).join(" ") || null;
+      [deviceBrand, deviceModel].filter(Boolean).join(" ") ||
+      // لو مفيش موديل من المتصفح — نخزن وصف مفيد بدل فاضي
+      [device.deviceType || (device.isMobile ? "موبايل" : "كمبيوتر"), device.os, device.osVersion || platformVersion || "", device.browser, device.browserVersion]
+        .filter(Boolean).join(" · ") || null;
 
     // بصمة مختصرة تساعد على تمييز نفس الجهاز حتى بدون تسجيل
     const deviceFingerprint = [
