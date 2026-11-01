@@ -1498,6 +1498,47 @@ function parseDeviceInfo(ua) {
   return { os, osVersion, deviceType, deviceBrand, deviceModel, browser, browserVersion, isMobile };
 }
 
+/** كشف بوت / زاحف من الـ UA والهيدرز وشكل الـ payload */
+function detectBot(ua, req, body) {
+  const s = String(ua || "");
+  const rules = [
+    [/googlebot|adsbot-google|mediapartners-google|google-inspectiontool/i, "Googlebot"],
+    [/bingbot|bingpreview|msnbot/i, "Bingbot"],
+    [/yandex(bot|images|accessibility)/i, "Yandex"],
+    [/baiduspider/i, "Baidu"],
+    [/duckduckbot/i, "DuckDuckBot"],
+    [/facebookexternalhit|facebot|meta-externalagent/i, "Facebook"],
+    [/twitterbot|xbot/i, "Twitter/X"],
+    [/linkedinbot/i, "LinkedIn"],
+    [/slackbot|slack-img/i, "Slack"],
+    [/discordbot/i, "Discord"],
+    [/telegrambot/i, "Telegram"],
+    [/whatsapp/i, "WhatsApp"],
+    [/applebot/i, "Applebot"],
+    [/semrushbot|ahrefsbot|mj12bot|dotbot|petalbot|bytespider|gptbot|chatgpt|claudebot|anthropic|ccbot|dataforseo|screaming frog|siteaudit|serpstat|majestic/i, "SEO/Crawler"],
+    [/curl\/|wget\/|python-requests|python-urllib|go-http-client|java\/|scrapy|httpclient|okhttp|libwww|php\//i, "Script/Client"],
+    [/headlesschrome|phantomjs|slimerjs|selenium|puppeteer|playwright/i, "Headless"],
+    [/\bbot\b|\bcrawl\b|\bspider\b|\bslurp\b/i, "Bot"]
+  ];
+  for (const [re, name] of rules) {
+    if (re.test(s)) return { isBot: true, botName: name, confidence: "high" };
+  }
+
+  let score = 0;
+  const reasons = [];
+  if (!s || s === "Unknown" || s.length < 12) { score += 3; reasons.push("ua-empty"); }
+  if (!req?.headers?.["accept-language"] && !(body && body.language)) { score += 1; reasons.push("no-lang"); }
+  const hasClientSignals = Boolean(
+    body && (body.screen || body.timezone || body.guestId || body.model || body.gpu || body.cores != null)
+  );
+  if (!hasClientSignals) { score += 1; reasons.push("no-client-signals"); }
+  if (/chrome\//i.test(s) && !req?.headers?.["sec-ch-ua"] && !hasClientSignals) { score += 1; reasons.push("no-ch"); }
+
+  if (score >= 3) return { isBot: true, botName: "Suspected bot", confidence: "medium", reasons };
+  if (score >= 2) return { isBot: false, botName: null, confidence: "low-suspect", reasons };
+  return { isBot: false, botName: null, confidence: "human", reasons };
+}
+
 /** اسم ودي للموديل (Samsung / Xiaomi / …) عشان يظهر في لوحة الأدمن بوضوح */
 function friendlyDeviceName(brand, model) {
   const b = String(brand || "").trim();
@@ -1972,6 +2013,10 @@ app.post("/api/track-visit", async (req, res) => {
       (body.deviceMemory != null ? body.deviceMemory + "GB" : "")
     ].filter(Boolean).join("|").slice(0, 180) || null;
 
+    const botInfo = detectBot(ua, req, body);
+    const isStudentVisit = Boolean(studentLink && studentLink.studentCode);
+    const visitorKind = botInfo.isBot ? "bot" : (isStudentVisit ? "student" : "human");
+
     const record = {
       ip,
       os: device.os,
@@ -1983,6 +2028,10 @@ app.post("/api/track-visit", async (req, res) => {
       browser: device.browser,
       browserVersion: device.browserVersion || null,
       isMobile: device.isMobile,
+      isBot: Boolean(botInfo.isBot),
+      botName: botInfo.botName || null,
+      botConfidence: botInfo.confidence || null,
+      visitorKind,
       language: language || null,
       referer: referer || null,
       screen: screen || null,
