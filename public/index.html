@@ -440,9 +440,10 @@ if ('IntersectionObserver' in window) {
   }, { threshold: 0.08 });
   document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 } else { document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible')); }
-fetch('/api/track-visit', { method: 'POST' }).catch(() => {});
 })();
 </script>
 <script src="theme.js"></script>
+<!-- تسجيل كل زائر (مسجّل أو لا) في لوحة الأدمن — لازم track-visit.js يكون في /public -->
+<script src="/track-visit.js" defer></script>
 </body>
 </html>
