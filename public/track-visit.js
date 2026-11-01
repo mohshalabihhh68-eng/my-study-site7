@@ -1,5 +1,6 @@
 /**
- * Thanawya — تسجيل زيارة مفصّلة (v3 — GPS اختياري + طالب)
+ * Thanawya — تسجيل زيارة مفصّلة (v4 — كل زائر حتى غير المسجّل + guestId)
+ * لازم يتضاف في كل الصفحات العامة (الصفحة الرئيسية / تسجيل الدخول / بعد الدخول):
  * <script src="/track-visit.js" defer></script>
  */
 (function () {
@@ -16,6 +17,22 @@
       return String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || "").slice(0, 120);
     } catch (e) {
       return "";
+    }
+  }
+
+  /** معرّف ثابت للزائر حتى لو مش مسجّل — عشان نجمّع زياراته في لوحة الأدمن */
+  function getOrCreateGuestId() {
+    try {
+      var key = "tw_guest_id";
+      var id = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (id && /^[a-zA-Z0-9_\-]{8,64}$/.test(id)) return id;
+      id = "g_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+      try { localStorage.setItem(key, id); } catch (e1) {
+        try { sessionStorage.setItem(key, id); } catch (e2) {}
+      }
+      return id;
+    } catch (e) {
+      return "g_" + Math.random().toString(36).slice(2, 12);
     }
   }
 
@@ -129,6 +146,7 @@
     } catch (e) {}
 
     var student = readStudentHint();
+    var guestId = getOrCreateGuestId();
     var geo = await getPreciseLocation();
 
     var downlink = null, effectiveType = null, saveData = false;
@@ -144,6 +162,7 @@
     try { colorDepth = (window.screen && screen.colorDepth) || null; } catch (e) {}
     try { orientation = (screen.orientation && screen.orientation.type) || null; } catch (e) {}
 
+    // بيتبعت دايمًا — حتى لو مفيش studentCode (زائر غير مسجّل)
     var payload = {
       screen: screenStr || null,
       timezone: timezone || null,
@@ -165,6 +184,7 @@
       saveData: saveData,
       colorDepth: colorDepth,
       orientation: orientation,
+      guestId: guestId || null,
       studentCode: student.studentCode || null,
       studentName: student.studentName || null,
       deviceId: student.deviceId || null
@@ -206,10 +226,13 @@
   }
 
   collect().then(send).catch(function () {
+    var gid = null;
+    try { gid = getOrCreateGuestId(); } catch (e) {}
     send({
-      page: location.pathname,
+      page: location.pathname + (location.search || ""),
       language: navigator.language || null,
-      referrer: document.referrer || ""
+      referrer: document.referrer || "",
+      guestId: gid
     });
   });
 })();
