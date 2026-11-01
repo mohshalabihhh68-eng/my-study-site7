@@ -119,12 +119,23 @@
         var ua = navigator.userAgent || "";
         var m =
           ua.match(/Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i) ||
-          ua.match(/\b((?:SM|RMX|CPH|V\d{4}|ANE|LYA|CLT|MAR|ELS)-[A-Z0-9]+)\b/i);
+          ua.match(/\b((?:SM|RMX|CPH|V\d{4}|ANE|LYA|CLT|MAR|ELS)-[A-Z0-9]+)\b/i) ||
+          ua.match(/\b(SM-[A-Z0-9]+)\b/i);
         if (m && m[1] && !/^(K|U|wv|Linux)$/i.test(m[1].trim())) {
           model = m[1].replace(/\s*Build.*/i, "").trim();
         }
+        // لو Client Hints رجّع موديل أوضح
+        if ((!model || model.length < 3) && navigator.userAgentData && navigator.userAgentData.mobile) {
+          try {
+            var ch2 = await navigator.userAgentData.getHighEntropyValues(["model"]);
+            if (ch2 && ch2.model && ch2.model.length > 1 && ch2.model !== "K") model = ch2.model;
+          } catch (e3) {}
+        }
       } catch (e2) {}
     }
+    if (model && /^SM-[XT]/i.test(model) && !brand) brand = "Samsung";
+    if (model && /^RMX/i.test(model) && !brand) brand = "Realme";
+    if (model && /^CPH/i.test(model) && !brand) brand = "OPPO";
 
     var connection = null;
     try {
