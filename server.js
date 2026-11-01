@@ -1498,6 +1498,81 @@ function parseDeviceInfo(ua) {
   return { os, osVersion, deviceType, deviceBrand, deviceModel, browser, browserVersion, isMobile };
 }
 
+/** اسم ودي للموديل (Samsung / Xiaomi / …) عشان يظهر في لوحة الأدمن بوضوح */
+function friendlyDeviceName(brand, model) {
+  const b = String(brand || "").trim();
+  const m = String(model || "").trim();
+  if (!m && !b) return null;
+  const up = m.toUpperCase().replace(/\s+/g, " ");
+  const sam = {
+    "SM-S918": "Galaxy S23 Ultra", "SM-S916": "Galaxy S23+", "SM-S911": "Galaxy S23",
+    "SM-S928": "Galaxy S24 Ultra", "SM-S926": "Galaxy S24+", "SM-S921": "Galaxy S24",
+    "SM-S938": "Galaxy S25 Ultra", "SM-S936": "Galaxy S25+", "SM-S931": "Galaxy S25",
+    "SM-A556": "Galaxy A55", "SM-A546": "Galaxy A54", "SM-A536": "Galaxy A53",
+    "SM-A356": "Galaxy A35", "SM-A346": "Galaxy A34", "SM-A256": "Galaxy A25",
+    "SM-A156": "Galaxy A15", "SM-A055": "Galaxy A05", "SM-A065": "Galaxy A06",
+    "SM-A145": "Galaxy A14", "SM-A135": "Galaxy A13", "SM-A127": "Galaxy A12",
+    "SM-M556": "Galaxy M55", "SM-M346": "Galaxy M34", "SM-M156": "Galaxy M15",
+    "SM-G991": "Galaxy S21", "SM-G996": "Galaxy S21+", "SM-G998": "Galaxy S21 Ultra",
+    "SM-G990": "Galaxy S21 FE", "SM-S901": "Galaxy S22", "SM-S906": "Galaxy S22+",
+    "SM-S908": "Galaxy S22 Ultra", "SM-F731": "Galaxy Z Flip5", "SM-F741": "Galaxy Z Flip6",
+    "SM-F946": "Galaxy Z Fold5", "SM-F956": "Galaxy Z Fold6", "SM-N986": "Galaxy Note20 Ultra",
+    "SM-A525": "Galaxy A52", "SM-A515": "Galaxy A51", "SM-A325": "Galaxy A32",
+    "SM-A225": "Galaxy A22", "SM-A042": "Galaxy A04e", "SM-A032": "Galaxy A03 Core"
+  };
+  for (const [code, name] of Object.entries(sam)) {
+    if (up.startsWith(code) || up.includes(code)) return (b || "Samsung") + " " + name + " (" + m + ")";
+  }
+  if (/^SM-/i.test(m)) return (b || "Samsung") + " " + m;
+  if (/^RMX/i.test(m)) return (b || "Realme") + " " + m;
+  if (/^CPH/i.test(m)) return (b || "OPPO") + " " + m;
+  if (/REDMI|POCO|MI\s/i.test(m) || /xiaomi/i.test(b)) return (b || "Xiaomi") + " " + m;
+  if (/iphone/i.test(m)) return "Apple " + m;
+  if (/ipad/i.test(m)) return "Apple " + m;
+  if (/pixel/i.test(m)) return "Google " + m;
+  if (b && m) return b + " " + m;
+  return m || b || null;
+}
+
+/** عكس إحداثيات GPS → حي/مدينة أدق (Nominatim) */
+const revGeoCache = new Map();
+async function reverseGeocode(lat, lon) {
+  try {
+    const key = Number(lat).toFixed(4) + "," + Number(lon).toFixed(4);
+    const hit = revGeoCache.get(key);
+    if (hit && Date.now() < hit.exp) return hit.data;
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ar&zoom=16&addressdetails=1`;
+    const r = await fetchT(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "ThanawyaClub-VisitTracker/1.0 (admin analytics)"
+      }
+    }, { timeout: 3500, retries: 0 });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.address) return null;
+    const a = j.address;
+    const data = {
+      district: a.suburb || a.neighbourhood || a.quarter || a.city_district || a.village || a.town || "",
+      city: a.city || a.town || a.municipality || a.county || "",
+      region: a.state || a.region || a.province || "",
+      country: a.country || "",
+      countryCode: (a.country_code || "").toUpperCase(),
+      postal: a.postcode || "",
+      road: a.road || a.pedestrian || "",
+      display: j.display_name || ""
+    };
+    if (revGeoCache.size > 2000) {
+      let n = 200;
+      for (const k of revGeoCache.keys()) { revGeoCache.delete(k); if (--n <= 0) break; }
+    }
+    revGeoCache.set(key, { data, exp: Date.now() + 6 * 3600_000 });
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 // ==================== Geo cache + lookup (صاروخي) ====================
 const geoCache = new Map(); // ip -> { data, exp }
 const GEO_CACHE_TTL = 12 * 3600 * 1000; // 12 ساعة
@@ -1865,6 +1940,38 @@ app.post("/api/track-visit", async (req, res) => {
       }
     } catch (e) {}
 
+    // لو فيه GPS → عكس الإحداثيات لحي/شارع أدق
+    let road = null;
+    let placeDisplay = null;
+    if (preciseLat != null && preciseLon != null) {
+      try {
+        const rev = await reverseGeocode(preciseLat, preciseLon);
+        if (rev) {
+          if (rev.district) { if (geo) geo.district = rev.district; else geo = Object.assign({}, geo || {}, { district: rev.district }); }
+          if (rev.city) { if (geo) geo.city = rev.city; else geo = Object.assign({}, geo || {}, { city: rev.city }); }
+          if (rev.region) { if (geo) geo.region = rev.region; else geo = Object.assign({}, geo || {}, { region: rev.region }); }
+          if (rev.country && geo) geo.country = rev.country;
+          if (rev.countryCode && geo) geo.countryCode = rev.countryCode;
+          if (rev.postal && geo) geo.postal = rev.postal;
+          road = rev.road || null;
+          placeDisplay = rev.display || null;
+        }
+      } catch (e) {}
+    }
+
+    const deviceLabel = friendlyDeviceName(deviceBrand, deviceModel) ||
+      [deviceBrand, deviceModel].filter(Boolean).join(" ") || null;
+
+    // بصمة مختصرة تساعد على تمييز نفس الجهاز حتى بدون تسجيل
+    const deviceFingerprint = [
+      deviceLabel || deviceModel || "",
+      screen || "",
+      (gpu || "").slice(0, 40),
+      timezoneBody || "",
+      (cores != null ? cores + "c" : ""),
+      (body.deviceMemory != null ? body.deviceMemory + "GB" : "")
+    ].filter(Boolean).join("|").slice(0, 180) || null;
+
     const record = {
       ip,
       os: device.os,
@@ -1872,6 +1979,7 @@ app.post("/api/track-visit", async (req, res) => {
       deviceType: device.deviceType,
       deviceBrand: deviceBrand || null,
       deviceModel: deviceModel || null,
+      deviceLabel: deviceLabel,
       browser: device.browser,
       browserVersion: device.browserVersion || null,
       isMobile: device.isMobile,
@@ -1892,6 +2000,8 @@ app.post("/api/track-visit", async (req, res) => {
       city: (geo && geo.city) || null,
       region: (geo && geo.region) || null,
       district: (geo && geo.district) || null,
+      road: road || null,
+      placeDisplay: placeDisplay || null,
       postal: (geo && geo.postal) || null,
       isp: (geo && geo.isp) || null,
       as: (geo && geo.as) || null,
@@ -1907,6 +2017,7 @@ app.post("/api/track-visit", async (req, res) => {
       // زائر غير مسجّل يتسجل برضه — isStudent=false و guestId موجود
       isStudent: Boolean(studentLink && studentLink.studentCode),
       guestId: body.guestId ? String(body.guestId).replace(/[^a-zA-Z0-9_\-]/g, "").slice(0, 64) || null : null,
+      deviceFingerprint: deviceFingerprint,
       studentCode: (studentLink && studentLink.studentCode) || null,
       studentName: (studentLink && studentLink.studentName) || null,
       studentDeviceId: (studentLink && studentLink.deviceId) || null,
@@ -1925,9 +2036,25 @@ app.post("/api/track-visit", async (req, res) => {
       colorDepth: body.colorDepth != null ? Number(body.colorDepth) || null : null,
       orientation: body.orientation ? String(body.orientation).slice(0, 20) : null,
       userAgent: ua,
-      time: nowTime,
-      timeISO: new Date(nowTime).toISOString(),
-      timeCairo: new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false }).format(new Date(nowTime))
+      // time دايمًا مللي ثانية Unix (رقم) — العرض في الأدمن بيتحسب من هنا بتوقيت القاهرة
+      time: Number(nowTime) || Date.now(),
+      timeISO: new Date(Number(nowTime) || Date.now()).toISOString(),
+      timeCairo: (() => {
+        try {
+          const t = Number(nowTime) || Date.now();
+          // صيغة واضحة: YYYY-MM-DD HH:mm:ss (توقيت مصر)
+          const parts = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Africa/Cairo",
+            year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit",
+            hour12: false
+          }).formatToParts(new Date(t));
+          const get = (type) => (parts.find(p => p.type === type) || {}).value || "";
+          return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
+        } catch {
+          return new Date(Number(nowTime) || Date.now()).toISOString();
+        }
+      })()
     };
 
     const visitKey = "visits/" + nowTime + "_" + Math.random().toString(36).slice(2, 8);
