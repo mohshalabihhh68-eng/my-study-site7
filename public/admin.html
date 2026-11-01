@@ -1840,23 +1840,28 @@ PAGES.visits = {
   render() {
     const list = S.visits || [];
     const d0 = startOfDay(Date.now());
-    const today = list.filter(v => toMs(v.time) >= d0).length;
-    const uniqToday = new Set(list.filter(v => toMs(v.time) >= d0).map(v => v.ip)).size;
+    const todayList = list.filter(v => toMs(v.time) >= d0);
+    const today = todayList.length;
+    const uniqToday = new Set(todayList.map(v => v.ip)).size;
     const uniqAll = new Set(list.map(v => v.ip)).size;
-    return `${pageHead("سجل الزوار", "آخر الزيارات مع ربط الطلاب (إيميل/تليفون/أجهزة) — والبيانات التفصيلية لكل جهاز.",
+    const guestsToday = todayList.filter(v => !(v.isStudent || v.studentCode)).length;
+    const studentsToday = today - guestsToday;
+    return `${pageHead("سجل الزوار", "كل اللي يدخل الموقع يظهر هنا — طلاب مسجّلين وزوّار غير مسجّلين، مع بيانات الجهاز والموقع.",
       `<button class="btn btn-g" data-act="vis-refresh">${ic("refresh", 17)} تحديث</button>`)}
     <div class="grid g-kpi" style="margin-bottom:16px">
       <div class="card kpi nohov"><div class="top"><span>زيارات اليوم</span><span class="ico c-b">${ic("globe", 18)}</span></div><b>${num(today)}</b><div class="sub">${num(uniqToday)} زائر فريد اليوم</div></div>
       <div class="card kpi nohov"><div class="top"><span>إجمالي الزيارات</span><span class="ico c-o">${ic("pulse", 18)}</span></div><b>${num(list.length)}</b><div class="sub">${num(uniqAll)} IP مختلف</div></div>
-      <div class="card kpi nohov"><div class="top"><span>موبايل اليوم</span><span class="ico c-g">${ic("phone", 18)}</span></div><b>${num(list.filter(v => toMs(v.time) >= d0 && v.isMobile).length)}</b><div class="sub">من زيارات اليوم</div></div>
+      <div class="card kpi nohov"><div class="top"><span>طلاب اليوم</span><span class="ico c-g">${ic("user", 18)}</span></div><b>${num(studentsToday)}</b><div class="sub">مسجّلين داخل الموقع</div></div>
+      <div class="card kpi nohov"><div class="top"><span>زوّار غير مسجّلين</span><span class="ico c-a">${ic("eye", 18)}</span></div><b>${num(guestsToday)}</b><div class="sub">من زيارات اليوم</div></div>
     </div>
     <div class="card">
       <div class="tbar">
-        <div class="inp-ic">${ic("search", 16)}<input class="inp" id="vis-q" data-in="vis-q" placeholder="ابحث بـ IP أو دولة أو مدينة أو متصفح…" value="${esc(S.vis.q || "")}" autocomplete="off"></div>
+        <div class="inp-ic">${ic("search", 16)}<input class="inp" id="vis-q" data-in="vis-q" placeholder="ابحث بـ IP أو دولة أو مدينة أو متصفح أو كود طالب…" value="${esc(S.vis.q || "")}" autocomplete="off"></div>
         <select class="sel" id="vis-filter" data-ch="vis-filter">
           <option value="all" ${S.vis.filter === "all" ? "selected" : ""}>كل الزيارات</option>
           <option value="today" ${S.vis.filter === "today" ? "selected" : ""}>اليوم فقط</option>
           <option value="students" ${S.vis.filter === "students" ? "selected" : ""}>طلاب مسجّلين فقط</option>
+          <option value="guests" ${S.vis.filter === "guests" ? "selected" : ""}>زوّار غير مسجّلين فقط</option>
           <option value="mobile" ${S.vis.filter === "mobile" ? "selected" : ""}>موبايل</option>
           <option value="desktop" ${S.vis.filter === "desktop" ? "selected" : ""}>كمبيوتر</option>
         </select>
@@ -1880,6 +1885,7 @@ function visitsFiltered() {
   const f = S.vis.filter || "all";
   if (f === "today") list = list.filter(v => toMs(v.time) >= d0);
   else if (f === "students") list = list.filter(v => v.isStudent || v.studentCode);
+  else if (f === "guests") list = list.filter(v => !(v.isStudent || v.studentCode));
   else if (f === "mobile") list = list.filter(v => v.isMobile);
   else if (f === "desktop") list = list.filter(v => !v.isMobile);
   const q = (S.vis.q || "").toLowerCase().trim();
@@ -1895,6 +1901,7 @@ function visitsFiltered() {
       String(v.deviceModel || "").toLowerCase().includes(q) ||
       String(v.isp || "").toLowerCase().includes(q) ||
       String(v.referer || "").toLowerCase().includes(q) ||
+      String(v.guestId || "").toLowerCase().includes(q) ||
       String(v.studentCode || "").includes(q) ||
       String(v.studentName || "").toLowerCase().includes(q) ||
       String(v.studentPhone || "").includes(q) ||
@@ -1953,7 +1960,7 @@ function drawVisits() {
       const br = [v.browser, v.browserVersion].filter(Boolean).join(" ");
       return `<tr>
         <td><b>${fmtVisit(v.time, v)}</b><div class="sm muted">${ago(v.time)}</div></td>
-        <td class="mono ltr">${esc(v.ip || "—")}${(v.isStudent || v.studentCode) ? `<div><span class="badge b-g nodot" style="margin-top:3px">${esc(v.studentName || v.studentCode)}</span></div>` : ""}${v.proxy ? `<div class="sm" style="color:var(--amber)">VPN</div>` : ""}</td>
+        <td class="mono ltr">${esc(v.ip || "—")}${(v.isStudent || v.studentCode) ? `<div><span class="badge b-g nodot" style="margin-top:3px">${esc(v.studentName || v.studentCode)}</span></div>` : `<div><span class="badge b-a nodot" style="margin-top:3px">زائر</span>${v.guestId ? `<div class="sm muted mono">${esc(String(v.guestId).slice(0, 16))}</div>` : ""}</div>`}${v.proxy ? `<div class="sm" style="color:var(--amber)">VPN</div>` : ""}</td>
         <td>${esc(locLabel(v))}${v.isp ? `<div class="sm muted">${esc(v.isp)}</div>` : ""}${v.lat != null && v.lon != null ? `<div class="sm muted ltr">${v.lat}, ${v.lon}</div>` : ""}</td>
         <td>${esc(devLabel(v))}</td>
         <td>${esc(br || "—")}${v.language ? `<div class="sm muted">${esc(v.language)}</div>` : ""}</td>
@@ -1985,7 +1992,7 @@ function drawVisits() {
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
             <b class="mono ltr">${esc(g.ip)}</b>
             <span class="badge b-b nodot">${num(g.items.length)} زيارة</span>
-            ${latest.isStudent || latest.studentCode ? `<span class="badge b-g nodot">طالب · ${esc(latest.studentName || latest.studentCode || "")}</span>` : ""}
+            ${latest.isStudent || latest.studentCode ? `<span class="badge b-g nodot">طالب · ${esc(latest.studentName || latest.studentCode || "")}</span>` : `<span class="badge b-a nodot">زائر غير مسجّل</span>`}
             ${latest.country ? `<span class="badge nodot b-m">${esc(latest.countryCode || latest.country)}</span>` : ""}
             ${latest.deviceBrand ? `<span class="badge nodot b-p">${esc(latest.deviceBrand)}</span>` : ""}
             ${latest.deviceModel ? `<span class="badge nodot b-o">${esc(latest.deviceModel)}</span>` : ""}
@@ -2013,7 +2020,8 @@ function drawVisits() {
           <span>آخر ظهور للطالب</span><b>${latest.studentLastSeen ? ago(latest.studentLastSeen) : "—"}</b>
           <span>حالة الاشتراك</span><b>${latest.studentActive === false ? '<span class="badge b-r nodot">موقوف</span>' : (latest.studentExpiresAt && toMs(latest.studentExpiresAt) < Date.now() ? '<span class="badge b-a nodot">منتهي</span>' : '<span class="badge b-g nodot">ساري</span>')}</b>
           <span>طريقة الربط</span><b>${esc({token:"توكن جلسة", "session-ip":"جلسة بنفس الـ IP", "ip-memory":"آخر نشاط على نفس الـ IP", "ip-memory-live":"ربط مباشر من الـ IP", client:"من المتصفح"}[latest.matchedBy] || latest.matchedBy || "—")}</b>
-          ` : `<span>طالب مسجّل</span><b class="muted">لا — زائر عادي</b>`}
+          ` : `<span>طالب مسجّل</span><b><span class="badge b-a nodot">لا — زائر غير مسجّل</span></b>
+          <span>معرّف الزائر</span><b class="mono ltr sm">${latest.guestId ? esc(latest.guestId) : "—"}</b>`}
           <span>المنطقة / الحي</span><b>${esc(latest.district || "—")}</b>
           <span>المدينة</span><b>${esc(latest.city || "—")}</b>
           <span>المحافظة</span><b>${esc(latest.region || "—")}</b>
