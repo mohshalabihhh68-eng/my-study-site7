@@ -1904,7 +1904,9 @@ app.post("/api/track-visit", async (req, res) => {
       proxy: geo ? geo.proxy : null,
       hosting: geo ? geo.hosting : null,
       mobileNet: geo ? geo.mobile : null,
+      // زائر غير مسجّل يتسجل برضه — isStudent=false و guestId موجود
       isStudent: Boolean(studentLink && studentLink.studentCode),
+      guestId: body.guestId ? String(body.guestId).replace(/[^a-zA-Z0-9_\-]/g, "").slice(0, 64) || null : null,
       studentCode: (studentLink && studentLink.studentCode) || null,
       studentName: (studentLink && studentLink.studentName) || null,
       studentDeviceId: (studentLink && studentLink.deviceId) || null,
@@ -1948,7 +1950,7 @@ app.get("/api/admin/visits/summary", requireAdmin("students_view"), async (_req,
     const visits = (await fbGetCached("visits", 15_000)) || {};
     const d0 = new Date(); d0.setHours(0, 0, 0, 0);
     const dayStart = d0.getTime();
-    let today = 0, mobileToday = 0, studentsToday = 0;
+    let today = 0, mobileToday = 0, studentsToday = 0, guestsToday = 0;
     const ips = new Set();
     const ipsToday = new Set();
     for (const v of Object.values(visits)) {
@@ -1960,6 +1962,7 @@ app.get("/api/admin/visits/summary", requireAdmin("students_view"), async (_req,
         if (v.ip) ipsToday.add(v.ip);
         if (v.isMobile) mobileToday++;
         if (v.isStudent || v.studentCode) studentsToday++;
+        else guestsToday++;
       }
     }
     res.json({
@@ -1970,7 +1973,8 @@ app.get("/api/admin/visits/summary", requireAdmin("students_view"), async (_req,
         today,
         uniqueToday: ipsToday.size,
         mobileToday,
-        studentsToday
+        studentsToday,
+        guestsToday
       }
     });
   } catch (e) {
