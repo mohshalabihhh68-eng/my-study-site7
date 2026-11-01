@@ -776,17 +776,41 @@ const dayF= mkFmt(Intl.DateTimeFormat, { weekday:"long", day:"numeric", month:"l
 const nF  = mkFmt(Intl.NumberFormat);
 const rtF = mkFmt(Intl.RelativeTimeFormat, { numeric:"auto" });
 const num = n => nF.format(Number(n) || 0);
-const toMs = v => { if(v == null || v === "") return 0; if(typeof v === "number") return v < 1e11 ? v*1000 : v; const t = Date.parse(v); return isNaN(t) ? 0 : t; };
+// دعم أرقام Firebase / نصوص ISO / ثواني vs مللي
+const toMs = v => {
+  if (v == null || v === "") return 0;
+  if (typeof v === "number") {
+    if (!Number.isFinite(v) || v <= 0) return 0;
+    // ثواني يونكس (< سنة ~2001 بالمللي) → حول لمللي
+    return v < 1e12 ? Math.round(v * 1000) : Math.round(v);
+  }
+  if (typeof v === "object") {
+    // Firebase Timestamp shape
+    if (typeof v.seconds === "number") return Math.round(v.seconds * 1000 + (v.nanoseconds || 0) / 1e6);
+    if (typeof v._seconds === "number") return Math.round(v._seconds * 1000 + (v._nanoseconds || 0) / 1e6);
+    if (typeof v.toMillis === "function") try { return v.toMillis(); } catch (e) {}
+  }
+  const s = String(v).trim();
+  if (/^\d{10,13}$/.test(s)) {
+    const n = Number(s);
+    return n < 1e12 ? n * 1000 : n;
+  }
+  const t = Date.parse(s);
+  return isNaN(t) ? 0 : t;
+};
 const fmt  = ms => { ms = toMs(ms); return ms ? dtF.format(ms) : "—"; };
-const dtFsec = mkFmt(Intl.DateTimeFormat, { day:"numeric", month:"short", year:"numeric", hour:"numeric", minute:"2-digit", second:"2-digit", hour12: true });
+const dtFsec = mkFmt(Intl.DateTimeFormat, { weekday:"short", day:"numeric", month:"short", year:"numeric", hour:"numeric", minute:"2-digit", second:"2-digit", hour12: true });
+// مهم: متعتمدش على timeCairo المخزّن كنص — دايمًا احسب من الـ timestamp بتوقيت القاهرة
 const fmtVisit = (ms, row) => {
-  if (row && row.timeCairo) return row.timeCairo.replace(/,/g, " · ");
-  ms = toMs(ms); return ms ? dtFsec.format(ms) : "—";
+  const t = toMs(ms != null ? ms : (row && (row.time || row.timeISO)));
+  if (!t) return "—";
+  try { return dtFsec.format(t); } catch (e) { return new Date(t).toLocaleString("ar-EG", { timeZone: "Africa/Cairo" }); }
 };
 const fmtD = ms => { ms = toMs(ms); return ms ? dF.format(ms) : "—"; };
 window.ago = function(ms){
   ms = toMs(ms); if(!ms) return "";
-  const d = ms - Date.now(), a = Math.abs(d);
+  const now = Date.now();
+  const d = ms - now, a = Math.abs(d);
   if(a < 45e3) return "الآن";
   if(a < 36e5) return rtF.format(Math.round(d/6e4), "minute");
   if(a < 864e5) return rtF.format(Math.round(d/36e5), "hour");
@@ -1899,6 +1923,10 @@ function visitsFiltered() {
       String(v.os || "").toLowerCase().includes(q) ||
       String(v.deviceBrand || "").toLowerCase().includes(q) ||
       String(v.deviceModel || "").toLowerCase().includes(q) ||
+      String(v.deviceLabel || "").toLowerCase().includes(q) ||
+      String(v.road || "").toLowerCase().includes(q) ||
+      String(v.placeDisplay || "").toLowerCase().includes(q) ||
+      String(v.deviceFingerprint || "").toLowerCase().includes(q) ||
       String(v.isp || "").toLowerCase().includes(q) ||
       String(v.referer || "").toLowerCase().includes(q) ||
       String(v.guestId || "").toLowerCase().includes(q) ||
@@ -1942,14 +1970,21 @@ function drawVisits() {
   }
 
   const devLabel = v => {
+    // الاسم الودي أولاً (Galaxy A54 …) ثم البراند/الموديل الخام
+    if (v.deviceLabel) {
+      const tail = [v.deviceType || (v.isMobile ? "موبايل" : "كمبيوتر"), v.os, v.osVersion].filter(Boolean).join(" · ");
+      return v.deviceLabel + (tail ? " · " + tail : "");
+    }
     const parts = [v.deviceBrand, v.deviceModel, v.deviceType || (v.isMobile ? "موبايل" : "كمبيوتر"), v.os, v.osVersion].filter(Boolean);
     return parts.length ? parts.join(" · ") : "—";
   };
   const locLabel = v => {
-    // المنطقة الأدق أولاً: حي/منطقة → مدينة → محافظة → دولة
-    const parts = [v.district, v.city, v.region, v.country].filter((x, i, a) => x && a.indexOf(x) === i);
+    // الأدق أولاً: شارع → حي → مدينة → محافظة → دولة
+    const parts = [v.road, v.district, v.city, v.region, v.country].filter((x, i, a) => x && a.indexOf(x) === i);
     let s = parts.length ? parts.join(" · ") : "—";
     if (v.postal) s += (s === "—" ? "" : " · ") + "رمز " + v.postal;
+    if (v.locationSource === "gps") s += (s === "—" ? "" : " · ") + "GPS";
+    else if (v.locationSource === "ip") s += (s === "—" ? "" : " · ") + "IP";
     return s;
   };
 
@@ -1959,7 +1994,7 @@ function drawVisits() {
     </tr></thead><tbody>${list.map(v => {
       const br = [v.browser, v.browserVersion].filter(Boolean).join(" ");
       return `<tr>
-        <td><b>${fmtVisit(v.time, v)}</b><div class="sm muted">${ago(v.time)}</div></td>
+        <td><b>${fmtVisit(v.time || v.timeISO, v)}</b><div class="sm muted">${ago(v.time || v.timeISO)}</div></td>
         <td class="mono ltr">${esc(v.ip || "—")}${(v.isStudent || v.studentCode) ? `<div><span class="badge b-g nodot" style="margin-top:3px">${esc(v.studentName || v.studentCode)}</span></div>` : `<div><span class="badge b-a nodot" style="margin-top:3px">زائر</span>${v.guestId ? `<div class="sm muted mono">${esc(String(v.guestId).slice(0, 16))}</div>` : ""}</div>`}${v.proxy ? `<div class="sm" style="color:var(--amber)">VPN</div>` : ""}</td>
         <td>${esc(locLabel(v))}${v.isp ? `<div class="sm muted">${esc(v.isp)}</div>` : ""}${v.lat != null && v.lon != null ? `<div class="sm muted ltr">${v.lat}, ${v.lon}</div>` : ""}</td>
         <td>${esc(devLabel(v))}</td>
@@ -1994,20 +2029,22 @@ function drawVisits() {
             <span class="badge b-b nodot">${num(g.items.length)} زيارة</span>
             ${latest.isStudent || latest.studentCode ? `<span class="badge b-g nodot">طالب · ${esc(latest.studentName || latest.studentCode || "")}</span>` : `<span class="badge b-a nodot">زائر غير مسجّل</span>`}
             ${latest.country ? `<span class="badge nodot b-m">${esc(latest.countryCode || latest.country)}</span>` : ""}
-            ${latest.deviceBrand ? `<span class="badge nodot b-p">${esc(latest.deviceBrand)}</span>` : ""}
-            ${latest.deviceModel ? `<span class="badge nodot b-o">${esc(latest.deviceModel)}</span>` : ""}
+            ${latest.deviceLabel ? `<span class="badge nodot b-p">${esc(latest.deviceLabel)}</span>` : (latest.deviceBrand ? `<span class="badge nodot b-p">${esc(latest.deviceBrand)}</span>` : "")}
+            ${!latest.deviceLabel && latest.deviceModel ? `<span class="badge nodot b-o">${esc(latest.deviceModel)}</span>` : ""}
+            ${latest.locationSource === "gps" ? `<span class="badge b-g nodot">موقع GPS</span>` : ""}
             ${latest.proxy ? `<span class="badge b-a nodot">VPN/Proxy</span>` : ""}
           </div>
           <div class="sm muted" style="margin-top:2px">${esc(locLabel(latest))} · ${esc(devLabel(latest))} · ${esc(br || "—")} · آخر زيارة ${ago(g.last)}</div>
         </div>
-        <span class="muted sm" title="${fmtVisit(g.last, latest)}">${fmtVisit(g.last, latest)}</span>
+        <span class="muted sm" title="${esc(latest.timeISO || "")}">${fmtVisit(g.last || latest.time, latest)}<div class="sm">${ago(g.last || latest.time)}</div></span>
         ${ic("down", 16)}
       </button>
       <div id="${id}" class="hide" style="padding:12px 16px;border-top:1px solid var(--line)">
         <div class="kv" style="margin-bottom:14px;grid-template-columns:120px 1fr">
           <span>IP</span><b class="mono ltr">${esc(g.ip)}</b>
-          <span>آخر زيارة (مصر)</span><b>${fmtVisit(g.last, latest)} <span class="muted sm">(${ago(g.last)})</span></b>
-          <span>time ISO</span><b class="ltr sm">${esc(latest.timeISO || (toMs(latest.time) ? new Date(toMs(latest.time)).toISOString() : "—"))}</b>
+          <span>آخر زيارة (مصر)</span><b>${fmtVisit(g.last || latest.time, latest)} <span class="muted sm">(${ago(g.last || latest.time)})</span></b>
+          <span>الوقت UTC</span><b class="ltr sm">${esc(latest.timeISO || (toMs(latest.time) ? new Date(toMs(latest.time)).toISOString() : "—"))}</b>
+          <span>timestamp</span><b class="ltr sm mono">${toMs(g.last || latest.time) || "—"}</b>
           ${(latest.isStudent || latest.studentCode) ? `
           <span>طالب مسجّل</span><b><span class="badge b-g nodot">نعم</span> · ${esc(latest.studentName || "—")} · كود <span class="code ltr">${esc(latest.studentCode || "")}</span></b>
           <span>تليفون الطالب</span><b class="ltr">${latest.studentPhone ? esc(latest.studentPhone) : '<span class="muted">غير مسجّل على ملف الطالب</span>'}</b>
@@ -2022,13 +2059,19 @@ function drawVisits() {
           <span>طريقة الربط</span><b>${esc({token:"توكن جلسة", "session-ip":"جلسة بنفس الـ IP", "ip-memory":"آخر نشاط على نفس الـ IP", "ip-memory-live":"ربط مباشر من الـ IP", client:"من المتصفح"}[latest.matchedBy] || latest.matchedBy || "—")}</b>
           ` : `<span>طالب مسجّل</span><b><span class="badge b-a nodot">لا — زائر غير مسجّل</span></b>
           <span>معرّف الزائر</span><b class="mono ltr sm">${latest.guestId ? esc(latest.guestId) : "—"}</b>`}
+          <span>مين الشخص؟</span><b>${(latest.isStudent || latest.studentCode)
+            ? `طالب: ${esc(latest.studentName || "—")} · كود ${esc(latest.studentCode || "")}${latest.studentPhone ? " · تليفون " + esc(latest.studentPhone) : ""}${latest.studentEmail ? " · " + esc(latest.studentEmail) : ""}`
+            : `زائر غير مسجّل${latest.guestId ? " · guest " + esc(String(latest.guestId).slice(0, 18)) : ""}${latest.deviceLabel ? " · " + esc(latest.deviceLabel) : ""}`}</b>
+          <span>بصمة الجهاز</span><b class="sm ltr" style="word-break:break-all">${latest.deviceFingerprint ? esc(latest.deviceFingerprint) : "—"}</b>
+          <span>الشارع</span><b>${esc(latest.road || "—")}</b>
           <span>المنطقة / الحي</span><b>${esc(latest.district || "—")}</b>
           <span>المدينة</span><b>${esc(latest.city || "—")}</b>
           <span>المحافظة</span><b>${esc(latest.region || "—")}</b>
           <span>الدولة</span><b>${esc(latest.country || "—")}${latest.countryCode ? " (" + esc(latest.countryCode) + ")" : ""}</b>
+          <span>العنوان الكامل</span><b class="sm">${esc(latest.placeDisplay || locLabel(latest))}</b>
           <span>الرمز البريدي</span><b class="ltr">${esc(latest.postal || "—")}</b>
           <span>مصدر الموقع</span><b>${latest.locationSource === "gps" || (latest.preciseLat != null) ? '<span class="badge b-g nodot">GPS دقيق من الجهاز</span>' : (latest.lat != null ? '<span class="badge b-a nodot">تقريبي من الـ IP (مش عنوان بالظبط)</span>' : "—")}</b>
-          <span>تنويه</span><b class="sm muted">${latest.preciseLat != null ? "الموقع من GPS الجهاز" : "شبكات الموبايل في مصر غالبًا بتظهر القاهرة أو برج مركزي — مش الشارع الحقيقي"}</b>
+          <span>تنويه</span><b class="sm muted">${latest.preciseLat != null ? "الموقع من GPS الجهاز + عكس إحداثيات لحي/شارع" : "شبكات الموبايل في مصر غالبًا بتظهر القاهرة أو برج مركزي — مش الشارع الحقيقي. الدقة الحقيقية تحتاج موافقة GPS من المتصفح."}</b>
           <span>الإحداثيات (IP)</span><b class="ltr">${latest.lat != null && latest.lon != null ? `${Number(latest.lat).toFixed(5)}, ${Number(latest.lon).toFixed(5)}` : "—"}</b>
           <span>موقع GPS دقيق</span><b class="ltr">${latest.preciseLat != null && latest.preciseLon != null ? `${Number(latest.preciseLat).toFixed(6)}, ${Number(latest.preciseLon).toFixed(6)}${latest.preciseAcc != null ? " (±" + Math.round(latest.preciseAcc) + "m)" : ""}` : "—"}</b>
           <span>خريطة</span><b>${(() => {
@@ -2042,7 +2085,8 @@ function drawVisits() {
           <span>مزود الخدمة</span><b>${esc(latest.isp || "—")}</b>
           <span>ASN</span><b class="ltr">${esc(latest.as || "—")}</b>
           <span>شبكة</span><b>${[latest.proxy ? "VPN/Proxy" : "", latest.hosting ? "Hosting/DC" : "", latest.mobileNet ? "Mobile ISP" : ""].filter(Boolean).join(" · ") || "عادية"}</b>
-          <span>الجهاز / الموديل</span><b>${esc(devLabel(latest))}</b>
+          <span>الجهاز بالتفصيل</span><b>${esc(latest.deviceLabel || devLabel(latest))}</b>
+          <span>كود الموديل</span><b class="ltr">${esc(latest.deviceModel || "—")}${latest.deviceBrand ? " · " + esc(latest.deviceBrand) : ""}</b>
           <span>المنصة</span><b>${esc(latest.platform || "—")}${latest.platformVersion ? " · " + esc(latest.platformVersion) : ""}</b>
           <span>المتصفح</span><b>${esc(br || "—")}</b>
           <span>الشاشة</span><b>${esc(latest.screen || "—")}</b>
