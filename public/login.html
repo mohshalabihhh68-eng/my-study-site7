@@ -422,8 +422,52 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
   document.addEventListener('touchend', stopErase);
   window.addEventListener('blur', stopErase);
 
+  async function detectDeviceName() {
+    let model = '', brand = '';
+    try {
+      if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+        const ch = await navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'fullVersionList']);
+        if (ch && ch.model && ch.model !== 'K' && ch.model.length > 1) model = ch.model;
+        if (ch && ch.fullVersionList) {
+          const brands = ch.fullVersionList.map(b => b.brand).join(' ');
+          if (/Samsung/i.test(brands)) brand = 'Samsung';
+          else if (/Huawei/i.test(brands)) brand = 'Huawei';
+        }
+      }
+    } catch (e) {}
+    if (!model || model === 'K') {
+      try {
+        const ua = navigator.userAgent || '';
+        const m = ua.match(/Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i)
+          || ua.match(/\b((?:SM|RMX|CPH|V\d{4})-[A-Z0-9]+)\b/i)
+          || ua.match(/\b(SM-[A-Z0-9]+)\b/i)
+          || ua.match(/\b((?:Redmi|POCO|Infinix|TECNO)[^);/]{2,30})\b/i);
+        if (m && m[1] && !/^(K|U|wv|Linux)$/i.test(m[1].trim())) model = m[1].replace(/\s*Build.*/i, '').trim();
+      } catch (e2) {}
+    }
+    if (!model) {
+      const ua = navigator.userAgent || '';
+      if (/iPhone/i.test(ua)) { model = 'iPhone'; brand = 'Apple'; }
+      else if (/iPad/i.test(ua)) { model = 'iPad'; brand = 'Apple'; }
+      else if (/Android/i.test(ua)) model = 'Android Device';
+      else if (/Windows/i.test(ua)) model = 'Windows PC';
+      else if (/Mac/i.test(ua)) model = 'Mac';
+      else model = 'Web Browser';
+    }
+    if (!brand) {
+      if (/^SM-/i.test(model)) brand = 'Samsung';
+      else if (/^RMX/i.test(model)) brand = 'Realme';
+      else if (/^CPH/i.test(model)) brand = 'OPPO';
+      else if (/Redmi|POCO|Mi\s/i.test(model)) brand = 'Xiaomi';
+    }
+    const name = [brand, model].filter(Boolean).join(' ').trim() || model;
+    try { localStorage.setItem('tw_device_model', JSON.stringify({ model, brand, at: Date.now() })); } catch (e) {}
+    return name.slice(0, 80);
+  }
+
   async function login() {
-    const code = getCode(), deviceId = getDeviceId(), deviceName = 'Web Browser';
+    const code = getCode(), deviceId = getDeviceId();
+    const deviceName = await detectDeviceName();
     
     if (code.length !== 9) {
       showError('لازم تدخل الـ 9 أرقام كاملة');
@@ -440,7 +484,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
       const response = await fetch(API + '/api/auth/login', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ code, deviceId, deviceName }) 
+        body: JSON.stringify({ code, deviceId, deviceName, model: deviceName }) 
       });
       
       const data = await response.json();
