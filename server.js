@@ -104,7 +104,13 @@ app.use(express.static(path.join(__dirname, "public"), {
   etag: true,
   lastModified: true,
   setHeaders(res, filePath) {
-    if (/\.(?:js|css|png|jpg|jpeg|webp|svg|woff2?|ico)$/i.test(filePath)) {
+    const base = String(filePath || "").replace(/\\/g, "/").toLowerCase();
+    // track-visit لازم يتحدث فورًا — ممنوع كاش 30 يوم
+    if (base.endsWith("/track-visit.js") || base.endsWith("track-visit.js")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    } else if (/\.(?:js|css|png|jpg|jpeg|webp|svg|woff2?|ico)$/i.test(filePath)) {
       res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
     } else if (/\.html?$/i.test(filePath)) {
       res.setHeader("Cache-Control", "public, max-age=120, must-revalidate");
@@ -1886,9 +1892,10 @@ app.post("/api/track-visit", async (req, res) => {
   // (خصوصًا على serverless أو لو العملية اتقفلت قبل الـ flush)
   try {
     const ip = clientIp(req);
-    const ua = req.headers["user-agent"] || "Unknown";
-    const nowTime = now();
     const body = req.body || {};
+    // لو العميل بعت ua من المتصفح استخدمه (أدق من هيدر مخفف أحيانًا)
+    const ua = String(body.ua || req.headers["user-agent"] || "Unknown").slice(0, 500);
+    const nowTime = now();
 
     const device = parseDeviceInfo(ua);
 
