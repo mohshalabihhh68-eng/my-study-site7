@@ -1986,16 +1986,26 @@ function drawVisits() {
       "SM-A356": "Galaxy A35", "SM-A346": "Galaxy A34", "SM-A256": "Galaxy A25",
       "SM-A156": "Galaxy A15", "SM-A055": "Galaxy A05", "SM-A065": "Galaxy A06",
       "SM-A145": "Galaxy A14", "SM-S918": "Galaxy S23 Ultra", "SM-S911": "Galaxy S23",
-      "SM-S928": "Galaxy S24 Ultra", "SM-S921": "Galaxy S24", "SM-S908": "Galaxy S22 Ultra"
+      "SM-S928": "Galaxy S24 Ultra", "SM-S921": "Galaxy S24", "SM-S908": "Galaxy S22 Ultra",
+      "CPH2591": "OPPO Reno12 / Realme", "CPH2577": "OPPO A78", "CPH2527": "OPPO A58",
+      "CPH2387": "OPPO A17", "CPH2477": "OPPO A77s", "CPH2637": "OPPO A3x"
     };
     for (const [code, name] of Object.entries(map)) {
-      if (m.startsWith(code) || m.includes(code)) return (b || "Samsung") + " " + name + " (" + (v.deviceModel || code) + ")";
+      if (m.startsWith(code) || m.includes(code)) return (b || (code.startsWith("CPH") ? "OPPO" : "Samsung")) + " " + name + " (" + (v.deviceModel || code) + ")";
     }
     if (m.startsWith("SM-")) return (b || "Samsung") + " " + (v.deviceModel || m);
     if (m.startsWith("RMX")) return (b || "Realme") + " " + (v.deviceModel || m);
     if (m.startsWith("CPH")) return (b || "OPPO") + " " + (v.deviceModel || m);
     if (v.deviceBrand && v.deviceModel) return v.deviceBrand + " " + v.deviceModel;
-    return v.deviceModel || v.deviceBrand || "";
+    if (v.deviceModel) return v.deviceModel;
+    if (v.deviceBrand) return v.deviceBrand;
+    // مفيش موديل في البيانات — وصف من نوع الجهاز/النظام بدل «غير معروف»
+    const kind = v.deviceType || (v.isMobile ? "موبايل" : "كمبيوتر");
+    const osBit = [v.os, v.osVersion].filter(Boolean).join(" ");
+    const brBit = [v.browser, v.browserVersion].filter(Boolean).join(" ");
+    const bits = [kind, osBit, brBit].filter(Boolean);
+    if (bits.length) return bits.join(" · ");
+    return "";
   };
   const devLabel = v => {
     // الاسم الودي أولاً (Galaxy A54 …) ثم البراند/الموديل الخام
@@ -2071,7 +2081,7 @@ function drawVisits() {
             ${latest.deviceModel && !String(latest.deviceLabel || "").includes(String(latest.deviceModel)) ? `<span class="badge nodot b-m ltr" title="كود الموديل">${esc(latest.deviceModel)}</span>` : ""}
             ${latest.proxy ? `<span class="badge b-a nodot">VPN/Proxy</span>` : ""}
           </div>
-          <div class="sm muted" style="margin-top:2px"><b style="color:var(--txt)">${esc(phoneName(latest) || "جهاز غير معروف")}</b> · ${esc(locLabel(latest))} · ${esc(devLabel(latest))} · ${esc(br || "—")} · آخر زيارة ${ago(g.last)}</div>
+          <div class="sm muted" style="margin-top:2px"><b style="color:var(--txt)">${esc(phoneName(latest) || [latest.deviceType || (latest.isMobile ? "موبايل" : "كمبيوتر"), latest.os, latest.osVersion, br].filter(Boolean).join(" · ") || "جهاز — الموديل غير متاح من المتصفح")}</b> · ${esc(locLabel(latest))} · آخر زيارة ${ago(g.last)}</div>
         </div>
         <span class="muted sm" title="${esc(latest.timeISO || "")}">${fmtVisit(g.last || latest.time, latest)}<div class="sm">${ago(g.last || latest.time)}</div></span>
         ${ic("down", 16)}
