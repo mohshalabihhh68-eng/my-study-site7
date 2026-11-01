@@ -1385,12 +1385,13 @@ function parseDeviceInfo(ua) {
     os = "أندرويد";
     const m = s.match(/Android\s+([\d.]+)/i);
     if (m) osVersion = m[1];
-    deviceType = /tablet|nexus\s?(7|9|10)|sm-t|pad/i.test(s) && !/mobile/i.test(s) ? "تابلت" : (/mobile/i.test(s) ? "موبايل" : "تابلت");
+    deviceType = /tablet|nexus\s?(7|9|10)|sm-t|sm-x|pad/i.test(s) && !/mobile/i.test(s) ? "تابلت" : (/mobile/i.test(s) ? "موبايل" : "تابلت");
     // محاولات متعددة لاستخراج الموديل من الـ UA
     const patterns = [
       /Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i,
       /;\s*((?:SM|GT|SC|SGH|SCH|SHV|LG|Lenovo|HTC|Pixel|Redmi|Mi|POCO|RMX|CPH|V\d{4}|Infinix|TECNO|ITE|Nokia|Moto)[^);/]{0,40})/i,
-      /\b((?:SM|RMX|CPH|V\d{4})-[A-Z0-9]+)\b/i
+      /\b((?:SM|RMX|CPH|V\d{4})-[A-Z0-9]+)\b/i,
+      /\b(SM-[A-Z0-9]+)\b/i
     ];
     for (const re of patterns) {
       const modelMatch = s.match(re);
@@ -1404,6 +1405,8 @@ function parseDeviceInfo(ua) {
         }
       }
     }
+    // تابلت Samsung غالبًا SM-X / SM-T
+    if (deviceModel && /^SM-[XT]/i.test(deviceModel)) deviceType = "تابلت";
   } else if (/iphone/i.test(s)) {
     os = "iOS";
     const m = s.match(/OS\s+([\d_]+)/i);
@@ -1559,7 +1562,24 @@ function friendlyDeviceName(brand, model) {
     "SM-S908": "Galaxy S22 Ultra", "SM-F731": "Galaxy Z Flip5", "SM-F741": "Galaxy Z Flip6",
     "SM-F946": "Galaxy Z Fold5", "SM-F956": "Galaxy Z Fold6", "SM-N986": "Galaxy Note20 Ultra",
     "SM-A525": "Galaxy A52", "SM-A515": "Galaxy A51", "SM-A325": "Galaxy A32",
-    "SM-A225": "Galaxy A22", "SM-A042": "Galaxy A04e", "SM-A032": "Galaxy A03 Core"
+    "SM-A225": "Galaxy A22", "SM-A042": "Galaxy A04e", "SM-A032": "Galaxy A03 Core",
+    // تابلت Galaxy Tab
+    "SM-X216": "Galaxy Tab A9", "SM-X210": "Galaxy Tab A9", "SM-X215": "Galaxy Tab A9",
+    "SM-X110": "Galaxy Tab A9 Kids", "SM-X115": "Galaxy Tab A9 Kids",
+    "SM-X200": "Galaxy Tab A8", "SM-X205": "Galaxy Tab A8",
+    "SM-X700": "Galaxy Tab S7 FE", "SM-X706": "Galaxy Tab S7 FE",
+    "SM-X800": "Galaxy Tab S8+", "SM-X806": "Galaxy Tab S8+",
+    "SM-X900": "Galaxy Tab S8 Ultra", "SM-X906": "Galaxy Tab S8 Ultra",
+    "SM-X710": "Galaxy Tab S9", "SM-X716": "Galaxy Tab S9",
+    "SM-X810": "Galaxy Tab S9+", "SM-X816": "Galaxy Tab S9+",
+    "SM-X910": "Galaxy Tab S9 Ultra", "SM-X916": "Galaxy Tab S9 Ultra",
+    "SM-X510": "Galaxy Tab S9 FE", "SM-X516": "Galaxy Tab S9 FE",
+    "SM-X610": "Galaxy Tab S9 FE+", "SM-X616": "Galaxy Tab S9 FE+",
+    "SM-T225": "Galaxy Tab A7 Lite", "SM-T220": "Galaxy Tab A7 Lite",
+    "SM-T509": "Galaxy Tab A7", "SM-T500": "Galaxy Tab A7",
+    "SM-A057": "Galaxy A05s", "SM-A155": "Galaxy A15", "SM-A165": "Galaxy A16",
+    "SM-A266": "Galaxy A26", "SM-A366": "Galaxy A36", "SM-A566": "Galaxy A56",
+    "SM-S721": "Galaxy S24 FE", "SM-A146": "Galaxy A14 5G"
   };
   for (const [code, name] of Object.entries(sam)) {
     if (up.startsWith(code) || up.includes(code)) return (b || "Samsung") + " " + name + " (" + m + ")";
