@@ -120,15 +120,18 @@
         var m =
           ua.match(/Android\s[\d.]+;\s*([^);]+?)(?:\s+Build|[);])/i) ||
           ua.match(/\b((?:SM|RMX|CPH|V\d{4}|ANE|LYA|CLT|MAR|ELS)-[A-Z0-9]+)\b/i) ||
-          ua.match(/\b(SM-[A-Z0-9]+)\b/i);
+          ua.match(/\b(SM-[A-Z0-9]+)\b/i) ||
+          ua.match(/\b((?:Redmi|POCO|Mi|Infinix|TECNO|ITE|Nokia|Moto|Galaxy)[^);/]{2,40})\b/i);
         if (m && m[1] && !/^(K|U|wv|Linux)$/i.test(m[1].trim())) {
           model = m[1].replace(/\s*Build.*/i, "").trim();
         }
-        // لو Client Hints رجّع موديل أوضح
-        if ((!model || model.length < 3) && navigator.userAgentData && navigator.userAgentData.mobile) {
+        // Client Hints (حتى لو مش mobile flag)
+        if ((!model || model.length < 3) && navigator.userAgentData) {
           try {
-            var ch2 = await navigator.userAgentData.getHighEntropyValues(["model"]);
+            var ch2 = await navigator.userAgentData.getHighEntropyValues(["model", "platform", "platformVersion"]);
             if (ch2 && ch2.model && ch2.model.length > 1 && ch2.model !== "K") model = ch2.model;
+            if (!platform && ch2.platform) platform = ch2.platform;
+            if (!platformVersion && ch2.platformVersion) platformVersion = ch2.platformVersion;
           } catch (e3) {}
         }
       } catch (e2) {}
@@ -136,6 +139,15 @@
     if (model && /^SM-[XT]/i.test(model) && !brand) brand = "Samsung";
     if (model && /^RMX/i.test(model) && !brand) brand = "Realme";
     if (model && /^CPH/i.test(model) && !brand) brand = "OPPO";
+    if (model && /Redmi|POCO|Mi\s/i.test(model) && !brand) brand = "Xiaomi";
+    if (model && /Infinix|TECNO|ITE/i.test(model) && !brand) brand = "Infinix/Tecno";
+    if (!model) {
+      try {
+        var ua2 = navigator.userAgent || "";
+        if (/iPhone/i.test(ua2)) { model = "iPhone"; brand = brand || "Apple"; }
+        else if (/iPad/i.test(ua2)) { model = "iPad"; brand = brand || "Apple"; }
+      } catch (e4) {}
+    }
 
     var connection = null;
     try {
