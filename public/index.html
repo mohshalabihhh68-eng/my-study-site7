@@ -201,6 +201,87 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .admin-card b{font-size:13px;display:block;color:var(--text)}
 .admin-card small{font-size:10px;color:var(--muted);display:block;margin-top:3px}
 
+/* === كارت الأدمن المميز (صاحب المنصة) === */
+.admin-card.owner{
+  position:relative;
+  border:1.5px solid transparent;
+  background:
+    linear-gradient(var(--panel),var(--panel)) padding-box,
+    linear-gradient(135deg,#6c63ff,#00d4ff,#59e0b3) border-box;
+  box-shadow:0 12px 30px rgba(108,99,255,.18);
+  overflow:hidden;
+}
+.admin-card.owner::before{
+  content:"";
+  position:absolute;
+  inset:-40%;
+  background:conic-gradient(from 0deg,transparent 0deg,rgba(108,99,255,.25) 60deg,transparent 120deg,rgba(0,212,255,.25) 200deg,transparent 280deg,rgba(89,224,179,.25) 320deg,transparent 360deg);
+  animation:ownerGlow 6s linear infinite;
+  z-index:0;
+  pointer-events:none;
+}
+.admin-card.owner > *{position:relative;z-index:1}
+.admin-card.owner:hover{
+  transform:translateY(-5px) scale(1.015);
+  box-shadow:0 18px 45px rgba(108,99,255,.35);
+  border-color:transparent;
+}
+.admin-card.owner .admin-avatar{
+  background:linear-gradient(145deg,#6c63ff,#00d4ff);
+  color:#fff;
+  box-shadow:0 6px 18px rgba(108,99,255,.4);
+}
+.admin-card.owner b{
+  font-size:14px;
+  background:linear-gradient(100deg,#6c63ff,#00d4ff);
+  background-clip:text;
+  -webkit-background-clip:text;
+  color:transparent;
+  font-weight:900;
+}
+.admin-card.owner small{
+  color:var(--blue);
+  font-weight:800;
+}
+.owner-badge{
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:2;
+  font-size:9px;
+  font-weight:900;
+  padding:4px 9px;
+  border-radius:99px;
+  background:linear-gradient(135deg,#6c63ff,#00d4ff);
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  box-shadow:0 4px 12px rgba(108,99,255,.4);
+  letter-spacing:.3px;
+}
+.owner-badge svg{width:10px;height:10px;stroke-width:2.5}
+@keyframes ownerGlow{
+  0%{transform:rotate(0deg)}
+  100%{transform:rotate(360deg)}
+}
+[data-theme="dark"] .admin-card.owner{
+  background:
+    linear-gradient(var(--panel2),var(--panel2)) padding-box,
+    linear-gradient(135deg,#4285ff,#59e0b3) border-box;
+}
+[data-theme="dark"] .admin-card.owner b{
+  background:linear-gradient(100deg,#76a9ff,#59e0b3);
+  background-clip:text;
+  -webkit-background-clip:text;
+  color:transparent;
+}
+[data-theme="dark"] .admin-card.owner small{color:var(--blue2)}
+@media(prefers-reduced-motion:reduce){
+  .admin-card.owner::before{animation:none}
+}
+/* ====================================== */
+
 .faq{max-width:800px;margin:auto;display:grid;gap:11px}
 .faq-item{border:1px solid var(--line);background:var(--card-bg);border-radius:16px;overflow:hidden;transition:border-color .2s,background .2s}
 .faq-item:hover{background:var(--card-bg-hover)}
@@ -358,15 +439,20 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 </div></section>
 
 <section class="trial" id="trial"><div class="container"><div class="trial-box reveal"><div class="trial-copy">
-    <h2>طب وأنا إيش ضمني إنك مش نصاب؟ 👀</h2>
+    <h2>طب وانا ايش ضمني انكم مش نصابين؟ 👀</h2>
     <!-- تم دمج النص كله هنا وتطبيق كلاس الهايلايتر -->
     <span class="marker-highlight">
         من حقك تطمّن قبل ما تشترك. متاح تجربة مجانية للموقع؛ جرّب براحتك، وكلم الأدمن من رابط التيليجرام الموجود هنا.
     </span>
 </div><div class="trial-cta"><a class="btn btn-lg" href="#admins">شوف طرق التواصل <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div>
-<div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمن <span class="gradient">المتاح للتواصل</span></h2><p>تواصل مع الأدمن مباشرة عبر تيليجرام.</p></div>
-<div class="admins" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:420px;margin-inline:auto">
-<a class="admin-card" href="https://t.me/S7alaby7" target="_blank" rel="noopener noreferrer"><div class="admin-avatar"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div><div><b>@S7alaby7</b><small>تواصل على تيليجرام ↗</small></div></a>
+<div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمن <span class="gradient">المتاح للتواصل</span></h2><p>تواصل مع الأدمن مباشرة عبر تيليجرام أو إنستجرام.</p></div>
+<div class="admins" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:620px;margin-inline:auto">
+<a class="admin-card owner" href="https://t.me/S7alaby7" target="_blank" rel="noopener noreferrer">
+  <span class="owner-badge"><svg viewBox="0 0 24 24"><path d="M12 2 15 9l7 .5-5.5 4.5 1.8 7L12 17l-6.3 4 1.8-7L2 9.5 9 9l3-7Z"/></svg> صاحب المنصة</span>
+  <div class="admin-avatar"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div>
+  <div><b>@S7alaby7</b><small>تواصل على تيليجرام ↗</small></div>
+</a>
+<a class="admin-card" href="https://instagram.com/mohamed3farag" target="_blank" rel="noopener noreferrer"><div class="admin-avatar"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg></div><div><b>@mohamed3farag</b><small>تواصل على إنستجرام ↗</small></div></a>
 </div></div></div></section>
 
 <section class="section" id="faq"><div class="container"><div class="section-head reveal"><div class="eyebrow">محتاج تعرف إيه؟</div><h2>أسئلة <span class="gradient">بتتكرر.</span></h2></div>
@@ -446,4 +532,4 @@ if ('IntersectionObserver' in window) {
 <!-- تسجيل كل زائر (مسجّل أو لا) في لوحة الأدمن — لازم track-visit.js يكون في /public -->
 <script src="/track-visit.js" defer></script>
 </body>
-</html>
+  </html>
