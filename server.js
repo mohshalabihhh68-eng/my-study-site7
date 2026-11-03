@@ -2584,7 +2584,7 @@ app.get("/api/config", requireStudent, async (req, res) => {
   res.json({ success: true, yearId, subjectIds, cryptoReady: Boolean(decryptPlaybackKeyFn), decryptSegments: true });
 });
 
-const THANAWICA_ALLOWED_SECTIONS = new Set(["scientific_sciences", "scientific_math"]);
+const THANAWICA_ALLOWED_SECTIONS = new Set(["scientific_sciences", "scientific_math", "azhari"]);
 function studentAllowsThanawica(student) { const sec = normalizeSection(student && student.section); return THANAWICA_ALLOWED_SECTIONS.has(sec || ""); }
 
 app.get("/api/subjects/:id", requireStudent, async (req, res) => {
