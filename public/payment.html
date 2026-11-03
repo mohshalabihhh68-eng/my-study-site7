@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ar-EG" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ff6b35" />
+  <title>بيانات الدفع — ثانوية club</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --orange: #ff6b35;
+      --orange2: #ff8c42;
+      --red: #e63946;
+      --bg: #fff5f0;
+      --card: #ffffff;
+      --text: #1a1a2e;
+      --muted: #6b7280;
+      --line: #f1e4dc;
+      --soft: #fff0e8;
+      --green: #10b981;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cairo', system-ui, sans-serif;
+      background: linear-gradient(160deg, #fff5f0 0%, #ffe8dc 40%, #fff0e8 100%);
+      min-height: 100vh;
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 17px;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .brand img {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      object-fit: contain;
+    }
+    .brand span { color: var(--orange); font-size: 13px; font-weight: 700; }
+
+    /* Main card */
+    .wrap {
+      max-width: 420px;
+      margin: 10px auto 40px;
+      padding: 0 16px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(255, 107, 53, 0.12), 0 4px 12px rgba(0,0,0,0.04);
+    }
+
+    /* Gradient header of card */
+    .card-head {
+      background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 50%, #ff9f5a 100%);
+      height: 110px;
+      position: relative;
+    }
+    .avatar-wrap {
+      position: absolute;
+      left: 50%;
+      bottom: -42px;
+      transform: translateX(-50%);
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: #fff;
+      padding: 4px;
+      box-shadow: 0 8px 24px rgba(255, 107, 53, 0.25);
+    }
+    .avatar {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff6b35, #ff8c42);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 32px;
+      font-weight: 900;
+    }
+
+    .card-body {
+      padding: 56px 24px 28px;
+      text-align: center;
+    }
+    .admin-name {
+      font-size: 22px;
+      font-weight: 900;
+      margin-bottom: 6px;
+      letter-spacing: -0.3px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff0e8;
+      color: var(--orange);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 99px;
+      margin-bottom: 22px;
+    }
+
+    /* Number box */
+    .num-box {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px 16px;
+      margin-bottom: 16px;
+    }
+    .num-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .num-value {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      direction: ltr;
+      margin-bottom: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .copy-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 13px;
+      font-weight: 800;
+      font-size: 14px;
+      color: #fff;
+      background: linear-gradient(135deg, #ff6b35, #ff8c42);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 8px 20px rgba(255, 107, 53, 0.3);
+    }
+    .copy-btn:active { transform: scale(0.97); }
+    .copy-btn.copied {
+      background: linear-gradient(135deg, #10b981, #34d399);
+      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    /* Instruction */
+    .hint {
+      background: #fff7ed;
+      border: 1px solid #ffedd5;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #9a3412;
+      text-align: right;
+      margin-bottom: 20px;
+      line-height: 1.7;
+    }
+    .hint strong { color: #c2410c; }
+
+    /* Package toggle */
+    .pkg-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .pkg {
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #fff;
+      text-align: center;
+    }
+    .pkg.active {
+      border-color: var(--orange);
+      background: #fff7ed;
+      box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.12);
+    }
+    .pkg .price {
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--text);
+    }
+    .pkg .label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .pkg .save {
+      font-size: 10px;
+      color: var(--green);
+      font-weight: 800;
+      margin-top: 4px;
+    }
+
+    /* Form */
+    .field {
+      text-align: right;
+      margin-bottom: 14px;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .field input,
+    .field select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #fafafa;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .field input:focus,
+    .field select:focus {
+      border-color: var(--orange);
+      box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.12);
+      background: #fff;
+    }
+    .field select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: left 14px center;
+      padding-left: 36px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 15px;
+      font-weight: 900;
+      font-size: 15px;
+      color: #fff;
+      background: linear-gradient(135deg, #ff6b35, #ff8c42);
+      cursor: pointer;
+      margin-top: 8px;
+      box-shadow: 0 10px 24px rgba(255, 107, 53, 0.3);
+      transition: transform 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .submit-btn:active { transform: scale(0.98); }
+    .submit-btn:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 18px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .footer-links a {
+      color: var(--orange);
+      text-decoration: none;
+    }
+
+    .success-box {
+      display: none;
+      text-align: center;
+      padding: 30px 20px;
+    }
+    .success-box.show { display: block; }
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #ecfdf5;
+      color: var(--green);
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      margin: 0 auto 16px;
+    }
+    .success-box h3 {
+      font-size: 18px;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+    .success-box p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 420px) {
+      .num-value { font-size: 22px; }
+      .card-body { padding: 52px 18px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a class="brand" href="/">
+      <img src="https://thanawya-club.up.railway.app/favicon.ico" alt="logo" onerror="this.style.display='none'" />
+      <div>
+        ثانوية club
+        <span>بيانات الدفع</span>
+      </div>
+    </a>
+  </div>
+
+  <div class="wrap">
+    <div class="card" id="mainCard">
+      <div class="card-head">
+        <div class="avatar-wrap">
+          <div class="avatar">S</div>
+        </div>
+      </div>
+
+      <div class="card-body" id="formArea">
+        <div class="admin-name">S7alaby</div>
+        <div class="badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          بيانات تحويل الاشتراك
+        </div>
+
+        <div class="num-box">
+          <div class="num-label">رقم الدفع</div>
+          <div class="num-value" id="payNumber">01036219414</div>
+          <button class="copy-btn" id="copyBtn" type="button" onclick="copyNumber()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            نسخ الرقم
+          </button>
+        </div>
+
+        <div class="hint">
+          حوّل المبلغ <strong>بالظبط</strong> على الرقم فوق، وبعد التحويل اكتب بياناتك هنا عشان نفعّل اشتراكك في أسرع وقت.
+        </div>
+
+        <!-- اختيار الباقة -->
+        <div class="pkg-row">
+          <div class="pkg active" data-pkg="monthly" data-amount="150" onclick="selectPkg(this)">
+            <div class="price">150 ج</div>
+            <div class="label">اشتراك شهري</div>
+          </div>
+          <div class="pkg" data-pkg="3months" data-amount="350" onclick="selectPkg(this)">
+            <div class="price">350 ج</div>
+            <div class="label">اشتراك 3 شهور</div>
+            <div class="save">وفّر 100 جنيه</div>
+          </div>
+        </div>
+
+        <form id="payForm" onsubmit="return submitForm(event)">
+          <div class="field">
+            <label>الاسم بالكامل</label>
+            <input type="text" id="fullName" placeholder="مثال: أحمد محمد علي" required autocomplete="name" />
+          </div>
+
+          <div class="field">
+            <label>الشعبة الدراسية</label>
+            <select id="section" required>
+              <option value="" disabled selected>اختار الشعبة</option>
+              <option value="علمي علوم">علمي علوم</option>
+              <option value="علمي رياضة">علمي رياضة</option>
+              <option value="أدبي">أدبي</option>
+              <option value="أزهر علمي">أزهر علمي</option>
+              <option value="أزهر أدبي">أزهر أدبي</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>رقم المحفظة اللي حوّلت منه</label>
+            <input type="tel" id="wallet" placeholder="01xxxxxxxxx" required pattern="01[0-9]{9}" inputmode="numeric" />
+          </div>
+
+          <button type="submit" class="submit-btn" id="submitBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            تحقق من الدفع وفعّل الاشتراك
+          </button>
+        </form>
+
+        <div class="footer-links">
+          <a href="https://t.me/S7alaby7" target="_blank">تواصل مع الأدمن</a>
+          <a href="/">الرجوع للموقع</a>
+        </div>
+      </div>
+
+      <!-- Success state -->
+      <div class="success-box" id="successBox">
+        <div class="success-icon">✓</div>
+        <h3>تم إرسال طلبك بنجاح</h3>
+        <p>
+          هيتم مراجعة التحويل وتفعيل الاشتراك في أقرب وقت.<br>
+          لو حابب تتابع أسرع، ابعت نفس البيانات للأدمن على تيليجرام.
+        </p>
+        <div style="margin-top:20px">
+          <a href="https://t.me/S7alaby7" target="_blank" class="submit-btn" style="text-decoration:none;display:inline-flex;width:auto;padding:12px 24px">
+            فتح تيليجرام مع الأدمن
+          </a>
+        </div>
+        <div class="footer-links" style="margin-top:18px">
+          <a href="/">الرجوع للصفحة الرئيسية</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let selectedPkg = { type: 'monthly', amount: 150 };
+
+    function selectPkg(el) {
+      document.querySelectorAll('.pkg').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      selectedPkg = {
+        type: el.dataset.pkg,
+        amount: Number(el.dataset.amount)
+      };
+    }
+
+    function copyNumber() {
+      const num = document.getElementById('payNumber').textContent.trim();
+      navigator.clipboard.writeText(num).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.classList.add('copied');
+        btn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          تم النسخ
+        `;
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            نسخ الرقم
+          `;
+        }, 2000);
+      }).catch(() => {
+        // fallback
+        const input = document.createElement('input');
+        input.value = num;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        alert('تم نسخ الرقم: ' + num);
+      });
+    }
+
+    function submitForm(e) {
+      e.preventDefault();
+
+      const name = document.getElementById('fullName').value.trim();
+      const section = document.getElementById('section').value;
+      const wallet = document.getElementById('wallet').value.trim();
+
+      if (!name || !section || !wallet) {
+        alert('من فضلك املأ كل البيانات');
+        return false;
+      }
+
+      if (!/^01[0-9]{9}$/.test(wallet)) {
+        alert('رقم المحفظة لازم يبدأ بـ 01 ويكون 11 رقم');
+        return false;
+      }
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerHTML = 'جاري الإرسال...';
+
+      const pkgText = selectedPkg.type === 'monthly' ? 'اشتراك شهري (150 جنيه)' : 'اشتراك 3 شهور (350 جنيه)';
+
+      // رسالة تيليجرام جاهزة
+      const msg = encodeURIComponent(
+        `طلب تفعيل اشتراك جديد 🎓\n\n` +
+        `الاسم: ${name}\n` +
+        `الشعبة: ${section}\n` +
+        `الباقة: ${pkgText}\n` +
+        `رقم المحفظة: ${wallet}\n` +
+        `رقم التحويل: 01036219414\n\n` +
+        `من صفحة الدفع`
+      );
+
+      // فتح تيليجرام
+      const tgUrl = `https://t.me/S7alaby7?text=${msg}`;
+      window.open(tgUrl, '_blank');
+
+      // إظهار رسالة النجاح
+      setTimeout(() => {
+        document.getElementById('formArea').style.display = 'none';
+        document.getElementById('successBox').classList.add('show');
+      }, 600);
+
+      return false;
+    }
+  </script>
+</body>
+</html>
