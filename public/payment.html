@@ -3,28 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#ff6b35" />
+  <meta name="theme-color" content="#6c63ff" />
   <title>بيانات الدفع — ثانوية club</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --orange: #ff6b35;
-      --orange2: #ff8c42;
-      --red: #e63946;
-      --bg: #fff5f0;
-      --card: #ffffff;
-      --text: #1a1a2e;
-      --muted: #6b7280;
-      --line: #f1e4dc;
-      --soft: #fff0e8;
+      --primary: #6c63ff;
+      --primary2: #00d4ff;
       --green: #10b981;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --line: rgba(108, 99, 255, 0.12);
+      --soft: rgba(108, 99, 255, 0.06);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Cairo', system-ui, sans-serif;
-      background: linear-gradient(160deg, #fff5f0 0%, #ffe8dc 40%, #fff0e8 100%);
+      background:
+        radial-gradient(ellipse at 78% 0%, rgba(108,99,255,0.08), transparent 35%),
+        radial-gradient(ellipse at 5% 48%, rgba(0,212,255,0.05), transparent 30%),
+        linear-gradient(180deg, #f8fafc, #f1f5f9 60%, #f8fafc);
       min-height: 100vh;
       color: var(--text);
       line-height: 1.6;
@@ -49,13 +51,25 @@
       text-decoration: none;
       color: var(--text);
     }
-    .brand img {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      object-fit: contain;
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #6c63ff, #00d4ff);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 900;
+      font-size: 18px;
+      box-shadow: 0 8px 20px rgba(108, 99, 255, 0.3);
     }
-    .brand span { color: var(--orange); font-size: 13px; font-weight: 700; }
+    .brand span {
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 700;
+      display: block;
+      margin-top: -2px;
+    }
 
     /* Main card */
     .wrap {
@@ -67,12 +81,13 @@
       background: var(--card);
       border-radius: 28px;
       overflow: hidden;
-      box-shadow: 0 20px 50px rgba(255, 107, 53, 0.12), 0 4px 12px rgba(0,0,0,0.04);
+      box-shadow: 0 20px 50px rgba(108, 99, 255, 0.12), 0 4px 12px rgba(0,0,0,0.04);
+      border: 1px solid var(--line);
     }
 
     /* Gradient header of card */
     .card-head {
-      background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 50%, #ff9f5a 100%);
+      background: linear-gradient(135deg, #6c63ff 0%, #5b54e6 40%, #00d4ff 100%);
       height: 110px;
       position: relative;
     }
@@ -86,13 +101,13 @@
       border-radius: 50%;
       background: #fff;
       padding: 4px;
-      box-shadow: 0 8px 24px rgba(255, 107, 53, 0.25);
+      box-shadow: 0 8px 24px rgba(108, 99, 255, 0.25);
     }
     .avatar {
       width: 100%;
       height: 100%;
       border-radius: 50%;
-      background: linear-gradient(135deg, #ff6b35, #ff8c42);
+      background: linear-gradient(135deg, #6c63ff, #00d4ff);
       display: grid;
       place-items: center;
       color: #fff;
@@ -109,18 +124,20 @@
       font-weight: 900;
       margin-bottom: 6px;
       letter-spacing: -0.3px;
+      color: var(--text);
     }
     .badge {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: #fff0e8;
-      color: var(--orange);
+      background: rgba(108, 99, 255, 0.08);
+      color: var(--primary);
       font-size: 12px;
       font-weight: 700;
       padding: 5px 12px;
       border-radius: 99px;
       margin-bottom: 22px;
+      border: 1px solid rgba(108, 99, 255, 0.15);
     }
 
     /* Number box */
@@ -144,6 +161,7 @@
       direction: ltr;
       margin-bottom: 14px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text);
     }
     .copy-btn {
       width: 100%;
@@ -153,14 +171,15 @@
       font-weight: 800;
       font-size: 14px;
       color: #fff;
-      background: linear-gradient(135deg, #ff6b35, #ff8c42);
+      background: linear-gradient(135deg, #6c63ff, #00d4ff);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       transition: transform 0.15s, box-shadow 0.2s;
-      box-shadow: 0 8px 20px rgba(255, 107, 53, 0.3);
+      box-shadow: 0 8px 20px rgba(108, 99, 255, 0.3);
+      font-family: inherit;
     }
     .copy-btn:active { transform: scale(0.97); }
     .copy-btn.copied {
@@ -170,17 +189,17 @@
 
     /* Instruction */
     .hint {
-      background: #fff7ed;
-      border: 1px solid #ffedd5;
+      background: rgba(108, 99, 255, 0.06);
+      border: 1px solid rgba(108, 99, 255, 0.12);
       border-radius: 14px;
       padding: 12px 14px;
       font-size: 13px;
-      color: #9a3412;
+      color: #4338ca;
       text-align: right;
       margin-bottom: 20px;
       line-height: 1.7;
     }
-    .hint strong { color: #c2410c; }
+    .hint strong { color: #4f46e5; }
 
     /* Package toggle */
     .pkg-row {
@@ -199,9 +218,9 @@
       text-align: center;
     }
     .pkg.active {
-      border-color: var(--orange);
-      background: #fff7ed;
-      box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.12);
+      border-color: var(--primary);
+      background: rgba(108, 99, 255, 0.06);
+      box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.12);
     }
     .pkg .price {
       font-size: 20px;
@@ -241,19 +260,20 @@
       padding: 12px 14px;
       font-size: 14px;
       font-family: inherit;
-      background: #fafafa;
+      background: #f8fafc;
       outline: none;
       transition: border-color 0.15s, box-shadow 0.15s;
+      color: var(--text);
     }
     .field input:focus,
     .field select:focus {
-      border-color: var(--orange);
-      box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.12);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.12);
       background: #fff;
     }
     .field select {
       appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: left 14px center;
       padding-left: 36px;
@@ -267,15 +287,16 @@
       font-weight: 900;
       font-size: 15px;
       color: #fff;
-      background: linear-gradient(135deg, #ff6b35, #ff8c42);
+      background: linear-gradient(135deg, #6c63ff, #00d4ff);
       cursor: pointer;
       margin-top: 8px;
-      box-shadow: 0 10px 24px rgba(255, 107, 53, 0.3);
+      box-shadow: 0 10px 24px rgba(108, 99, 255, 0.3);
       transition: transform 0.15s;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
+      font-family: inherit;
     }
     .submit-btn:active { transform: scale(0.98); }
     .submit-btn:disabled {
@@ -292,7 +313,7 @@
       font-weight: 700;
     }
     .footer-links a {
-      color: var(--orange);
+      color: var(--primary);
       text-decoration: none;
     }
 
@@ -317,6 +338,7 @@
       font-size: 18px;
       font-weight: 900;
       margin-bottom: 8px;
+      color: var(--text);
     }
     .success-box p {
       color: var(--muted);
@@ -334,7 +356,7 @@
 
   <div class="topbar">
     <a class="brand" href="/">
-      <img src="https://thanawya-club.up.railway.app/favicon.ico" alt="logo" onerror="this.style.display='none'" />
+      <div class="brand-logo">ث</div>
       <div>
         ثانوية club
         <span>بيانات الدفع</span>
@@ -467,7 +489,6 @@
           `;
         }, 2000);
       }).catch(() => {
-        // fallback
         const input = document.createElement('input');
         input.value = num;
         document.body.appendChild(input);
@@ -501,7 +522,6 @@
 
       const pkgText = selectedPkg.type === 'monthly' ? 'اشتراك شهري (150 جنيه)' : 'اشتراك 3 شهور (350 جنيه)';
 
-      // رسالة تيليجرام جاهزة
       const msg = encodeURIComponent(
         `طلب تفعيل اشتراك جديد 🎓\n\n` +
         `الاسم: ${name}\n` +
@@ -512,11 +532,9 @@
         `من صفحة الدفع`
       );
 
-      // فتح تيليجرام
       const tgUrl = `https://t.me/S7alaby7?text=${msg}`;
       window.open(tgUrl, '_blank');
 
-      // إظهار رسالة النجاح
       setTimeout(() => {
         document.getElementById('formArea').style.display = 'none';
         document.getElementById('successBox').classList.add('show');
