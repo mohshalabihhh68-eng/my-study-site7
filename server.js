@@ -4412,18 +4412,33 @@ export default app;
 
 const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 if (!isVercel) {
-  const server = app.listen(CONFIG.PORT, () => {
-    console.log(`[API ${APP_VERSION}] :${CONFIG.PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
+  // Railway / Heroku / Render بيحددوا البورت في process.env.PORT
+  // ولازم نسمع على 0.0.0.0 عشان يقدروا يوصلوا للسيرفر
+  const PORT = Number(process.env.PORT) || CONFIG.PORT || 3000;
+  const HOST = "0.0.0.0";
+
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`[API ${APP_VERSION}] listening on http://${HOST}:${PORT}`);
+    console.log(`[API ${APP_VERSION}] Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
   });
+
+  server.on("error", (err) => {
+    console.error("[API] listen error:", err && err.message);
+    process.exit(1);
+  });
+
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
   server.requestTimeout = 0;
-  process.on("SIGTERM", () => {
-    console.log("[API] SIGTERM — closing");
+
+  const shutdown = (sig) => {
+    console.log(`[API] ${sig} — closing`);
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 10_000).unref();
-  });
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 } else {
   console.log(`[API ${APP_VERSION}] Vercel serverless mode · segment-decrypt ON`);
 }
