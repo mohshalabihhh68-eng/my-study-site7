@@ -3098,33 +3098,69 @@ async function buildVideoSource(videoId, clientHeaders) {
     if (ytUrl) return { reqVideoId: videoId, videoId: String(videoId), mode: "coursatk-youtube", youtubeUrl: ytUrl, streamUrl: ytUrl, plainKey: Buffer.from("youtube"), segs: [], playlist: "", mediaSeq: 0, allowedHosts: new Set(), createdAt: now() };
   } catch (e) { console.warn("[platforms youtube]", e.message); }
 
-  let mode = null; let streamUrl = null; let sessionToken = null; let resolvedVideoId = videoId; let probeText = null;
   const errors = [];
+  const candidates = [];
 
+  // 1) stream-weave
   try {
     const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
     if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-    mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
-  } catch (e) { errors.push(e.message); }
+    candidates.push({
+      mode: "weave",
+      sessionToken: data.data.token,
+      streamUrl: data.data.stream_url,
+      resolvedVideoId: String(data.data.video_id || videoId),
+      probeText: null
+    });
+  } catch (e) { errors.push("weave: " + (e.message || e)); }
 
-  if (!mode) {
+  // 2) CDN playlist (دايمًا كـ fallback — حتى لو weave نجح في الـ token)
+  try {
+    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+    const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 15_000, retries: 1 }));
+    if (!probe.ok) throw new Error(`CDN ${probe.status}`);
+    const masterText = await probe.text();
+    if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
+    candidates.push({
+      mode: "cdn",
+      sessionToken: upstreamTok,
+      streamUrl: masterUrl,
+      resolvedVideoId: String(videoId),
+      probeText: masterText
+    });
+  } catch (e) { errors.push("cdn: " + (e.message || e)); }
+
+  if (!candidates.length) throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
+
+  let lastErr = null;
+  for (const c of candidates) {
     try {
-      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-      const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 15_000, retries: 1 }));
-      if (!probe.ok) throw new Error(`CDN ${probe.status}`);
-      const masterText = await probe.text();
-      if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
-      mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
-    } catch (e) { errors.push(e.message); }
+      const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+      try { allowedHosts.add(new URL(c.streamUrl).hostname); } catch {}
+      const src = {
+        reqVideoId: videoId,
+        videoId: c.resolvedVideoId,
+        mode: c.mode,
+        token: c.sessionToken,
+        streamUrl: c.streamUrl,
+        allowedHosts,
+        plainKey: null,
+        defaultIv: null,
+        mediaSeq: 0,
+        segs: [],
+        playlist: "",
+        createdAt: now()
+      };
+      await buildPlaylist(src, c.probeText, clientHeaders);
+      console.log("[source]", c.mode, "ok for", videoId);
+      return src;
+    } catch (e) {
+      lastErr = e;
+      console.warn("[source]", c.mode, "failed for", videoId, ":", e && e.message ? e.message : e);
+      errors.push(c.mode + " playlist: " + (e && e.message ? e.message : e));
+    }
   }
-
-  if (!mode || !streamUrl || !sessionToken) throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
-
-  const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
-  try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
-  const src = { reqVideoId: videoId, videoId: resolvedVideoId, mode, token: sessionToken, streamUrl, allowedHosts, plainKey: null, defaultIv: null, mediaSeq: 0, segs: [], playlist: "", createdAt: now() };
-  await buildPlaylist(src, probeText, clientHeaders);
-  return src;
+  throw lastErr || new Error(errors.join(" | ") || "فشل تجهيز مصدر الفيديو");
 }
 
 function getVideoSource(videoId, clientHeaders) {
