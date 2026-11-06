@@ -2621,24 +2621,8 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 
     let results = await Promise.all(wantedIds.map((sid, idx) => resolveOne(sid).then((s) => ({ ...s, order_index: idx + 1 }))));
 
-    if (CONFIG.THANAWICA_ENABLED && studentAllowsThanawica(req.student)) {
-      try {
-        const thList = await thSubjectsForYear(yearId);
-        const thMath = thList.find((s) => s._kind === "math") || null;
-        if (thMath) {
-          const filtered = [];
-          let replacedMath = false;
-          for (const s of results) {
-            const kind = chemMathKind(s.name);
-            if (kind === "math" && !replacedMath) { filtered.push({ ...thMath, order_index: s.order_index, name: thMath.name || s.name, image_url: s.image_url || thMath.image_url || null }); replacedMath = true; }
-            else if (kind === "math" && replacedMath) continue;
-            else filtered.push(s);
-          }
-          if (!replacedMath) filtered.push({ ...thMath, order_index: filtered.length + 1 });
-          results = filtered;
-        }
-      } catch (e) { console.warn("[subjects] thanawica hybrid skip:", e.message); }
-    }
+    // ✅ التعديل: الرياضة تفضل من كورساتك زيها زي أي مادة — لا يوجد استبدال من ثانويكا
+    // (تم إلغاء استبدال مادة الرياضيات بمادة ثانويكا بناءً على الطلب)
 
     res.json({ success: true, message: "Success", data: results });
   } catch (e) { jsonError(res, 502, e.message); }
