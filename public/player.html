@@ -746,8 +746,9 @@ function findCrypto() {
   }
   return null;
 }
+// player.js الحالي مبقاش بيعرّض DecryptionUtils — مش بنفشل التشغيل بسببه
 function loadPlayerScript() {
-  return new Promise(function (resolve, reject) {
+  return new Promise(function (resolve) {
     if (findCrypto()) return resolve(findCrypto());
     var existing = document.querySelector('script[src*="player.stream-weave.com"]');
     if (existing) {
@@ -755,8 +756,8 @@ function loadPlayerScript() {
       var t = setInterval(function () {
         var c = findCrypto();
         if (c) { clearInterval(t); resolve(c); }
-        else if (++tries > 40) { clearInterval(t); reject(new Error('timeout crypto')); }
-      }, 150);
+        else if (++tries > 20) { clearInterval(t); resolve(null); }
+      }, 100);
       return;
     }
     var s = document.createElement('script');
@@ -766,10 +767,10 @@ function loadPlayerScript() {
       var t = setInterval(function () {
         var c = findCrypto();
         if (c) { clearInterval(t); resolve(c); }
-        else if (++tries > 40) { clearInterval(t); reject(new Error('crypto not found')); }
-      }, 150);
+        else if (++tries > 20) { clearInterval(t); resolve(null); }
+      }, 100);
     };
-    s.onerror = function () { reject(new Error('failed to load player.js')); };
+    s.onerror = function () { resolve(null); };
     document.head.appendChild(s);
   });
 }
@@ -1534,6 +1535,7 @@ async function playIndex(i,autoplay){
   updateMediaSession();
   try{
     let playData = null;
+    let playErr = null;
     try {
       playData = await getPlayCached(item.id);
       if (!playData) {
@@ -1541,8 +1543,11 @@ async function playIndex(i,autoplay){
         playCache.set(String(item.id), { data: playData, ts: Date.now() });
       }
     } catch (e1) {
-      if (!(e1.status === 404 || e1.status === 403 || /غير موجود|not found/i.test(e1.message||''))) {
-        if (e1.kind === 'auth' || e1.kind === 'network') throw e1;
+      playErr = e1;
+      // auth/network → وقف فورًا. باقي الأخطاء نعرضها ومش نروح للمسار القديم اللي بيعتمد على crypto اتشال
+      if (e1.kind === 'auth' || e1.kind === 'network') throw e1;
+      if (!(e1.status === 404 || /غير موجود|not found/i.test(e1.message || ''))) {
+        throw e1;
       }
       playData = null;
     }
@@ -1573,6 +1578,11 @@ async function playIndex(i,autoplay){
       if (playUrl.startsWith('/')) playUrl = location.origin + playUrl;
       await startHls(playUrl, my, autoplay, item);
       return;
+    }
+
+    // لو /api/play رجع 404 بس، جرّب المسار القديم — غير كده متعتمدش على crypto المتصفح
+    if (playErr && !(playErr.status === 404 || /غير موجود|not found/i.test(playErr.message || ''))) {
+      throw playErr;
     }
 
     setLoading(true,'جاري فتح الجلسة (المسار القديم)…');
@@ -1672,12 +1682,17 @@ async function playIndex(i,autoplay){
     if(!cryptoUtils) cryptoUtils = await loadPlayerScript();
     
     let plainKey;
-    try {
-      const dec = await cryptoUtils.decryptPlaybackKey(new Uint8Array(keyBuf), String(swVideoId));
-      plainKey = dec && dec.key ? dec.key : dec;
-    } catch (ke) {
-      if (keyBuf.byteLength === 16) plainKey = new Uint8Array(keyBuf);
-      else throw new Error('فشل فك مفتاح التشفير: ' + (ke.message || ke));
+    if (keyBuf.byteLength === 16) {
+      plainKey = new Uint8Array(keyBuf);
+    } else if (cryptoUtils && typeof cryptoUtils.decryptPlaybackKey === 'function') {
+      try {
+        const dec = await cryptoUtils.decryptPlaybackKey(new Uint8Array(keyBuf), String(swVideoId));
+        plainKey = dec && dec.key ? dec.key : dec;
+      } catch (ke) {
+        throw new Error('فشل فك مفتاح التشفير: ' + (ke.message || ke));
+      }
+    } else {
+      throw new Error('السيرفر لازم يفك التشفير (/api/play) — مشغل المتصفح مفيهوش crypto');
     }
     const keyBytes = plainKey instanceof ArrayBuffer ? new Uint8Array(plainKey)
                    : plainKey.buffer ? new Uint8Array(plainKey.buffer, plainKey.byteOffset||0, plainKey.byteLength||plainKey.length)
