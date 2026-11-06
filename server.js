@@ -4385,7 +4385,11 @@ setInterval(() => {
 }, 60_000).unref();
 
 CONFIG.BOOTSTRAP_ADMIN.passwordHash = scryptHash(CONFIG.BOOTSTRAP_ADMIN.passwordPlain);
-await loadDecryptionUtils();
+try {
+  await loadDecryptionUtils();
+} catch (e) {
+  console.error("[crypto] failed to load DecryptionUtils — continuing without segment decrypt:", e && e.message ? e.message : e);
+}
 try {
   if (CONFIG.THANAWICA_ENABLED && CONFIG.THANAWICA_CODE) {
     await loadMaintenanceFromFirebase();
@@ -4423,13 +4427,15 @@ try {
 } catch (e) { console.warn("[API] section seed skip:", e.message); }
 
 // ===== Vercel / local dual mode =====
-// On Vercel we export the Express app (serverless). Locally we listen as usual.
+// On Vercel we export the Express app (serverless). Locally / Railway we listen as usual.
 export default app;
 
 const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 if (!isVercel) {
-  const server = app.listen(CONFIG.PORT, () => {
-    console.log(`[API ${APP_VERSION}] :${CONFIG.PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
+  // Railway (and most PaaS) require binding 0.0.0.0 — localhost-only is unreachable from the proxy
+  const HOST = process.env.HOST || "0.0.0.0";
+  const server = app.listen(CONFIG.PORT, HOST, () => {
+    console.log(`[API ${APP_VERSION}] ${HOST}:${CONFIG.PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
   });
   server.keepAliveTimeout = 65_000;
@@ -4442,4 +4448,4 @@ if (!isVercel) {
   });
 } else {
   console.log(`[API ${APP_VERSION}] Vercel serverless mode · segment-decrypt ON`);
-}
+        }
