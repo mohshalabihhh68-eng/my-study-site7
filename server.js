@@ -1114,51 +1114,296 @@ function requireBootstrap(req, res, next) {
 // Decrypt utils
 let decryptPlaybackKeyFn = null;
 
+function makeDomStub() {
+  const el = () => {
+    const o = {
+      style: {},
+      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+      children: [],
+      childNodes: [],
+      setAttribute() {},
+      getAttribute() { return null; },
+      removeAttribute() {},
+      appendChild(c) { return c; },
+      removeChild() {},
+      remove() {},
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent() { return true; },
+      querySelector() { return null; },
+      querySelectorAll() { return []; },
+      getElementsByTagName() { return []; },
+      getBoundingClientRect() { return { top: 0, left: 0, width: 0, height: 0 }; },
+      focus() {},
+      blur() {},
+      click() {},
+      play() { return Promise.resolve(); },
+      pause() {},
+      load() {},
+      textContent: "",
+      innerHTML: "",
+      src: "",
+      href: "",
+      value: "",
+      width: 0,
+      height: 0,
+      currentTime: 0,
+      duration: NaN,
+      readyState: 0,
+      paused: true,
+      canPlayType() { return ""; }
+    };
+    return o;
+  };
+  const doc = el();
+  doc.createElement = () => el();
+  doc.createElementNS = () => el();
+  doc.createTextNode = () => el();
+  doc.createDocumentFragment = () => el();
+  doc.head = el();
+  doc.body = el();
+  doc.documentElement = el();
+  doc.getElementById = () => null;
+  doc.querySelector = () => null;
+  doc.querySelectorAll = () => [];
+  doc.getElementsByTagName = () => [];
+  doc.addEventListener = () => {};
+  doc.removeEventListener = () => {};
+  doc.cookie = "";
+  doc.readyState = "complete";
+  doc.location = {
+    href: "https://coursatk.online/",
+    protocol: "https:",
+    host: "coursatk.online",
+    hostname: "coursatk.online",
+    pathname: "/",
+    search: "",
+    hash: ""
+  };
+  return doc;
+}
+
 async function loadDecryptionUtils() {
+  // player.js الحالي مش بيشيل DecryptionUtils (اتشفر من جديد) —
+  // بنحاول نحمله في sandbox أغنى، ولو فشل نكمّل بمسار CDN/plain-key.
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
   let source = null;
-  try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
+  try {
+    if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8");
+  } catch {}
   if (!source) {
     const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" } });
     if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
-    try { fs.writeFileSync(cachePath, source); } catch {}
+    try {
+      fs.writeFileSync(cachePath, source);
+    } catch {}
   }
+
+  // لو الملف القديم مفيهوش الرموز المتوقعة، امسحه عشان نعيد التحميل لاحقًا
+  if (source && !/DecryptionUtils|decryptPlaybackKey/.test(source)) {
+    console.warn("[crypto] player.js has no DecryptionUtils symbols — will use CDN/plain key fallback");
+    try {
+      fs.unlinkSync(cachePath);
+    } catch {}
+  }
+
   const { webcrypto } = crypto;
+  const doc = makeDomStub();
   const sandbox = {
-    window: {}, self: {}, globalThis: {}, global: {},
-    console: { log() {}, warn() {}, error() {}, info() {} },
-    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer,
+    console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
+    crypto: webcrypto,
+    TextEncoder,
+    TextDecoder,
+    Uint8Array,
+    ArrayBuffer,
+    Uint16Array,
+    Uint32Array,
+    Int32Array,
+    Float32Array,
+    DataView,
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
-    setTimeout, clearTimeout, setInterval, clearInterval,
-    Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, Symbol, Proxy, Reflect,
-    document: { createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }), head: { appendChild() {} }, body: { appendChild() {} }, querySelector: () => null, addEventListener() {} },
-    navigator: { userAgent: "Node" }, location: { href: "https://coursatk.online/" },
-    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
-    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
-    Blob: class { constructor(p) { this.p = p; } },
-    fetch: async () => ({ ok: false }),
-    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    Promise,
+    Error,
+    TypeError,
+    RangeError,
+    SyntaxError,
+    Object,
+    Array,
+    String,
+    Number,
+    Boolean,
+    Math,
+    JSON,
+    Date,
+    Map,
+    Set,
+    WeakMap,
+    WeakSet,
+    Symbol,
+    Proxy,
+    Reflect,
+    Function,
+    RegExp,
+    parseInt,
+    parseFloat,
+    isNaN,
+    isFinite,
+    encodeURIComponent,
+    decodeURIComponent,
+    encodeURI,
+    decodeURI,
+    undefined,
+    NaN,
+    Infinity,
+    document: doc,
+    navigator: {
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+      language: "en",
+      platform: "Win32",
+      hardwareConcurrency: 4,
+      onLine: true
+    },
+    location: doc.location,
+    history: { pushState() {}, replaceState() {} },
+    localStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
+    sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
+    HTMLElement: class {},
+    HTMLVideoElement: class {},
+    MediaSource: class {
+      static isTypeSupported() {
+        return false;
+      }
+    },
+    URL: Object.assign(
+      function URL(u, b) {
+        return new globalThis.URL(u, b || "https://coursatk.online/");
+      },
+      { createObjectURL: () => "blob:x", revokeObjectURL() {} }
+    ),
+    Blob: class {
+      constructor() {
+        this.size = 0;
+      }
+    },
+    Worker: class {
+      postMessage() {}
+      addEventListener() {}
+      terminate() {}
+    },
+    fetch: async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+      text: async () => "",
+      arrayBuffer: async () => new ArrayBuffer(0),
+      headers: { get() { return null; } }
+    }),
+    XMLHttpRequest: class {
+      open() {}
+      send() {}
+      setRequestHeader() {}
+      addEventListener() {}
+    },
+    requestAnimationFrame: (cb) => setTimeout(cb, 16),
+    cancelAnimationFrame: clearTimeout,
+    performance: { now: () => Date.now() },
+    matchMedia: () => ({ matches: false, addListener() {}, addEventListener() {} }),
+    getComputedStyle: () => new Proxy({}, { get: () => "" }),
+    MutationObserver: class {
+      observe() {}
+      disconnect() {}
+    },
+    ResizeObserver: class {
+      observe() {}
+    },
+    CustomEvent: class {
+      constructor(t, o) {
+        this.type = t;
+        this.detail = o && o.detail;
+      }
+    },
+    Event: class {
+      constructor(t) {
+        this.type = t;
+      }
+    },
+    Image: class {},
+    screen: { width: 1920, height: 1080 },
+    innerWidth: 1920,
+    innerHeight: 1080,
+    devicePixelRatio: 1,
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {
+      return true;
+    }
   };
-  sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox; sandbox.global = sandbox;
-  vm.runInNewContext(source, sandbox, { timeout: 8000 });
-  const du = sandbox.DecryptionUtils;
-  if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
-  decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-  console.log("[crypto] ready");
+  sandbox.window = sandbox;
+  sandbox.self = sandbox;
+  sandbox.globalThis = sandbox;
+  sandbox.global = sandbox;
+  sandbox.top = sandbox;
+  sandbox.parent = sandbox;
+
+  try {
+    vm.runInNewContext(source, sandbox, { timeout: 20_000 });
+  } catch (e) {
+    console.warn("[crypto] player.js sandbox error:", e && e.message ? e.message : e);
+  }
+
+  let du = sandbox.DecryptionUtils;
+  if (!du?.decryptPlaybackKey) {
+    // ابحث في أي كائن عن decryptPlaybackKey
+    for (const v of Object.values(sandbox)) {
+      if (v && typeof v === "object" && typeof v.decryptPlaybackKey === "function") {
+        du = v;
+        break;
+      }
+    }
+  }
+  if (du?.decryptPlaybackKey) {
+    decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
+    console.log("[crypto] ready (DecryptionUtils)");
+    return;
+  }
+  console.warn("[crypto] DecryptionUtils unavailable — using CDN/plain-key fallback only");
 }
 
 async function unwrapKey(wrappedBuf, videoId) {
-  if (!decryptPlaybackKeyFn) throw new Error("crypto not loaded");
-  const wrapped = Buffer.isBuffer(wrappedBuf) ? new Uint8Array(wrappedBuf) : new Uint8Array(wrappedBuf);
-  if (wrapped.byteLength === 16) return Buffer.from(wrapped);
-  const result = await decryptPlaybackKeyFn(wrapped, String(videoId));
-  const key = result?.key;
-  if (!key) throw new Error("empty key");
-  const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
-  if (aes.length !== 16) throw new Error(`key len ${aes.length}`);
-  return aes;
+  const wrapped = Buffer.isBuffer(wrappedBuf) ? wrappedBuf : Buffer.from(wrappedBuf);
+  // مفتاح AES-128 خام
+  if (wrapped.length === 16) return wrapped;
+
+  // مسار player.js القديم
+  if (decryptPlaybackKeyFn) {
+    try {
+      const result = await decryptPlaybackKeyFn(new Uint8Array(wrapped), String(videoId));
+      const key = result?.key;
+      if (key) {
+        const aes = Buffer.isBuffer(key)
+          ? key
+          : key instanceof ArrayBuffer
+            ? Buffer.from(key)
+            : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+        if (aes.length === 16) return aes;
+      }
+    } catch (e) {
+      console.warn("[unwrapKey] DecryptionUtils failed:", e && e.message ? e.message : e);
+    }
+  }
+
+  // fallback: نفس خوارزمية CDN (PBKDF2 + AES-GCM) — شغالة على blob steams كتير
+  try {
+    return await unwrapCdnKey(wrapped);
+  } catch (e) {
+    throw new Error("فشل فك مفتاح التشفير (crypto/CDN): " + (e && e.message ? e.message : e));
+  }
 }
 
 const CDN_KEY_PASSWORD = "pQDKIpCkQxsulP";
@@ -2769,11 +3014,24 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
-        if (src.mode === "cdn" || String(uri).includes("/user/auth/")) src.plainKey = await unwrapCdnKey(wrapped);
-        else src.plainKey = await unwrapKey(wrapped, src.videoId);
+        // جرّب CDN أولاً لو الشكل مناسب، وإلا unwrapKey (فيه fallback داخلي)
+        if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
+          src.plainKey = await unwrapCdnKey(wrapped);
+        } else {
+          try {
+            src.plainKey = await unwrapKey(wrapped, src.videoId);
+          } catch (e1) {
+            try {
+              src.plainKey = await unwrapCdnKey(wrapped);
+              console.warn("[key] weave unwrap failed, CDN fallback ok");
+            } catch (e2) {
+              throw e1;
+            }
+          }
+        }
         src.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} via stream-weave API`);
+        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${wrapped.length} plain=${src.plainKey && src.plainKey.length}`);
       }
       continue;
     }
