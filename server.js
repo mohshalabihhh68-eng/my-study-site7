@@ -460,7 +460,7 @@ const CONFIG = {
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
   STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
-  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
+  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1",
   FIREBASE: process.env.FIREBASE_URL || "",
   BOOTSTRAP_ADMIN: {
     username: process.env.ADMIN_USER || "admin",
@@ -1184,195 +1184,147 @@ function makeDomStub() {
 }
 
 async function loadDecryptionUtils() {
-  // player.js الحالي مش بيشيل DecryptionUtils (اتشفر من جديد) —
-  // بنحاول نحمله في sandbox أغنى، ولو فشل نكمّل بمسار CDN/plain-key.
+  // player.js الجديد اتشفر تاني بالكامل ومفيش فيه DecryptionUtils.
+  // بنحمّله فقط عشان نتأكد من الإصدار، والمسار الأساسي بقى CDN/plain-key fallback.
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
   let source = null;
+
   try {
-    if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8");
+    if (fs.existsSync(cachePath)) {
+      const stat = fs.statSync(cachePath);
+      // لو الكاش أقدم من 6 ساعات نعيد التحميل
+      if (Date.now() - stat.mtimeMs < 6 * 3600 * 1000) {
+        source = fs.readFileSync(cachePath, "utf8");
+      }
+    }
   } catch {}
+
   if (!source) {
-    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" } });
-    if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
-    source = await r.text();
     try {
-      fs.writeFileSync(cachePath, source);
-    } catch {}
+      const r = await fetch(CONFIG.PLAYER_JS, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+          Accept: "*/*",
+          Referer: "https://coursatk.online/"
+        }
+      });
+      if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
+      source = await r.text();
+      try { fs.writeFileSync(cachePath, source); } catch {}
+    } catch (e) {
+      console.warn("[crypto] failed to fetch player.js:", e && e.message ? e.message : e);
+      decryptPlaybackKeyFn = null;
+      return;
+    }
   }
 
-  // لو الملف القديم مفيهوش الرموز المتوقعة، امسحه عشان نعيد التحميل لاحقًا
   if (source && !/DecryptionUtils|decryptPlaybackKey/.test(source)) {
-    console.warn("[crypto] player.js has no DecryptionUtils symbols — will use CDN/plain key fallback");
-    try {
-      fs.unlinkSync(cachePath);
-    } catch {}
-  }
-
-  const { webcrypto } = crypto;
-  const doc = makeDomStub();
-  const sandbox = {
-    console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
-    crypto: webcrypto,
-    TextEncoder,
-    TextDecoder,
-    Uint8Array,
-    ArrayBuffer,
-    Uint16Array,
-    Uint32Array,
-    Int32Array,
-    Float32Array,
-    DataView,
-    atob: (s) => Buffer.from(s, "base64").toString("binary"),
-    btoa: (s) => Buffer.from(s, "binary").toString("base64"),
-    setTimeout,
-    clearTimeout,
-    setInterval,
-    clearInterval,
-    Promise,
-    Error,
-    TypeError,
-    RangeError,
-    SyntaxError,
-    Object,
-    Array,
-    String,
-    Number,
-    Boolean,
-    Math,
-    JSON,
-    Date,
-    Map,
-    Set,
-    WeakMap,
-    WeakSet,
-    Symbol,
-    Proxy,
-    Reflect,
-    Function,
-    RegExp,
-    parseInt,
-    parseFloat,
-    isNaN,
-    isFinite,
-    encodeURIComponent,
-    decodeURIComponent,
-    encodeURI,
-    decodeURI,
-    undefined,
-    NaN,
-    Infinity,
-    document: doc,
-    navigator: {
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-      language: "en",
-      platform: "Win32",
-      hardwareConcurrency: 4,
-      onLine: true
-    },
-    location: doc.location,
-    history: { pushState() {}, replaceState() {} },
-    localStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
-    sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
-    HTMLElement: class {},
-    HTMLVideoElement: class {},
-    MediaSource: class {
-      static isTypeSupported() {
-        return false;
-      }
-    },
-    URL: Object.assign(
-      function URL(u, b) {
-        return new globalThis.URL(u, b || "https://coursatk.online/");
-      },
-      { createObjectURL: () => "blob:x", revokeObjectURL() {} }
-    ),
-    Blob: class {
-      constructor() {
-        this.size = 0;
-      }
-    },
-    Worker: class {
-      postMessage() {}
-      addEventListener() {}
-      terminate() {}
-    },
-    fetch: async () => ({
-      ok: false,
-      status: 404,
-      json: async () => ({}),
-      text: async () => "",
-      arrayBuffer: async () => new ArrayBuffer(0),
-      headers: { get() { return null; } }
-    }),
-    XMLHttpRequest: class {
-      open() {}
-      send() {}
-      setRequestHeader() {}
-      addEventListener() {}
-    },
-    requestAnimationFrame: (cb) => setTimeout(cb, 16),
-    cancelAnimationFrame: clearTimeout,
-    performance: { now: () => Date.now() },
-    matchMedia: () => ({ matches: false, addListener() {}, addEventListener() {} }),
-    getComputedStyle: () => new Proxy({}, { get: () => "" }),
-    MutationObserver: class {
-      observe() {}
-      disconnect() {}
-    },
-    ResizeObserver: class {
-      observe() {}
-    },
-    CustomEvent: class {
-      constructor(t, o) {
-        this.type = t;
-        this.detail = o && o.detail;
-      }
-    },
-    Event: class {
-      constructor(t) {
-        this.type = t;
-      }
-    },
-    Image: class {},
-    screen: { width: 1920, height: 1080 },
-    innerWidth: 1920,
-    innerHeight: 1080,
-    devicePixelRatio: 1,
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {
-      return true;
-    }
-  };
-  sandbox.window = sandbox;
-  sandbox.self = sandbox;
-  sandbox.globalThis = sandbox;
-  sandbox.global = sandbox;
-  sandbox.top = sandbox;
-  sandbox.parent = sandbox;
-
-  try {
-    vm.runInNewContext(source, sandbox, { timeout: 20_000 });
-  } catch (e) {
-    console.warn("[crypto] player.js sandbox error:", e && e.message ? e.message : e);
-  }
-
-  let du = sandbox.DecryptionUtils;
-  if (!du?.decryptPlaybackKey) {
-    // ابحث في أي كائن عن decryptPlaybackKey
-    for (const v of Object.values(sandbox)) {
-      if (v && typeof v === "object" && typeof v.decryptPlaybackKey === "function") {
-        du = v;
-        break;
-      }
-    }
-  }
-  if (du?.decryptPlaybackKey) {
-    decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-    console.log("[crypto] ready (DecryptionUtils)");
+    console.warn("[crypto] player.js (new obfuscated build) has no DecryptionUtils — using CDN/plain-key fallback only");
+    decryptPlaybackKeyFn = null;
+    // نمسح الكاش عشان لو نزل إصدار فيه الرموز تاني نلتقطه
+    try { fs.unlinkSync(cachePath); } catch {}
     return;
   }
+
+  // لو رجع إصدار قديم فيه DecryptionUtils نحاول نحمله (نادر)
+  try {
+    const { webcrypto } = crypto;
+    const doc = makeDomStub();
+    const sandbox = {
+      console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
+      crypto: webcrypto,
+      TextEncoder,
+      TextDecoder,
+      Uint8Array,
+      ArrayBuffer,
+      Uint16Array,
+      Uint32Array,
+      Int32Array,
+      Float32Array,
+      DataView,
+      atob: (s) => Buffer.from(s, "base64").toString("binary"),
+      btoa: (s) => Buffer.from(s, "binary").toString("base64"),
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      Promise,
+      Error,
+      TypeError,
+      RangeError,
+      SyntaxError,
+      Object,
+      Array,
+      String,
+      Number,
+      Boolean,
+      Math,
+      JSON,
+      Date,
+      Map,
+      Set,
+      WeakMap,
+      WeakSet,
+      Symbol,
+      Proxy,
+      Reflect,
+      Function,
+      RegExp,
+      parseInt,
+      parseFloat,
+      isNaN,
+      isFinite,
+      encodeURIComponent,
+      decodeURIComponent,
+      encodeURI,
+      decodeURI,
+      undefined,
+      NaN,
+      Infinity,
+      document: doc,
+      navigator: {
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        language: "en",
+        platform: "Win32",
+        hardwareConcurrency: 4,
+        onLine: true
+      },
+      location: doc.location,
+      history: { pushState() {}, replaceState() {} },
+      localStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
+      sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
+      self: null,
+      window: null,
+      globalThis: null
+    };
+    sandbox.self = sandbox;
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+
+    const script = new vm.Script(source, { filename: "player.stream-weave.js" });
+    const context = vm.createContext(sandbox);
+    script.runInContext(context, { timeout: 8000 });
+
+    let du = sandbox.DecryptionUtils;
+    if (!du?.decryptPlaybackKey) {
+      for (const v of Object.values(sandbox)) {
+        if (v && typeof v === "object" && typeof v.decryptPlaybackKey === "function") {
+          du = v;
+          break;
+        }
+      }
+    }
+    if (du?.decryptPlaybackKey) {
+      decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
+      console.log("[crypto] ready (DecryptionUtils)");
+      return;
+    }
+  } catch (e) {
+    console.warn("[crypto] sandbox load failed:", e && e.message ? e.message : e);
+  }
+
   console.warn("[crypto] DecryptionUtils unavailable — using CDN/plain-key fallback only");
+  decryptPlaybackKeyFn = null;
 }
 
 async function unwrapKey(wrappedBuf, videoId) {
@@ -1380,7 +1332,20 @@ async function unwrapKey(wrappedBuf, videoId) {
   // مفتاح AES-128 خام
   if (wrapped.length === 16) return wrapped;
 
-  // مسار player.js القديم
+  // بعض الردود الجديدة بتيجي base64 أو hex
+  if (wrapped.length > 16 && wrapped.length < 96) {
+    const asStr = wrapped.toString("utf8").trim();
+    if (/^[0-9a-fA-F]{32}$/.test(asStr)) return Buffer.from(asStr, "hex");
+    if (/^[A-Za-z0-9+/=\s]{20,}$/.test(asStr)) {
+      try {
+        const b = Buffer.from(asStr.replace(/\s+/g, ""), "base64");
+        if (b.length === 16) return b;
+        if (b.length === 32) return b.subarray(0, 16);
+      } catch {}
+    }
+  }
+
+  // مسار player.js القديم (لو رجع إصدار فيه DecryptionUtils)
   if (decryptPlaybackKeyFn) {
     try {
       const result = await decryptPlaybackKeyFn(new Uint8Array(wrapped), String(videoId));
@@ -1425,13 +1390,119 @@ const KEY_PASSWORDS = [
   "pQDKIpCkQxsulP",
   "stream-weave",
   "streamweave",
+  "StreamWeave",
   "coursatk",
   "Coursatk",
+  "coursatk.online",
   "SoulBrowser",
   "soulbrowser",
+  "com.mycompany.app.soulbrowser",
   "playback",
-  "PlaybackKey"
+  "PlaybackKey",
+  "playback_key",
+  "sw-key",
+  "sw_key",
+  "cdn-key",
+  "cdn_key",
+  "aes128",
+  "hls-key"
 ];
+
+/** لو الرد نص/JSON/hex/base64 مش binary مغلّف */
+function tryParseKeyPayload(buf, contentType = "") {
+  if (!buf || !buf.length) return null;
+  if (buf.length === 16) return Buffer.from(buf);
+  // binary looks non-text → skip text parse
+  const asUtf = buf.toString("utf8").trim();
+  const isMostlyText = /^[\x09\x0a\x0d\x20-\x7e]+$/.test(asUtf) || /json|text|xml/.test(contentType);
+  if (!isMostlyText && buf.length > 32) return null;
+
+  // pure hex 32
+  if (/^[0-9a-fA-F]{32}$/.test(asUtf)) return Buffer.from(asUtf, "hex");
+  // pure hex 64 → first 16 bytes
+  if (/^[0-9a-fA-F]{64}$/.test(asUtf)) return Buffer.from(asUtf.slice(0, 32), "hex");
+
+  // base64 of 16 bytes
+  try {
+    const b = Buffer.from(asUtf.replace(/\s+/g, ""), "base64");
+    if (b.length === 16) return b;
+    if (b.length === 32 && /^[0-9a-fA-F]{32}$/.test(b.toString("utf8"))) return Buffer.from(b.toString("utf8"), "hex");
+    if (b.length === 32) return b.subarray(0, 16);
+  } catch {}
+
+  // JSON
+  if (asUtf.startsWith("{") || asUtf.startsWith("[")) {
+    try {
+      const j = JSON.parse(asUtf);
+      const candidates = [
+        j.key, j.Key, j.aes_key, j.aesKey, j.plain_key, j.plainKey,
+        j.data && j.data.key, j.data && j.data.aes_key,
+        j.result && j.result.key, j.key_hex, j.keyHex, j.k
+      ];
+      for (const c of candidates) {
+        if (!c) continue;
+        if (typeof c === "string") {
+          const t = c.trim();
+          if (/^[0-9a-fA-F]{32}$/.test(t)) return Buffer.from(t, "hex");
+          try {
+            const b = Buffer.from(t, "base64");
+            if (b.length === 16) return b;
+          } catch {}
+        }
+        if (Array.isArray(c) && c.length === 16) return Buffer.from(c);
+      }
+    } catch {}
+  }
+  return null;
+}
+
+/** AES-GCM باستخدام SHA-256(password) كمفتاح مباشر (بدون PBKDF2) */
+function unwrapWithShaPassword(buf, videoId, token = "") {
+  const secrets = [];
+  if (videoId) {
+    secrets.push(String(videoId));
+    secrets.push(String(videoId).replace(/-/g, ""));
+    secrets.push("video:" + String(videoId));
+  }
+  if (token) secrets.push(String(token), String(token).slice(0, 32));
+  secrets.push(CDN_KEY_PASSWORD, "stream-weave", "coursatk");
+
+  const layouts = [];
+  if (buf.length >= 28) {
+    layouts.push({ iv: buf.subarray(0, 12), data: buf.subarray(12) });
+    layouts.push({ iv: buf.subarray(0, 16), data: buf.subarray(16) });
+  }
+  if (buf.length >= 44) {
+    layouts.push({ iv: buf.subarray(16, 28), data: buf.subarray(28), salt: buf.subarray(0, 16) });
+  }
+
+  for (const secret of secrets) {
+    const key256 = crypto.createHash("sha256").update(String(secret), "utf8").digest();
+    const key128 = key256.subarray(0, 16);
+    for (const lay of layouts) {
+      if (!lay.data || lay.data.length < 16) continue;
+      const tag = lay.data.subarray(lay.data.length - 16);
+      const ct = lay.data.subarray(0, lay.data.length - 16);
+      if (!ct.length) continue;
+      for (const [algo, key, iv] of [
+        ["aes-256-gcm", key256, lay.iv.length >= 12 ? lay.iv.subarray(0, 12) : lay.iv],
+        ["aes-128-gcm", key128, lay.iv.length >= 12 ? lay.iv.subarray(0, 12) : lay.iv]
+      ]) {
+        try {
+          const decipher = crypto.createDecipheriv(algo, key, iv);
+          decipher.setAuthTag(tag);
+          const plain = Buffer.concat([decipher.update(ct), decipher.final()]);
+          const parsed = parseAesKeyFromPlain(plain);
+          if (parsed) {
+            console.log("[key] SHA-password GCM ok secretLen=", String(secret).length, algo);
+            return parsed;
+          }
+        } catch {}
+      }
+    }
+  }
+  throw new Error("SHA-password unwrap failed");
+}
 
 function parseAesKeyFromPlain(plain) {
   if (!plain || !plain.length) return null;
@@ -3109,24 +3180,32 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
-        // جرّب CDN أولاً لو الشكل مناسب، وإلا unwrapKey (فيه fallback داخلي)
-        if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
-          src.plainKey = await unwrapCdnKey(wrapped);
-        } else {
+        const ctHdr = (keyRes.headers.get("content-type") || "").toLowerCase();
+        console.log(`[key] fetch mode=${src.mode} video=${src.videoId} len=${wrapped.length} ct=${ctHdr} head=${wrapped.subarray(0, Math.min(20, wrapped.length)).toString("hex")}`);
+
+        src.plainKey = tryParseKeyPayload(wrapped, ctHdr);
+        if (!src.plainKey) {
           try {
-            src.plainKey = await unwrapKey(wrapped, src.videoId);
+            if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
+              src.plainKey = await unwrapCdnKey(wrapped, [String(src.videoId || ""), String(src.token || "")]);
+            } else {
+              src.plainKey = await unwrapKey(wrapped, src.videoId);
+            }
           } catch (e1) {
             try {
-              src.plainKey = await unwrapCdnKey(wrapped);
-              console.warn("[key] weave unwrap failed, CDN fallback ok");
+              src.plainKey = await unwrapCdnKey(wrapped, [String(src.videoId || ""), String(src.token || "")]);
             } catch (e2) {
-              throw e1;
+              try {
+                src.plainKey = unwrapWithShaPassword(wrapped, String(src.videoId || ""), String(src.token || ""));
+              } catch (e3) {
+                throw e1;
+              }
             }
           }
         }
         src.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${wrapped.length} plain=${src.plainKey && src.plainKey.length}`);
+        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} plain=${src.plainKey && src.plainKey.length}`);
       }
       continue;
     }
