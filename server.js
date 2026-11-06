@@ -1398,28 +1398,123 @@ async function unwrapKey(wrappedBuf, videoId) {
     }
   }
 
-  // fallback: نفس خوارزمية CDN (PBKDF2 + AES-GCM) — شغالة على blob steams كتير
+  // fallback: PBKDF2 + AES-GCM بأكتر من password (بما فيهم videoId)
   try {
-    return await unwrapCdnKey(wrapped);
+    const extras = [];
+    if (videoId) {
+      extras.push(String(videoId));
+      extras.push(String(videoId).replace(/-/g, ""));
+      extras.push("video:" + String(videoId));
+      extras.push(String(videoId).toLowerCase());
+      extras.push(String(videoId).toUpperCase());
+    }
+    try {
+      const tok = getCoursatkTokenSync && getCoursatkTokenSync();
+      if (tok) extras.push(tok, tok.slice(0, 32), tok.slice(-32));
+    } catch {}
+    return await unwrapCdnKey(wrapped, extras);
   } catch (e) {
+    console.error("[unwrapKey] all strategies failed, blobLen=", wrapped.length, "videoId=", videoId);
     throw new Error("فشل فك مفتاح التشفير (crypto/CDN): " + (e && e.message ? e.message : e));
   }
 }
 
 const CDN_KEY_PASSWORD = "pQDKIpCkQxsulP";
-async function unwrapCdnKey(wrappedBuf) {
+const KEY_PASSWORDS = [
+  CDN_KEY_PASSWORD,
+  "pQDKIpCkQxsulP",
+  "stream-weave",
+  "streamweave",
+  "coursatk",
+  "Coursatk",
+  "SoulBrowser",
+  "soulbrowser",
+  "playback",
+  "PlaybackKey"
+];
+
+function parseAesKeyFromPlain(plain) {
+  if (!plain || !plain.length) return null;
+  // hex string 32 chars
+  const asUtf = plain.toString("utf8").trim();
+  if (/^[0-9a-fA-F]{32}$/.test(asUtf.slice(0, 32))) return Buffer.from(asUtf.slice(0, 32), "hex");
+  // raw 16 bytes
+  if (plain.length === 16) return Buffer.from(plain);
+  // raw 32 bytes → take first 16 (AES-128)
+  if (plain.length === 32) return Buffer.from(plain.subarray(0, 16));
+  // base64 of 16 bytes
+  try {
+    const b = Buffer.from(asUtf, "base64");
+    if (b.length === 16) return b;
+    if (b.length === 32 && /^[0-9a-fA-F]{32}$/.test(b.toString("utf8"))) return Buffer.from(b.toString("utf8"), "hex");
+  } catch {}
+  return null;
+}
+
+function tryGcmUnwrapOnce(buf, password, iterations, digest) {
+  if (buf.length < 44) return null; // salt16 + iv12 + tag16 min
+  const layouts = [
+    // salt(16) + iv(12) + ciphertext + tag(16)
+    { salt: buf.subarray(0, 16), iv: buf.subarray(16, 28), data: buf.subarray(28) },
+    // iv(12) + salt(16) + ciphertext + tag(16)
+    { salt: buf.subarray(12, 28), iv: buf.subarray(0, 12), data: buf.subarray(28) },
+    // salt(16) + iv(16) + ciphertext + tag(16)  (some stacks use 16-byte IV)
+    buf.length >= 48 ? { salt: buf.subarray(0, 16), iv: buf.subarray(16, 32), data: buf.subarray(32) } : null
+  ].filter(Boolean);
+
+  for (const lay of layouts) {
+    if (lay.data.length < 16) continue;
+    const tag = lay.data.subarray(lay.data.length - 16);
+    const ciphertext = lay.data.subarray(0, lay.data.length - 16);
+    if (!ciphertext.length) continue;
+    try {
+      const derived = crypto.pbkdf2Sync(String(password), lay.salt, iterations, 32, digest);
+      const decipher = crypto.createDecipheriv("aes-256-gcm", derived, lay.iv);
+      decipher.setAuthTag(tag);
+      const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      const key = parseAesKeyFromPlain(plain);
+      if (key) return key;
+    } catch {
+      // auth fail / bad layout — جرّب التالي
+    }
+    // AES-128-GCM with 16-byte derived key
+    try {
+      const derived16 = crypto.pbkdf2Sync(String(password), lay.salt, iterations, 16, digest);
+      const decipher = crypto.createDecipheriv("aes-128-gcm", derived16, lay.iv.length === 12 ? lay.iv : lay.iv.subarray(0, 12));
+      decipher.setAuthTag(tag);
+      const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      const key = parseAesKeyFromPlain(plain);
+      if (key) return key;
+    } catch {}
+  }
+  return null;
+}
+
+async function unwrapCdnKey(wrappedBuf, extraPasswords = []) {
   const buf = Buffer.isBuffer(wrappedBuf) ? wrappedBuf : Buffer.from(wrappedBuf);
   if (buf.length === 16) return buf;
-  if (buf.length < 60) throw new Error("CDN key blob قصير");
-  const salt = buf.subarray(0, 16); const iv = buf.subarray(16, 28); const data = buf.subarray(28);
-  const derived = crypto.pbkdf2Sync(CDN_KEY_PASSWORD, salt, 100, 32, "sha256");
-  const tag = data.subarray(data.length - 16); const ciphertext = data.subarray(0, data.length - 16);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", derived, iv);
-  decipher.setAuthTag(tag);
-  const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  const hexKey = plain.toString("utf8").trim().slice(0, 32);
-  if (!/^[0-9a-fA-F]{32}$/.test(hexKey)) throw new Error("CDN key format غير متوقع");
-  return Buffer.from(hexKey, "hex");
+  if (buf.length < 32) throw new Error("CDN key blob قصير (" + buf.length + ")");
+
+  const passwords = [...extraPasswords.filter(Boolean).map(String), ...KEY_PASSWORDS];
+  const iterationsList = [100, 1000, 1, 10000, 128, 256];
+  const digests = ["sha256", "sha1"];
+
+  for (const password of passwords) {
+    for (const iterations of iterationsList) {
+      for (const digest of digests) {
+        const key = tryGcmUnwrapOnce(buf, password, iterations, digest);
+        if (key) {
+          console.log("[key] GCM unwrap ok passLen=", String(password).length, "iter=", iterations, "digest=", digest);
+          return key;
+        }
+      }
+    }
+  }
+
+  // آخر محاولة: لو الـ blob نفسه 16 بعد قصّ header بسيط
+  if (buf.length >= 16 && buf.length <= 20) return buf.subarray(0, 16);
+
+  throw new Error("CDN key: unable to authenticate data (جرّبنا عدة passwords/layouts)");
 }
 
 function decryptSegment(encrypted, key, iv) { const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv); return Buffer.concat([decipher.update(encrypted), decipher.final()]); }
