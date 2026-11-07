@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.3-swkey";
+const APP_VERSION = "v1.7.4-swkey2";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1328,10 +1328,16 @@ async function loadDecryptionUtils() {
 }
 
 
-// ==================== New Stream-Weave key format (player.js 2025/2026) ====================
-// 86-byte blob: [check][85 scrambled bytes]
-// After unpermute with fixed yd table → salt(16) + iv(12) + ciphertext+tag
-// PBKDF2 (iter=1337, SHA-256) + AES-GCM
+
+// ==================== New Stream-Weave key format (player.js late-2025 / 2026) ====================
+// 86-byte blob layout (recovered from player.js):
+//   [0]     = check byte  (must equal 165 ^ salt[0])
+//   [1..85] = scrambled with fixed permutation yd[]
+// After unpermute:
+//   salt = [0..15], iv = [16..27] (12 bytes), body = [28..84] (57 bytes)
+// Crypto chain (simplified but covering the observed paths):
+//   PBKDF2(password=videoId.toLowerCase(), salt, iter=1337, 32 bytes, SHA-256)
+//   → AES-GCM / XOR stages → final 16-byte AES-128 key
 
 const SW_YD = [11,48,0,37,74,26,63,15,52,4,41,78,30,67,19,56,8,45,82,34,71,23,60,12,49,1,38,75,27,64,16,53,5,42,79,31,68,20,57,9,46,83,35,72,24,61,13,50,2,39,76,28,65,17,54,6,43,80,32,69,21,58,10,47,84,36,73,25,62,14,51,3,40,77,29,66,18,55,7,44,81,33,70,22,59];
 
@@ -1341,116 +1347,139 @@ function swUnpermute(scrambled85) {
   return o;
 }
 
-async function unwrapNewStreamWeaveKey(wrapped, videoId) {
+function swTryGcm(derivedKey, iv, ciphertext, tag) {
+  try {
+    const algo = derivedKey.length === 32 ? "aes-256-gcm" : "aes-128-gcm";
+    const decipher = crypto.createDecipheriv(algo, derivedKey, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  } catch {
+    return null;
+  }
+}
+
+async function unwrapNewStreamWeaveKey(wrapped, videoId, extraSecrets = []) {
   if (!Buffer.isBuffer(wrapped) || wrapped.length !== 86) return null;
 
   const check = wrapped[0];
-  const scrambled = wrapped.subarray(1);
-  const plain = swUnpermute(scrambled);
-
+  const plain = swUnpermute(wrapped.subarray(1));
   const salt = plain.subarray(0, 16);
-  const iv = plain.subarray(16, 28);          // 12 bytes
-  const ctAndTag = plain.subarray(28);
+  const iv = plain.subarray(16, 28);
+  const body = plain.subarray(28); // 57 bytes
 
-  // integrity check used by the player
+  if (body.length < 17) return null;
+
+  // Player integrity check
   if ((165 ^ salt[0]) !== check) {
-    // still try – some builds may differ
+    console.warn("[key] SW check byte mismatch", { check, expected: 165 ^ salt[0] });
   }
 
-  if (ctAndTag.length < 17) return null;
+  const passwords = [];
+  const vid = String(videoId || "").trim();
+  if (vid) {
+    passwords.push(vid.toLowerCase(), vid, vid.replace(/-/g, ""), vid.toUpperCase(), "video:" + vid.toLowerCase());
+  }
+  for (const s of extraSecrets) {
+    if (s) passwords.push(String(s), String(s).toLowerCase());
+  }
+  // also try empty / fixed fallbacks that appear in some builds
+  passwords.push("stream-weave", "streamweave", "coursatk", CDN_KEY_PASSWORD || "pQDKIpCkQxsulP");
 
-  const password = String(videoId || "").trim().toLowerCase();
-  if (!password) return null;
+  const seen = new Set();
+  for (const password of passwords) {
+    if (!password || seen.has(password)) continue;
+    seen.add(password);
 
-  const tag = ctAndTag.subarray(ctAndTag.length - 16);
-  const ciphertext = ctAndTag.subarray(0, ctAndTag.length - 16);
+    for (const iterations of [1337, 1000, 100, 1, 10000]) {
+      // 32-byte key
+      let derived32;
+      try { derived32 = crypto.pbkdf2Sync(password, salt, iterations, 32, "sha256"); } catch { continue; }
 
-  // Primary path observed in player: PBKDF2 → 32-byte key → AES-256-GCM
-  try {
-    const derived = crypto.pbkdf2Sync(password, salt, 1337, 32, "sha256");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", derived, iv);
-    decipher.setAuthTag(tag);
-    const plainKey = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    if (plainKey.length >= 16) return plainKey.subarray(0, 16);
-  } catch {}
+      // Path A: treat last 16 bytes of body as GCM tag, rest as ciphertext
+      const tagA = body.subarray(body.length - 16);
+      const ctA = body.subarray(0, body.length - 16);
+      let out = swTryGcm(derived32, iv, ctA, tagA);
+      if (out && out.length >= 16) {
+        console.log("[key] SW path-A ok iter=", iterations, "pwLen=", password.length);
+        return out.subarray(0, 16);
+      }
 
-  // Fallback: 16-byte derived key + AES-128-GCM
-  try {
-    const derived16 = crypto.pbkdf2Sync(password, salt, 1337, 16, "sha256");
-    const decipher = crypto.createDecipheriv("aes-128-gcm", derived16, iv);
-    decipher.setAuthTag(tag);
-    const plainKey = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    if (plainKey.length >= 16) return plainKey.subarray(0, 16);
-  } catch {}
+      // Path B: 16-byte derived key
+      let derived16;
+      try { derived16 = crypto.pbkdf2Sync(password, salt, iterations, 16, "sha256"); } catch { continue; }
+      out = swTryGcm(derived16, iv, ctA, tagA);
+      if (out && out.length >= 16) {
+        console.log("[key] SW path-B ok iter=", iterations, "pwLen=", password.length);
+        return out.subarray(0, 16);
+      }
 
-  // Extra tries with common password variants
-  const variants = [
-    password,
-    password.replace(/-/g, ""),
-    "video:" + password,
-    String(videoId || ""),
-    String(videoId || "").toUpperCase()
-  ];
-  for (const pw of variants) {
-    for (const iter of [1337, 1000, 100, 1]) {
+      // Path C: XOR body with repeating derived key then take first 16 (observed intermediate step)
       try {
-        const derived = crypto.pbkdf2Sync(pw, salt, iter, 32, "sha256");
-        const decipher = crypto.createDecipheriv("aes-256-gcm", derived, iv);
-        decipher.setAuthTag(tag);
-        const plainKey = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-        if (plainKey.length >= 16) {
-          console.log("[key] new-SW unwrap ok iter=", iter, "pwLen=", pw.length);
-          return plainKey.subarray(0, 16);
+        const xored = Buffer.alloc(body.length);
+        for (let i = 0; i < body.length; i++) xored[i] = body[i] ^ derived32[i % 32];
+        // try GCM on the xored buffer
+        const tagC = xored.subarray(xored.length - 16);
+        const ctC = xored.subarray(0, xored.length - 16);
+        out = swTryGcm(derived32, iv, ctC, tagC);
+        if (out && out.length >= 16) {
+          console.log("[key] SW path-C (xor+gcm) ok iter=", iterations);
+          return out.subarray(0, 16);
+        }
+        // or just use first 16 of xored if it looks non-trivial
+        if (xored.subarray(0, 16).some(b => b !== 0)) {
+          // don't return blindly – only if later stages fail
         }
       } catch {}
     }
   }
+
+  console.warn("[key] SW all paths failed for videoId=", videoId, "blobHead=", wrapped.subarray(0, 8).toString("hex"));
   return null;
 }
 
-async function unwrapKey(wrappedBuf, videoId) {
+async function unwrapKey(wrappedBuf, videoId, extraSecrets = []) {
   const wrapped = Buffer.isBuffer(wrappedBuf) ? wrappedBuf : Buffer.from(wrappedBuf);
 
-  // 1. Raw 16-byte AES key
+  // 1. Raw 16-byte key
   if (wrapped.length === 16) return wrapped;
 
-  // 2. New Stream-Weave 86-byte scrambled format
+  // 2. New Stream-Weave 86-byte format (highest priority)
   if (wrapped.length === 86) {
     try {
-      const k = await unwrapNewStreamWeaveKey(wrapped, videoId);
-      if (k && k.length === 16) {
-        console.log("[key] unwrapped via new Stream-Weave format, videoId=", videoId);
-        return k;
-      }
+      const k = await unwrapNewStreamWeaveKey(wrapped, videoId, extraSecrets);
+      if (k && k.length === 16) return k;
     } catch (e) {
-      console.warn("[unwrapKey] new-SW path failed:", e && e.message ? e.message : e);
+      console.warn("[unwrapKey] new-SW exception:", e && e.message ? e.message : e);
     }
   }
 
-  // 3. Text / base64 that some endpoints still return
-  if (wrapped.length > 16 && wrapped.length < 96) {
+  // 3. Short text / hex / base64 payloads
+  if (wrapped.length > 16 && wrapped.length < 120) {
     const asStr = wrapped.toString("utf8").trim();
     if (/^[0-9a-fA-F]{32}$/.test(asStr)) return Buffer.from(asStr, "hex");
+    if (/^[0-9a-fA-F]{64}$/.test(asStr)) return Buffer.from(asStr.slice(0, 32), "hex");
     if (/^[A-Za-z0-9+/=\s]{20,}$/.test(asStr)) {
       try {
         const b = Buffer.from(asStr.replace(/\s+/g, ""), "base64");
         if (b.length === 16) return b;
         if (b.length === 32) return b.subarray(0, 16);
+        if (b.length === 86) {
+          const k = await unwrapNewStreamWeaveKey(b, videoId, extraSecrets);
+          if (k) return k;
+        }
       } catch {}
     }
   }
 
-  // 4. Legacy DecryptionUtils path (old player builds)
+  // 4. Legacy DecryptionUtils (old player)
   if (decryptPlaybackKeyFn) {
     try {
       const result = await decryptPlaybackKeyFn(new Uint8Array(wrapped), String(videoId));
       const key = result?.key;
       if (key) {
-        const aes = Buffer.isBuffer(key)
-          ? key
-          : key instanceof ArrayBuffer
-            ? Buffer.from(key)
-            : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+        const aes = Buffer.isBuffer(key) ? key
+          : key instanceof ArrayBuffer ? Buffer.from(key)
+          : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
         if (aes.length === 16) return aes;
       }
     } catch (e) {
@@ -1458,15 +1487,12 @@ async function unwrapKey(wrappedBuf, videoId) {
     }
   }
 
-  // 5. Classic CDN / multi-password GCM fallback
+  // 5. Classic multi-password GCM fallback
   try {
-    const extras = [];
+    const extras = [...(extraSecrets || [])];
     if (videoId) {
-      extras.push(String(videoId));
-      extras.push(String(videoId).replace(/-/g, ""));
-      extras.push("video:" + String(videoId));
-      extras.push(String(videoId).toLowerCase());
-      extras.push(String(videoId).toUpperCase());
+      extras.push(String(videoId), String(videoId).replace(/-/g, ""), "video:" + String(videoId),
+        String(videoId).toLowerCase(), String(videoId).toUpperCase());
     }
     try {
       const tok = getCoursatkTokenSync && getCoursatkTokenSync();
@@ -1474,7 +1500,8 @@ async function unwrapKey(wrappedBuf, videoId) {
     } catch {}
     return await unwrapCdnKey(wrapped, extras);
   } catch (e) {
-    console.error("[unwrapKey] all strategies failed, blobLen=", wrapped.length, "videoId=", videoId);
+    console.error("[unwrapKey] all strategies failed, blobLen=", wrapped.length, "videoId=", videoId,
+      "head=", wrapped.subarray(0, Math.min(12, wrapped.length)).toString("hex"));
     throw new Error("فشل فك مفتاح التشفير (crypto/CDN): " + (e && e.message ? e.message : e));
   }
 }
@@ -3127,19 +3154,19 @@ async function buildPlaylist(src, masterText, clientHeaders) {
 
         src.plainKey = tryParseKeyPayload(wrapped, ctHdr);
         if (!src.plainKey) {
+          const extras = [String(src.token || ""), String(src.videoId || "")].filter(Boolean);
           try {
-            if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
-              src.plainKey = await unwrapCdnKey(wrapped, [String(src.videoId || ""), String(src.token || "")]);
-            } else {
-              src.plainKey = await unwrapKey(wrapped, src.videoId);
-            }
+            // Always try the full unwrapKey first (handles 86-byte SW format + legacy)
+            src.plainKey = await unwrapKey(wrapped, src.videoId, extras);
           } catch (e1) {
             try {
-              src.plainKey = await unwrapCdnKey(wrapped, [String(src.videoId || ""), String(src.token || "")]);
+              src.plainKey = await unwrapCdnKey(wrapped, extras);
             } catch (e2) {
               try {
                 src.plainKey = unwrapWithShaPassword(wrapped, String(src.videoId || ""), String(src.token || ""));
               } catch (e3) {
+                console.error("[key] final failure video=", src.videoId, "len=", wrapped.length,
+                  "head=", wrapped.subarray(0, Math.min(16, wrapped.length)).toString("hex"));
                 throw e1;
               }
             }
