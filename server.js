@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.14 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.15 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.14";
+const APP_VERSION = "v1.7.15";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -472,6 +472,7 @@ const CONFIG = {
     "api.coursatk.online",
     "stream-weave.com",
     "floravon.online",
+    "floravon.shop",
     "c-cdn.online",
     "thanawica.com",
     "www.thanawica.com",
@@ -2758,6 +2759,17 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
       } catch (e) { console.warn("[subjects] thanawica hybrid skip:", e.message); }
     }
 
+    // حقن مادة أحياء — د. حسام عيسى (Bunny)
+    results.push({
+      id: HOSSAM_SUBJECT_ID,
+      name: "أحياء — د. حسام عيسى",
+      image_url: null,
+      year_id: yearId,
+      is_published: true,
+      order_index: results.length + 1,
+      _source: "hossam"
+    });
+
     res.json({ success: true, message: "Success", data: results });
   } catch (e) { jsonError(res, 502, e.message); }
 });
@@ -2765,6 +2777,18 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (String(req.params.id) === String(HOSSAM_SUBJECT_ID) || String(req.params.id) === "hos_biology") {
+      return res.json({
+        success: true,
+        message: "Success",
+        data: {
+          id: HOSSAM_SUBJECT_ID,
+          name: "أحياء — د. حسام عيسى",
+          image_url: null,
+          teachers: [{ id: HOSSAM_TEACHER_ID, name: "د. حسام عيسى", image_url: null, chapter_count: (HOSSAM_CATALOG.courses || []).length }]
+        }
+      });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thTeachers(req.params.id);
       return res.json({ success: true, message: "Success", data });
@@ -2776,6 +2800,19 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
+      const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
+        id: HOSSAM_CHAPTER_BASE + i,
+        name: c.name,
+        image_url: null,
+        teacher_name: HOSSAM_CATALOG.teacher,
+        subject_name: HOSSAM_CATALOG.subject,
+        lecture_count: (c.lessons || []).length,
+        _source: "hossam",
+        _courseId: c.id
+      }));
+      return res.json({ success: true, message: "Success", data: chapters });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thChapters(req.params.id);
       return res.json({ success: true, message: "Success", data });
@@ -2787,6 +2824,26 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    const cid = Number(req.params.id);
+    if (Number.isFinite(cid) && cid >= HOSSAM_CHAPTER_BASE && cid < HOSSAM_CHAPTER_BASE + 100) {
+      const idx = cid - HOSSAM_CHAPTER_BASE;
+      const course = (HOSSAM_CATALOG.courses || [])[idx];
+      if (!course) return jsonError(res, 404, "فصل حسام غير موجود");
+      const lectures = (course.lessons || []).map((l) => ({
+        id: HOSSAM_LECTURE_BASE + Number(l.lessonId),
+        name: l.title || (`درس ${l.lessonId}`),
+        image_url: null,
+        chapter_name: course.name,
+        teacher_name: HOSSAM_CATALOG.teacher,
+        subject_name: HOSSAM_CATALOG.subject,
+        video_count: l.videoId ? 1 : 0,
+        pdf_count: 0,
+        exam_count: 0,
+        _source: "hossam",
+        _videoId: l.videoId || null
+      }));
+      return res.json({ success: true, message: "Success", data: lectures });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thLectures(req.params.id);
       return res.json({ success: true, message: "Success", data });
@@ -2797,6 +2854,29 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
 
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
+    const lid = Number(req.params.id);
+    if (Number.isFinite(lid) && lid >= HOSSAM_LECTURE_BASE) {
+      const lessonId = lid - HOSSAM_LECTURE_BASE;
+      let found = null; let courseName = "";
+      for (const c of HOSSAM_CATALOG.courses || []) {
+        for (const l of c.lessons || []) {
+          if (Number(l.lessonId) === lessonId) { found = l; courseName = c.name; break; }
+        }
+        if (found) break;
+      }
+      if (!found) return jsonError(res, 404, "درس حسام غير موجود — حدّث الكتالوج بعد resolve-lesson");
+      return res.json({
+        success: true,
+        message: "Success",
+        data: {
+          lecture_id: lid,
+          lecture_name: found.title || (`درس ${lessonId}`),
+          videos: found.videoId ? [{ id: found.videoId, title: found.title || found.videoId, duration: 0, _source: "hossam" }] : [],
+          pdfs: [],
+          exams: []
+        }
+      });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) return res.json(await thLectureContent(req.params.id));
     res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`));
   } catch (e) { jsonError(res, 502, e.message); }
@@ -2805,6 +2885,10 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
 
 // ==================== Bunny Stream (د. حسام عيسى) — فك حماية iframe/Referer + AES-128 ====================
 // كتالوج أولي — د. حسام عيسى (Bunny). أضف guids بعد resolve-lesson
+const HOSSAM_SUBJECT_ID = 900001;
+const HOSSAM_TEACHER_ID = 900001;
+const HOSSAM_CHAPTER_BASE = 900100;
+const HOSSAM_LECTURE_BASE = 910000;
 const HOSSAM_CATALOG = {
   teacher: "د. حسام عيسى",
   subject: "أحياء",
@@ -2989,8 +3073,8 @@ const SID_TOKEN = "{{SID}}";
 async function buildPlaylist(src, masterText, clientHeaders) {
   if (masterText == null) {
     const m = await streamFetch(src, src.streamUrl, {}, clientHeaders);
-    if (!m.ok) throw new Error(`Stream master HTTP ${m.status}`);
     masterText = await m.text();
+    if (!masterText.includes("#EXTM3U")) throw new Error(`Stream master HTTP ${m.status}`);
   }
   let text = masterText;
   let baseUrl = src.streamUrl;
@@ -3004,8 +3088,8 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   }
   if (variant) {
     const v = await streamFetch(src, variant, {}, clientHeaders);
-    if (!v.ok) throw new Error(`Variant HTTP ${v.status}`);
     text = await v.text();
+    if (!text.includes("#EXTM3U")) throw new Error(`Variant HTTP ${v.status}`);
     baseUrl = variant;
   }
   try { src.allowedHosts.add(new URL(baseUrl).hostname); } catch {}
@@ -3065,8 +3149,9 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         try { src.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
         src.allowedHosts.add("api.stream-weave.com");
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
-        if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
+        if (!wrapped.length) throw new Error(`Key HTTP ${keyRes.status} — empty`);
+        // كورساتك قد ترجع 404 مع مفتاح صالح (blob ~60-100 بايت)
         try {
           if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
             src.plainKey = await unwrapCdnKey(wrapped);
@@ -3176,10 +3261,11 @@ async function buildVideoSource(videoId, clientHeaders) {
     try {
       const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
       const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES }));
-      if (!probe.ok) throw new Error(`CDN ${probe.status}`);
       const masterText = await probe.text();
-      if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
+      // كورساتك أحيانًا ترجع 404/426 والجسم m3u8 سليم
+      if (!masterText.includes("#EXTM3U")) throw new Error(`CDN ${probe.status} — playlist غير صالح`);
       mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
+      console.log(`[cdn] master ok status=${probe.status} video=${videoId}`);
     } catch (e) { errors.push(e.message); }
   }
 
