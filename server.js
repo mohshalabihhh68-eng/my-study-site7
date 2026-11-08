@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.2 — Full Analytics (Visits + Grouped Watch History + Student Tracker)
+ * VERSION v1.7.13 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.4-swkey2";
+const APP_VERSION = "v1.7.13";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -71,7 +71,25 @@ for (const m of ["get", "post", "put", "patch", "delete", "use"]) {
   };
 }
 app.set("trust proxy", 1);
-app.use(cors({ origin: true, credentials: true }));
+// CORS مفتوح لكل المواقع (أي Origin يُسمح له + credentials)
+// لو حابب تقيّد لاحقًا: CORS_STRICT=1 + ALLOWED_ORIGINS=domain1,domain2
+const ALLOWED_ORIGINS = new Set([
+  "https://www.durosakplus.com",
+  "https://durosakplus.com",
+  ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
+]);
+const CORS_STRICT = process.env.CORS_STRICT === "1";
+app.use(cors({
+  credentials: true,
+  origin: (origin, cb) => {
+    // بدون Origin (مثل curl/تطبيقات) → اسمح
+    if (!origin) return cb(null, true);
+    // وضع صارم: الدومينات المسموحة فقط
+    if (CORS_STRICT) return cb(null, ALLOWED_ORIGINS.has(origin));
+    // الافتراضي: افتح لكل المواقع واعكس الـ Origin عشان credentials تشتغل
+    return cb(null, true);
+  }
+}));
 app.use(express.json({ limit: "20mb" }));
 // طلب Client Hints من المتصفح (موديل الجهاز وغيره)
 app.use((req, res, next) => {
@@ -210,7 +228,8 @@ async function relayFetch(url, opts = {}, timeout = 15_000) {
   return relayRes;
 }
 
-async function fetchT(url, opts = {}, { timeout = 15_000, retries = 0, retryOn = [429, 502, 503, 504] } = {}) {
+const UPSTREAM_FETCH_RETRIES = Number(process.env.UPSTREAM_FETCH_RETRIES || 7);
+async function fetchT(url, opts = {}, { timeout = 15_000, retries = 0, retryOn = [429, 502, 503, 504, 408, 500] } = {}) {
   let lastErr;
   const tryRelay = Boolean(UPSTREAM_RELAY_URL);
   for (let a = 0; a <= retries; a++) {
@@ -347,6 +366,7 @@ function rateLimit(options = {}) {
   const banMs = options.banMs || 5 * 60_000;
   const skip = options.skip;
   const keyFn = options.keyFn;
+  const limitMessage = options.message || "طلبات كثيرة — حاول بعد قليل";
   return (req, res, next) => {
     if (skip && skip(req)) return next();
     const ip = keyFn ? keyFn(req) : clientIp(req);
@@ -373,7 +393,7 @@ function rateLimit(options = {}) {
       if (banAfter > 0 && b.hits429 >= banAfter) banBuckets.set(banKey, Date.now() + banMs);
       const sec = Math.ceil((b.resetAt - t) / 1000);
       res.setHeader("Retry-After", String(Math.max(1, sec)));
-      return res.status(429).json({ success: false, message: "طلبات كثيرة — حاول بعد قليل" });
+      return res.status(429).json({ success: false, message: limitMessage });
     }
     next();
   };
@@ -454,14 +474,24 @@ const CONFIG = {
     "floravon.online",
     "c-cdn.online",
     "thanawica.com",
-    "www.thanawica.com"
+    "www.thanawica.com",
+    "b-cdn.net",
+    "mediadelivery.net",
+    "iframe.mediadelivery.net",
+    "vz-878412bf-692.b-cdn.net"
   ],
+  // Bunny Stream (د. حسام عيسى / drhossamissa.com)
+  BUNNY_CDN_HOST: (process.env.BUNNY_CDN_HOST || "vz-878412bf-692.b-cdn.net").replace(/^https?:\/\//, "").replace(/\/$/, ""),
+  BUNNY_LIBRARY_ID: process.env.BUNNY_LIBRARY_ID || "396717",
+  BUNNY_REFERER: "https://iframe.mediadelivery.net/",
+  BUNNY_ORIGIN: "https://iframe.mediadelivery.net",
+  BUNNY_ENABLED: process.env.BUNNY_ENABLED !== "0",
   STREAM_ORIGIN: "https://coursatk.online",
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
   STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
-  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1",
-  FIREBASE: process.env.FIREBASE_URL || "",
+  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
+  FIREBASE: (process.env.FIREBASE_URL || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, ""),
   BOOTSTRAP_ADMIN: {
     username: process.env.ADMIN_USER || "admin",
     passwordHash: "",
@@ -600,7 +630,9 @@ function saveRuntimeFile() {
 }
 
 function getFirebaseUrl() {
-  return (runtime.firebaseUrl || process.env.FIREBASE_URL || "").replace(/\/$/, "");
+  // الترتيب: runtime (لو اتظبط من الأدمن) → ENV → الافتراضي الأصلي
+  const url = (runtime.firebaseUrl || process.env.FIREBASE_URL || CONFIG.FIREBASE || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, "");
+  return url;
 }
 
 function getCoursatkTokenSync() {
@@ -608,6 +640,10 @@ function getCoursatkTokenSync() {
 }
 
 loadRuntimeFile();
+// لو مفيش رابط Firebase متظبط → استخدم الفايربيز الأصلي
+if (!runtime.firebaseUrl) {
+  runtime.firebaseUrl = (process.env.FIREBASE_URL || CONFIG.FIREBASE || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, "");
+}
 
 const maintenance = { mode: "off", message: "السيرفر في وضع الصيانة حاليًا. حاول لاحقًا.", updatedAt: 0, updatedBy: null };
 
@@ -1114,447 +1150,67 @@ function requireBootstrap(req, res, next) {
 // Decrypt utils
 let decryptPlaybackKeyFn = null;
 
-function makeDomStub() {
-  const el = () => {
-    const o = {
-      style: {},
-      classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-      children: [],
-      childNodes: [],
-      setAttribute() {},
-      getAttribute() { return null; },
-      removeAttribute() {},
-      appendChild(c) { return c; },
-      removeChild() {},
-      remove() {},
-      addEventListener() {},
-      removeEventListener() {},
-      dispatchEvent() { return true; },
-      querySelector() { return null; },
-      querySelectorAll() { return []; },
-      getElementsByTagName() { return []; },
-      getBoundingClientRect() { return { top: 0, left: 0, width: 0, height: 0 }; },
-      focus() {},
-      blur() {},
-      click() {},
-      play() { return Promise.resolve(); },
-      pause() {},
-      load() {},
-      textContent: "",
-      innerHTML: "",
-      src: "",
-      href: "",
-      value: "",
-      width: 0,
-      height: 0,
-      currentTime: 0,
-      duration: NaN,
-      readyState: 0,
-      paused: true,
-      canPlayType() { return ""; }
-    };
-    return o;
-  };
-  const doc = el();
-  doc.createElement = () => el();
-  doc.createElementNS = () => el();
-  doc.createTextNode = () => el();
-  doc.createDocumentFragment = () => el();
-  doc.head = el();
-  doc.body = el();
-  doc.documentElement = el();
-  doc.getElementById = () => null;
-  doc.querySelector = () => null;
-  doc.querySelectorAll = () => [];
-  doc.getElementsByTagName = () => [];
-  doc.addEventListener = () => {};
-  doc.removeEventListener = () => {};
-  doc.cookie = "";
-  doc.readyState = "complete";
-  doc.location = {
-    href: "https://coursatk.online/",
-    protocol: "https:",
-    host: "coursatk.online",
-    hostname: "coursatk.online",
-    pathname: "/",
-    search: "",
-    hash: ""
-  };
-  return doc;
-}
-
 async function loadDecryptionUtils() {
-  // player.js الجديد اتشفر تاني بالكامل ومفيش فيه DecryptionUtils.
-  // بنحمّله فقط عشان نتأكد من الإصدار، والمسار الأساسي بقى CDN/plain-key fallback.
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
   let source = null;
-
-  try {
-    if (fs.existsSync(cachePath)) {
-      const stat = fs.statSync(cachePath);
-      // لو الكاش أقدم من 6 ساعات نعيد التحميل
-      if (Date.now() - stat.mtimeMs < 6 * 3600 * 1000) {
-        source = fs.readFileSync(cachePath, "utf8");
-      }
-    }
-  } catch {}
-
+  try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
   if (!source) {
-    try {
-      const r = await fetch(CONFIG.PLAYER_JS, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-          Accept: "*/*",
-          Referer: "https://coursatk.online/"
-        }
-      });
-      if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
-      source = await r.text();
-      try { fs.writeFileSync(cachePath, source); } catch {}
-    } catch (e) {
-      console.warn("[crypto] failed to fetch player.js:", e && e.message ? e.message : e);
-      decryptPlaybackKeyFn = null;
-      return;
-    }
+    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" } });
+    if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
+    source = await r.text();
+    try { fs.writeFileSync(cachePath, source); } catch {}
   }
-
-  if (source && !/DecryptionUtils|decryptPlaybackKey/.test(source)) {
-    console.warn("[crypto] player.js (new obfuscated build) has no DecryptionUtils — using CDN/plain-key fallback only");
-    decryptPlaybackKeyFn = null;
-    // نمسح الكاش عشان لو نزل إصدار فيه الرموز تاني نلتقطه
-    try { fs.unlinkSync(cachePath); } catch {}
-    return;
-  }
-
-  // لو رجع إصدار قديم فيه DecryptionUtils نحاول نحمله (نادر)
-  try {
-    const { webcrypto } = crypto;
-    const doc = makeDomStub();
-    const sandbox = {
-      console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
-      crypto: webcrypto,
-      TextEncoder,
-      TextDecoder,
-      Uint8Array,
-      ArrayBuffer,
-      Uint16Array,
-      Uint32Array,
-      Int32Array,
-      Float32Array,
-      DataView,
-      atob: (s) => Buffer.from(s, "base64").toString("binary"),
-      btoa: (s) => Buffer.from(s, "binary").toString("base64"),
-      setTimeout,
-      clearTimeout,
-      setInterval,
-      clearInterval,
-      Promise,
-      Error,
-      TypeError,
-      RangeError,
-      SyntaxError,
-      Object,
-      Array,
-      String,
-      Number,
-      Boolean,
-      Math,
-      JSON,
-      Date,
-      Map,
-      Set,
-      WeakMap,
-      WeakSet,
-      Symbol,
-      Proxy,
-      Reflect,
-      Function,
-      RegExp,
-      parseInt,
-      parseFloat,
-      isNaN,
-      isFinite,
-      encodeURIComponent,
-      decodeURIComponent,
-      encodeURI,
-      decodeURI,
-      undefined,
-      NaN,
-      Infinity,
-      document: doc,
-      navigator: {
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-        language: "en",
-        platform: "Win32",
-        hardwareConcurrency: 4,
-        onLine: true
-      },
-      location: doc.location,
-      history: { pushState() {}, replaceState() {} },
-      localStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
-      sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {}, clear() {}, length: 0 },
-      self: null,
-      window: null,
-      globalThis: null
-    };
-    sandbox.self = sandbox;
-    sandbox.window = sandbox;
-    sandbox.globalThis = sandbox;
-
-    const script = new vm.Script(source, { filename: "player.stream-weave.js" });
-    const context = vm.createContext(sandbox);
-    script.runInContext(context, { timeout: 8000 });
-
-    let du = sandbox.DecryptionUtils;
-    if (!du?.decryptPlaybackKey) {
-      for (const v of Object.values(sandbox)) {
-        if (v && typeof v === "object" && typeof v.decryptPlaybackKey === "function") {
-          du = v;
-          break;
-        }
-      }
-    }
-    if (du?.decryptPlaybackKey) {
-      decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-      console.log("[crypto] ready (DecryptionUtils)");
-      return;
-    }
-  } catch (e) {
-    console.warn("[crypto] sandbox load failed:", e && e.message ? e.message : e);
-  }
-
-  console.warn("[crypto] DecryptionUtils unavailable — using CDN/plain-key fallback only");
-  decryptPlaybackKeyFn = null;
+  const { webcrypto } = crypto;
+  const sandbox = {
+    window: {}, self: {}, globalThis: {}, global: {},
+    console: { log() {}, warn() {}, error() {}, info() {} },
+    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer,
+    atob: (s) => Buffer.from(s, "base64").toString("binary"),
+    btoa: (s) => Buffer.from(s, "binary").toString("base64"),
+    setTimeout, clearTimeout, setInterval, clearInterval,
+    Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, Symbol, Proxy, Reflect,
+    document: { createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }), head: { appendChild() {} }, body: { appendChild() {} }, querySelector: () => null, addEventListener() {} },
+    navigator: { userAgent: "Node" }, location: { href: "https://coursatk.online/" },
+    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
+    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
+    Blob: class { constructor(p) { this.p = p; } },
+    fetch: async () => ({ ok: false }),
+    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
+  };
+  sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox; sandbox.global = sandbox;
+  vm.runInNewContext(source, sandbox, { timeout: 8000 });
+  const du = sandbox.DecryptionUtils;
+  if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
+  decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
+  console.log("[crypto] ready");
 }
 
-
-
-// ==================== New Stream-Weave key format (player.js late-2025 / 2026) ====================
-// 86-byte blob layout (recovered from player.js):
-//   [0]     = check byte  (must equal 165 ^ salt[0])
-//   [1..85] = scrambled with fixed permutation yd[]
-// After unpermute:
-//   salt = [0..15], iv = [16..27] (12 bytes), body = [28..84] (57 bytes)
-// Crypto chain (simplified but covering the observed paths):
-//   PBKDF2(password=videoId.toLowerCase(), salt, iter=1337, 32 bytes, SHA-256)
-//   → AES-GCM / XOR stages → final 16-byte AES-128 key
-
-const SW_YD = [11,48,0,37,74,26,63,15,52,4,41,78,30,67,19,56,8,45,82,34,71,23,60,12,49,1,38,75,27,64,16,53,5,42,79,31,68,20,57,9,46,83,35,72,24,61,13,50,2,39,76,28,65,17,54,6,43,80,32,69,21,58,10,47,84,36,73,25,62,14,51,3,40,77,29,66,18,55,7,44,81,33,70,22,59];
-
-function swUnpermute(scrambled85) {
-  const o = Buffer.alloc(85);
-  for (let i = 0; i < 85; i++) o[SW_YD[i]] = scrambled85[i];
-  return o;
-}
-
-function swTryGcm(derivedKey, iv, ciphertext, tag) {
-  try {
-    const algo = derivedKey.length === 32 ? "aes-256-gcm" : "aes-128-gcm";
-    const decipher = crypto.createDecipheriv(algo, derivedKey, iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  } catch {
-    return null;
-  }
-}
-
-async function unwrapNewStreamWeaveKey(wrapped, videoId, extraSecrets = []) {
-  if (!Buffer.isBuffer(wrapped) || wrapped.length !== 86) return null;
-
-  const check = wrapped[0];
-  const plain = swUnpermute(wrapped.subarray(1));
-  const salt = plain.subarray(0, 16);
-  const iv = plain.subarray(16, 28);
-  const body = plain.subarray(28); // 57 bytes
-
-  if (body.length < 17) return null;
-
-  // Player integrity check
-  if ((165 ^ salt[0]) !== check) {
-    console.warn("[key] SW check byte mismatch", { check, expected: 165 ^ salt[0] });
-  }
-
-  const passwords = [];
-  const vid = String(videoId || "").trim();
-  if (vid) {
-    passwords.push(vid.toLowerCase(), vid, vid.replace(/-/g, ""), vid.toUpperCase(), "video:" + vid.toLowerCase());
-  }
-  for (const s of extraSecrets) {
-    if (s) passwords.push(String(s), String(s).toLowerCase());
-  }
-  // also try empty / fixed fallbacks that appear in some builds
-  passwords.push("stream-weave", "streamweave", "coursatk", CDN_KEY_PASSWORD || "pQDKIpCkQxsulP");
-
-  const seen = new Set();
-  for (const password of passwords) {
-    if (!password || seen.has(password)) continue;
-    seen.add(password);
-
-    for (const iterations of [1337, 1000, 100, 1, 10000]) {
-      // 32-byte key
-      let derived32;
-      try { derived32 = crypto.pbkdf2Sync(password, salt, iterations, 32, "sha256"); } catch { continue; }
-
-      // Path A: treat last 16 bytes of body as GCM tag, rest as ciphertext
-      const tagA = body.subarray(body.length - 16);
-      const ctA = body.subarray(0, body.length - 16);
-      let out = swTryGcm(derived32, iv, ctA, tagA);
-      if (out && out.length >= 16) {
-        console.log("[key] SW path-A ok iter=", iterations, "pwLen=", password.length);
-        return out.subarray(0, 16);
-      }
-
-      // Path B: 16-byte derived key
-      let derived16;
-      try { derived16 = crypto.pbkdf2Sync(password, salt, iterations, 16, "sha256"); } catch { continue; }
-      out = swTryGcm(derived16, iv, ctA, tagA);
-      if (out && out.length >= 16) {
-        console.log("[key] SW path-B ok iter=", iterations, "pwLen=", password.length);
-        return out.subarray(0, 16);
-      }
-
-      // Path C: XOR body with repeating derived key then take first 16 (observed intermediate step)
-      try {
-        const xored = Buffer.alloc(body.length);
-        for (let i = 0; i < body.length; i++) xored[i] = body[i] ^ derived32[i % 32];
-        // try GCM on the xored buffer
-        const tagC = xored.subarray(xored.length - 16);
-        const ctC = xored.subarray(0, xored.length - 16);
-        out = swTryGcm(derived32, iv, ctC, tagC);
-        if (out && out.length >= 16) {
-          console.log("[key] SW path-C (xor+gcm) ok iter=", iterations);
-          return out.subarray(0, 16);
-        }
-        // or just use first 16 of xored if it looks non-trivial
-        if (xored.subarray(0, 16).some(b => b !== 0)) {
-          // don't return blindly – only if later stages fail
-        }
-      } catch {}
-    }
-  }
-
-  console.warn("[key] SW all paths failed for videoId=", videoId, "blobHead=", wrapped.subarray(0, 8).toString("hex"));
-  return null;
-}
-
-async function unwrapKey(wrappedBuf, videoId, extraSecrets = []) {
-  const wrapped = Buffer.isBuffer(wrappedBuf) ? wrappedBuf : Buffer.from(wrappedBuf);
-
-  // 1. Raw 16-byte key
-  if (wrapped.length === 16) return wrapped;
-
-  // 2. New Stream-Weave 86-byte format (highest priority)
-  if (wrapped.length === 86) {
-    try {
-      const k = await unwrapNewStreamWeaveKey(wrapped, videoId, extraSecrets);
-      if (k && k.length === 16) return k;
-    } catch (e) {
-      console.warn("[unwrapKey] new-SW exception:", e && e.message ? e.message : e);
-    }
-  }
-
-  // 3. Short text / hex / base64 payloads
-  if (wrapped.length > 16 && wrapped.length < 120) {
-    const asStr = wrapped.toString("utf8").trim();
-    if (/^[0-9a-fA-F]{32}$/.test(asStr)) return Buffer.from(asStr, "hex");
-    if (/^[0-9a-fA-F]{64}$/.test(asStr)) return Buffer.from(asStr.slice(0, 32), "hex");
-    if (/^[A-Za-z0-9+/=\s]{20,}$/.test(asStr)) {
-      try {
-        const b = Buffer.from(asStr.replace(/\s+/g, ""), "base64");
-        if (b.length === 16) return b;
-        if (b.length === 32) return b.subarray(0, 16);
-        if (b.length === 86) {
-          const k = await unwrapNewStreamWeaveKey(b, videoId, extraSecrets);
-          if (k) return k;
-        }
-      } catch {}
-    }
-  }
-
-  // 4. Legacy DecryptionUtils (old player)
-  if (decryptPlaybackKeyFn) {
-    try {
-      const result = await decryptPlaybackKeyFn(new Uint8Array(wrapped), String(videoId));
-      const key = result?.key;
-      if (key) {
-        const aes = Buffer.isBuffer(key) ? key
-          : key instanceof ArrayBuffer ? Buffer.from(key)
-          : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
-        if (aes.length === 16) return aes;
-      }
-    } catch (e) {
-      console.warn("[unwrapKey] DecryptionUtils failed:", e && e.message ? e.message : e);
-    }
-  }
-
-  // 5. Classic multi-password GCM fallback
-  try {
-    const extras = [...(extraSecrets || [])];
-    if (videoId) {
-      extras.push(String(videoId), String(videoId).replace(/-/g, ""), "video:" + String(videoId),
-        String(videoId).toLowerCase(), String(videoId).toUpperCase());
-    }
-    try {
-      const tok = getCoursatkTokenSync && getCoursatkTokenSync();
-      if (tok) extras.push(tok, tok.slice(0, 32), tok.slice(-32));
-    } catch {}
-    return await unwrapCdnKey(wrapped, extras);
-  } catch (e) {
-    console.error("[unwrapKey] all strategies failed, blobLen=", wrapped.length, "videoId=", videoId,
-      "head=", wrapped.subarray(0, Math.min(12, wrapped.length)).toString("hex"));
-    throw new Error("فشل فك مفتاح التشفير (crypto/CDN): " + (e && e.message ? e.message : e));
-  }
+async function unwrapKey(wrappedBuf, videoId) {
+  if (!decryptPlaybackKeyFn) throw new Error("crypto not loaded");
+  const wrapped = Buffer.isBuffer(wrappedBuf) ? new Uint8Array(wrappedBuf) : new Uint8Array(wrappedBuf);
+  if (wrapped.byteLength === 16) return Buffer.from(wrapped);
+  const result = await decryptPlaybackKeyFn(wrapped, String(videoId));
+  const key = result?.key;
+  if (!key) throw new Error("empty key");
+  const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+  if (aes.length !== 16) throw new Error(`key len ${aes.length}`);
+  return aes;
 }
 
 const CDN_KEY_PASSWORD = "pQDKIpCkQxsulP";
-const KEY_PASSWORDS = [
-  CDN_KEY_PASSWORD,
-  "pQDKIpCkQxsulP",
-  "stream-weave",
-  "streamweave",
-  "StreamWeave",
-  "coursatk",
-  "Coursatk",
-  "coursatk.online",
-  "SoulBrowser",
-  "soulbrowser",
-  "com.mycompany.app.soulbrowser",
-  "playback",
-  "PlaybackKey",
-  "playback_key",
-  "sw-key",
-  "sw_key",
-  "cdn-key",
-  "cdn_key",
-  "aes128",
-  "hls-key"
-];
-
-async function unwrapCdnKey(wrappedBuf, extraPasswords = []) {
+async function unwrapCdnKey(wrappedBuf) {
   const buf = Buffer.isBuffer(wrappedBuf) ? wrappedBuf : Buffer.from(wrappedBuf);
   if (buf.length === 16) return buf;
-  if (buf.length < 32) throw new Error("CDN key blob قصير (" + buf.length + ")");
-
-  const passwords = [...extraPasswords.filter(Boolean).map(String), ...KEY_PASSWORDS];
-  const iterationsList = [100, 1000, 1, 10000, 128, 256];
-  const digests = ["sha256", "sha1"];
-
-  for (const password of passwords) {
-    for (const iterations of iterationsList) {
-      for (const digest of digests) {
-        const key = tryGcmUnwrapOnce(buf, password, iterations, digest);
-        if (key) {
-          console.log("[key] GCM unwrap ok passLen=", String(password).length, "iter=", iterations, "digest=", digest);
-          return key;
-        }
-      }
-    }
-  }
-
-  // آخر محاولة: لو الـ blob نفسه 16 بعد قصّ header بسيط
-  if (buf.length >= 16 && buf.length <= 20) return buf.subarray(0, 16);
-
-  throw new Error("CDN key: unable to authenticate data (جرّبنا عدة passwords/layouts)");
+  if (buf.length < 60) throw new Error("CDN key blob قصير");
+  const salt = buf.subarray(0, 16); const iv = buf.subarray(16, 28); const data = buf.subarray(28);
+  const derived = crypto.pbkdf2Sync(CDN_KEY_PASSWORD, salt, 100, 32, "sha256");
+  const tag = data.subarray(data.length - 16); const ciphertext = data.subarray(0, data.length - 16);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", derived, iv);
+  decipher.setAuthTag(tag);
+  const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  const hexKey = plain.toString("utf8").trim().slice(0, 32);
+  if (!/^[0-9a-fA-F]{32}$/.test(hexKey)) throw new Error("CDN key format غير متوقع");
+  return Buffer.from(hexKey, "hex");
 }
 
 function decryptSegment(encrypted, key, iv) { const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv); return Buffer.concat([decipher.update(encrypted), decipher.final()]); }
@@ -1582,7 +1238,7 @@ async function upstreamJsonRaw(apiPath, options = {}) {
     try {
       const headers = await upstreamHeaders(options.headers || {}, p);
       const r = await upstreamSlot(() =>
-        fetchT(url, { ...options, headers }, { timeout: 18_000, retries: isGet && p === 0 ? 1 : 0, retryOn: [429, 502, 503, 504] })
+        fetchT(url, { ...options, headers }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES, retryOn: [429, 502, 503, 504, 408, 500] })
       );
       const text = await r.text();
       if (isCloudflareBlock(r.status, text)) {
@@ -1665,23 +1321,38 @@ function allowedStreamUrl(raw, session = null) {
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
   const ch = clientHeaders || {};
-  const headers = {
-    Authorization: `Bearer ${session.token}`, Accept: "*/*", "Cache-Control": "no-cache",
-    Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER,
-    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
-    "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
-  };
+  const isBunny = session && (session.mode === "bunny" || session.mode === "hossam");
+  let headers;
+  if (isBunny) {
+    // فك حماية Bunny: Referer من iframe.mediadelivery.net مطلوب
+    headers = {
+      Accept: "*/*",
+      "Cache-Control": "no-cache",
+      Origin: CONFIG.BUNNY_ORIGIN || "https://iframe.mediadelivery.net",
+      Referer: CONFIG.BUNNY_REFERER || "https://iframe.mediadelivery.net/",
+      "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
+    };
+  } else {
+    headers = {
+      Authorization: `Bearer ${session.token}`, Accept: "*/*", "Cache-Control": "no-cache",
+      Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER,
+      "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
+      "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
+    };
+  }
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
   }
   for (const [k, v] of Object.entries(extra || {})) { if (v != null && v !== "") headers[k] = v; }
   const hasRange = Boolean(headers.Range || headers.range);
-  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 25_000, retries: hasRange ? 0 : 1 }));
+  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 30_000, retries: hasRange ? 2 : UPSTREAM_FETCH_RETRIES }));
 }
 
 app.use(rateLimit({ max: 1500, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
 app.use("/api/stream/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
-app.use("/api/hls/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
+// حد المقاطع: يمنع سحب المحاضرة كاملة بسرعة من سكربت/منصة تانية
+app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || 420), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات بث كثيرة — هدّي شوية" }));
+app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 30), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -1690,6 +1361,8 @@ app.get("/health", (_req, res) => {
     cryptoReady: Boolean(decryptPlaybackKeyFn),
     decryptSegments: true,
     directSegments: process.env.HLS_DIRECT_SEGMENTS !== "0",
+    bunnyEnabled: CONFIG.BUNNY_ENABLED !== false,
+    bunnyCdn: CONFIG.BUNNY_CDN_HOST || null,
     version: APP_VERSION,
     upstreamProxy: Boolean(proxyAgent),
     upstreamRelay: Boolean(UPSTREAM_RELAY_URL),
@@ -3001,7 +2674,9 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 
     let results = await Promise.all(wantedIds.map((sid, idx) => resolveOne(sid).then((s) => ({ ...s, order_index: idx + 1 }))));
 
-    if (CONFIG.THANAWICA_ENABLED && studentAllowsThanawica(req.student)) {
+    // الرياضة من كورساتك فقط — مش بنستبدلها بمادة ثانويكا
+    // لو حابب ترجع الاستبدال: THANAWICA_REPLACE_MATH=1
+    if (CONFIG.THANAWICA_ENABLED && process.env.THANAWICA_REPLACE_MATH === "1" && studentAllowsThanawica(req.student)) {
       try {
         const thList = await thSubjectsForYear(yearId);
         const thMath = thList.find((s) => s._kind === "math") || null;
@@ -3064,7 +2739,168 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
-const SOURCE_TTL_MS = Number(process.env.SOURCE_TTL_MS || 3 * 60_000);
+
+// ==================== Bunny Stream (د. حسام عيسى) — فك حماية iframe/Referer + AES-128 ====================
+function isBunnyVideoId(id) {
+  return /^(?:bn|hos|hossam)_/i.test(String(id || ""));
+}
+function parseBunnyGuid(videoId) {
+  const raw = String(videoId || "");
+  const m = raw.match(/^(?:bn|hos|hossam)_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+async function bunnyFetch(url, extraHeaders = {}) {
+  const headers = {
+    Accept: "*/*",
+    "Cache-Control": "no-cache",
+    Origin: CONFIG.BUNNY_ORIGIN || "https://iframe.mediadelivery.net",
+    Referer: CONFIG.BUNNY_REFERER || "https://iframe.mediadelivery.net/",
+    "User-Agent": CONFIG.STREAM_UA || "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
+    ...extraHeaders
+  };
+  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 30_000, retries: 2 }));
+}
+function pickBunnyVariant(masterText, prefer = ["720p", "480p", "1080p", "360p", "240p"]) {
+  const lines = String(masterText || "").split(/\r?\n/);
+  const variants = [];
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t.startsWith("#EXT-X-STREAM-INF")) continue;
+    const next = (lines[i + 1] || "").trim();
+    if (!next || next.startsWith("#")) continue;
+    const bw = Number((t.match(/BANDWIDTH=(\d+)/) || [])[1] || 0);
+    const res = ((t.match(/RESOLUTION=(\d+x\d+)/) || [])[1] || "");
+    variants.push({ line: next, bw, res, raw: t });
+  }
+  if (!variants.length) return null;
+  for (const p of prefer) {
+    const hit = variants.find((v) => v.line.includes(p) || (p === "720p" && v.res.startsWith("1280")) || (p === "1080p" && v.res.startsWith("1920")) || (p === "480p" && v.res.startsWith("854")) || (p === "360p" && v.res.startsWith("640")));
+    if (hit) return hit.line;
+  }
+  variants.sort((a, b) => b.bw - a.bw);
+  return variants[0].line;
+}
+async function buildBunnySource(guid, clientHeaders) {
+  const host = CONFIG.BUNNY_CDN_HOST || "vz-878412bf-692.b-cdn.net";
+  const base = `https://${host}/${guid}`;
+  const masterUrl = `${base}/playlist.m3u8`;
+  const masterRes = await bunnyFetch(masterUrl);
+  if (!masterRes.ok) {
+    const e = new Error(`Bunny master HTTP ${masterRes.status}`);
+    e.status = masterRes.status === 403 ? 403 : 502;
+    throw e;
+  }
+  const masterText = await masterRes.text();
+  if (!masterText.includes("#EXTM3U")) throw new Error("Bunny playlist غير صالح");
+
+  let variantRel = pickBunnyVariant(masterText) || "720p/video.m3u8";
+  let variantUrl;
+  try { variantUrl = new URL(variantRel, masterUrl).href; } catch { variantUrl = `${base}/${variantRel.replace(/^\//, "")}`; }
+
+  const varRes = await bunnyFetch(variantUrl);
+  if (!varRes.ok) throw new Error(`Bunny variant HTTP ${varRes.status}`);
+  const varText = await varRes.text();
+  if (!varText.includes("#EXTM3U")) throw new Error("Bunny variant غير صالح");
+
+  const allowedHosts = new Set([
+    ...CONFIG.STREAM_HOSTS,
+    host,
+    "b-cdn.net",
+    "mediadelivery.net",
+    "iframe.mediadelivery.net"
+  ]);
+  try { allowedHosts.add(new URL(variantUrl).hostname); } catch {}
+
+  const src = {
+    reqVideoId: "bn_" + guid,
+    videoId: guid,
+    mode: "bunny",
+    token: "bunny",
+    streamUrl: masterUrl,
+    allowedHosts,
+    plainKey: null,
+    defaultIv: null,
+    mediaSeq: 0,
+    segs: [],
+    playlist: "",
+    targetDuration: 4,
+    createdAt: now()
+  };
+
+  const lines = varText.split(/\r?\n/);
+  const out = [];
+  const segs = [];
+  let mediaSeq = 0;
+  let currentIv = null;
+  let keyFetched = false;
+  let segIndex = 0;
+  let targetDuration = 4;
+
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0;
+    if (t.startsWith("#EXT-X-TARGETDURATION:")) targetDuration = Number(t.split(":")[1]) || targetDuration;
+  }
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#EXT-X-KEY:")) {
+      const uri = line.match(/URI="([^"]+)"/)?.[1];
+      const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
+      if (ivHex) currentIv = parseIvHex(ivHex);
+      if (uri && !keyFetched) {
+        const keyUrl = new URL(uri, variantUrl).href;
+        try { allowedHosts.add(new URL(keyUrl).hostname); } catch {}
+        const keyRes = await bunnyFetch(keyUrl);
+        if (!keyRes.ok) throw new Error(`Bunny key HTTP ${keyRes.status}`);
+        const keyBuf = Buffer.from(await keyRes.arrayBuffer());
+        if (keyBuf.length !== 16) throw new Error(`Bunny key len ${keyBuf.length}`);
+        // مفتاح AES-128 صريح — بدون unwrap stream-weave
+        src.plainKey = keyBuf;
+        src.defaultIv = currentIv;
+        keyFetched = true;
+        console.log(`[key] bunny for ${guid}`);
+      }
+      continue; // السيرفر يفك التشفير قبل الإرسال
+    }
+    if (line.startsWith("#EXTINF:")) {
+      out.push(raw);
+      const dur = Number(line.slice(8).split(",")[0]) || targetDuration;
+      // duration stored with next seg
+      src._lastDur = dur;
+      continue;
+    }
+    if (line && !line.startsWith("#")) {
+      const segmentUrl = new URL(line, variantUrl).href;
+      try { allowedHosts.add(new URL(segmentUrl).hostname); } catch {}
+      const seq = mediaSeq + segIndex;
+      const iv = currentIv || ivFromMediaSequence(seq);
+      segs.push({ u: segmentUrl, iv: iv.toString("hex"), s: seq, i: segIndex, dur: src._lastDur || targetDuration });
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      segIndex++;
+      continue;
+    }
+    if (line.startsWith("#EXT-X-ENDLIST") || line.startsWith("#EXTM3U") || line.startsWith("#EXT-X-VERSION") || line.startsWith("#EXT-X-TARGETDURATION") || line.startsWith("#EXT-X-MEDIA-SEQUENCE") || line.startsWith("#EXT-X-PLAYLIST-TYPE")) {
+      out.push(raw);
+      continue;
+    }
+    if (line.startsWith("#")) {
+      out.push(raw);
+      continue;
+    }
+  }
+
+  if (!src.plainKey) throw new Error("فشل جلب مفتاح Bunny");
+  if (!segs.length) throw new Error("مفيش مقاطع في قائمة Bunny");
+  src.mediaSeq = mediaSeq;
+  src.segs = segs;
+  src.targetDuration = targetDuration;
+  src.playlist = out.join("\n");
+  src.allowedHosts = allowedHosts;
+  return src;
+}
+
+const SOURCE_TTL_MS = Number(process.env.SOURCE_TTL_MS || 15 * 60_000);
 const sourceCache = new Map();
 const SID_TOKEN = "{{SID}}";
 
@@ -3149,32 +2985,11 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
-        const ctHdr = (keyRes.headers.get("content-type") || "").toLowerCase();
-        console.log(`[key] fetch mode=${src.mode} video=${src.videoId} len=${wrapped.length} ct=${ctHdr} head=${wrapped.subarray(0, Math.min(20, wrapped.length)).toString("hex")}`);
-
-        src.plainKey = tryParseKeyPayload(wrapped, ctHdr);
-        if (!src.plainKey) {
-          const extras = [String(src.token || ""), String(src.videoId || "")].filter(Boolean);
-          try {
-            // Always try the full unwrapKey first (handles 86-byte SW format + legacy)
-            src.plainKey = await unwrapKey(wrapped, src.videoId, extras);
-          } catch (e1) {
-            try {
-              src.plainKey = await unwrapCdnKey(wrapped, extras);
-            } catch (e2) {
-              try {
-                src.plainKey = unwrapWithShaPassword(wrapped, String(src.videoId || ""), String(src.token || ""));
-              } catch (e3) {
-                console.error("[key] final failure video=", src.videoId, "len=", wrapped.length,
-                  "head=", wrapped.subarray(0, Math.min(16, wrapped.length)).toString("hex"));
-                throw e1;
-              }
-            }
-          }
-        }
+        if (src.mode === "cdn" || String(uri).includes("/user/auth/")) src.plainKey = await unwrapCdnKey(wrapped);
+        else src.plainKey = await unwrapKey(wrapped, src.videoId);
         src.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} plain=${src.plainKey && src.plainKey.length}`);
+        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} via stream-weave API`);
       }
       continue;
     }
@@ -3241,75 +3056,65 @@ async function buildVideoSource(videoId, clientHeaders) {
     if (ytUrl) return { reqVideoId: videoId, videoId: String(videoId), mode: "coursatk-youtube", youtubeUrl: ytUrl, streamUrl: ytUrl, plainKey: Buffer.from("youtube"), segs: [], playlist: "", mediaSeq: 0, allowedHosts: new Set(), createdAt: now() };
   } catch (e) { console.warn("[platforms youtube]", e.message); }
 
+  let mode = null; let streamUrl = null; let sessionToken = null; let resolvedVideoId = videoId; let probeText = null;
   const errors = [];
-  const candidates = [];
 
-  // 1) stream-weave
-  try {
-    const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
-    if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-    candidates.push({
-      mode: "weave",
-      sessionToken: data.data.token,
-      streamUrl: data.data.stream_url,
-      resolvedVideoId: String(data.data.video_id || videoId),
-      probeText: null
-    });
-  } catch (e) { errors.push("weave: " + (e.message || e)); }
-
-  // 2) CDN playlist (دايمًا كـ fallback — حتى لو weave نجح في الـ token)
-  try {
-    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-    const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 15_000, retries: 1 }));
-    if (!probe.ok) throw new Error(`CDN ${probe.status}`);
-    const masterText = await probe.text();
-    if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
-    candidates.push({
-      mode: "cdn",
-      sessionToken: upstreamTok,
-      streamUrl: masterUrl,
-      resolvedVideoId: String(videoId),
-      probeText: masterText
-    });
-  } catch (e) { errors.push("cdn: " + (e.message || e)); }
-
-  if (!candidates.length) throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
-
-  let lastErr = null;
-  for (const c of candidates) {
-    try {
-      const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
-      try { allowedHosts.add(new URL(c.streamUrl).hostname); } catch {}
-      const src = {
-        reqVideoId: videoId,
-        videoId: c.resolvedVideoId,
-        mode: c.mode,
-        token: c.sessionToken,
-        streamUrl: c.streamUrl,
-        allowedHosts,
-        plainKey: null,
-        defaultIv: null,
-        mediaSeq: 0,
-        segs: [],
-        playlist: "",
-        createdAt: now()
-      };
-      await buildPlaylist(src, c.probeText, clientHeaders);
-      console.log("[source]", c.mode, "ok for", videoId);
-      return src;
-    } catch (e) {
-      lastErr = e;
-      console.warn("[source]", c.mode, "failed for", videoId, ":", e && e.message ? e.message : e);
-      errors.push(c.mode + " playlist: " + (e && e.message ? e.message : e));
+  // جلسة كورساتك/stream-weave — إعادة محاولة قوية ثم حفظ في الذاكرة (sourceCache)
+  {
+    let lastWeaveErr = null;
+    for (let attempt = 1; attempt <= UPSTREAM_FETCH_RETRIES; attempt++) {
+      try {
+        const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+        if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
+        mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
+        lastWeaveErr = null;
+        break;
+      } catch (e) {
+        lastWeaveErr = e;
+        console.warn(`[weave] play attempt ${attempt}/${UPSTREAM_FETCH_RETRIES}:`, e.message);
+        if (attempt < UPSTREAM_FETCH_RETRIES) await delay(250 * attempt + Math.random() * 200);
+      }
     }
+    if (lastWeaveErr) errors.push(lastWeaveErr.message);
   }
-  throw lastErr || new Error(errors.join(" | ") || "فشل تجهيز مصدر الفيديو");
+
+  if (!mode) {
+    try {
+      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+      const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES }));
+      if (!probe.ok) throw new Error(`CDN ${probe.status}`);
+      const masterText = await probe.text();
+      if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
+      mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
+    } catch (e) { errors.push(e.message); }
+  }
+
+  if (!mode || !streamUrl || !sessionToken) throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
+
+  const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+  try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
+  const src = { reqVideoId: videoId, videoId: resolvedVideoId, mode, token: sessionToken, streamUrl, allowedHosts, plainKey: null, defaultIv: null, mediaSeq: 0, segs: [], playlist: "", createdAt: now() };
+  await buildPlaylist(src, probeText, clientHeaders);
+  return src;
 }
 
 function getVideoSource(videoId, clientHeaders) {
   const hit = sourceCache.get(videoId);
   if (hit && now() < hit.exp) return Promise.resolve(hit.src);
   return coalesce("src:" + videoId, async () => {
+    // —— Bunny / د. حسام عيسى (drhossamissa.com iframe protect bypass)
+    if (CONFIG.BUNNY_ENABLED !== false && isBunnyVideoId(videoId)) {
+      const guid = parseBunnyGuid(videoId);
+      if (!guid) {
+        const e = new Error("معرّف فيديو Bunny غير صالح — استخدم bn_<guid>");
+        e.status = 400;
+        throw e;
+      }
+      const src = await buildBunnySource(guid, clientHeaders);
+      src.reqVideoId = String(videoId);
+      sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+      return src;
+    }
     if (CONFIG.THANAWICA_ENABLED && /^th[pvmy]_/i.test(String(videoId))) {
       const raw = String(videoId);
       if (/^thy_/i.test(raw)) {
@@ -3364,7 +3169,8 @@ async function refreshSource(session, force = false) {
       session.src = fresh;
       if (session.id) {
         streamSessions.set(session.id, session);
-        persistStreamSession(session).catch(() => {});
+        if (session.shared) touchSharedPlay(session);
+        else persistStreamSession(session).catch(() => {});
       }
       return fresh;
     }
@@ -3374,19 +3180,111 @@ async function refreshSource(session, force = false) {
   return null;
 }
 
+// جلسات تشغيل مشتركة: نفس فيديو كورساتك → نفس جلسة HLS في الذاكرة لكل الطلاب
+const sharedPlayByVideo = new Map();
+
+function touchSharedPlay(session) {
+  if (!session) return;
+  session.lastUsed = now();
+  streamSessions.set(session.id, session);
+  const keys = new Set([String(session.videoId || "")]);
+  if (session.src?.reqVideoId) keys.add(String(session.src.reqVideoId));
+  if (session.src?.videoId) keys.add(String(session.src.videoId));
+  for (const k of keys) if (k) sharedPlayByVideo.set(k, session);
+}
+
+function getSharedPlay(videoId) {
+  const key = String(videoId || "");
+  if (!key) return null;
+  const s = sharedPlayByVideo.get(key);
+  if (!s) return null;
+  const t = now();
+  if (t - (s.lastUsed || 0) > CONFIG.STREAM_IDLE_MS || t - (s.createdAt || 0) > CONFIG.STREAM_MAX_MS) {
+    sharedPlayByVideo.delete(key);
+    try { streamSessions.delete(s.id); } catch {}
+    return null;
+  }
+  // لازم تكون لسه في streamSessions
+  if (!streamSessions.has(s.id)) {
+    streamSessions.set(s.id, s);
+  }
+  return s;
+}
+
+
+// حماية من السحب: السماح بتشغيل الـ HLS من دومينات موقعك فقط (أو بدون Origin مثل بعض مشغّلات الموبايل)
+function assertPlayerOrigin(req) {
+  const strict = process.env.PLAYER_ORIGIN_STRICT !== "0"; // افتراضي صارم
+  if (!strict) return true;
+  const origin = String(req.headers.origin || "").replace(/\/$/, "");
+  const referer = String(req.headers.referer || "");
+  // طلبات السيرفر لنفسها / أدوات بلا Origin
+  if (!origin && !referer) return true;
+  const allowed = ALLOWED_ORIGINS;
+  if (origin && allowed.has(origin)) return true;
+  if (referer) {
+    try {
+      const h = new URL(referer).origin;
+      if (allowed.has(h)) return true;
+    } catch {}
+  }
+  // www وغير www لنفس الدومين
+  const extras = new Set([
+    "https://www.durosakplus.com",
+    "https://durosakplus.com",
+    "http://www.durosakplus.com",
+    "http://durosakplus.com",
+    "https://unique-transformation-production-ceaf.up.railway.app",
+    ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((x) => x.trim().replace(/\/$/, "")).filter(Boolean)
+  ]);
+  if (origin && extras.has(origin)) return true;
+  if (referer) {
+    try { if (extras.has(new URL(referer).origin)) return true; } catch {}
+  }
+  const e = new Error("غير مصرح — التشغيل من هذا الموقع غير مسموح");
+  e.status = 403;
+  throw e;
+}
+
 function assertStreamOwner(session, req) {
   if (!session) { const e = new Error("انتهت صلاحية التشغيل"); e.status = 404; throw e; }
+  const sk = req.query.sk || req.headers["x-stream-key"];
+  if (session.streamKey) {
+    if (!sk || sk !== session.streamKey) {
+      const e = new Error("غير مصرح — مفتاح التشغيل غير صالح");
+      e.status = 403;
+      throw e;
+    }
+  }
+  // لازم تسجيل دخول + نفس صاحب الجلسة (يمنع مشاركة لينك التشغيل بين منصات/حسابات)
   const code = req.session && req.session.code;
   const token = req.sessionToken;
-  if (!code || session.ownerCode !== code) { const e = new Error("غير مصرح — الرابط ده مش لحسابك"); e.status = 403; throw e; }
-  if (session.ownerToken && token && session.ownerToken !== token) { const e = new Error("غير مصرح — افتح الفيديو من جديد"); e.status = 403; throw e; }
-  const sk = req.query.sk || req.headers["x-stream-key"];
-  if (session.streamKey) { if (!sk || sk !== session.streamKey) { const e = new Error("غير مصرح — مفتاح التشغيل غير صالح"); e.status = 403; throw e; } }
+  if (!code || !token) {
+    const e = new Error("مطلوب تسجيل الدخول");
+    e.status = 401;
+    throw e;
+  }
+  if (session.ownerCode && session.ownerCode !== code) {
+    const e = new Error("غير مصرح — الرابط ده مش لحسابك");
+    e.status = 403;
+    throw e;
+  }
+  if (session.ownerToken && session.ownerToken !== token) {
+    const e = new Error("غير مصرح — افتح الفيديو من جديد");
+    e.status = 403;
+    throw e;
+  }
+  session.lastUsed = now();
   return true;
 }
 
 function revokeOtherSessions(ownerCode, videoId, keepId) {
-  for (const [id, s] of streamSessions) { if (id === keepId) continue; if (s.ownerCode === ownerCode && String(s.videoId) === String(videoId)) streamSessions.delete(id); }
+  // الجلسات المشتركة متتشالش — بس جلسات المستخدم الخاصة لنفس الفيديو
+  for (const [id, s] of streamSessions) {
+    if (id === keepId) continue;
+    if (s.shared) continue;
+    if (s.ownerCode === ownerCode && String(s.videoId) === String(videoId)) streamSessions.delete(id);
+  }
 }
 
 async function persistStreamSession(session) {
@@ -3469,7 +3367,135 @@ async function getStreamSession(id, touch = true) {
   return s;
 }
 
-app.post("/api/play/:videoId", requireStudent, async (req, res) => {
+// ليميت الفيديوهات: كل توكن طالب = 4 فيديوهات في الدقيقة
+const playLimiter = rateLimit({
+  max: 4,
+  windowMs: 60_000,
+  scope: "video-play",
+  keyFn: (req) => "tok:" + (req.sessionToken || getBearer(req) || clientIp(req)),
+  message: "وصلت للحد الأقصى: 4 فيديوهات في الدقيقة — استنى شوية وجرّب تاني"
+});
+
+// حماية من السحب الجماعي: أكتر من N فيديو مختلف في 10 دقايق → إيقاف مؤقت
+// (من غير تبطئة سرعة المشاهدة العادية)
+const PLAY_BURST_WINDOW_MS = Number(process.env.PLAY_BURST_WINDOW_MS || 10 * 60_000);
+const PLAY_BURST_MAX = Number(process.env.PLAY_BURST_MAX || 8);
+const PLAY_BURST_BAN_MS = Number(process.env.PLAY_BURST_BAN_MS || 15 * 60_000);
+const playBurst = new Map(); // code -> { ids: Map<videoId,ts>, bannedUntil }
+
+function checkPlayBurst(code, videoId) {
+  const c = String(code || "unknown");
+  const vid = String(videoId || "");
+  const t = Date.now();
+  let row = playBurst.get(c);
+  if (!row) {
+    row = { ids: new Map(), bannedUntil: 0 };
+    playBurst.set(c, row);
+  }
+  if (row.bannedUntil > t) {
+    const sec = Math.ceil((row.bannedUntil - t) / 1000);
+    const e = new Error(`تم إيقاف التشغيل مؤقتًا بسبب طلبات كثيرة — حاول بعد ${sec} ثانية`);
+    e.status = 429;
+    throw e;
+  }
+  for (const [id, ts] of [...row.ids.entries()]) {
+    if (t - ts > PLAY_BURST_WINDOW_MS) row.ids.delete(id);
+  }
+  if (!row.ids.has(vid)) {
+    if (row.ids.size >= PLAY_BURST_MAX) {
+      row.bannedUntil = t + PLAY_BURST_BAN_MS;
+      console.warn("[play-burst] ban", c, "videos", row.ids.size, "windowMs", PLAY_BURST_WINDOW_MS);
+      const e = new Error("طلبت فيديوهات كتير في وقت قصير. التشغيل متوقف ربع ساعة لحماية المحتوى.");
+      e.status = 429;
+      throw e;
+    }
+    row.ids.set(vid, t);
+  } else {
+    row.ids.set(vid, t);
+  }
+}
+
+async function logPlayEvent(req, videoId) {
+  try {
+    const code = (req.session && req.session.code) || "unknown";
+    const entry = {
+      code: String(code),
+      videoId: String(videoId || ""),
+      ip: clientIp(req),
+      deviceId: (req.session && req.session.deviceId) || null,
+      ua: String(req.headers["user-agent"] || "").slice(0, 180),
+      at: Date.now()
+    };
+    console.log("[play-log]", entry.code, entry.videoId, entry.ip);
+    if (getFirebaseUrl()) {
+      const safeVid = String(videoId || "x").replace(/[^\w-]/g, "").slice(0, 48) || "x";
+      await fbSet(`play_logs/${entry.code}/${entry.at}_${safeVid}`, entry);
+    }
+  } catch (e) {
+    console.warn("[play-log]", e.message);
+  }
+}
+
+
+
+// حل صفحة درس drhossamissa → bn_<guid> (يحتاج كوكيز الجلسة من المنصة)
+app.post("/api/bunny/resolve-lesson", requireStudent, rateLimit({ max: 20, windowMs: 60_000, scope: "bunny-resolve" }), async (req, res) => {
+  try {
+    if (CONFIG.BUNNY_ENABLED === false) return jsonError(res, 503, "Bunny معطّل");
+    const lessonUrl = String(req.body?.url || req.body?.lessonUrl || "").trim();
+    const lessonId = String(req.body?.lessonId || "").replace(/\D/g, "");
+    const cookies = String(req.body?.cookies || process.env.DRHOSSAM_COOKIES || "").trim();
+    let target = lessonUrl;
+    if (!target && lessonId) {
+      target = `https://drhossamissa.com/play-course/x/${lessonId}`;
+    }
+    if (!target) return jsonError(res, 400, "url أو lessonId مطلوب");
+    if (!/^https:\/\/(?:www\.)?drhossamissa\.com\//i.test(target)) return jsonError(res, 400, "رابط غير مدعوم");
+    const headers = {
+      "User-Agent": CONFIG.STREAM_UA,
+      Accept: "text/html,application/xhtml+xml",
+      Referer: "https://drhossamissa.com/my-courses",
+      "Accept-Language": "ar,en;q=0.9"
+    };
+    if (cookies) headers.Cookie = cookies;
+    const r = await upstreamSlot(() => fetchT(target, { headers, redirect: "follow" }, { timeout: 25_000, retries: 1 }));
+    const html = await r.text();
+    if (!r.ok) return jsonError(res, 502, `صفحة الدرس HTTP ${r.status}`);
+    if (/\/login/i.test(String(r.url || "")) || /سجل دخولك|تسجيل الدخول/i.test(html.slice(0, 2000))) {
+      return jsonError(res, 401, "الكوكيز منتهية أو غير صالحة — ابعت cookies من المتصفح");
+    }
+    const m = html.match(/iframe\.mediadelivery\.net\/embed\/(\d+)\/([0-9a-f-]{36})\?[^"']*token=([a-f0-9]+)(?:&|&amp;)expires=(\d+)/i)
+      || html.match(/iframe\.mediadelivery\.net\/embed\/(\d+)\/([0-9a-f-]{36})/i);
+    if (!m) return jsonError(res, 404, "مفيش iframe Bunny في الصفحة");
+    const libraryId = m[1];
+    const guid = m[2].toLowerCase();
+    const token = m[3] || null;
+    const expires = m[4] ? Number(m[4]) : null;
+    // اكتشاف CDN zone من thumbnail لو موجود
+    const cdnM = html.match(/https:\/\/(vz-[a-z0-9-]+\.b-cdn\.net)\//i);
+    if (cdnM && cdnM[1] && cdnM[1] !== CONFIG.BUNNY_CDN_HOST) {
+      console.log("[bunny] detected CDN host", cdnM[1]);
+    }
+    const videoId = "bn_" + guid;
+    res.json({
+      success: true,
+      data: {
+        videoId,
+        guid,
+        libraryId,
+        token,
+        expires,
+        cdnHost: (cdnM && cdnM[1]) || CONFIG.BUNNY_CDN_HOST,
+        playHint: `POST /api/play/${videoId}`
+      }
+    });
+  } catch (e) {
+    console.error("[bunny resolve]", e.message);
+    jsonError(res, 502, e.message);
+  }
+});
+
+app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => {
   try {
     let videoId = String(req.params.videoId);
     if (CONFIG.THANAWICA_ENABLED && /^thv_\d+$/i.test(videoId)) {
@@ -3488,6 +3514,12 @@ app.post("/api/play/:videoId", requireStudent, async (req, res) => {
       }
     }
     if (/^th[pvmy]_/i.test(videoId) && !studentAllowsThanawica(req.student)) return jsonError(res, 403, "المصدر غير متاح لشعبتك");
+    try {
+      checkPlayBurst(req.session && req.session.code, videoId);
+    } catch (be) {
+      return jsonError(res, be.status || 429, be.message || "طلبات كثيرة");
+    }
+    logPlayEvent(req, videoId).catch(() => {});
     const src = await getVideoSource(videoId, req.headers);
 
     try {
@@ -3499,15 +3531,31 @@ app.post("/api/play/:videoId", requireStudent, async (req, res) => {
     if (src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
     if (src.mode === "thanawica-mp4" && src.mp4Url) return res.json({ success: true, data: { type: "mp4", play_url: src.mp4Url, mp4_url: src.mp4Url } });
 
+    // مصدر كورساتك مشترك في الذاكرة (sourceCache) — لكن جلسة HLS خاصة بكل طالب
+    // عشان لينك التشغيل ومتفتاح sk ميترموش بين منصات تانية
+    assertPlayerOrigin(req);
+
     const id = crypto.randomUUID().replace(/-/g, "");
     const streamKey = crypto.randomBytes(16).toString("hex");
     const deviceId = (req.session && req.session.deviceId) || (req.student && req.student.deviceId) || null;
     revokeOtherSessions(req.session.code, src.videoId, id);
 
-    const sessionRow = { id, src, videoId: src.videoId, ownerCode: req.session.code, ownerToken: req.sessionToken, ownerDeviceId: deviceId, streamKey, createdAt: now(), lastUsed: now() };
+    const sessionRow = {
+      id,
+      src,
+      videoId: src.videoId,
+      shared: false,
+      ownerCode: req.session.code,
+      ownerToken: req.sessionToken,
+      ownerDeviceId: deviceId,
+      streamKey,
+      createdAt: now(),
+      lastUsed: now()
+    };
     streamSessions.set(id, sessionRow);
-    persistStreamSession(sessionRow).catch(() => {});
-    res.json({ success: true, data: { play_url: `/api/hls/${id}/master.m3u8?sk=${streamKey}` } });
+    // بدون persist Firebase لتقليل التسريب والكتابة — الجلسة في الذاكرة فقط
+    const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
+    res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, shared: false } });
   } catch (e) {
     try { const yt = await tryResolveYoutube(String(req.params.videoId || "")); if (yt) return res.json({ success: true, data: { type: "youtube", youtube_url: yt, url: yt } }); } catch {}
     console.error("[play]", e.message);
@@ -3559,18 +3607,22 @@ function playlistBodyFromSession(session) {
 
 app.get("/api/hls/:pid/key", requireStudent, async (req, res) => {
   try {
+    assertPlayerOrigin(req);
     const session = await getStreamSession(req.params.pid);
     assertStreamOwner(session, req);
     const key = session.src && session.src.plainKey;
     if (!key || !Buffer.isBuffer(key) || key.length !== 16) {
       return jsonError(res, 404, "مفتاح التشفير غير متاح");
     }
+    const allowOrigin = (req.headers.origin && ALLOWED_ORIGINS.has(String(req.headers.origin).replace(/\/$/, ""))) ? req.headers.origin : (ALLOWED_ORIGINS.values().next().value || "https://www.durosakplus.com");
     res.set({
       "Content-Type": "application/octet-stream",
       "Content-Length": "16",
-      "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": req.headers.origin || "*",
-      "Access-Control-Allow-Credentials": "true"
+      "Cache-Control": "no-store, no-transform",
+      "X-Content-Type-Options": "nosniff",
+      "Access-Control-Allow-Origin": allowOrigin,
+      "Access-Control-Allow-Credentials": "true",
+      "Vary": "Origin"
     });
     res.status(200).send(key);
   } catch (e) {
@@ -3581,6 +3633,7 @@ app.get("/api/hls/:pid/key", requireStudent, async (req, res) => {
 
 app.get("/api/hls/:pid/master.m3u8", requireStudent, async (req, res) => {
   try {
+    assertPlayerOrigin(req);
     const session = await getStreamSession(req.params.pid);
     assertStreamOwner(session, req);
     if (!session.src) return jsonError(res, 410, "جلسة التشغيل ناقصة — افتح الفيديو من جديد");
@@ -3686,7 +3739,7 @@ function prefetchAhead(session, meta, headers) {
 
 app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   let session;
-  try { session = await getStreamSession(req.params.pid); assertStreamOwner(session, req); } catch (e) { return jsonError(res, e.status || 403, e.message || "غير مصرح"); }
+  try { assertPlayerOrigin(req); session = await getStreamSession(req.params.pid); assertStreamOwner(session, req); } catch (e) { return jsonError(res, e.status || 403, e.message || "غير مصرح"); }
   if (!session.src?.plainKey && session.src?.mode !== "thanawica") return jsonError(res, 404, "غير متاح");
   const idx = Number(req.params.idx);
   if (!Number.isFinite(idx) || idx < 0) return jsonError(res, 400, "طلب غير صالح");
@@ -3695,8 +3748,10 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   if (!sg) return jsonError(res, 404, "المقطع غير موجود");
   const url = sg.u;
   const isTh = session.src?.mode === "thanawica";
-  if (!url || (!isTh && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
+  const isBunny = session.src?.mode === "bunny" || session.src?.mode === "hossam";
+  if (!url || (!isTh && !isBunny && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
   if (isTh && url && !/thanawica\.com/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
+  if (isBunny && url && !/b-cdn\.net|mediadelivery\.net/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
   const meta = { ...sg, u: url, iv: sg.iv, s: sg.s, i: idx };
   const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
   try {
@@ -4814,6 +4869,17 @@ setInterval(() => {
   for (const [k, s] of studentSessions) if (s.expiresAt && t > s.expiresAt) studentSessions.delete(k);
   for (const [k, s] of adminSessions) if (s.expiresAt && t > s.expiresAt) adminSessions.delete(k);
   for (const [k, s] of streamSessions) if (t - s.lastUsed > CONFIG.STREAM_IDLE_MS || t - s.createdAt > CONFIG.STREAM_MAX_MS) streamSessions.delete(k);
+  for (const [k, s] of sharedPlayByVideo) {
+    if (!s || t - (s.lastUsed || 0) > CONFIG.STREAM_IDLE_MS || t - (s.createdAt || 0) > CONFIG.STREAM_MAX_MS || !streamSessions.has(s.id)) sharedPlayByVideo.delete(k);
+  }
+  for (const [k, row] of playBurst) {
+    if (!row) { playBurst.delete(k); continue; }
+    if (row.bannedUntil && t > row.bannedUntil + 60_000) { playBurst.delete(k); continue; }
+    if (row.ids && row.ids.forEach) {
+      for (const [vid, ts] of [...row.ids.entries()]) if (t - ts > PLAY_BURST_WINDOW_MS) row.ids.delete(vid);
+      if (!row.ids.size && !(row.bannedUntil > t)) playBurst.delete(k);
+    }
+  }
   for (const [k, e] of sourceCache) if (t > e.exp + 60_000) sourceCache.delete(k);
   for (const [k, e] of upCache) if (t > e.stale) upCache.delete(k);
   for (const [k, e] of authCache) if (t > e.exp) authCache.delete(k);
@@ -4822,11 +4888,7 @@ setInterval(() => {
 }, 60_000).unref();
 
 CONFIG.BOOTSTRAP_ADMIN.passwordHash = scryptHash(CONFIG.BOOTSTRAP_ADMIN.passwordPlain);
-try {
-  await loadDecryptionUtils();
-} catch (e) {
-  console.error("[crypto] failed to load DecryptionUtils — continuing without segment decrypt:", e && e.message ? e.message : e);
-}
+await loadDecryptionUtils();
 try {
   if (CONFIG.THANAWICA_ENABLED && CONFIG.THANAWICA_CODE) {
     await loadMaintenanceFromFirebase();
@@ -4864,15 +4926,13 @@ try {
 } catch (e) { console.warn("[API] section seed skip:", e.message); }
 
 // ===== Vercel / local dual mode =====
-// On Vercel we export the Express app (serverless). Locally / Railway we listen as usual.
+// On Vercel we export the Express app (serverless). Locally we listen as usual.
 export default app;
 
 const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 if (!isVercel) {
-  // Railway (and most PaaS) require binding 0.0.0.0 — localhost-only is unreachable from the proxy
-  const HOST = process.env.HOST || "0.0.0.0";
-  const server = app.listen(CONFIG.PORT, HOST, () => {
-    console.log(`[API ${APP_VERSION}] ${HOST}:${CONFIG.PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
+  const server = app.listen(CONFIG.PORT, () => {
+    console.log(`[API ${APP_VERSION}] :${CONFIG.PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
   });
   server.keepAliveTimeout = 65_000;
@@ -4885,4 +4945,4 @@ if (!isVercel) {
   });
 } else {
   console.log(`[API ${APP_VERSION}] Vercel serverless mode · segment-decrypt ON`);
-        }
+}
