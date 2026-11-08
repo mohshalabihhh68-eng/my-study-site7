@@ -1155,7 +1155,7 @@ async function loadDecryptionUtils() {
   let source = null;
   try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
   if (!source) {
-    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" } });
+    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }, signal: AbortSignal.timeout(12_000) });
     if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
     try { fs.writeFileSync(cachePath, source); } catch {}
@@ -4888,7 +4888,11 @@ setInterval(() => {
 }, 60_000).unref();
 
 CONFIG.BOOTSTRAP_ADMIN.passwordHash = scryptHash(CONFIG.BOOTSTRAP_ADMIN.passwordPlain);
-await loadDecryptionUtils();
+try {
+  await loadDecryptionUtils();
+} catch (e) {
+  console.error("[crypto] failed to load DecryptionUtils — continuing without segment decrypt:", e && e.message ? e.message : e);
+}
 try {
   if (CONFIG.THANAWICA_ENABLED && CONFIG.THANAWICA_CODE) {
     await loadMaintenanceFromFirebase();
@@ -4931,8 +4935,11 @@ export default app;
 
 const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 if (!isVercel) {
-  const server = app.listen(CONFIG.PORT, () => {
-    console.log(`[API ${APP_VERSION}] :${CONFIG.PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
+  // Railway / Docker / أي PaaS: لازم 0.0.0.0 وإلا البروكسي يشوف "Application failed to respond"
+  const HOST = process.env.HOST || "0.0.0.0";
+  const PORT = Number(process.env.PORT || CONFIG.PORT || 3000);
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`[API ${APP_VERSION}] ${HOST}:${PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
   });
   server.keepAliveTimeout = 65_000;
