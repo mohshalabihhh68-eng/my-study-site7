@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.13 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.14 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.13";
+const APP_VERSION = "v1.7.14";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -490,7 +490,7 @@ const CONFIG = {
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
   STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
-  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
+  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1",
   FIREBASE: (process.env.FIREBASE_URL || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, ""),
   BOOTSTRAP_ADMIN: {
     username: process.env.ADMIN_USER || "admin",
@@ -1154,8 +1154,17 @@ async function loadDecryptionUtils() {
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
   let source = null;
   try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
-  if (!source) {
-    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }, signal: AbortSignal.timeout(12_000) });
+  // نظّف أي سطر هيدر مش JS (زي رابط الملف)
+  if (source) {
+    const lines = source.split(/\r?\n/);
+    let i = 0;
+    while (i < lines.length && lines[i] && !/^\s*(function|\(function|!function|var |const |let |\/\*|\/\/)/.test(lines[i])) i++;
+    if (i > 0) source = lines.slice(i).join("\n");
+    const cssIdx = source.indexOf("/* streamweave:embedded-css");
+    if (cssIdx > 0) source = source.slice(0, cssIdx);
+  }
+  if (!source || source.length < 1000) {
+    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }, signal: AbortSignal.timeout(15_000) });
     if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
     try { fs.writeFileSync(cachePath, source); } catch {}
@@ -1164,37 +1173,91 @@ async function loadDecryptionUtils() {
   const sandbox = {
     window: {}, self: {}, globalThis: {}, global: {},
     console: { log() {}, warn() {}, error() {}, info() {} },
-    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer,
+    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, Int8Array, Uint16Array, Int16Array, Uint32Array, Int32Array, Float32Array, Float64Array, DataView,
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
     setTimeout, clearTimeout, setInterval, clearInterval,
-    Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, Symbol, Proxy, Reflect,
-    document: { createElement: () => ({ style: {}, setAttribute() {}, appendChild() {}, remove() {} }), head: { appendChild() {} }, body: { appendChild() {} }, querySelector: () => null, addEventListener() {} },
-    navigator: { userAgent: "Node" }, location: { href: "https://coursatk.online/" },
-    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
-    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
+    Promise, Error, TypeError, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Function, RegExp, parseInt, parseFloat, isNaN, Infinity, NaN, undefined,
+    document: {
+      createElement: () => ({ style: {}, setAttribute() {}, getAttribute() { return null; }, appendChild() {}, remove() {}, classList: { add() {}, remove() {} }, addEventListener() {}, removeEventListener() {} }),
+      head: { appendChild() {} }, body: { appendChild() {} }, documentElement: { style: {} },
+      querySelector: () => null, querySelectorAll: () => [], getElementById: () => null, addEventListener() {}, cookie: "", readyState: "complete"
+    },
+    navigator: { userAgent: "Mozilla/5.0", language: "en", mediaDevices: {} },
+    location: { href: "https://coursatk.online/", hostname: "coursatk.online", protocol: "https:", origin: "https://coursatk.online", pathname: "/", search: "", hash: "" },
+    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class { static isTypeSupported() { return true; } },
+    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {}, canParse: () => true },
     Blob: class { constructor(p) { this.p = p; } },
-    fetch: async () => ({ ok: false }),
-    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
+    fetch: async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) }),
+    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} addEventListener() {} },
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    matchMedia: () => ({ matches: false, addListener() {}, addEventListener() {} }),
+    requestAnimationFrame: (cb) => setTimeout(cb, 0),
+    performance: { now: () => Date.now() },
+    EventTarget: class { addEventListener() {} removeEventListener() {} dispatchEvent() { return true; } },
+    Event: class { constructor(t) { this.type = t; } },
+    CustomEvent: class {},
+    Worker: class {},
+    WebAssembly
   };
   sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox; sandbox.global = sandbox;
-  vm.runInNewContext(source, sandbox, { timeout: 8000 });
-  const du = sandbox.DecryptionUtils;
-  if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
-  decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-  console.log("[crypto] ready");
+  sandbox.top = sandbox; sandbox.parent = sandbox;
+  try {
+    vm.runInNewContext(source, sandbox, { timeout: 12_000 });
+  } catch (e) {
+    console.warn("[crypto] player.js vm partial/fail:", e && e.message ? e.message : e);
+  }
+  // ابحث عن DecryptionUtils بأي اسم
+  let du = sandbox.DecryptionUtils || sandbox.decryptionUtils || null;
+  if (!du?.decryptPlaybackKey) {
+    for (const k of Object.getOwnPropertyNames(sandbox)) {
+      try {
+        const v = sandbox[k];
+        if (v && typeof v === "object" && typeof v.decryptPlaybackKey === "function") { du = v; break; }
+        if (v && typeof v === "function" && k.toLowerCase().includes("decrypt") && v.length >= 1) {
+          // function itself
+        }
+      } catch {}
+    }
+  }
+  if (du?.decryptPlaybackKey) {
+    decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
+    console.log("[crypto] ready (DecryptionUtils)");
+  } else {
+    decryptPlaybackKeyFn = null;
+    console.warn("[crypto] DecryptionUtils غير متاح في player.js الجديد — استخدام fallback keys (plain/CDN)");
+  }
 }
 
 async function unwrapKey(wrappedBuf, videoId) {
-  if (!decryptPlaybackKeyFn) throw new Error("crypto not loaded");
-  const wrapped = Buffer.isBuffer(wrappedBuf) ? new Uint8Array(wrappedBuf) : new Uint8Array(wrappedBuf);
-  if (wrapped.byteLength === 16) return Buffer.from(wrapped);
-  const result = await decryptPlaybackKeyFn(wrapped, String(videoId));
-  const key = result?.key;
-  if (!key) throw new Error("empty key");
-  const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
-  if (aes.length !== 16) throw new Error(`key len ${aes.length}`);
-  return aes;
+  const wrapped = Buffer.isBuffer(wrappedBuf) ? Buffer.from(wrappedBuf) : Buffer.from(wrappedBuf);
+  if (wrapped.length === 16) return wrapped;
+  // 1) stream-weave decryptPlaybackKey لو اتحمل
+  if (decryptPlaybackKeyFn) {
+    try {
+      const result = await decryptPlaybackKeyFn(new Uint8Array(wrapped), String(videoId));
+      const key = result?.key;
+      if (key) {
+        const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+        if (aes.length === 16) return aes;
+      }
+    } catch (e) {
+      console.warn("[unwrapKey] decryptPlaybackKey failed:", e.message);
+    }
+  }
+  // 2) CDN-style blob (pbkdf2 + aes-gcm)
+  try {
+    return await unwrapCdnKey(wrapped);
+  } catch (e) {
+    console.warn("[unwrapKey] CDN unwrap failed:", e.message);
+  }
+  // 3) لو المفتاح hex نصّي 32 حرف
+  try {
+    const s = wrapped.toString("utf8").trim();
+    if (/^[0-9a-fA-F]{32}$/.test(s)) return Buffer.from(s, "hex");
+  } catch {}
+  throw new Error("فشل فك مفتاح التشغيل — حدّث player.stream-weave.cache.js أو جرّب فيديو تاني");
 }
 
 const CDN_KEY_PASSWORD = "pQDKIpCkQxsulP";
@@ -2741,6 +2804,25 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
 
 
 // ==================== Bunny Stream (د. حسام عيسى) — فك حماية iframe/Referer + AES-128 ====================
+// كتالوج أولي — د. حسام عيسى (Bunny). أضف guids بعد resolve-lesson
+const HOSSAM_CATALOG = {
+  teacher: "د. حسام عيسى",
+  subject: "أحياء",
+  platform: "drhossamissa.com",
+  libraryId: "396717",
+  courses: [
+    {
+      id: "hormones-workshop",
+      name: "ورشة الهرمونات",
+      courseId: 9,
+      lessons: [
+        { lessonId: 120, title: "ورشة الهرمونات — 11_133", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" }
+        // أضف باقي الدروس بعد POST /api/bunny/resolve-lesson لكل lessonId
+      ]
+    }
+  ]
+};
+
 function isBunnyVideoId(id) {
   return /^(?:bn|hos|hossam)_/i.test(String(id || ""));
 }
@@ -2985,11 +3067,23 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
         if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
-        if (src.mode === "cdn" || String(uri).includes("/user/auth/")) src.plainKey = await unwrapCdnKey(wrapped);
-        else src.plainKey = await unwrapKey(wrapped, src.videoId);
+        try {
+          if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
+            src.plainKey = await unwrapCdnKey(wrapped);
+          } else {
+            src.plainKey = await unwrapKey(wrapped, src.videoId);
+          }
+        } catch (ke) {
+          // fallback عكسي
+          try {
+            src.plainKey = src.mode === "cdn" ? await unwrapKey(wrapped, src.videoId) : await unwrapCdnKey(wrapped);
+          } catch (ke2) {
+            throw new Error(`Key unwrap failed: ${ke.message}`);
+          }
+        }
         src.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} via stream-weave API`);
+        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${src.plainKey?.length}`);
       }
       continue;
     }
@@ -3439,6 +3533,25 @@ async function logPlayEvent(req, videoId) {
 
 
 // حل صفحة درس drhossamissa → bn_<guid> (يحتاج كوكيز الجلسة من المنصة)
+app.get("/api/bunny/catalog", requireStudent, (_req, res) => {
+  res.json({ success: true, data: HOSSAM_CATALOG });
+});
+
+app.get("/api/public/hossam", rateLimit({ max: 60, windowMs: 60_000, scope: "hossam-pub" }), (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      teacher: HOSSAM_CATALOG.teacher,
+      subject: HOSSAM_CATALOG.subject,
+      courses: (HOSSAM_CATALOG.courses || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        lessons: (c.lessons || []).map((l) => ({ lessonId: l.lessonId, title: l.title, videoId: l.videoId }))
+      }))
+    }
+  });
+});
+
 app.post("/api/bunny/resolve-lesson", requireStudent, rateLimit({ max: 20, windowMs: 60_000, scope: "bunny-resolve" }), async (req, res) => {
   try {
     if (CONFIG.BUNNY_ENABLED === false) return jsonError(res, 503, "Bunny معطّل");
