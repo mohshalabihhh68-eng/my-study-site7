@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.15 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.16 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -46,7 +46,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.15";
+const APP_VERSION = "v1.7.16";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -76,8 +76,18 @@ app.set("trust proxy", 1);
 const ALLOWED_ORIGINS = new Set([
   "https://www.durosakplus.com",
   "https://durosakplus.com",
+  "https://thanawya-club.up.railway.app",
+  "https://thanawya-club.vercel.app",
   ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
+// Railway/Vercel public domain من البيئة
+for (const envKey of ["RAILWAY_PUBLIC_DOMAIN", "RAILWAY_STATIC_URL", "VERCEL_URL"]) {
+  const v = String(process.env[envKey] || "").trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
+  if (v) {
+    ALLOWED_ORIGINS.add("https://" + v);
+    ALLOWED_ORIGINS.add("http://" + v);
+  }
+}
 const CORS_STRICT = process.env.CORS_STRICT === "1";
 app.use(cors({
   credentials: true,
@@ -3235,47 +3245,78 @@ async function buildVideoSource(videoId, clientHeaders) {
     if (ytUrl) return { reqVideoId: videoId, videoId: String(videoId), mode: "coursatk-youtube", youtubeUrl: ytUrl, streamUrl: ytUrl, plainKey: Buffer.from("youtube"), segs: [], playlist: "", mediaSeq: 0, allowedHosts: new Set(), createdAt: now() };
   } catch (e) { console.warn("[platforms youtube]", e.message); }
 
+  // اقرأ المنصات المتاحة — لو CDN فقط نتخطى weave
+  let platformNames = [];
+  try {
+    const pdata = await upstreamJson(`/video/${encodeURIComponent(videoId)}/platforms`);
+    const plats = (pdata && pdata.data && pdata.data.platforms) || pdata.platforms || [];
+    platformNames = (Array.isArray(plats) ? plats : []).map((p) => String(p?.name || p || "").toLowerCase());
+  } catch (e) { console.warn("[platforms]", e.message); }
+  const preferCdn = platformNames.includes("cdn") && !platformNames.includes("stream-weave") && !platformNames.includes("weave");
+  const preferYoutube = platformNames.includes("youtube") && !platformNames.includes("cdn") && !platformNames.includes("stream-weave");
+
   let mode = null; let streamUrl = null; let sessionToken = null; let resolvedVideoId = videoId; let probeText = null;
   const errors = [];
 
-  // جلسة كورساتك/stream-weave — إعادة محاولة قوية ثم حفظ في الذاكرة (sourceCache)
-  {
+  async function tryCdn() {
+    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+    const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES }));
+    const masterText = await probe.text();
+    // كورساتك أحيانًا ترجع 404/426 والجسم m3u8 سليم
+    if (!masterText.includes("#EXTM3U")) throw new Error(`CDN ${probe.status} — playlist غير صالح`);
+    console.log(`[cdn] master ok status=${probe.status} video=${videoId}`);
+    return { mode: "cdn", streamUrl: masterUrl, sessionToken: upstreamTok, probeText: masterText, resolvedVideoId: String(videoId) };
+  }
+
+  async function tryWeave() {
     let lastWeaveErr = null;
     for (let attempt = 1; attempt <= UPSTREAM_FETCH_RETRIES; attempt++) {
       try {
         const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
         if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-        mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
-        lastWeaveErr = null;
-        break;
+        return {
+          mode: "weave",
+          sessionToken: data.data.token,
+          streamUrl: data.data.stream_url,
+          resolvedVideoId: String(data.data.video_id || videoId),
+          probeText: null
+        };
       } catch (e) {
         lastWeaveErr = e;
         console.warn(`[weave] play attempt ${attempt}/${UPSTREAM_FETCH_RETRIES}:`, e.message);
         if (attempt < UPSTREAM_FETCH_RETRIES) await delay(250 * attempt + Math.random() * 200);
       }
     }
-    if (lastWeaveErr) errors.push(lastWeaveErr.message);
+    throw lastWeaveErr || new Error("weave failed");
   }
 
-  if (!mode) {
+  // ترتيب المحاولة: CDN أولاً لو المنصة CDN؛ وإلا weave ثم CDN
+  const order = preferCdn ? ["cdn", "weave"] : ["weave", "cdn"];
+  for (const which of order) {
     try {
-      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-      const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES }));
-      const masterText = await probe.text();
-      // كورساتك أحيانًا ترجع 404/426 والجسم m3u8 سليم
-      if (!masterText.includes("#EXTM3U")) throw new Error(`CDN ${probe.status} — playlist غير صالح`);
-      mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
-      console.log(`[cdn] master ok status=${probe.status} video=${videoId}`);
-    } catch (e) { errors.push(e.message); }
+      const got = which === "cdn" ? await tryCdn() : await tryWeave();
+      mode = got.mode; streamUrl = got.streamUrl; sessionToken = got.sessionToken;
+      resolvedVideoId = got.resolvedVideoId; probeText = got.probeText;
+      // جهّز الـ playlist — لو فشل (426 وغيره) جرّب المنصة التالية
+      const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+      try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
+      allowedHosts.add("floravon.shop");
+      allowedHosts.add("floravon.online");
+      const src = { reqVideoId: videoId, videoId: resolvedVideoId, mode, token: sessionToken, streamUrl, allowedHosts, plainKey: null, defaultIv: null, mediaSeq: 0, segs: [], playlist: "", createdAt: now() };
+      try {
+        await buildPlaylist(src, probeText, clientHeaders);
+        return src;
+      } catch (bpErr) {
+        console.warn(`[${mode}] buildPlaylist failed:`, bpErr.message);
+        errors.push(`${mode}: ${bpErr.message}`);
+        mode = null; streamUrl = null; sessionToken = null; probeText = null;
+      }
+    } catch (e) {
+      errors.push(`${which}: ${e.message}`);
+    }
   }
 
-  if (!mode || !streamUrl || !sessionToken) throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
-
-  const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
-  try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
-  const src = { reqVideoId: videoId, videoId: resolvedVideoId, mode, token: sessionToken, streamUrl, allowedHosts, plainKey: null, defaultIv: null, mediaSeq: 0, segs: [], playlist: "", createdAt: now() };
-  await buildPlaylist(src, probeText, clientHeaders);
-  return src;
+  throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
 }
 
 function getVideoSource(videoId, clientHeaders) {
@@ -3394,32 +3435,37 @@ function getSharedPlay(videoId) {
 
 // حماية من السحب: السماح بتشغيل الـ HLS من دومينات موقعك فقط (أو بدون Origin مثل بعض مشغّلات الموبايل)
 function assertPlayerOrigin(req) {
-  const strict = process.env.PLAYER_ORIGIN_STRICT !== "0"; // افتراضي صارم
+  // PLAYER_ORIGIN_STRICT=0 يلغي الفحص بالكامل
+  const strict = process.env.PLAYER_ORIGIN_STRICT !== "0";
   if (!strict) return true;
   const origin = String(req.headers.origin || "").replace(/\/$/, "");
   const referer = String(req.headers.referer || "");
-  // طلبات السيرفر لنفسها / أدوات بلا Origin
   if (!origin && !referer) return true;
-  const allowed = ALLOWED_ORIGINS;
-  if (origin && allowed.has(origin)) return true;
+
+  // اسمح بنفس هوست السيرفر (Railway/Vercel/أي deploy)
+  let reqOrigin = "";
+  try {
+    const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+    const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim() || "https";
+    if (host) reqOrigin = (proto + "://" + host).replace(/\/$/, "");
+  } catch {}
+
+  const allowed = new Set(ALLOWED_ORIGINS);
+  if (reqOrigin) allowed.add(reqOrigin);
+  // أي *.up.railway.app / *.vercel.app
+  function isDeployHost(o) {
+    try {
+      const h = new URL(o).hostname;
+      return /\.up\.railway\.app$/i.test(h) || /\.railway\.app$/i.test(h) || /\.vercel\.app$/i.test(h);
+    } catch { return false; }
+  }
+
+  if (origin && (allowed.has(origin) || isDeployHost(origin))) return true;
   if (referer) {
     try {
       const h = new URL(referer).origin;
-      if (allowed.has(h)) return true;
+      if (allowed.has(h) || isDeployHost(h)) return true;
     } catch {}
-  }
-  // www وغير www لنفس الدومين
-  const extras = new Set([
-    "https://www.durosakplus.com",
-    "https://durosakplus.com",
-    "http://www.durosakplus.com",
-    "http://durosakplus.com",
-    "https://unique-transformation-production-ceaf.up.railway.app",
-    ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((x) => x.trim().replace(/\/$/, "")).filter(Boolean)
-  ]);
-  if (origin && extras.has(origin)) return true;
-  if (referer) {
-    try { if (extras.has(new URL(referer).origin)) return true; } catch {}
   }
   const e = new Error("غير مصرح — التشغيل من هذا الموقع غير مسموح");
   e.status = 403;
