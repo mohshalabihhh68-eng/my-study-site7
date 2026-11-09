@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.26 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.19 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.26";
+const APP_VERSION = "v1.7.19";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -492,8 +492,10 @@ const CONFIG = {
   STREAM_HOSTS: [
     "api.coursatk.online",
     "stream-weave.com",
+    "api.stream-weave.com",
     "floravon.online",
     "floravon.shop",
+    "suo2.floravon.online",
     "c-cdn.online",
     "thanawica.com",
     "www.thanawica.com",
@@ -512,7 +514,7 @@ const CONFIG = {
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
   STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
-  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1",
+  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=3.0.0",
   FIREBASE: (process.env.FIREBASE_URL || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, ""),
   BOOTSTRAP_ADMIN: {
     username: process.env.ADMIN_USER || "admin",
@@ -1299,227 +1301,122 @@ async function unwrapCdnKey(wrappedBuf) {
 }
 
 function decryptSegment(encrypted, key, iv) { const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv); return Buffer.concat([decipher.update(encrypted), decipher.final()]); }
-
-
-/** stream-weave v3 key package (86 bytes) → AES-128 content key */
-const SW_NE = [11,48,0,37,74,26,63,15,52,4,41,78,30,67,19,56,8,45,82,34,71,23,60,12,49,1,38,75,27,64,16,53,5,42,79,31,68,20,57,9,46,83,35,72,24,61,13,50,2,39,76,28,65,17,54,6,43,80,32,69,21,58,10,47,84,36,73,25,62,14,51,3,40,77,29,66,18,55,7,44,81,33,70,22,59];
-
-function swB64UrlToBuf(s) {
-  const t = String(s).replace(/-/g, "+").replace(/_/g, "/");
-  return Buffer.from(t, "base64");
-}
-function swBufToB64Url(buf) {
-  return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-async function swHmacSha256(keyBuf, ...parts) {
-  const h = crypto.createHmac("sha256", keyBuf);
-  for (const p of parts) {
-    if (p == null) continue;
-    h.update(typeof p === "string" ? Buffer.from(p) : Buffer.from(p));
-  }
-  return h.digest();
-}
-
-async function unwrapStreamWeaveKeyV3(packageBuf, keySeedB64, idA, idB, keyVersion = 3) {
-  if (!packageBuf || packageBuf.length !== 86) throw new Error("sw key package must be 86 bytes, got " + (packageBuf && packageBuf.length));
-  const seed = swB64UrlToBuf(keySeedB64);
-  if (seed.length !== 32) throw new Error("key_seed must decode to 32 bytes, got " + seed.length);
-  const n = String(idA || "").trim().toLowerCase();
-  const t = String(idB || "").trim().toLowerCase();
-  if (!n || !t) throw new Error("sw unwrap needs two ids");
-
-  const k = packageBuf.subarray(1);
-  const f = Buffer.alloc(85);
-  for (let i = 0; i < 85; i++) f[SW_NE[i]] = k[i];
-  const a = f.subarray(0, 16);
-  const s = f.subarray(16, 28); // 12-byte GCM iv
-  const O = f.subarray(28); // 57 bytes
-
-  // header check: payload[0] should equal 90 XOR a[0]
-  if (packageBuf[0] !== ((90 ^ a[0]) & 0xff)) {
-    // try soft continue — some versions may differ
-    console.warn("[sw-v3] header byte mismatch", packageBuf[0], (90 ^ a[0]) & 0xff);
-  }
-
-  const msgCandidates = [
-    `${n}|${t}|`,
-    `${n}|${t}|${keyVersion}`,
-    `${n}|${t}`,
-    `${t}|${n}|`,
-    `${t}|${n}|${keyVersion}`,
-    `${n}|${t}|${String(keyVersion).toLowerCase()}`,
-  ];
-
-  let lastErr = null;
-  for (const msg of msgCandidates) {
-    try {
-      // HMAC keySeed over msg (and optionally a)
-      let m = await swHmacSha256(seed, msg);
-      // Also try with a appended as in Je(..., a)
-      const m2 = await swHmacSha256(seed, msg, a);
-      for (const mm of [m, m2]) {
-        // PBKDF2: password=mm, salt=a, iter=1337, 32 bytes
-        const derived = crypto.pbkdf2Sync(mm, a, 1337, 32, "sha256");
-        // AES-256-GCM? or AES-128-GCM — key 32 bytes suggests AES-256-GCM
-        try {
-          const decipher = crypto.createDecipheriv("aes-256-gcm", derived, s);
-          // O = ciphertext (41) + tag (16) = 57
-          const ct = O.subarray(0, O.length - 16);
-          const tag = O.subarray(O.length - 16);
-          decipher.setAuthTag(tag);
-          const S = Buffer.concat([decipher.update(ct), decipher.final()]);
-          if (S.length !== 41) throw new Error("plain len " + S.length);
-          const h = Buffer.alloc(41);
-          for (let i = 0; i < 41; i++) h[i] = S[i] ^ a[i % 16];
-          // first 32 bytes are base64 of 16-byte key?
-          const b64 = h.subarray(0, 32).toString("utf8");
-          let key;
-          try {
-            key = Buffer.from(b64, "base64");
-          } catch {
-            key = h.subarray(0, 16);
-          }
-          if (key.length >= 16) {
-            console.log("[sw-v3] unwrap ok msg=", JSON.stringify(msg), "keylen", key.length);
-            return key.subarray(0, 16);
-          }
-        } catch (e) {
-          lastErr = e;
-        }
-        // try AES-128-GCM with first 16 of derived
-        try {
-          const decipher = crypto.createDecipheriv("aes-128-gcm", derived.subarray(0, 16), s);
-          const ct = O.subarray(0, O.length - 16);
-          const tag = O.subarray(O.length - 16);
-          decipher.setAuthTag(tag);
-          const S = Buffer.concat([decipher.update(ct), decipher.final()]);
-          if (S.length === 41) {
-            const h = Buffer.alloc(41);
-            for (let i = 0; i < 41; i++) h[i] = S[i] ^ a[i % 16];
-            const b64 = h.subarray(0, 32).toString("utf8");
-            let key;
-            try { key = Buffer.from(b64, "base64"); } catch { key = h.subarray(0, 16); }
-            if (key.length >= 16) {
-              console.log("[sw-v3] unwrap ok aes128 msg=", JSON.stringify(msg));
-              return key.subarray(0, 16);
-            }
-          }
-        } catch (e) {
-          lastErr = e;
-        }
-      }
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error("sw-v3 unwrap failed");
-}
-
-
-function looksLikeTs(buf) {
-  if (!buf || buf.length < 188) return false;
-  let hits = 0, checks = 0;
-  for (let i = 0; i + 188 <= Math.min(buf.length, 188 * 8); i += 188) {
-    checks++;
-    if (buf[i] === 0x47) hits++;
-  }
-  return checks > 0 && hits >= Math.ceil(checks * 0.7);
-}
-
-function weaveKeyCandidates(keySeed, ticket, wrapped) {
-  const out = [];
-  const push = (b, tag) => {
-    if (!b) return;
-    const buf = Buffer.isBuffer(b) ? b : Buffer.from(b);
-    if (buf.length >= 16) out.push({ key: buf.subarray(0, 16), tag });
-    if (buf.length >= 32) out.push({ key: buf.subarray(16, 32), tag: tag + "+16" });
-  };
-  let seedBuf = null;
-  if (keySeed) {
-    try {
-      seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-    } catch {
-      try { seedBuf = Buffer.from(String(keySeed), "base64"); } catch { seedBuf = Buffer.from(String(keySeed)); }
-    }
-    push(seedBuf, "seed");
-    push(crypto.createHash("sha256").update(seedBuf).digest(), "seed-sha256");
-  }
-  if (ticket && seedBuf) {
-    const tbuf = Buffer.from(String(ticket));
-    push(crypto.createHmac("sha256", seedBuf).update(tbuf).digest(), "hmac-seed-ticket");
-    push(crypto.createHmac("sha256", tbuf).update(seedBuf).digest(), "hmac-ticket-seed");
-    try {
-      push(crypto.pbkdf2Sync(seedBuf, tbuf, 1337, 32, "sha256"), "pbkdf2-1337");
-      push(crypto.pbkdf2Sync(seedBuf, tbuf, 1000, 32, "sha256"), "pbkdf2-1000");
-      push(crypto.pbkdf2Sync(String(keySeed), String(ticket), 1337, 32, "sha256"), "pbkdf2-str");
-    } catch {}
-    try {
-      const prk2 = crypto.createHmac("sha256", tbuf).update(seedBuf).digest();
-      push(prk2, "hkdf-ish");
-      const info = Buffer.from("X-SW-Proof");
-      const okm = crypto.createHmac("sha256", prk2).update(Buffer.concat([info, Buffer.from([1])])).digest();
-      push(okm, "hkdf-expand");
-    } catch {}
-  }
-  if (wrapped && wrapped.length) {
-    push(wrapped, "wrapped-raw");
-    if (seedBuf) {
-      const x = Buffer.alloc(16);
-      for (let i = 0; i < 16; i++) x[i] = wrapped[i % wrapped.length] ^ seedBuf[i % seedBuf.length];
-      push(x, "xor-seed");
-      try {
-        const decipher = crypto.createDecipheriv("aes-128-ecb", seedBuf.subarray(0, 16), null);
-        decipher.setAutoPadding(false);
-        const dec = Buffer.concat([decipher.update(wrapped.subarray(0, Math.floor(wrapped.length / 16) * 16)), decipher.final()]);
-        push(dec, "aes-ecb-seed");
-      } catch {}
-    }
-  }
-  const seen = new Set();
-  const uniq = [];
-  for (const c of out) {
-    const h = c.key.toString("hex");
-    if (seen.has(h)) continue;
-    seen.add(h);
-    uniq.push(c);
-  }
-  return uniq;
-}
-
-async function resolveWeavePlainKey({ keySeed, ticket, wrapped, sampleEncrypted, sampleIv, videoId }) {
-  const candidates = weaveKeyCandidates(keySeed, ticket, wrapped);
-  if (wrapped && wrapped.length === 16) candidates.unshift({ key: wrapped, tag: "wrapped-16" });
-  if (wrapped && wrapped.length) {
-    for (const fn of [
-      async () => unwrapKey(wrapped, videoId),
-      async () => unwrapCdnKey(wrapped)
-    ]) {
-      try {
-        const k = await fn();
-        if (k && k.length === 16) candidates.unshift({ key: Buffer.from(k), tag: "unwrap-fn" });
-      } catch {}
-    }
-  }
-  if (!sampleEncrypted || !sampleIv) {
-    return candidates[0] ? candidates[0].key : null;
-  }
-  for (const c of candidates) {
-    try {
-      const plain = decryptSegment(sampleEncrypted, c.key, sampleIv);
-      if (looksLikeTs(plain)) {
-        console.log("[weave-v3] key matched via", c.tag);
-        return c.key;
-      }
-    } catch {}
-  }
-  console.warn("[weave-v3] no candidate produced valid TS, tried", candidates.length);
-  return candidates[0] ? candidates[0].key : null;
-}
-
-
 function parseIvHex(hex) { const h = String(hex || "").replace(/^0x/i, "").trim(); if (!/^[0-9a-fA-F]{32}$/.test(h)) return null; return Buffer.from(h, "hex"); }
 function ivFromMediaSequence(seq) { const iv = Buffer.alloc(16, 0); iv.writeUInt32BE(Number(seq) >>> 0, 12); return iv; }
+
+function decodeKeySeed(seed) {
+  if (!seed) return null;
+  const s = String(seed).trim();
+  for (const enc of ["base64url", "base64"]) {
+    try {
+      const b = Buffer.from(s, enc);
+      if (b.length >= 8) return b;
+    } catch {}
+  }
+  try { return Buffer.from(s, "utf8"); } catch { return null; }
+}
+
+/** مرشّحات مفتاح AES-128 لـ stream-weave key_version=3 */
+function weaveV3KeyCandidates(keyBin, keySeed) {
+  const out = [];
+  const push = (buf, tag) => {
+    if (!buf || buf.length < 16) return;
+    const k = Buffer.from(buf.subarray(0, 16));
+    const hex = k.toString("hex");
+    if (out.some((x) => x.hex === hex)) return;
+    out.push({ key: k, tag, hex });
+  };
+  const bin = Buffer.isBuffer(keyBin) ? keyBin : Buffer.from(keyBin || []);
+  if (bin.length === 16) push(bin, "bin16");
+  if (bin.length === 32) {
+    push(bin.subarray(0, 16), "bin32-hi");
+    push(bin.subarray(16, 32), "bin32-lo");
+  }
+  const seed = decodeKeySeed(keySeed);
+  if (seed) {
+    push(seed, "seed16");
+    if (seed.length >= 32) push(seed.subarray(16, 32), "seed32-lo");
+    const sh = crypto.createHash("sha256").update(seed).digest();
+    push(sh, "sha256(seed)");
+    if (bin.length >= 16) {
+      const x = Buffer.alloc(16);
+      for (let i = 0; i < 16; i++) x[i] = bin[i] ^ seed[i % seed.length];
+      push(x, "bin16-xor-seed");
+      const x2 = Buffer.alloc(16);
+      for (let i = 0; i < 16; i++) x2[i] = bin[i] ^ sh[i];
+      push(x2, "bin16-xor-sha256seed");
+      push(crypto.createHash("sha256").update(Buffer.concat([bin.subarray(0, 16), seed])).digest(), "sha256(bin||seed)");
+      push(crypto.createHash("sha256").update(Buffer.concat([seed, bin.subarray(0, 16)])).digest(), "sha256(seed||bin)");
+      try {
+        push(crypto.createHmac("sha256", seed).update(bin.subarray(0, Math.min(16, bin.length))).digest(), "hmac(seed,bin)");
+        push(crypto.createHmac("sha256", bin.subarray(0, 16)).update(seed).digest(), "hmac(bin,seed)");
+      } catch {}
+    }
+  }
+  try {
+    const t = bin.toString("utf8").trim();
+    if (/^[0-9a-fA-F]{32}$/.test(t)) push(Buffer.from(t, "hex"), "hex-text");
+  } catch {}
+  return out;
+}
+
+function looksLikeMpegTs(buf) {
+  if (!buf || buf.length < 188) return false;
+  let hits = 0;
+  const limit = Math.min(buf.length, 188 * 8);
+  for (let off = 0; off + 188 <= limit; off += 188) {
+    if (buf[off] === 0x47) hits++;
+  }
+  if (hits >= 3) return true;
+  for (let i = 0; i < Math.min(188, buf.length - 188); i++) {
+    if (buf[i] === 0x47 && buf[i + 188] === 0x47) return true;
+  }
+  return false;
+}
+
+/**
+ * جرّب مرشّحات المفتاح مع IV من الـ playlist على أول مقطع — يرجع المفتاح الصالح أو null
+ */
+async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, logTag = "weave-v3" }) {
+  const cands = weaveV3KeyCandidates(keyBuf, keySeed);
+  if (!cands.length) {
+    console.warn(`[${logTag}] no key candidates (binLen=${keyBuf?.length || 0} seed=${keySeed ? "yes" : "no"})`);
+    return null;
+  }
+  const ivs = [];
+  if (iv && Buffer.isBuffer(iv) && iv.length === 16) ivs.push(iv);
+  for (let s = 0; s < 4; s++) ivs.push(ivFromMediaSequence(s));
+
+  if (!sampleEncrypted || sampleEncrypted.length < 32) {
+    const prefer = cands.find((c) => c.tag === "bin16") || cands[0];
+    console.warn(`[${logTag}] no sample segment — using candidate ${prefer.tag} without TS validate`);
+    return prefer.key;
+  }
+
+  for (const cand of cands) {
+    for (const testIv of ivs) {
+      try {
+        const plain = decryptSegment(sampleEncrypted, cand.key, testIv);
+        if (looksLikeMpegTs(plain)) {
+          console.log(`[${logTag}] plainKey OK via ${cand.tag} iv=${testIv.toString("hex").slice(0, 8)}…`);
+          return cand.key;
+        }
+      } catch {
+        // padding error → مفتاح/IV غلط
+      }
+    }
+  }
+  console.warn(`[${logTag}] reject key candidates all IVs failed (tried ${cands.length} keys × ${ivs.length} IVs)`);
+  return null;
+}
+
+/** x-sw-proof تقريبي (player.js الحقيقي أدق) */
+function makeSwProof({ keySeed, sessionId, token, path }) {
+  const seed = decodeKeySeed(keySeed) || Buffer.from(String(keySeed || ""));
+  const msg = Buffer.from([String(sessionId || ""), String(path || "/key"), String(token || "").slice(-16)].join("|"));
+  const h = crypto.createHmac("sha256", seed.length ? seed : Buffer.from("sw")).update(msg).digest();
+  return h.toString("base64url").replace(/=+$/, "");
+}
 
 // Upstream helpers
 async function upstreamHeaders(extra = {}, profileIdx = 0) {
@@ -1643,9 +1540,11 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
       "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
       "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
     };
-    if (session.mode === "weave" || session.keyVersion != null) {
-      headers["x-sw-key-version"] = String(session.keyVersion != null ? session.keyVersion : 3);
-    }
+    // stream-weave key_version=3: لازم x-sw-key-version + أحيانًا proof/ticket
+    const kv = Number(session.keyVersion || session.key_version || 0);
+    if (kv > 0) headers["x-sw-key-version"] = String(kv);
+    if (session.swTicket) headers["x-sw-ticket"] = String(session.swTicket);
+    if (session.swProof) headers["x-sw-proof"] = String(session.swProof);
   }
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
@@ -3139,36 +3038,11 @@ const HOSSAM_CATALOG = {
   libraryId: "396717",
   courses: [
     {
-      id: "hormonal-coordination",
-      name: "باب التنسيق الهرموني",
-      courseId: 7,
-      courseSlug: "باب-التنسيق-الهرموني-7",
-      lessons: [
-        // lessonId أرقام تقريبية — الاستيراد بالكوكيز يملأ videoId/guid الحقيقي
-        { lessonId: 70, title: "مقدمة الهرمونات في النبات والهرمونات في الانسان", videoId: null, guid: null },
-        { lessonId: 71, title: "حل كتاب التفوق المحاضره الاولى هرمونات", videoId: null, guid: null },
-        { lessonId: 72, title: "كتاب دكتور حسام المحاضره الاولى هرمونات", videoId: null, guid: null },
-        { lessonId: 73, title: "الغدة النخامية (هرمونات الجزء الغدي)", videoId: null, guid: null },
-        { lessonId: 74, title: "الغدة النخامية (هرمونات الجزء العصبي)", videoId: null, guid: null },
-        { lessonId: 75, title: "حل كتاب التفوق المحاضره الثانيه هرمونات", videoId: null, guid: null },
-        { lessonId: 76, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null },
-        { lessonId: 77, title: "حل كتاب التفوق المحاضره الثالثة", videoId: null, guid: null },
-        { lessonId: 78, title: "الغدة الكظرية", videoId: null, guid: null },
-        { lessonId: 79, title: "البنكرياس", videoId: null, guid: null },
-        { lessonId: 80, title: "الغدد التناسلية وملحقات القناة الهضمية", videoId: null, guid: null },
-        { lessonId: 81, title: "شرح الورشة", videoId: null, guid: null },
-        { lessonId: 82, title: "حل كتاب الامتحان", videoId: null, guid: null },
-        { lessonId: 83, title: "حل كتاب المرشد", videoId: null, guid: null },
-        { lessonId: 84, title: "حل كتاب دكتور حسام", videoId: null, guid: null }
-      ]
-    },
-    {
       id: "hormones-workshop",
       name: "ورشة الهرمونات",
       courseId: 9,
-      courseSlug: "ورشة-الهرمونات-9",
       lessons: [
-        { lessonId: 120, title: "ورشة الهرمونات — درس متاح", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" },
+        { lessonId: 120, title: "ورشة الهرمونات — الدرس المتاح", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" },
         { lessonId: 121, title: "الدرس الاول", videoId: null, guid: null },
         { lessonId: 122, title: "الدرس الثاني", videoId: null, guid: null },
         { lessonId: 123, title: "حل الدرس الاول", videoId: null, guid: null },
@@ -3176,7 +3050,9 @@ const HOSSAM_CATALOG = {
         { lessonId: 125, title: "حل كتاب المرشد", videoId: null, guid: null },
         { lessonId: 126, title: "مقدمة الهرمونات في النبات والإنسان", videoId: null, guid: null },
         { lessonId: 127, title: "الغدة النخامية", videoId: null, guid: null },
-        { lessonId: 128, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null }
+        { lessonId: 128, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null },
+        { lessonId: 129, title: "الهرمونات — تكملة", videoId: null, guid: null },
+        { lessonId: 130, title: "الهرمونات — مراجعة", videoId: null, guid: null }
       ]
     }
   ]
@@ -3382,8 +3258,16 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   function toWeaveSegUrl(absUrl, fallbackVideoId) {
     try {
       const u = new URL(absUrl);
+      // احتفظ بروابط floravon/CDN اللي فيها token/expires — متكسرش التوقيع
+      if (/floravon\.(online|shop)$/i.test(u.hostname) || /\.floravon\./i.test(u.hostname)) {
+        return u.href;
+      }
+      if (/b-cdn\.net$/i.test(u.hostname) || /mediadelivery\.net$/i.test(u.hostname)) {
+        return u.href;
+      }
       if (/stream-weave\.com$/i.test(u.hostname) || u.hostname.endsWith(".stream-weave.com")) {
-        return u.href.split("?")[0];
+        // للإبقاء على sid لو موجود
+        return u.href;
       }
       const parts = u.pathname.split("/").filter(Boolean);
       const vi = parts.indexOf("videos");
@@ -3392,6 +3276,7 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         const quality = parts[vi + 2];
         const fname = (parts[vi + 3] || "").split("?")[0];
         if (vid && quality && fname) {
+          // مرّر عبر stream-weave API مع الـ Bearer بدل token الـ CDN
           return `https://api.stream-weave.com/api/v1/videos/${vid}/stream/${quality}/${fname}`;
         }
       }
@@ -3404,7 +3289,47 @@ async function buildPlaylist(src, masterText, clientHeaders) {
     return absUrl;
   }
 
+  // اقرأ kv من الـ playlist لو موجود
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (t.startsWith("#EXT-X-SW-KV:")) {
+      const n = Number(t.split(":")[1]);
+      if (Number.isFinite(n) && n > 0) src.keyVersion = n;
+    }
+  }
+
+  // لو weave v3: حاول تجديد ticket من session/key (مش حاسم — key.bin أهم)
+  if (src.mode === "weave" && src.sessionId && src.token) {
+    try {
+      const proof = makeSwProof({
+        keySeed: src.keySeed,
+        sessionId: src.sessionId,
+        token: src.token,
+        path: `/playback/session/${src.sessionId}/key`
+      });
+      src.swProof = proof;
+      const sessKeyUrl = `https://api.stream-weave.com/api/v1/playback/session/${src.sessionId}/key`;
+      src.allowedHosts.add("api.stream-weave.com");
+      const skRes = await streamFetch(src, sessKeyUrl, { Accept: "application/json" }, clientHeaders);
+      const skText = await skRes.text();
+      console.log(`[weave-v3] sess key status ${skRes.status} len ${skText.length} proof ${String(proof).slice(0, 12)}`);
+      if (skRes.ok) {
+        try {
+          const sk = JSON.parse(skText);
+          if (sk.ticket) src.swTicket = sk.ticket;
+          if (sk.key_version) src.keyVersion = Number(sk.key_version) || src.keyVersion;
+          console.log(`[weave-v3] sess key ticket=${src.swTicket ? "yes" : "no"} kv=${src.keyVersion}`);
+        } catch {}
+      } else {
+        console.warn(`[weave-v3] ${skRes.status} body ${skText.slice(0, 120)}`);
+      }
+    } catch (e) {
+      console.warn("[weave-v3] sess key skip:", e.message);
+    }
+  }
+
   let segIndex = 0;
+  let firstSegUrl = null;
   for (const raw of lines) {
     const line = raw.trim();
     if (line.startsWith("#EXT-X-KEY:")) {
@@ -3416,34 +3341,31 @@ async function buildPlaylist(src, masterText, clientHeaders) {
       }
       if (uri && !keyFetched) {
         let keyUrl = new URL(uri, baseUrl).href;
+        // مهم: احتفظ بـ sid= من الـ playlist — متستبدلش المسار بـ /key العاري
         try {
-          if (!/stream-weave\.com/i.test(keyUrl) && src.videoId) {
-            keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/key`;
+          const ku = new URL(keyUrl);
+          if (!/stream-weave\.com/i.test(ku.hostname) && src.videoId) {
+            // URI نسبي غريب — ابنِ مسار key.bin مع sid
+            const sidQ = src.sessionId ? `?sid=${encodeURIComponent(src.sessionId)}` : "";
+            keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/stream/600/key.bin${sidQ}`;
+          } else if (src.sessionId && !ku.searchParams.get("sid")) {
+            ku.searchParams.set("sid", src.sessionId);
+            keyUrl = ku.href;
           }
         } catch {}
         try { src.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
         src.allowedHosts.add("api.stream-weave.com");
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
+        console.log(`[weave-v3] key.bin status ${keyRes.status} len ${wrapped.length}`);
         if (!wrapped.length) throw new Error(`Key HTTP ${keyRes.status} — empty`);
-        // كورساتك قد ترجع 404 مع مفتاح صالح (blob ~60-100 بايت)
-        try {
-          if (src.mode === "cdn" || String(uri).includes("/user/auth/")) {
-            src.plainKey = await unwrapCdnKey(wrapped);
-          } else {
-            src.plainKey = await unwrapKey(wrapped, src.videoId);
-          }
-        } catch (ke) {
-          // fallback عكسي
-          try {
-            src.plainKey = src.mode === "cdn" ? await unwrapKey(wrapped, src.videoId) : await unwrapCdnKey(wrapped);
-          } catch (ke2) {
-            throw new Error(`Key unwrap failed: ${ke.message}`);
-          }
-        }
+
+        // اجمع أول URL مقطع للتحقق لاحقًا
+        // (هنتعلمه من اللوب التالي)
+        src._pendingKeyBuf = wrapped;
+        src._pendingKeyUri = uri;
         src.defaultIv = currentIv;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${src.plainKey?.length}`);
       }
       continue;
     }
@@ -3454,15 +3376,78 @@ async function buildPlaylist(src, masterText, clientHeaders) {
       src.allowedHosts.add("api.stream-weave.com");
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
-      const ivHex = iv.toString("hex");
-      segs.push({ u: segmentUrl, iv: ivHex, s: seq, i: segIndex });
+      const ivHexOut = iv.toString("hex");
+      segs.push({ u: segmentUrl, iv: ivHexOut, s: seq, i: segIndex });
+      if (!firstSegUrl) firstSegUrl = segmentUrl;
       out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
       segIndex++;
       continue;
     }
     out.push(raw);
   }
+
+  // —— فك/اختيار المفتاح بعد ما نعرف أول مقطع ——
+  if (src._pendingKeyBuf) {
+    const wrapped = src._pendingKeyBuf;
+    delete src._pendingKeyBuf;
+    const uri = src._pendingKeyUri || "";
+    delete src._pendingKeyUri;
+
+    let sampleEncrypted = null;
+    if (firstSegUrl && src.mode === "weave") {
+      try {
+        const segRes = await streamFetch(src, firstSegUrl, {}, clientHeaders);
+        if (segRes.ok) {
+          sampleEncrypted = Buffer.from(await segRes.arrayBuffer());
+          console.log(`[weave-v3] sample seg len=${sampleEncrypted.length}`);
+        } else {
+          console.warn(`[weave-v3] sample seg HTTP ${segRes.status}`);
+        }
+      } catch (e) {
+        console.warn("[weave-v3] sample seg fetch:", e.message);
+      }
+    }
+
+    const isCdnStyle = src.mode === "cdn" || String(uri).includes("/user/auth/");
+    if (isCdnStyle) {
+      try {
+        src.plainKey = await unwrapCdnKey(wrapped);
+      } catch (ke) {
+        try { src.plainKey = await unwrapKey(wrapped, src.videoId); } catch {
+          throw new Error(`Key unwrap failed: ${ke.message}`);
+        }
+      }
+    } else {
+      // weave / key_version 3: جرّب مرشّحات + تحقق TS
+      const resolved = await resolveWeaveV3PlainKey({
+        keyBuf: wrapped,
+        keySeed: src.keySeed,
+        iv: src.defaultIv || currentIv,
+        sampleEncrypted,
+        logTag: "weave-v3"
+      });
+      if (resolved) {
+        src.plainKey = resolved;
+      } else {
+        // fallback القديم القديمة
+        try {
+          src.plainKey = await unwrapKey(wrapped, src.videoId);
+          console.log("[weave-v3] fallback unwrapKey len=" + src.plainKey?.length);
+        } catch (ke) {
+          try {
+            src.plainKey = await unwrapCdnKey(wrapped);
+          } catch (ke2) {
+            console.warn("[weave-v3] plainKey still null after all paths");
+            throw new Error(`Key unwrap failed: ${ke.message}`);
+          }
+        }
+      }
+    }
+    console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${src.plainKey?.length} kv=${src.keyVersion || 0}`);
+  }
+
   if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
+  console.log(`[weave] v3 ready segs=${segs.length} key=${src.plainKey?.length || 0}`);
   src.mediaSeq = mediaSeq; src.segs = segs; src.playlist = out.join("\n");
 }
 
@@ -3692,6 +3677,10 @@ async function fetchPlaylistSmart(url, token, label = "pl") {
           Pragma: "no-cache"
         };
         if (token) headers.Authorization = `Bearer ${token}`;
+        // stream-weave غالبًا يطلب x-sw-key-version مع الماستر
+        if (String(label).includes("weave") || /stream-weave\.com/i.test(String(url))) {
+          headers["x-sw-key-version"] = "3";
+        }
         const probe = await upstreamSlot(() =>
           fetchT(url, { headers, cache: "no-store" }, { timeout: 20_000, retries: 1, retryOn: [429, 502, 503, 504, 408] })
         );
@@ -3767,473 +3756,51 @@ async function buildVideoSource(videoId, clientHeaders) {
     let lastWeaveErr = null;
     for (let attempt = 1; attempt <= UPSTREAM_FETCH_RETRIES; attempt++) {
       try {
-        const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, {
-          method: "POST",
-          headers: { Accept: "application/json" }
-        });
-        if (!data?.success || !data?.data?.token || !data?.data?.stream_url) {
-          throw new Error("Weave response ناقص");
-        }
-        const d = data.data;
-        const wToken = d.token;
-        const wUrl = d.stream_url;
-        const wVid = String(d.video_id || videoId);
-        const sessionId = d.session_id || null;
-        const keySeed = d.key_seed || null;
-        const keyVersion = d.key_version != null ? Number(d.key_version) : 3;
-        const apiBase = String(d.api_base || "https://api.stream-weave.com").replace(/\/$/, "");
-        const heartbeatUrl = d.heartbeat_url || (sessionId ? `${apiBase}/api/v1/playback/session/${sessionId}/heartbeat` : null);
-
-        const weaveHeaders = {
-          Authorization: `Bearer ${wToken}`,
-          Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
-          Origin: CONFIG.STREAM_ORIGIN,
-          Referer: CONFIG.STREAM_REFERER,
-          "User-Agent": CONFIG.STREAM_UA,
-          "x-sw-key-version": String(keyVersion),
-          "Cache-Control": "no-cache"
-        };
-
-        const candidates = [wUrl, `${apiBase}/api/v1/videos/${wVid}/stream/master.m3u8`];
-        let masterText = null;
-        let masterUrl = null;
+        const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+        if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
+        const wToken = data.data.token;
+        const wUrl = data.data.stream_url;
+        const wVid = String(data.data.video_id || videoId);
+        const wSid = data.data.session_id || data.data.sessionId || null;
+        const wSeed = data.data.key_seed || data.data.keySeed || null;
+        const wKv = Number(data.data.key_version || data.data.keyVersion || 0) || 0;
+        const wHb = data.data.heartbeat_url || data.data.heartbeatUrl || null;
+        console.log(`[weave] play ok vid=${wVid} sid=${wSid || "-"} kv=${wKv} seed=${wSeed ? "yes" : "no"}`);
+        // اجلب الماستر فورًا — لو 426 جرّب مسارات بديلة
+        let probeText = null;
+        const candidates = [wUrl];
+        try {
+          const u = new URL(wUrl);
+          // بدائل شائعة لـ stream-weave
+          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/master.m3u8`);
+          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/playlist.m3u8`);
+          if (!/master\.m3u8|playlist\.m3u8/i.test(u.pathname)) {
+            candidates.push(wUrl.replace(/\/?$/, "/playlist.m3u8"));
+            candidates.push(wUrl.replace(/\/?$/, "/master.m3u8"));
+          }
+        } catch {}
         let lastPlErr = null;
         for (const cand of [...new Set(candidates)]) {
           try {
-            const r = await upstreamSlot(() =>
-              fetchT(cand, { headers: weaveHeaders, cache: "no-store" }, { timeout: 22_000, retries: 1 })
-            );
-            const body = await r.text();
-            if (body.includes("#EXTM3U")) {
-              masterText = body;
-              masterUrl = cand;
-              break;
-            }
-            lastPlErr = new Error(`weave master HTTP ${r.status}`);
-          } catch (e) {
-            lastPlErr = e;
-          }
-        }
-        if (!masterText) throw lastPlErr || new Error("Weave master failed");
-
-        let mediaText = masterText;
-        let mediaUrl = masterUrl;
-        if (masterText.includes("#EXT-X-STREAM-INF")) {
-          const lines = masterText.split(/\r?\n/);
-          let best = null, bestBw = -1, pending = null;
-          for (const raw of lines) {
-            const line = raw.trim();
-            if (line.startsWith("#EXT-X-STREAM-INF:")) {
-              pending = Number((line.match(/BANDWIDTH=(\d+)/) || [])[1] || 0);
-            } else if (line && !line.startsWith("#") && pending != null) {
-              if (pending >= bestBw) { bestBw = pending; best = line; }
-              pending = null;
-            }
-          }
-          if (!best) throw new Error("weave master فاضي");
-          mediaUrl = new URL(best, masterUrl).href;
-          const mr = await upstreamSlot(() =>
-            fetchT(mediaUrl, { headers: weaveHeaders, cache: "no-store" }, { timeout: 22_000, retries: 1 })
-          );
-          mediaText = await mr.text();
-          if (!mediaText.includes("#EXTM3U")) throw new Error(`weave media HTTP ${mr.status}`);
-        }
-
-        const keyLine = mediaText.split(/\r?\n/).find((l) => l.startsWith("#EXT-X-KEY:"));
-        let plainKey = null;
-        let defaultIv = null;
-        let keyUri = null;
-        if (keyLine) {
-          keyUri = (keyLine.match(/URI="([^"]+)"/) || [])[1] || null;
-          const ivHex = (keyLine.match(/IV=(0x[0-9a-fA-F]+)/i) || [])[1];
-          if (ivHex) defaultIv = Buffer.from(ivHex.replace(/^0x/i, ""), "hex");
-        }
-
-        // عيّنة مقطع للتحقق
-        let sampleEnc = null;
-        let sampleIv = defaultIv || ivFromMediaSequence(0);
-        try {
-          for (const raw of mediaText.split(/\r?\n/)) {
-            const line = raw.trim();
-            if (line && !line.startsWith("#")) {
-              const segU = new URL(line, mediaUrl).href;
-              const sr = await fetchT(segU, {
-                headers: {
-                  Accept: "*/*",
-                  Origin: CONFIG.STREAM_ORIGIN,
-                  Referer: CONFIG.STREAM_REFERER,
-                  "User-Agent": CONFIG.STREAM_UA
-                },
-                cache: "no-store"
-              }, { timeout: 20_000, retries: 1 });
-              sampleEnc = Buffer.from(await sr.arrayBuffer());
-              console.log("[weave-v3] sample seg status", sr.status, "len", sampleEnc.length);
-              break;
-            }
-          }
-        } catch (e) {
-          console.warn("[weave-v3] sample seg", e.message);
-        }
-
-        const tryAcceptKey = (buf, tag) => {
-          if (!buf || buf.length < 16) return false;
-          const k = Buffer.isBuffer(buf) ? buf.subarray(0, 16) : Buffer.from(buf).subarray(0, 16);
-          if (!sampleEnc) {
-            plainKey = k;
-            console.log("[weave-v3] accepted key via", tag, "no-sample");
-            return true;
-          }
-          const ivs = [];
-          if (sampleIv) ivs.push({ iv: sampleIv, name: "keyline" });
-          for (let seq = 0; seq <= 16; seq++) ivs.push({ iv: ivFromMediaSequence(seq), name: "seq" + seq });
-          // unique by hex
-          const seen = new Set();
-          for (const { iv, name } of ivs) {
-            const hx = iv.toString("hex");
-            if (seen.has(hx)) continue;
-            seen.add(hx);
-            try {
-              const plain = decryptSegment(sampleEnc, k, iv);
-              if (looksLikeTs(plain)) {
-                plainKey = k;
-                defaultIv = iv;
-                console.log("[weave-v3] accepted key via", tag, "iv", name, "TS ok");
-                return true;
-              }
-            } catch {}
-            // autoPadding false fallback
-            try {
-              const decipher = crypto.createDecipheriv("aes-128-cbc", k, iv);
-              decipher.setAutoPadding(false);
-              const plain = Buffer.concat([decipher.update(sampleEnc), decipher.final()]);
-              if (looksLikeTs(plain)) {
-                plainKey = k;
-                defaultIv = iv;
-                console.log("[weave-v3] accepted key via", tag, "iv", name, "nopad TS ok");
-                return true;
-              }
-            } catch {}
-          }
-          console.warn("[weave-v3] reject key", tag, "all IVs failed");
-          return false;
-        };
-
-        const buildProofs = (seedB64, ticket) => {
-          const out = [];
-          let seedBuf;
-          try {
-            seedBuf = Buffer.from(String(seedB64).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-          } catch {
-            seedBuf = Buffer.from(String(seedB64));
-          }
-          const ticketStr = String(ticket);
-          const ticketBuf = Buffer.from(ticketStr, "utf8");
-          // variants
-          out.push(crypto.createHmac("sha256", seedBuf).update(ticketStr, "utf8").digest("base64url"));
-          out.push(crypto.createHmac("sha256", seedBuf).update(ticketBuf).digest("base64url"));
-          out.push(crypto.createHmac("sha256", seedBuf).update(ticketStr, "utf8").digest("base64"));
-          out.push(crypto.createHmac("sha256", seedBuf).update(ticketStr, "utf8").digest("hex"));
-          try {
-            const tb = Buffer.from(ticketStr.replace(/-/g, "+").replace(/_/g, "/"), "base64");
-            out.push(crypto.createHmac("sha256", seedBuf).update(tb).digest("base64url"));
-          } catch {}
-          out.push(crypto.createHmac("sha256", ticketBuf).update(seedBuf).digest("base64url"));
-          out.push(crypto.createHash("sha256").update(Buffer.concat([seedBuf, ticketBuf])).digest("base64url"));
-          out.push(crypto.createHash("sha256").update(seedBuf).update(ticketBuf).digest("base64url"));
-          // unique
-          return [...new Set(out.filter(Boolean))];
-        };
-
-        // 1) مسار session v3 أولاً (key-ticket + /key) — أهم من key.bin
-        if (sessionId && keySeed) {
-          try {
-            const ticketUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key-ticket`;
-            const tr = await fetchT(ticketUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${wToken}`,
-                Accept: "application/json",
-                Origin: CONFIG.STREAM_ORIGIN,
-                Referer: CONFIG.STREAM_REFERER,
-                "User-Agent": CONFIG.STREAM_UA,
-                "Content-Length": "0"
-              },
-              cache: "no-store"
-            }, { timeout: 15_000, retries: 1 });
-            let ticket = null;
-            try {
-              const tj = await tr.json();
-              ticket = tj.ticket || tj.data?.ticket || null;
-            } catch {
-              try {
-                const tt = await tr.text();
-                ticket = JSON.parse(tt).ticket;
-              } catch {}
-            }
-            console.log("[weave-v3] ticket", ticket ? String(ticket).slice(0, 16) + "…" : null, "status", tr.status);
-
-            const keySessUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key`;
-            const kh = {
-              Authorization: `Bearer ${wToken}`,
-              Accept: "*/*",
-              Origin: CONFIG.STREAM_ORIGIN,
-              Referer: CONFIG.STREAM_REFERER,
-              "User-Agent": CONFIG.STREAM_UA,
-              "x-sw-key-version": String(keyVersion)
+            const got = await fetchPlaylistSmart(cand, wToken, "weave");
+            probeText = got.text;
+            return {
+              mode: "weave",
+              sessionToken: wToken,
+              streamUrl: cand,
+              resolvedVideoId: wVid,
+              probeText,
+              sessionId: wSid,
+              keySeed: wSeed,
+              keyVersion: wKv,
+              heartbeatUrl: wHb
             };
-            let kb2 = null;
-            let kr2status = 0;
-            const proofs = ticket ? buildProofs(keySeed, ticket) : [null];
-            console.log("[weave-v3] seedlen", (() => { try { return Buffer.from(String(keySeed).replace(/-/g,"+").replace(/_/g,"/"),"base64").length; } catch { return -1; } })(), "proofs", proofs.length);
-            for (const proof of proofs) {
-              const headers = { ...kh };
-              if (ticket) headers["X-SW-Ticket"] = ticket;
-              if (proof) headers["X-SW-Proof"] = proof;
-              try {
-                const kr2 = await fetchT(keySessUrl, { headers, cache: "no-store" }, { timeout: 12_000, retries: 0 });
-                const body = Buffer.from(await kr2.arrayBuffer());
-                console.log("[weave-v3] sess key status", kr2.status, "len", body.length, "proof", proof ? String(proof).slice(0, 12) : null);
-                if (kr2.status === 200 && body.length > 0 && !body.toString("utf8").trim().startsWith("{")) {
-                  kb2 = body;
-                  kr2status = 200;
-                  break;
-                }
-                if (kr2.status === 401) {
-                  console.warn("[weave-v3] 401 body", body.toString("utf8").slice(0, 80));
-                }
-              } catch (e) {
-                console.warn("[weave-v3] sess key try", e.message);
-              }
-            }
-            // بدون proof كمحاولة أخيرة
-            if (!kb2) {
-              try {
-                const headers = { ...kh };
-                if (ticket) headers["X-SW-Ticket"] = ticket;
-                const kr2 = await fetchT(keySessUrl, { headers, cache: "no-store" }, { timeout: 12_000, retries: 0 });
-                const body = Buffer.from(await kr2.arrayBuffer());
-                console.log("[weave-v3] sess key no-proof status", kr2.status, "len", body.length);
-                if (kr2.status === 200 && body.length > 0) kb2 = body;
-              } catch {}
-            }
-            if (!kb2) kb2 = Buffer.alloc(0);
-            console.log("[weave-v3] sess key final len", kb2.length);
-            if (kb2.length === 86) {
-              try {
-                const k = await unwrapStreamWeaveKeyV3(kb2, keySeed, wVid, sessionId, keyVersion);
-                tryAcceptKey(k, "sw86-vid-sid");
-              } catch (e) {
-                console.warn("[weave-v3] sw86 vid/sid", e.message);
-                try {
-                  const k = await unwrapStreamWeaveKeyV3(kb2, keySeed, sessionId, wVid, keyVersion);
-                  tryAcceptKey(k, "sw86-sid-vid");
-                } catch (e2) {
-                  console.warn("[weave-v3] sw86 sid/vid", e2.message);
-                }
-              }
-            } else if (kb2.length === 16) {
-              tryAcceptKey(kb2, "sess-16");
-            } else if (kb2.length > 0 && !kb2.toString("utf8").trim().startsWith("{")) {
-              try {
-                const k = await unwrapKey(kb2, wVid);
-                tryAcceptKey(k, "sess-unwrap");
-              } catch {
-                try {
-                  const k = await unwrapCdnKey(kb2);
-                  tryAcceptKey(k, "sess-cdn");
-                } catch {}
-              }
-            }
-          } catch (e) {
-            console.warn("[weave-v3] session key path", e.message);
+          } catch (pe) {
+            lastPlErr = pe;
+            console.warn("[weave] playlist candidate fail", cand.slice(0, 80), pe.message);
           }
         }
-
-        // 2) key.bin من الـ playlist — لا نقبله إلا بعد TS check
-        if (!plainKey && keyUri) {
-          try {
-            const keyUrl = new URL(keyUri, mediaUrl).href;
-            const binHeaders = { ...weaveHeaders };
-            // أعد جلب ticket سريع إن لزم
-            try {
-              if (sessionId && keySeed) {
-                const ticketUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key-ticket`;
-                const tr = await fetchT(ticketUrl, {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${wToken}`,
-                    Accept: "application/json",
-                    Origin: CONFIG.STREAM_ORIGIN,
-                    Referer: CONFIG.STREAM_REFERER,
-                    "User-Agent": CONFIG.STREAM_UA,
-                    "Content-Length": "0"
-                  },
-                  cache: "no-store"
-                }, { timeout: 10_000, retries: 0 });
-                let ticket2 = null;
-                try { ticket2 = (await tr.json()).ticket; } catch {}
-                if (ticket2) {
-                  binHeaders["X-SW-Ticket"] = ticket2;
-                  const proofs = buildProofs(keySeed, ticket2);
-                  if (proofs[0]) binHeaders["X-SW-Proof"] = proofs[0];
-                }
-              }
-            } catch {}
-            const kr = await fetchT(keyUrl, { headers: binHeaders, cache: "no-store" }, { timeout: 15_000, retries: 1 });
-            const kb = Buffer.from(await kr.arrayBuffer());
-            console.log("[weave-v3] key.bin status", kr.status, "len", kb.length);
-            if (kb.length === 86 && keySeed) {
-              try {
-                const k = await unwrapStreamWeaveKeyV3(kb, keySeed, wVid, sessionId, keyVersion);
-                tryAcceptKey(k, "bin86");
-              } catch (e) {
-                console.warn("[weave-v3] bin86", e.message);
-              }
-            } else if (kb.length === 16) {
-              // مهم: لا تقبل 16 بايت من key.bin بدون فحص TS
-              if (!tryAcceptKey(kb, "bin16")) {
-                // قد يكون ملف ملفوف
-                if (keySeed) {
-                  try {
-                    const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-                    // XOR / AES محاولات
-                    const x = Buffer.alloc(16);
-                    for (let i = 0; i < 16; i++) x[i] = kb[i] ^ seedBuf[i % seedBuf.length];
-                    tryAcceptKey(x, "bin16-xor-seed");
-                  } catch {}
-                }
-                try {
-                  const k = await unwrapKey(kb, wVid);
-                  tryAcceptKey(k, "bin16-unwrap");
-                } catch {
-                  try {
-                    const k = await unwrapCdnKey(kb);
-                    tryAcceptKey(k, "bin16-cdn");
-                  } catch {}
-                }
-              }
-            } else if (kb.length > 0) {
-              try {
-                const k = await unwrapKey(kb, wVid);
-                tryAcceptKey(k, "bin-unwrap");
-              } catch {
-                try {
-                  const k = await unwrapCdnKey(kb);
-                  tryAcceptKey(k, "bin-cdn");
-                } catch {}
-              }
-            }
-          } catch (e) {
-            console.warn("[weave-v3] key.bin fail", e.message);
-          }
-        }
-
-        // 3) مرشّحات seed/ticket كحل أخير مع فحص TS
-        if (!plainKey && sampleEnc && sampleIv) {
-          try {
-            const resolved = await resolveWeavePlainKey({
-              keySeed,
-              ticket: null,
-              wrapped: null,
-              sampleEncrypted: sampleEnc,
-              sampleIv,
-              videoId: wVid
-            });
-            if (resolved) tryAcceptKey(resolved, "candidates");
-          } catch (e) {
-            console.warn("[weave-v3] candidates", e.message);
-          }
-        }
-
-        if (!plainKey) {
-          console.warn("[weave-v3] plainKey still null after all paths");
-        } else if (sampleEnc && sampleIv) {
-          try {
-            const test = decryptSegment(sampleEnc, plainKey, sampleIv);
-            console.log("[weave-v3] final key TS check", looksLikeTs(test), "len", test.length);
-          } catch (e) {
-            console.warn("[weave-v3] final key still bad", e.message);
-            // لا تستخدم مفتاح فاسد — فضّل الفشل الواضح على شاشة سوداء
-            plainKey = null;
-          }
-        }
-
-        const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
-        allowedHosts.add("api.stream-weave.com");
-        allowedHosts.add("floravon.online");
-        allowedHosts.add("floravon.shop");
-        try { allowedHosts.add(new URL(mediaUrl).hostname); } catch {}
-        try { allowedHosts.add(new URL(masterUrl).hostname); } catch {}
-
-        const lines = mediaText.split(/\r?\n/);
-        let mediaSeq = 0;
-        const msm = mediaText.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/);
-        if (msm) mediaSeq = Number(msm[1]) || 0;
-        const tdm = mediaText.match(/#EXT-X-TARGETDURATION:([\d.]+)/);
-        const targetDuration = tdm ? Number(tdm[1]) : 10;
-
-        const segs = [];
-        const out = ["#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(targetDuration))}`, "#EXT-X-PLAYLIST-TYPE:VOD", `#EXT-X-MEDIA-SEQUENCE:${mediaSeq}`];
-        let pendingDur = targetDuration;
-        let segIndex = 0;
-        for (const raw of lines) {
-          const line = raw.trim();
-          if (line.startsWith("#EXTINF:")) {
-            const dnum = Number((line.match(/#EXTINF:([\d.]+)/) || [])[1]);
-            if (Number.isFinite(dnum) && dnum > 0) pendingDur = dnum;
-            continue;
-          }
-          if (line.startsWith("#") || !line) continue;
-          const segUrl = new URL(line, mediaUrl).href;
-          try { allowedHosts.add(new URL(segUrl).hostname); } catch {}
-          const seq = mediaSeq + segIndex;
-          const iv = defaultIv || ivFromMediaSequence(seq);
-          segs.push({ u: segUrl, iv: Buffer.isBuffer(iv) ? iv.toString("hex") : String(iv), s: seq, i: segIndex, dur: pendingDur });
-          out.push(`#EXTINF:${Number(pendingDur).toFixed(5)},`);
-          out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
-          segIndex++;
-        }
-        if (!segs.length) throw new Error("weave playlist مفيش مقاطع");
-
-        if (heartbeatUrl) {
-          const beat = () => {
-            fetchT(heartbeatUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${wToken}`,
-                Origin: CONFIG.STREAM_ORIGIN,
-                Referer: CONFIG.STREAM_REFERER,
-                "User-Agent": CONFIG.STREAM_UA,
-                "Content-Length": "0"
-              },
-              cache: "no-store"
-            }, { timeout: 10_000, retries: 0 }).catch(() => {});
-          };
-          beat();
-          const hb = setInterval(beat, 25_000);
-          setTimeout(() => clearInterval(hb), 2 * 60 * 60 * 1000);
-        }
-
-        console.log(`[weave-v3] ok video=${videoId} segs=${segs.length} key=${plainKey ? plainKey.length : 0} kv=${keyVersion}`);
-        return {
-          mode: "weave",
-          sessionToken: wToken,
-          streamUrl: mediaUrl,
-          resolvedVideoId: wVid,
-          probeText: mediaText,
-          _v3: {
-            plainKey,
-            defaultIv,
-            segs,
-            playlist: out.join("\n"),
-            allowedHosts,
-            mediaSeq,
-            targetDuration,
-            sessionId,
-            keySeed,
-            keyVersion
-          }
-        };
+        throw lastPlErr || new Error("Weave playlist failed");
       } catch (e) {
         lastWeaveErr = e;
         console.warn(`[weave] play attempt ${attempt}/${UPSTREAM_FETCH_RETRIES}:`, e.message);
@@ -4252,33 +3819,33 @@ async function buildVideoSource(videoId, clientHeaders) {
       const got = which === "cdn" ? await tryCdn() : await tryWeave();
       mode = got.mode; streamUrl = got.streamUrl; sessionToken = got.sessionToken;
       resolvedVideoId = got.resolvedVideoId; probeText = got.probeText;
-      if (got._v3 && got._v3.segs && got._v3.segs.length) {
-        const v3 = got._v3;
-        const src = {
-          reqVideoId: videoId,
-          videoId: resolvedVideoId,
-          mode,
-          token: sessionToken,
-          streamUrl,
-          allowedHosts: v3.allowedHosts,
-          plainKey: v3.plainKey,
-          defaultIv: v3.defaultIv,
-          mediaSeq: v3.mediaSeq || 0,
-          targetDuration: v3.targetDuration || 10,
-          segs: v3.segs,
-          playlist: v3.playlist,
-          createdAt: now(),
-          weaveSessionId: v3.sessionId || null,
-          keyVersion: v3.keyVersion
-        };
-        console.log(`[${mode}] v3 ready segs=${src.segs.length} key=${src.plainKey ? src.plainKey.length : 0}`);
-        return src;
-      }
+      // جهّز الـ playlist — لو فشل (426 وغيره) جرّب المنصة التالية
       const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
       try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
       allowedHosts.add("floravon.shop");
       allowedHosts.add("floravon.online");
-      const src = { reqVideoId: videoId, videoId: resolvedVideoId, mode, token: sessionToken, streamUrl, allowedHosts, plainKey: null, defaultIv: null, mediaSeq: 0, segs: [], playlist: "", createdAt: now() };
+      allowedHosts.add("suo2.floravon.online");
+      allowedHosts.add("api.stream-weave.com");
+      const src = {
+        reqVideoId: videoId,
+        videoId: resolvedVideoId,
+        mode,
+        token: sessionToken,
+        streamUrl,
+        allowedHosts,
+        plainKey: null,
+        defaultIv: null,
+        mediaSeq: 0,
+        segs: [],
+        playlist: "",
+        createdAt: now(),
+        sessionId: got.sessionId || null,
+        keySeed: got.keySeed || null,
+        keyVersion: got.keyVersion || 0,
+        heartbeatUrl: got.heartbeatUrl || null,
+        swTicket: null,
+        swProof: null
+      };
       try {
         await buildPlaylist(src, probeText, clientHeaders);
         return src;
@@ -4662,68 +4229,11 @@ app.get("/api/public/hossam", rateLimit({ max: 60, windowMs: 60_000, scope: "hos
 
 
 // استيراد كل دروس كورس حسام دفعة واحدة (يحتاج cookies صالحة من المتصفح)
-
-app.post("/api/bunny/import-all", requireStudent, rateLimit({ max: 3, windowMs: 300_000, scope: "bunny-import-all" }), async (req, res) => {
-  try {
-    const cookies = String(req.body?.cookies || process.env.HOSSAM_COOKIES || process.env.DRHOSSAM_COOKIES || "").trim();
-    if (!cookies) return jsonError(res, 400, "ابعت cookies أو حط HOSSAM_COOKIES في Variables");
-    const courses = [
-      { slug: "باب-التنسيق-الهرموني-7", start: 50, end: 150 },
-      { slug: "ورشة-الهرمونات-9", start: 100, end: 160 }
-    ];
-    const all = [];
-    for (const c of courses) {
-      for (let lessonId = c.start; lessonId <= c.end; lessonId++) {
-        try {
-          const pageUrl = `https://drhossamissa.com/play-course/${encodeURIComponent(c.slug)}/${lessonId}`;
-          const r = await fetch(pageUrl, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
-              Accept: "text/html",
-              Cookie: cookies,
-              Referer: "https://drhossamissa.com/my-courses"
-            },
-            redirect: "follow",
-            signal: AbortSignal.timeout(18_000)
-          });
-          const html = await r.text();
-          if (lessonId === c.start && (r.status === 401 || r.status === 403 || (/login|تسجيل الدخول/i.test(html.slice(0, 2500)) && !/mediadelivery|iframe/i.test(html)))) {
-            return jsonError(res, 401, "الكوكيز منتهية — جدّدها من المتصفح وابعته تاني");
-          }
-          const guidM = html.match(/mediadelivery\.net\/embed\/\d+\/([a-f0-9-]{36})/i)
-            || html.match(/vz-[a-z0-9-]+\.b-cdn\.net\/([a-f0-9-]{36})\//i);
-          if (!guidM) continue;
-          const guid = guidM[1];
-          const titleM = html.match(/<title>([^<]+)<\/title>/i);
-          const title = (titleM && titleM[1] ? titleM[1].replace(/\s*\|\s*.*$/, "").trim() : `درس ${lessonId}`);
-          const videoId = "bn_" + guid;
-          const entry = { courseSlug: c.slug, lessonId, title, videoId, guid };
-          all.push(entry);
-          // update matching course in catalog
-          for (const course of (HOSSAM_CATALOG.courses || [])) {
-            if (String(course.courseSlug) === c.slug || String(course.courseId) === String(c.slug.split("-").pop())) {
-              const existing = (course.lessons || []).find((l) => Number(l.lessonId) === lessonId);
-              if (existing) { existing.videoId = videoId; existing.guid = guid; if (title) existing.title = title; }
-              else (course.lessons || (course.lessons = [])).push({ lessonId, title, videoId, guid });
-            }
-          }
-          console.log("[bunny-import-all]", c.slug, lessonId, videoId);
-        } catch (e) {
-          console.warn("[bunny-import-all]", c.slug, lessonId, e.message);
-        }
-      }
-    }
-    res.json({ success: true, imported: all.length, lessons: all });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
-});
-
 app.post("/api/bunny/import-course", requireStudent, rateLimit({ max: 5, windowMs: 300_000, scope: "bunny-import" }), async (req, res) => {
   try {
     const cookies = String(req.body?.cookies || process.env.HOSSAM_COOKIES || "").trim();
     if (!cookies) return jsonError(res, 400, "ابعت cookies من جلسة drhossamissa.com");
-    const courseSlug = String(req.body?.courseSlug || req.body?.slug || "باب-التنسيق-الهرموني-7").trim();
+    const courseSlug = String(req.body?.courseSlug || "ورشة-الهرمونات-9").trim();
     const start = Math.max(1, Number(req.body?.start || 100) || 100);
     const end = Math.min(start + 80, Number(req.body?.end || start + 40) || start + 40);
     const found = [];
@@ -4967,10 +4477,14 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
     console.error("[play]", e.message);
     const msg = String(e && e.message || "");
     const blocked = /CDN|weave|playlist|403|500|426|cloudflare|blocked|غير صالح|fetch failed|UPSTREAM/i.test(msg);
-    // client_fetch يفشل غالبًا بسبب CORS من المتصفح — نرجّع خطأ واضح بدل مسار مكسور
     if (blocked && !/^bn_/i.test(String(req.params.videoId || "")) && !/^th/i.test(String(req.params.videoId || ""))) {
-      console.warn("[play] upstream failed for", req.params.videoId, msg);
-      return jsonError(res, 502, msg || "تعذر جلب الفيديو من كورساتك — أعد المحاولة");
+      try {
+        const tok = await getCoursatkToken();
+        if (tok) {
+          console.warn("[play] falling back to client_fetch for", req.params.videoId, msg);
+          return res.json({ success: true, data: clientFetchPayload(String(req.params.videoId), tok) });
+        }
+      } catch (e2) { console.warn("[play] client_fetch payload failed", e2.message); }
     }
     jsonError(res, e.status || 502, e.message);
   }
