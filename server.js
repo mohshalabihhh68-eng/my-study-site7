@@ -13,10 +13,14 @@ import { fileURLToPath } from "node:url";
 
 let ProxyAgent = null;
 let undiciFetch = null;
+let undiciAgent = null;
 try {
   const undici = await import("undici");
   ProxyAgent = undici.ProxyAgent;
   undiciFetch = undici.fetch;
+  if (undici.Agent) {
+    undiciAgent = new undici.Agent({ allowH2: false, keepAliveTimeout: 15_000, connections: 32 });
+  }
 } catch {
   console.warn("[API] undici not available — UPSTREAM_PROXY disabled");
 }
@@ -200,8 +204,10 @@ function isCloudflareBlock(status, text) {
 async function rawFetch(url, opts = {}, timeout = 15_000) {
   const signal = opts.signal || AbortSignal.timeout(timeout);
   const fetchOpts = { ...opts, signal };
-  if (proxyAgent && undiciFetch) {
-    return undiciFetch(url, { ...fetchOpts, dispatcher: proxyAgent });
+  // استخدم undici + HTTP/1.1 دائمًا لو متاح (يتجنب 426 من بعض الـ CDNs)
+  if (undiciFetch) {
+    const dispatcher = proxyAgent || undiciAgent || undefined;
+    return undiciFetch(url, dispatcher ? { ...fetchOpts, dispatcher } : fetchOpts);
   }
   return fetch(url, fetchOpts);
 }
@@ -2910,8 +2916,17 @@ const HOSSAM_CATALOG = {
       name: "ورشة الهرمونات",
       courseId: 9,
       lessons: [
-        { lessonId: 120, title: "ورشة الهرمونات — 11_133", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" }
-        // أضف باقي الدروس بعد POST /api/bunny/resolve-lesson لكل lessonId
+        { lessonId: 120, title: "ورشة الهرمونات — الدرس المتاح", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" },
+        { lessonId: 121, title: "الدرس الاول", videoId: null, guid: null },
+        { lessonId: 122, title: "الدرس الثاني", videoId: null, guid: null },
+        { lessonId: 123, title: "حل الدرس الاول", videoId: null, guid: null },
+        { lessonId: 124, title: "حل الدرس الثاني", videoId: null, guid: null },
+        { lessonId: 125, title: "حل كتاب المرشد", videoId: null, guid: null },
+        { lessonId: 126, title: "مقدمة الهرمونات في النبات والإنسان", videoId: null, guid: null },
+        { lessonId: 127, title: "الغدة النخامية", videoId: null, guid: null },
+        { lessonId: 128, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null },
+        { lessonId: 129, title: "الهرمونات — تكملة", videoId: null, guid: null },
+        { lessonId: 130, title: "الهرمونات — مراجعة", videoId: null, guid: null }
       ]
     }
   ]
@@ -3260,12 +3275,33 @@ async function buildVideoSource(videoId, clientHeaders) {
 
   async function tryCdn() {
     const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-    const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES }));
-    const masterText = await probe.text();
-    // كورساتك أحيانًا ترجع 404/426 والجسم m3u8 سليم
-    if (!masterText.includes("#EXTM3U")) throw new Error(`CDN ${probe.status} — playlist غير صالح`);
-    console.log(`[cdn] master ok status=${probe.status} video=${videoId}`);
-    return { mode: "cdn", streamUrl: masterUrl, sessionToken: upstreamTok, probeText: masterText, resolvedVideoId: String(videoId) };
+    let lastErr = null;
+    for (let i = 0; i < UA_PROFILES.length; i++) {
+      const profile = UA_PROFILES[i];
+      try {
+        const probe = await upstreamSlot(() => fetchT(masterUrl, {
+          headers: {
+            Authorization: `Bearer ${upstreamTok}`,
+            Accept: "*/*",
+            "Cache-Control": "no-cache",
+            ...profile
+          },
+          cache: "no-store"
+        }, { timeout: 22_000, retries: 1 }));
+        const masterText = await probe.text();
+        if (!masterText.includes("#EXTM3U")) {
+          lastErr = new Error(`CDN ${probe.status} — playlist غير صالح`);
+          console.warn(`[cdn] try ${i} status=${probe.status} body=`, masterText.slice(0, 80).replace(/\n/g, " "));
+          continue;
+        }
+        console.log(`[cdn] master ok status=${probe.status} video=${videoId} profile=${i}`);
+        return { mode: "cdn", streamUrl: masterUrl, sessionToken: upstreamTok, probeText: masterText, resolvedVideoId: String(videoId) };
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[cdn] try ${i} err`, e.message);
+      }
+    }
+    throw lastErr || new Error("CDN failed");
   }
 
   async function tryWeave() {
@@ -3290,8 +3326,10 @@ async function buildVideoSource(videoId, clientHeaders) {
     throw lastWeaveErr || new Error("weave failed");
   }
 
-  // ترتيب المحاولة: CDN أولاً لو المنصة CDN؛ وإلا weave ثم CDN
-  const order = preferCdn ? ["cdn", "weave"] : ["weave", "cdn"];
+  // ترتيب المحاولة: لو مفيش stream-weave في المنصات نتخطاه (يقلل 426 الفارغة)
+  const hasWeave = platformNames.some((n) => n.includes("weave") || n.includes("stream-weave"));
+  const order = preferCdn || !hasWeave ? ["cdn", "weave"] : ["weave", "cdn"];
+  if (!hasWeave) console.log(`[play] video ${videoId} platforms=${platformNames.join(",")||"?"} → prefer CDN`);
   for (const which of order) {
     try {
       const got = which === "cdn" ? await tryCdn() : await tryWeave();
@@ -3682,6 +3720,61 @@ app.get("/api/public/hossam", rateLimit({ max: 60, windowMs: 60_000, scope: "hos
       }))
     }
   });
+});
+
+
+// استيراد كل دروس كورس حسام دفعة واحدة (يحتاج cookies صالحة من المتصفح)
+app.post("/api/bunny/import-course", requireStudent, rateLimit({ max: 5, windowMs: 300_000, scope: "bunny-import" }), async (req, res) => {
+  try {
+    const cookies = String(req.body?.cookies || process.env.HOSSAM_COOKIES || "").trim();
+    if (!cookies) return jsonError(res, 400, "ابعت cookies من جلسة drhossamissa.com");
+    const courseSlug = String(req.body?.courseSlug || "ورشة-الهرمونات-9").trim();
+    const start = Math.max(1, Number(req.body?.start || 100) || 100);
+    const end = Math.min(start + 80, Number(req.body?.end || start + 40) || start + 40);
+    const found = [];
+    for (let lessonId = start; lessonId <= end; lessonId++) {
+      try {
+        const pageUrl = `https://drhossamissa.com/play-course/${encodeURIComponent(courseSlug)}/${lessonId}`;
+        const r = await fetch(pageUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+            Accept: "text/html",
+            Cookie: cookies,
+            Referer: "https://drhossamissa.com/my-courses"
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(20_000)
+        });
+        const html = await r.text();
+        if (r.status === 401 || r.status === 403 || /login|تسجيل الدخول/i.test(html.slice(0, 2000)) && !/mediadelivery|iframe/i.test(html)) {
+          if (lessonId === start) return jsonError(res, 401, "الكوكيز منتهية — جدّدها من المتصفح");
+          continue;
+        }
+        const guidM = html.match(/mediadelivery\.net\/embed\/\d+\/([a-f0-9-]{36})/i)
+          || html.match(/vz-[a-z0-9-]+\.b-cdn\.net\/([a-f0-9-]{36})\//i)
+          || html.match(/["']([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})["']/i);
+        if (!guidM) continue;
+        const guid = guidM[1];
+        const titleM = html.match(/<title>([^<]+)<\/title>/i);
+        const title = (titleM && titleM[1] ? titleM[1].replace(/\s*\|\s*.*$/, "").trim() : `درس ${lessonId}`);
+        const videoId = "bn_" + guid;
+        found.push({ lessonId, title, videoId, guid });
+        // حدّث الكتالوج في الذاكرة
+        const course = HOSSAM_CATALOG.courses[0];
+        if (course) {
+          const existing = (course.lessons || []).find((l) => Number(l.lessonId) === lessonId);
+          if (existing) { existing.videoId = videoId; existing.guid = guid; if (title) existing.title = title; }
+          else (course.lessons || (course.lessons = [])).push({ lessonId, title, videoId, guid });
+        }
+        console.log("[bunny-import] lesson", lessonId, videoId);
+      } catch (e) {
+        console.warn("[bunny-import]", lessonId, e.message);
+      }
+    }
+    res.json({ success: true, imported: found.length, lessons: found, catalog: HOSSAM_CATALOG.courses[0] });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
 });
 
 app.post("/api/bunny/resolve-lesson", requireStudent, rateLimit({ max: 20, windowMs: 60_000, scope: "bunny-resolve" }), async (req, res) => {
