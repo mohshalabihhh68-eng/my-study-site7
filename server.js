@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.16 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.18 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -19,7 +19,12 @@ try {
   ProxyAgent = undici.ProxyAgent;
   undiciFetch = undici.fetch;
   if (undici.Agent) {
-    undiciAgent = new undici.Agent({ allowH2: false, keepAliveTimeout: 15_000, connections: 32 });
+    undiciAgent = new undici.Agent({
+      allowH2: false,
+      keepAliveTimeout: 10_000,
+      connections: 24,
+      connect: { timeout: 12_000, rejectUnauthorized: true }
+    });
   }
 } catch {
   console.warn("[API] undici not available — UPSTREAM_PROXY disabled");
@@ -50,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.16";
+const APP_VERSION = "v1.7.18";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -3251,6 +3256,62 @@ async function tryResolveYoutube(videoId) {
   return null;
 }
 
+
+/** جلب playlist مع تعدد محاولات (H1.1 / Accept / بدون auth أحيانًا) */
+async function fetchPlaylistSmart(url, token, label = "pl") {
+  const accepts = [
+    "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+    "*/*",
+    "application/json, text/plain, */*"
+  ];
+  let last = { status: 0, text: "" };
+  for (let pi = 0; pi < UA_PROFILES.length; pi++) {
+    for (const accept of accepts) {
+      try {
+        const headers = {
+          ...UA_PROFILES[pi],
+          Accept: accept,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache"
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const probe = await upstreamSlot(() =>
+          fetchT(url, { headers, cache: "no-store" }, { timeout: 20_000, retries: 1, retryOn: [429, 502, 503, 504, 408] })
+        );
+        const masterText = await probe.text();
+        last = { status: probe.status, text: masterText };
+        if (masterText.includes("#EXTM3U")) {
+          console.log(`[${label}] ok status=${probe.status} profile=${pi}`);
+          return { status: probe.status, text: masterText };
+        }
+        console.warn(`[${label}] status=${probe.status} no-m3u profile=${pi}`, masterText.slice(0, 60).replace(/\n/g, " "));
+      } catch (e) {
+        last = { status: 0, text: "", error: e.message };
+        console.warn(`[${label}] err profile=${pi}`, e.message);
+      }
+    }
+  }
+  // محاولة أخيرة بدون بعض الهيدر
+  try {
+    const probe = await fetchT(url, {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : undefined,
+        Accept: "*/*",
+        "User-Agent": CONFIG.STREAM_UA
+      },
+      cache: "no-store"
+    }, { timeout: 20_000, retries: 0 });
+    const masterText = await probe.text();
+    if (masterText.includes("#EXTM3U")) return { status: probe.status, text: masterText };
+    last = { status: probe.status, text: masterText };
+  } catch (e) {
+    last.error = e.message;
+  }
+  const err = new Error(`${label} ${last.status || ""} — playlist غير صالح`.trim());
+  err.detail = (last.text || "").slice(0, 120);
+  throw err;
+}
+
 async function buildVideoSource(videoId, clientHeaders) {
   const upstreamTok = await getCoursatkToken();
   if (!upstreamTok) { const e = new Error("توكن كورساتك غير مضبوط"); e.status = 503; throw e; }
@@ -3275,48 +3336,44 @@ async function buildVideoSource(videoId, clientHeaders) {
 
   async function tryCdn() {
     const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-    let lastErr = null;
-    for (let i = 0; i < UA_PROFILES.length; i++) {
-      const profile = UA_PROFILES[i];
-      try {
-        const probe = await upstreamSlot(() => fetchT(masterUrl, {
-          headers: {
-            Authorization: `Bearer ${upstreamTok}`,
-            Accept: "*/*",
-            "Cache-Control": "no-cache",
-            ...profile
-          },
-          cache: "no-store"
-        }, { timeout: 22_000, retries: 1 }));
-        const masterText = await probe.text();
-        if (!masterText.includes("#EXTM3U")) {
-          lastErr = new Error(`CDN ${probe.status} — playlist غير صالح`);
-          console.warn(`[cdn] try ${i} status=${probe.status} body=`, masterText.slice(0, 80).replace(/\n/g, " "));
-          continue;
-        }
-        console.log(`[cdn] master ok status=${probe.status} video=${videoId} profile=${i}`);
-        return { mode: "cdn", streamUrl: masterUrl, sessionToken: upstreamTok, probeText: masterText, resolvedVideoId: String(videoId) };
-      } catch (e) {
-        lastErr = e;
-        console.warn(`[cdn] try ${i} err`, e.message);
-      }
-    }
-    throw lastErr || new Error("CDN failed");
+    const got = await fetchPlaylistSmart(masterUrl, upstreamTok, "cdn");
+    return { mode: "cdn", streamUrl: masterUrl, sessionToken: upstreamTok, probeText: got.text, resolvedVideoId: String(videoId) };
   }
 
-  async function tryWeave() {
+  async function tryWeaveasync function tryWeave() {
     let lastWeaveErr = null;
     for (let attempt = 1; attempt <= UPSTREAM_FETCH_RETRIES; attempt++) {
       try {
         const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
         if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-        return {
-          mode: "weave",
-          sessionToken: data.data.token,
-          streamUrl: data.data.stream_url,
-          resolvedVideoId: String(data.data.video_id || videoId),
-          probeText: null
-        };
+        const wToken = data.data.token;
+        const wUrl = data.data.stream_url;
+        const wVid = String(data.data.video_id || videoId);
+        // اجلب الماستر فورًا — لو 426 جرّب مسارات بديلة
+        let probeText = null;
+        const candidates = [wUrl];
+        try {
+          const u = new URL(wUrl);
+          // بدائل شائعة لـ stream-weave
+          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/master.m3u8`);
+          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/playlist.m3u8`);
+          if (!/master\.m3u8|playlist\.m3u8/i.test(u.pathname)) {
+            candidates.push(wUrl.replace(/\/?$/, "/playlist.m3u8"));
+            candidates.push(wUrl.replace(/\/?$/, "/master.m3u8"));
+          }
+        } catch {}
+        let lastPlErr = null;
+        for (const cand of [...new Set(candidates)]) {
+          try {
+            const got = await fetchPlaylistSmart(cand, wToken, "weave");
+            probeText = got.text;
+            return { mode: "weave", sessionToken: wToken, streamUrl: cand, resolvedVideoId: wVid, probeText };
+          } catch (pe) {
+            lastPlErr = pe;
+            console.warn("[weave] playlist candidate fail", cand.slice(0, 80), pe.message);
+          }
+        }
+        throw lastPlErr || new Error("Weave playlist failed");
       } catch (e) {
         lastWeaveErr = e;
         console.warn(`[weave] play attempt ${attempt}/${UPSTREAM_FETCH_RETRIES}:`, e.message);
@@ -3830,6 +3887,29 @@ app.post("/api/bunny/resolve-lesson", requireStudent, rateLimit({ max: 20, windo
   } catch (e) {
     console.error("[bunny resolve]", e.message);
     jsonError(res, 502, e.message);
+  }
+});
+
+
+app.get("/api/debug/stream-probe/:videoId", requireStudent, rateLimit({ max: 10, windowMs: 60_000, scope: "dbg-stream" }), async (req, res) => {
+  try {
+    const videoId = String(req.params.videoId || "");
+    const tok = await getCoursatkToken();
+    const out = { videoId, tokenConfigured: Boolean(tok), platforms: null, weave: null, cdn: null };
+    try {
+      out.platforms = await upstreamJson(`/video/${encodeURIComponent(videoId)}/platforms`);
+    } catch (e) { out.platforms = { error: e.message }; }
+    try {
+      out.weave = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+    } catch (e) { out.weave = { error: e.message }; }
+    try {
+      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+      const got = await fetchPlaylistSmart(masterUrl, tok, "dbg-cdn");
+      out.cdn = { status: got.status, hasM3U: got.text.includes("#EXTM3U"), head: got.text.slice(0, 200) };
+    } catch (e) { out.cdn = { error: e.message, detail: e.detail || null }; }
+    res.json({ success: true, data: out, version: APP_VERSION });
+  } catch (e) {
+    jsonError(res, 500, e.message);
   }
 });
 
