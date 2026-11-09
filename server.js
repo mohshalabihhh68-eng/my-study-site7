@@ -3585,20 +3585,55 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         src.cipherMode = "cbc";
         src.ivMode = "playlist";
       } else {
-        try {
-          src.plainKey = await unwrapKey(wrapped, src.videoId);
-          src.cipherMode = "cbc";
-          src.ivMode = "playlist";
-          console.log("[weave-v3] fallback unwrapKey len=" + src.plainKey?.length);
-        } catch (ke) {
-          try {
-            src.plainKey = await unwrapCdnKey(wrapped);
-            src.cipherMode = "cbc";
-            src.ivMode = "playlist";
-          } catch (ke2) {
-            console.warn("[weave-v3] plainKey still null after all paths");
-            throw new Error(`Key unwrap failed: ${ke.message}`);
+        // kv>=3: مفيش قبول raw key.bin من غير تحقق TS — بيسبب bad decrypt
+        // جرّب decryptPlaybackKey من player.js بصيغ متعددة
+        let got = null;
+        if (decryptPlaybackKeyFn) {
+          const attempts = [
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), String(src.videoId)),
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), String(src.videoId), src.keySeed),
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), String(src.videoId), src.keySeed, src.sessionId),
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), { videoId: src.videoId, keySeed: src.keySeed, sessionId: src.sessionId, ticket: src.swTicket }),
+          ];
+          for (const fn of attempts) {
+            try {
+              const result = await fn();
+              const key = result?.key || result;
+              if (!key) continue;
+              const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+              if (aes.length === 16) {
+                // validate against sample if available
+                if (sampleEncrypted && sampleEncrypted.length >= 32) {
+                  let ok = false;
+                  for (const testIv of [src.defaultIv, currentIv, ivFromMediaSequence(0)].filter(Boolean)) {
+                    try {
+                      const plain = decryptSegment(sampleEncrypted, aes, testIv);
+                      if (looksLikeMpegTs(plain, true)) { ok = true; break; }
+                    } catch {}
+                    try {
+                      const plain = decryptSegmentCtr(sampleEncrypted, aes, testIv);
+                      if (looksLikeMpegTs(plain, true)) { ok = true; src.cipherMode = "ctr"; break; }
+                    } catch {}
+                  }
+                  if (!ok) continue;
+                }
+                got = aes;
+                console.log("[weave-v3] decryptPlaybackKeyFn produced valid key");
+                break;
+              }
+            } catch (e) {
+              console.warn("[weave-v3] decryptPlaybackKey attempt:", e.message);
+            }
           }
+        }
+        if (got) {
+          src.plainKey = got;
+          src.cipherMode = src.cipherMode || "cbc";
+          src.ivMode = "playlist";
+        } else {
+          console.warn("[weave-v3] plainKey still null after all paths — need valid x-sw-proof / player.js algo");
+          console.warn("[weave-v3] hint: upload player.stream-weave.cache.js from browser Network tab (coursatk) to extract proof algorithm");
+          throw new Error("فشل فك مفتاح weave v3 — proof غير صالح أو خوارزمية المفتاح غير معروفة");
         }
       }
     }
