@@ -1534,17 +1534,29 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
       "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
     };
   } else {
+    let host = "";
+    try { host = new URL(url).hostname.toLowerCase(); } catch {}
+    const isFloravon = /floravon\./i.test(host) || /\.floravon\./i.test(host);
+    const isSw = /stream-weave\.com$/i.test(host) || host.endsWith(".stream-weave.com");
     headers = {
-      Authorization: `Bearer ${session.token}`, Accept: "*/*", "Cache-Control": "no-cache",
-      Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER,
-      "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
+      Accept: "*/*",
+      "Cache-Control": "no-cache",
+      Origin: CONFIG.STREAM_ORIGIN,
+      Referer: CONFIG.STREAM_REFERER,
       "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
     };
-    // stream-weave key_version=3: لازم x-sw-key-version + أحيانًا proof/ticket
-    const kv = Number(session.keyVersion || session.key_version || 0);
-    if (kv > 0) headers["x-sw-key-version"] = String(kv);
-    if (session.swTicket) headers["x-sw-ticket"] = String(session.swTicket);
-    if (session.swProof) headers["x-sw-proof"] = String(session.swProof);
+    // floravon CDN موقّع بـ token في الـ query — متبعتش Bearer (أحيانًا يبوّظ)
+    if (!isFloravon && session.token) {
+      headers.Authorization = `Bearer ${session.token}`;
+      headers["X-Requested-With"] = CONFIG.STREAM_X_REQUESTED_WITH;
+    }
+    // stream-weave key_version=3
+    if (isSw) {
+      const kv = Number(session.keyVersion || session.key_version || 0);
+      if (kv > 0) headers["x-sw-key-version"] = String(kv);
+      if (session.swTicket) headers["x-sw-ticket"] = String(session.swTicket);
+      if (session.swProof) headers["x-sw-proof"] = String(session.swProof);
+    }
   }
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
@@ -3229,19 +3241,37 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   }
   let text = masterText;
   let baseUrl = src.streamUrl;
-  const mLines = masterText.split(/\r?\n/);
-  let variant = null;
-  for (let i = 0; i < mLines.length; i++) {
-    if (mLines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
-      const next = mLines[i + 1]?.trim();
-      if (next && !next.startsWith("#")) { variant = new URL(next, src.streamUrl).href; break; }
+
+  // لو عندنا media playlist من key-ticket (فيه EXTINF + floravon) استخدمه مباشرة
+  if (src.mediaPlaylistText && /#EXTINF/i.test(src.mediaPlaylistText) && /#EXTM3U/i.test(src.mediaPlaylistText)) {
+    text = src.mediaPlaylistText;
+    baseUrl = src.streamUrl || `https://api.stream-weave.com/api/v1/videos/${src.videoId}/stream/600/playlist.m3u8`;
+    console.log("[weave-v3] buildPlaylist using mediaPlaylistText from key-ticket");
+  } else {
+    const mLines = masterText.split(/\r?\n/);
+    let variant = null;
+    for (let i = 0; i < mLines.length; i++) {
+      if (mLines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
+        const next = mLines[i + 1]?.trim();
+        if (next && !next.startsWith("#")) {
+          // data: URL من تلفيف سابق؟
+          if (next.startsWith("data:")) continue;
+          variant = new URL(next, src.streamUrl).href;
+          break;
+        }
+      }
     }
-  }
-  if (variant) {
-    const v = await streamFetch(src, variant, {}, clientHeaders);
-    text = await v.text();
-    if (!text.includes("#EXTM3U")) throw new Error(`Variant HTTP ${v.status}`);
-    baseUrl = variant;
+    if (variant) {
+      const v = await streamFetch(src, variant, {}, clientHeaders);
+      text = await v.text();
+      if (!text.includes("#EXTM3U")) throw new Error(`Variant HTTP ${v.status}`);
+      baseUrl = variant;
+    }
+    // لو الـ media لسة مفيش EXTINF وkey-ticket موجود
+    if (!/#EXTINF/i.test(text) && src.mediaPlaylistText && /#EXTINF/i.test(src.mediaPlaylistText)) {
+      text = src.mediaPlaylistText;
+      console.log("[weave-v3] fallback to key-ticket media after empty variant");
+    }
   }
   try { src.allowedHosts.add(new URL(baseUrl).hostname); } catch {}
   const lines = text.split(/\r?\n/);
@@ -3389,6 +3419,7 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   // —— فك/اختيار المفتاح بعد ما نعرف أول مقطع ——
   if (src._pendingKeyBuf) {
     const wrapped = src._pendingKeyBuf;
+    src._lastKeyBuf = Buffer.from(wrapped); // للاستخدام لو decrypt فشل لاحقًا
     delete src._pendingKeyBuf;
     const uri = src._pendingKeyUri || "";
     delete src._pendingKeyUri;
@@ -3766,12 +3797,54 @@ async function buildVideoSource(videoId, clientHeaders) {
         const wKv = Number(data.data.key_version || data.data.keyVersion || 0) || 0;
         const wHb = data.data.heartbeat_url || data.data.heartbeatUrl || null;
         console.log(`[weave] play ok vid=${wVid} sid=${wSid || "-"} kv=${wKv} seed=${wSeed ? "yes" : "no"}`);
-        // اجلب الماستر فورًا — لو 426 جرّب مسارات بديلة
+
+        // —— v3: POST key-ticket هو اللي بيرجع الـ media playlist الفعلي (floravon + token)
+        let mediaFromTicket = null;
+        if (wSid && wKv >= 3) {
+          try {
+            const ktUrl = `https://api.stream-weave.com/api/v1/playback/session/${wSid}/key-ticket`;
+            const ktRes = await upstreamSlot(() =>
+              fetchT(
+                ktUrl,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${wToken}`,
+                    Accept: "application/json, application/vnd.apple.mpegurl, */*",
+                    Origin: CONFIG.STREAM_ORIGIN,
+                    Referer: CONFIG.STREAM_REFERER,
+                    "User-Agent": CONFIG.STREAM_UA,
+                    "x-sw-key-version": String(wKv || 3),
+                    "Content-Length": "0"
+                  },
+                  body: ""
+                },
+                { timeout: 20_000, retries: 2 }
+              )
+            );
+            const ktText = await ktRes.text();
+            console.log(`[weave-v3] key-ticket status=${ktRes.status} len=${ktText.length} head=${ktText.slice(0, 40).replace(/\n/g, " ")}`);
+            if (ktRes.ok && ktText.includes("#EXTM3U") && /#EXTINF/i.test(ktText)) {
+              mediaFromTicket = ktText;
+            } else if (ktRes.ok) {
+              // أحيانًا JSON فيه playlist
+              try {
+                const j = JSON.parse(ktText);
+                const maybe = j.playlist || j.media || j.data?.playlist || j.data?.media;
+                if (typeof maybe === "string" && maybe.includes("#EXTM3U")) mediaFromTicket = maybe;
+              } catch {}
+            }
+          } catch (kte) {
+            console.warn("[weave-v3] key-ticket fail:", kte.message);
+          }
+        }
+
+        // اجلب الماستر — لو 426 جرّب مسارات بديلة
         let probeText = null;
+        let streamUrlUsed = wUrl;
         const candidates = [wUrl];
         try {
           const u = new URL(wUrl);
-          // بدائل شائعة لـ stream-weave
           candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/master.m3u8`);
           candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/playlist.m3u8`);
           if (!/master\.m3u8|playlist\.m3u8/i.test(u.pathname)) {
@@ -3784,23 +3857,50 @@ async function buildVideoSource(videoId, clientHeaders) {
           try {
             const got = await fetchPlaylistSmart(cand, wToken, "weave");
             probeText = got.text;
-            return {
-              mode: "weave",
-              sessionToken: wToken,
-              streamUrl: cand,
-              resolvedVideoId: wVid,
-              probeText,
-              sessionId: wSid,
-              keySeed: wSeed,
-              keyVersion: wKv,
-              heartbeatUrl: wHb
-            };
+            streamUrlUsed = cand;
+            break;
           } catch (pe) {
             lastPlErr = pe;
             console.warn("[weave] playlist candidate fail", cand.slice(0, 80), pe.message);
           }
         }
-        throw lastPlErr || new Error("Weave playlist failed");
+
+        // لو key-ticket رجّع media playlist كامل، فضّله (فيه روابط floravon الموقّعة)
+        if (mediaFromTicket) {
+          // لو الماستر فيه variants فقط، اعتبر ticket هو الـ media مباشرة
+          const masterIsVariantOnly =
+            probeText &&
+            /#EXT-X-STREAM-INF/i.test(probeText) &&
+            !/#EXTINF/i.test(probeText);
+          if (!probeText || masterIsVariantOnly || !/#EXTINF/i.test(probeText)) {
+            // لفّه كـ master بسيط → media
+            probeText =
+              "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=1800000\n" +
+              "data:application/vnd.apple.mpegurl;base64," +
+              Buffer.from(mediaFromTicket).toString("base64");
+            // أبسط: مرّر media كـ probe مع علامة
+            probeText = mediaFromTicket;
+            streamUrlUsed = `https://api.stream-weave.com/api/v1/videos/${wVid}/stream/600/playlist.m3u8`;
+            console.log("[weave-v3] using key-ticket media playlist as probe");
+          } else {
+            // احتفظ بالماستر، ومرّر media منفصل عبر حقل إضافي
+          }
+        }
+
+        if (!probeText) throw lastPlErr || new Error("Weave playlist failed");
+
+        return {
+          mode: "weave",
+          sessionToken: wToken,
+          streamUrl: streamUrlUsed,
+          resolvedVideoId: wVid,
+          probeText,
+          mediaPlaylistText: mediaFromTicket || null,
+          sessionId: wSid,
+          keySeed: wSeed,
+          keyVersion: wKv,
+          heartbeatUrl: wHb
+        };
       } catch (e) {
         lastWeaveErr = e;
         console.warn(`[weave] play attempt ${attempt}/${UPSTREAM_FETCH_RETRIES}:`, e.message);
@@ -3843,6 +3943,7 @@ async function buildVideoSource(videoId, clientHeaders) {
         keySeed: got.keySeed || null,
         keyVersion: got.keyVersion || 0,
         heartbeatUrl: got.heartbeatUrl || null,
+        mediaPlaylistText: got.mediaPlaylistText || null,
         swTicket: null,
         swProof: null
       };
@@ -4637,9 +4738,46 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
     let plain;
     try {
       plain = decryptSegment(encrypted, usedSrc.plainKey, usedIv);
+      if (usedSrc.mode === "weave" && !looksLikeMpegTs(plain)) {
+        // المفتاح غلط رغم عدم رمي padding error — جرّب مرشّحات تانية
+        throw new Error("not mpeg-ts after decrypt");
+      }
     } catch (decErr) {
-      console.warn("[seg] decrypt failed, serving raw:", decErr.message);
-      plain = encrypted;
+      let recovered = null;
+      if (usedSrc.mode === "weave" && usedSrc.keySeed && encrypted.length >= 32) {
+        try {
+          const cands = weaveV3KeyCandidates(usedSrc.plainKey, usedSrc.keySeed);
+          // أعد توليد من keyBuf لو موجود
+          if (usedSrc._lastKeyBuf) {
+            for (const c of weaveV3KeyCandidates(usedSrc._lastKeyBuf, usedSrc.keySeed)) {
+              if (!cands.some((x) => x.hex === c.hex)) cands.push(c);
+            }
+          }
+          const ivs = [usedIv, usedSrc.defaultIv, ivFromMediaSequence(meta.s || 0)].filter(
+            (x) => x && Buffer.isBuffer(x) && x.length === 16
+          );
+          for (const cand of cands) {
+            for (const testIv of ivs) {
+              try {
+                const p = decryptSegment(encrypted, cand.key, testIv);
+                if (looksLikeMpegTs(p)) {
+                  recovered = p;
+                  usedSrc.plainKey = cand.key;
+                  console.log(`[seg] recovered plainKey via ${cand.tag}`);
+                  break;
+                }
+              } catch {}
+            }
+            if (recovered) break;
+          }
+        } catch {}
+      }
+      if (recovered) {
+        plain = recovered;
+      } else {
+        console.warn("[seg] decrypt failed, serving raw:", decErr.message);
+        plain = encrypted;
+      }
     }
 
     segSet(key, plain);
