@@ -714,6 +714,97 @@ const initialVideoId = qs.get('videoId');
 const playCache = new Map();
 const PLAY_CACHE_TTL = 45000;
 
+
+async function clientFetchAndHydrate(videoId, meta) {
+  const playlistUrl = meta.playlistUrl || meta.playlist_url;
+  const headers = Object.assign({}, meta.headers || {});
+  // المتصفح مش هيقدر يبعت Origin مخصص أحيانًا — سيبه للمتصفح
+  const hdrs = {
+    Accept: headers.Accept || 'application/vnd.apple.mpegurl, application/x-mpegURL, */*',
+    Authorization: headers.Authorization || ''
+  };
+  if (!hdrs.Authorization) throw Object.assign(new Error('مفيش توكن كورساتك للجلب من الجهاز'), { kind: 'auth' });
+
+  async function getText(url) {
+    // مباشرة — غالبًا CORS هيمنع من دومين تاني؛ لو فشل نجرب بروكسي اختياري
+    async function once(u, h) {
+      const r = await fetch(u, { method: 'GET', headers: h, mode: 'cors', credentials: 'omit', cache: 'no-store' });
+      const t = await r.text();
+      return { r, t };
+    }
+    let lastStatus = 0;
+    try {
+      const { r, t } = await once(url, hdrs);
+      lastStatus = r.status;
+      if (t && t.includes('#EXTM3U')) return t;
+    } catch (e) { /* CORS */ }
+    // بروكسي عام (لو متاح) — يمرر الـ URL فقط؛ التوكن في query
+    const proxies = [];
+    try {
+      const envProxy = (window.CORS_PROXY || localStorage.getItem('CORS_PROXY') || '').trim();
+      if (envProxy) proxies.push(envProxy);
+    } catch (_) {}
+    // بدون بروكسي نرمي خطأ واضح
+    const err = new Error('المتصفح ممنوع من كورساتك (CORS) أو القائمة فاشلة (' + lastStatus + '). الحل: UPSTREAM_PROXY على السيرفر أو CORS_PROXY.');
+    err.status = lastStatus || 0;
+    throw err;
+  }
+
+  const master = await getText(playlistUrl);
+  let media = master;
+  let variantUrl = playlistUrl;
+  if (master.includes('#EXT-X-STREAM-INF')) {
+    const lines = master.split(/\r?\n/);
+    let best = null, bestBw = -1, pending = null;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.startsWith('#EXT-X-STREAM-INF:')) {
+        const bw = Number((line.match(/BANDWIDTH=(\d+)/) || [])[1] || 0);
+        pending = bw;
+      } else if (line && !line.startsWith('#') && pending != null) {
+        if (pending >= bestBw) { bestBw = pending; best = line; }
+        pending = null;
+      }
+    }
+    if (!best) throw new Error('الماستر فاضي');
+    variantUrl = new URL(best, playlistUrl).href;
+    media = await getText(variantUrl);
+  }
+
+  let keyBase64 = null;
+  let keyUrl = null;
+  const keyLine = media.split(/\r?\n/).find(l => l.indexOf('#EXT-X-KEY:') === 0);
+  if (keyLine) {
+    const m = keyLine.match(/URI="([^"]+)"/);
+    if (m) {
+      keyUrl = new URL(m[1], variantUrl).href;
+      const kr = await fetch(keyUrl, { method: 'GET', headers: hdrs, mode: 'cors', credentials: 'omit', cache: 'no-store' });
+      const buf = await kr.arrayBuffer();
+      if (!buf || !buf.byteLength) throw new Error('فشل جلب مفتاح التشغيل (' + kr.status + ')');
+      const bytes = new Uint8Array(buf);
+      let s = '';
+      for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      keyBase64 = btoa(s);
+    }
+  }
+
+  const hydratePath = meta.hydratePath || ('/api/play/' + encodeURIComponent(videoId) + '/hydrate');
+  const hydrated = await api(hydratePath, {
+    method: 'POST',
+    body: JSON.stringify({
+      masterPlaylist: master,
+      mediaPlaylist: media,
+      variantUrl: variantUrl,
+      keyUrl: keyUrl,
+      keyBase64: keyBase64
+    })
+  });
+  // api() might return data nested
+  const data = (hydrated && hydrated.play_url) ? hydrated : (hydrated && hydrated.data) ? hydrated.data : hydrated;
+  if (!data || !data.play_url) throw new Error('hydrate فشل — مفيش play_url');
+  return data;
+}
+
 async function getPlayCached(videoId) {
   const c = playCache.get(String(videoId));
   if (c && Date.now() - c.ts < PLAY_CACHE_TTL) return c.data;
@@ -1173,6 +1264,7 @@ function hideError(){$('error').classList.remove('show')}
 async function api(path,opts={}){
   const headers={Accept:'application/json',...(opts.headers||{})};
   if(token)headers.Authorization='Bearer '+token;
+  if(opts.body && !headers['Content-Type'] && !headers['content-type']) headers['Content-Type']='application/json';
   let r;
   try{r=await fetch(API+path,{method:opts.method||'GET',headers,body:opts.body,cache:'no-store',credentials:'include'})}
   catch(e){const er=new Error('مفيش اتصال بالسيرفر. اتأكد من النت وجرّب تاني.');er.kind='network';throw er}
@@ -1552,6 +1644,13 @@ async function playIndex(i,autoplay){
       playData = null;
     }
     if (my !== playToken) return;
+
+    // Cloudflare حظر IP السيرفر → جلب playlist من جهاز الطالب ثم hydrate
+    if (playData && (playData.type === 'client_fetch' || playData.needsClientFetch)) {
+      setLoading(true, 'جاري جلب الفيديو من جهازك (تجاوز الحظر)…');
+      playData = await clientFetchAndHydrate(item.id, playData);
+      playCache.set(String(item.id), { data: playData, ts: Date.now() });
+    }
 
     if (playData && (playData.type === 'youtube' || playData.youtube_url)) {
       const yt = playData.youtube_url || playData.url;
