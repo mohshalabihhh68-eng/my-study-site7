@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.24 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.25 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.24";
+const APP_VERSION = "v1.7.25";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -3842,148 +3842,65 @@ async function buildVideoSource(videoId, clientHeaders) {
         const keyLine = mediaText.split(/\r?\n/).find((l) => l.startsWith("#EXT-X-KEY:"));
         let plainKey = null;
         let defaultIv = null;
+        let keyUri = null;
         if (keyLine) {
-          const uri = (keyLine.match(/URI="([^"]+)"/) || [])[1];
+          keyUri = (keyLine.match(/URI="([^"]+)"/) || [])[1] || null;
           const ivHex = (keyLine.match(/IV=(0x[0-9a-fA-F]+)/i) || [])[1];
           if (ivHex) defaultIv = Buffer.from(ivHex.replace(/^0x/i, ""), "hex");
-          const keyUrl = uri ? new URL(uri, mediaUrl).href : null;
-
-          if (keyUrl && !plainKey) {
-            try {
-              const kr = await fetchT(keyUrl, { headers: weaveHeaders, cache: "no-store" }, { timeout: 15_000, retries: 1 });
-              const kb = Buffer.from(await kr.arrayBuffer());
-              console.log("[weave-v3] key.bin len", kb.length);
-              if (kb.length === 86 && keySeed) {
-                try { plainKey = await unwrapStreamWeaveKeyV3(kb, keySeed, wVid, sessionId, keyVersion); }
-                catch (e) {
-                  try { plainKey = await unwrapStreamWeaveKeyV3(kb, keySeed, sessionId, wVid, keyVersion); }
-                  catch (e2) { console.warn("[weave-v3] key.bin unwrap", e2.message); }
-                }
-              } else if (kb.length === 16) plainKey = kb;
-              else if (kb.length > 0) {
-                try { plainKey = await unwrapKey(kb, wVid); } catch {
-                  try { plainKey = await unwrapCdnKey(kb); } catch {}
-                }
-              }
-            } catch (e) {
-              console.warn("[weave-v3] key.bin fail", e.message);
-            }
-          }
-
-          if (!plainKey && sessionId) {
-            try {
-              const ticketUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key-ticket`;
-              const tr = await fetchT(ticketUrl, {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${wToken}`,
-                  Accept: "application/json",
-                  Origin: CONFIG.STREAM_ORIGIN,
-                  Referer: CONFIG.STREAM_REFERER,
-                  "User-Agent": CONFIG.STREAM_UA,
-                  "Content-Length": "0"
-                },
-                cache: "no-store"
-              }, { timeout: 15_000, retries: 1 });
-              let ticket = null;
-              const tct = tr.headers.get("content-type") || "";
-              if (tct.includes("json")) {
-                const tj = await tr.json();
-                ticket = tj.ticket || tj.data?.ticket || null;
-              } else {
-                const tt = await tr.text();
-                try { ticket = JSON.parse(tt).ticket; } catch { ticket = (tt || "").trim() || null; }
-              }
-
-              const keySessUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key`;
-              const kh = {
-                Authorization: `Bearer ${wToken}`,
-                Accept: "*/*",
-                Origin: CONFIG.STREAM_ORIGIN,
-                Referer: CONFIG.STREAM_REFERER,
-                "User-Agent": CONFIG.STREAM_UA,
-                "x-sw-key-version": String(keyVersion)
-              };
-              if (ticket) kh["X-SW-Ticket"] = ticket;
-              if (ticket && keySeed) {
-                try {
-                  const cryptoMod = await import("crypto");
-                  const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-                  kh["X-SW-Proof"] = cryptoMod.createHmac("sha256", seedBuf).update(String(ticket)).digest("base64url");
-                } catch (e) {
-                  console.warn("[weave-v3] proof gen", e.message);
-                }
-              }
-              const kr2 = await fetchT(keySessUrl, { headers: kh, cache: "no-store" }, { timeout: 15_000, retries: 1 });
-              const kb2 = Buffer.from(await kr2.arrayBuffer());
-              const asText = kb2.toString("utf8");
-              console.log("[weave-v3] sess key status", kr2.status, "len", kb2.length);
-              if (asText.trim().startsWith("{")) {
-                console.warn("[weave-v3] key endpoint JSON", asText.slice(0, 120));
-              } else if (kb2.length === 86 && keySeed) {
-                try {
-                  plainKey = await unwrapStreamWeaveKeyV3(kb2, keySeed, wVid, sessionId, keyVersion);
-                  console.log("[weave-v3] unwrapped 86-byte package");
-                } catch (e) {
-                  console.warn("[weave-v3] unwrap 86 fail", e.message);
-                  try {
-                    plainKey = await unwrapStreamWeaveKeyV3(kb2, keySeed, sessionId, wVid, keyVersion);
-                  } catch (e2) {
-                    console.warn("[weave-v3] unwrap 86 swap fail", e2.message);
-                  }
-                }
-              } else if (kb2.length === 16) {
-                plainKey = kb2;
-              } else if (kb2.length > 0) {
-                try { plainKey = await unwrapKey(kb2, wVid); } catch {
-                  try { plainKey = await unwrapCdnKey(kb2); } catch {
-                    if (kb2.length >= 16) plainKey = kb2.subarray(0, 16);
-                  }
-                }
-              }
-            } catch (e) {
-              console.warn("[weave-v3] session key fail", e.message);
-            }
-          }
-
         }
 
-        // عيّنة مقطع مشفّر للتحقق من صحة المفتاح
-        let sampleEnc = null, sampleIv = null;
-        {
-          const keyLine0 = mediaText.split(/\r?\n/).find((l) => l.startsWith("#EXT-X-KEY:"));
-          if (keyLine0) {
-            const ivHex0 = (keyLine0.match(/IV=(0x[0-9a-fA-F]+)/i) || [])[1];
-            if (ivHex0) sampleIv = Buffer.from(ivHex0.replace(/^0x/i, ""), "hex");
-          }
-          if (!sampleIv) sampleIv = defaultIv || ivFromMediaSequence(0);
+        // عيّنة مقطع للتحقق
+        let sampleEnc = null;
+        let sampleIv = defaultIv || ivFromMediaSequence(0);
+        try {
           for (const raw of mediaText.split(/\r?\n/)) {
             const line = raw.trim();
             if (line && !line.startsWith("#")) {
-              try {
-                const segU = new URL(line, mediaUrl).href;
-                const sr = await fetchT(segU, {
-                  headers: {
-                    Accept: "*/*",
-                    Origin: CONFIG.STREAM_ORIGIN,
-                    Referer: CONFIG.STREAM_REFERER,
-                    "User-Agent": CONFIG.STREAM_UA
-                  },
-                  cache: "no-store"
-                }, { timeout: 20_000, retries: 1 });
-                sampleEnc = Buffer.from(await sr.arrayBuffer());
-                console.log("[weave-v3] sample seg status", sr.status, "len", sampleEnc.length);
-              } catch (e) {
-                console.warn("[weave-v3] sample seg", e.message);
-              }
+              const segU = new URL(line, mediaUrl).href;
+              const sr = await fetchT(segU, {
+                headers: {
+                  Accept: "*/*",
+                  Origin: CONFIG.STREAM_ORIGIN,
+                  Referer: CONFIG.STREAM_REFERER,
+                  "User-Agent": CONFIG.STREAM_UA
+                },
+                cache: "no-store"
+              }, { timeout: 20_000, retries: 1 });
+              sampleEnc = Buffer.from(await sr.arrayBuffer());
+              console.log("[weave-v3] sample seg status", sr.status, "len", sampleEnc.length);
               break;
             }
           }
+        } catch (e) {
+          console.warn("[weave-v3] sample seg", e.message);
         }
 
-        // ticket إضافي إن لم يُجلب
-        let ticketForKey = null;
-        if (sessionId) {
+        const tryAcceptKey = (buf, tag) => {
+          if (!buf || buf.length < 16) return false;
+          const k = Buffer.isBuffer(buf) ? buf.subarray(0, 16) : Buffer.from(buf).subarray(0, 16);
+          if (sampleEnc && sampleIv) {
+            try {
+              const plain = decryptSegment(sampleEnc, k, sampleIv);
+              if (looksLikeTs(plain)) {
+                plainKey = k;
+                console.log("[weave-v3] accepted key via", tag, "TS ok");
+                return true;
+              }
+              console.warn("[weave-v3] reject key", tag, "not valid TS");
+              return false;
+            } catch (e) {
+              console.warn("[weave-v3] reject key", tag, e.message);
+              return false;
+            }
+          }
+          // بدون عيّنة نقبل بحذر
+          plainKey = k;
+          console.log("[weave-v3] accepted key via", tag, "no-sample");
+          return true;
+        };
+
+        // 1) مسار session v3 أولاً (key-ticket + /key) — أهم من key.bin
+        if (sessionId && keySeed) {
           try {
             const ticketUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key-ticket`;
             const tr = await fetchT(ticketUrl, {
@@ -3997,47 +3914,152 @@ async function buildVideoSource(videoId, clientHeaders) {
                 "Content-Length": "0"
               },
               cache: "no-store"
-            }, { timeout: 12_000, retries: 0 });
+            }, { timeout: 15_000, retries: 1 });
+            let ticket = null;
             try {
               const tj = await tr.json();
-              ticketForKey = tj.ticket || tj.data?.ticket || null;
-            } catch {}
-          } catch {}
+              ticket = tj.ticket || tj.data?.ticket || null;
+            } catch {
+              try {
+                const tt = await tr.text();
+                ticket = JSON.parse(tt).ticket;
+              } catch {}
+            }
+            console.log("[weave-v3] ticket", ticket ? String(ticket).slice(0, 16) + "…" : null, "status", tr.status);
+
+            const keySessUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key`;
+            const kh = {
+              Authorization: `Bearer ${wToken}`,
+              Accept: "*/*",
+              Origin: CONFIG.STREAM_ORIGIN,
+              Referer: CONFIG.STREAM_REFERER,
+              "User-Agent": CONFIG.STREAM_UA,
+              "x-sw-key-version": String(keyVersion)
+            };
+            if (ticket) {
+              kh["X-SW-Ticket"] = ticket;
+              try {
+                const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+                // Ee: HMAC-SHA256(keySeed, ticket) → base64url
+                kh["X-SW-Proof"] = crypto.createHmac("sha256", seedBuf).update(String(ticket)).digest("base64url");
+              } catch (e) {
+                console.warn("[weave-v3] proof", e.message);
+              }
+            }
+            const kr2 = await fetchT(keySessUrl, { headers: kh, cache: "no-store" }, { timeout: 15_000, retries: 1 });
+            const kb2 = Buffer.from(await kr2.arrayBuffer());
+            console.log("[weave-v3] sess key status", kr2.status, "len", kb2.length);
+            if (kb2.length === 86) {
+              try {
+                const k = await unwrapStreamWeaveKeyV3(kb2, keySeed, wVid, sessionId, keyVersion);
+                tryAcceptKey(k, "sw86-vid-sid");
+              } catch (e) {
+                console.warn("[weave-v3] sw86 vid/sid", e.message);
+                try {
+                  const k = await unwrapStreamWeaveKeyV3(kb2, keySeed, sessionId, wVid, keyVersion);
+                  tryAcceptKey(k, "sw86-sid-vid");
+                } catch (e2) {
+                  console.warn("[weave-v3] sw86 sid/vid", e2.message);
+                }
+              }
+            } else if (kb2.length === 16) {
+              tryAcceptKey(kb2, "sess-16");
+            } else if (kb2.length > 0 && !kb2.toString("utf8").trim().startsWith("{")) {
+              try {
+                const k = await unwrapKey(kb2, wVid);
+                tryAcceptKey(k, "sess-unwrap");
+              } catch {
+                try {
+                  const k = await unwrapCdnKey(kb2);
+                  tryAcceptKey(k, "sess-cdn");
+                } catch {}
+              }
+            }
+          } catch (e) {
+            console.warn("[weave-v3] session key path", e.message);
+          }
         }
 
-        // لو عندنا sample — اختبر كل مرشّحات المفتاح
-        try {
-          if (sampleEnc && sampleIv) {
+        // 2) key.bin من الـ playlist — لا نقبله إلا بعد TS check
+        if (!plainKey && keyUri) {
+          try {
+            const keyUrl = new URL(keyUri, mediaUrl).href;
+            const kr = await fetchT(keyUrl, { headers: weaveHeaders, cache: "no-store" }, { timeout: 15_000, retries: 1 });
+            const kb = Buffer.from(await kr.arrayBuffer());
+            console.log("[weave-v3] key.bin status", kr.status, "len", kb.length);
+            if (kb.length === 86 && keySeed) {
+              try {
+                const k = await unwrapStreamWeaveKeyV3(kb, keySeed, wVid, sessionId, keyVersion);
+                tryAcceptKey(k, "bin86");
+              } catch (e) {
+                console.warn("[weave-v3] bin86", e.message);
+              }
+            } else if (kb.length === 16) {
+              // مهم: لا تقبل 16 بايت من key.bin بدون فحص TS
+              if (!tryAcceptKey(kb, "bin16")) {
+                // قد يكون ملف ملفوف
+                if (keySeed) {
+                  try {
+                    const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+                    // XOR / AES محاولات
+                    const x = Buffer.alloc(16);
+                    for (let i = 0; i < 16; i++) x[i] = kb[i] ^ seedBuf[i % seedBuf.length];
+                    tryAcceptKey(x, "bin16-xor-seed");
+                  } catch {}
+                }
+                try {
+                  const k = await unwrapKey(kb, wVid);
+                  tryAcceptKey(k, "bin16-unwrap");
+                } catch {
+                  try {
+                    const k = await unwrapCdnKey(kb);
+                    tryAcceptKey(k, "bin16-cdn");
+                  } catch {}
+                }
+              }
+            } else if (kb.length > 0) {
+              try {
+                const k = await unwrapKey(kb, wVid);
+                tryAcceptKey(k, "bin-unwrap");
+              } catch {
+                try {
+                  const k = await unwrapCdnKey(kb);
+                  tryAcceptKey(k, "bin-cdn");
+                } catch {}
+              }
+            }
+          } catch (e) {
+            console.warn("[weave-v3] key.bin fail", e.message);
+          }
+        }
+
+        // 3) مرشّحات seed/ticket كحل أخير مع فحص TS
+        if (!plainKey && sampleEnc && sampleIv) {
+          try {
             const resolved = await resolveWeavePlainKey({
               keySeed,
-              ticket: ticketForKey,
-              wrapped: plainKey && plainKey.length !== 16 ? plainKey : null,
+              ticket: null,
+              wrapped: null,
               sampleEncrypted: sampleEnc,
               sampleIv,
               videoId: wVid
             });
-            if (resolved) plainKey = resolved;
-          } else if (!plainKey && keySeed) {
-            try {
-              const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-              if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
-            } catch {}
+            if (resolved) tryAcceptKey(resolved, "candidates");
+          } catch (e) {
+            console.warn("[weave-v3] candidates", e.message);
           }
-          if (plainKey && sampleEnc && sampleIv) {
-            try {
-              const test = decryptSegment(sampleEnc, plainKey, sampleIv);
-              console.log("[weave-v3] key TS check", looksLikeTs(test), "plainLen", test.length);
-            } catch (e) {
-              console.warn("[weave-v3] key TS decrypt err", e.message);
-            }
-          }
-        } catch (e) {
-          console.warn("[weave-v3] key resolve soft-fail", e.message);
-          if (!plainKey && keySeed) {
-            try {
-              const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-              if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
-            } catch {}
+        }
+
+        if (!plainKey) {
+          console.warn("[weave-v3] plainKey still null after all paths");
+        } else if (sampleEnc && sampleIv) {
+          try {
+            const test = decryptSegment(sampleEnc, plainKey, sampleIv);
+            console.log("[weave-v3] final key TS check", looksLikeTs(test), "len", test.length);
+          } catch (e) {
+            console.warn("[weave-v3] final key still bad", e.message);
+            // لا تستخدم مفتاح فاسد — فضّل الفشل الواضح على شاشة سوداء
+            plainKey = null;
           }
         }
 
