@@ -50,6 +50,16 @@ import {
   getThanawicaSessionInfo
 } from "./thanawica.js";
 
+// ===== taleb.pro adapter =====
+import {
+  buildTalebSource,
+  getTalebTeachers,
+  getTalebKey,
+  getTalebPlaylist,
+  TALEB_STREAM_HOSTS,
+  updateTalebCookies
+} from "./taleb.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
@@ -502,7 +512,10 @@ const CONFIG = {
     "b-cdn.net",
     "mediadelivery.net",
     "iframe.mediadelivery.net",
-    "vz-878412bf-692.b-cdn.net"
+    "vz-878412bf-692.b-cdn.net",
+    // taleb.pro
+    "video.talep.pro",
+    "talep.pro"
   ],
   // Bunny Stream (د. حسام عيسى / drhossamissa.com)
   BUNNY_CDN_HOST: (process.env.BUNNY_CDN_HOST || "vz-878412bf-692.b-cdn.net").replace(/^https?:\/\//, "").replace(/\/$/, ""),
@@ -668,6 +681,20 @@ loadRuntimeFile();
 if (!runtime.firebaseUrl) {
   runtime.firebaseUrl = (process.env.FIREBASE_URL || CONFIG.FIREBASE || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, "");
 }
+
+// تحميل كوكيز taleb.pro من Firebase عند الـ startup
+(async () => {
+  try {
+    const talebCookies = await fbGet("config/taleb_cookies");
+    if (talebCookies && talebCookies.device && talebCookies.session) {
+      process.env.TALEB_DEVICE = talebCookies.device;
+      process.env.TALEB_SESSION = talebCookies.session;
+      console.log("[taleb] cookies loaded from Firebase");
+    }
+  } catch (e) {
+    console.warn("[taleb] couldn't load cookies from Firebase:", e.message);
+  }
+})();
 
 const maintenance = { mode: "off", message: "السيرفر في وضع الصيانة حاليًا. حاول لاحقًا.", updatedAt: 0, updatedBy: null };
 
@@ -1726,8 +1753,22 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
   const ch = clientHeaders || {};
   const isBunny = session && (session.mode === "bunny" || session.mode === "hossam");
+  const isTaleb = session && session.mode === "taleb";
   let headers;
-  if (isBunny) {
+  if (isTaleb) {
+    // taleb.pro: كوكيز بدل Bearer
+    const device = process.env.TALEB_DEVICE || "";
+    const sess = process.env.TALEB_SESSION || "";
+    headers = {
+      Accept: "*/*",
+      "Cache-Control": "no-cache",
+      Origin: "https://talep.pro",
+      Referer: "https://talep.pro/",
+      "User-Agent": ch["user-agent"] || "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "accept-language": "ar-AE,ar;q=0.9,en-US;q=0.8,en;q=0.7",
+      "cookie": `taleb-device=${device}; taleb-session=${sess}`
+    };
+  } else if (isBunny) {
     // فك حماية Bunny: Referer من iframe.mediadelivery.net مطلوب
     headers = {
       Accept: "*/*",
@@ -4317,6 +4358,19 @@ function getVideoSource(videoId, clientHeaders) {
   if (hit && now() < hit.exp) return Promise.resolve(hit.src);
   return coalesce("src:" + videoId, async () => {
     // —— Bunny / د. حسام عيسى (drhossamissa.com iframe protect bypass)
+    // ===== taleb.pro: taleb_{partId} =====
+    if (String(videoId).startsWith("taleb_")) {
+      const partId = String(videoId).slice(6); // بعد "taleb_"
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(partId)) {
+        const e = new Error("معرّف فيديو taleb غير صالح — استخدم taleb_{uuid}");
+        e.status = 400;
+        throw e;
+      }
+      const src = await buildTalebSource(partId);
+      sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+      return src;
+    }
+
     if (CONFIG.BUNNY_ENABLED !== false && isBunnyVideoId(videoId)) {
       const guid = parseBunnyGuid(videoId);
       if (!guid) {
@@ -5195,9 +5249,11 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   const url = sg.u;
   const isTh = session.src?.mode === "thanawica";
   const isBunny = session.src?.mode === "bunny" || session.src?.mode === "hossam";
-  if (!url || (!isTh && !isBunny && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
+  const isTaleb2 = session.src?.mode === "taleb";
+  if (!url || (!isTh && !isBunny && !isTaleb2 && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
   if (isTh && url && !/thanawica\.com/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
   if (isBunny && url && !/b-cdn\.net|mediadelivery\.net/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
+  if (isTaleb2 && url && !/video\.talep\.pro/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
   const meta = { ...sg, u: url, iv: sg.iv, s: sg.s, i: idx };
   const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
   try {
@@ -6119,6 +6175,124 @@ app.post("/api/video/:id/play", async function (req, res) {
   });
   res.status(200).json(r);
 });
+
+// ==================== taleb.pro endpoints ====================
+
+/** جلب المدرسين من taleb.pro */
+app.get("/api/taleb/teachers", requireStudent, async (req, res) => {
+  try {
+    const teachers = await getTalebTeachers();
+    res.json({ success: true, data: teachers });
+  } catch (e) {
+    console.error("[taleb teachers]", e.message);
+    jsonError(res, 502, "فشل جلب المدرسين من taleb.pro: " + e.message);
+  }
+});
+
+/** جلب playlist لـ partId مباشرة */
+app.get("/api/taleb/playlist/:partId", requireStudent, async (req, res) => {
+  try {
+    const partId = String(req.params.partId || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "partId غير صالح");
+    const text = await getTalebPlaylist(partId);
+    res.type("application/vnd.apple.mpegurl").send(text);
+  } catch (e) {
+    jsonError(res, 502, e.message);
+  }
+});
+
+/** تشغيل فيديو taleb مباشرة بـ partId (بدون حاجة لـ /api/play/taleb_{uuid}) */
+app.post("/api/taleb/play/:partId", requireStudent, playLimiter, async (req, res) => {
+  try {
+    const partId = String(req.params.partId || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "partId (UUID) غير صالح");
+
+    const videoId = `taleb_${partId}`;
+    checkPlayBurst(req.session && req.session.code, videoId);
+    logPlayEvent(req, videoId).catch(() => {});
+
+    assertPlayerOrigin(req);
+    const src = await getVideoSource(videoId, req.headers);
+
+    try {
+      const secure = (req.secure || req.headers["x-forwarded-proto"] === "https") ? "; Secure" : "";
+      res.setHeader("Set-Cookie", `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`);
+    } catch {}
+
+    const id = crypto.randomUUID().replace(/-/g, "");
+    const streamKey = crypto.randomBytes(16).toString("hex");
+    const deviceId = (req.session && req.session.deviceId) || null;
+    revokeOtherSessions(req.session.code, src.videoId, id);
+
+    const sessionRow = {
+      id, src,
+      videoId: src.videoId,
+      shared: false,
+      ownerCode: req.session.code,
+      ownerToken: req.sessionToken,
+      ownerDeviceId: deviceId,
+      streamKey,
+      createdAt: now(),
+      lastUsed: now()
+    };
+    streamSessions.set(id, sessionRow);
+    const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
+    res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, shared: false, partId, videoId } });
+  } catch (be) {
+    jsonError(res, be.status || 502, be.message);
+  }
+});
+
+/** تحديث كوكيز taleb.pro من لوحة الأدمن */
+app.put("/api/admin/taleb/cookies", requireAdmin("admins_manage"), async (req, res) => {
+  try {
+    const device = String(req.body?.device || "").trim();
+    const session = String(req.body?.session || "").trim();
+    if (!device || !session) return jsonError(res, 400, "device و session مطلوبان");
+    updateTalebCookies(device, session);
+    // احفظهم في Firebase للاستمرارية
+    try {
+      await fbSet("config/taleb_cookies", { device, session, updatedAt: now(), updatedBy: req.admin.username });
+    } catch (e) { console.warn("[taleb cookies] fb save:", e.message); }
+    res.json({ success: true, message: "تم تحديث كوكيز taleb.pro" });
+  } catch (e) { jsonError(res, 500, e.message); }
+});
+
+/** جلب حالة كوكيز taleb */
+app.get("/api/admin/taleb/status", requireAdmin(null), async (_req, res) => {
+  try {
+    const device = process.env.TALEB_DEVICE || "";
+    const session = process.env.TALEB_SESSION || "";
+    // اختبر بطلب notifications
+    let alive = false;
+    let error = null;
+    try {
+      const r = await fetch("https://talep.pro/api/notifications", {
+        headers: {
+          "user-agent": "Mozilla/5.0",
+          "cookie": `taleb-device=${device}; taleb-session=${session}`,
+          "accept": "*/*"
+        },
+        signal: AbortSignal.timeout(8000)
+      });
+      alive = r.ok;
+      if (!r.ok) error = `HTTP ${r.status}`;
+    } catch (e) { error = e.message; }
+    res.json({
+      success: true,
+      data: {
+        deviceSet: Boolean(device),
+        sessionSet: Boolean(session),
+        devicePrefix: device ? device.slice(0, 12) + "…" : null,
+        sessionPrefix: session ? session.slice(0, 20) + "…" : null,
+        alive,
+        error
+      }
+    });
+  } catch (e) { jsonError(res, 500, e.message); }
+});
+
+// ===== END taleb.pro endpoints =====
 
 app.post("/api/heartbeat", async function (req, res) {
   try {
