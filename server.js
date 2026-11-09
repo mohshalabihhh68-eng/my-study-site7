@@ -1454,6 +1454,22 @@ function decryptSegmentCtr(encrypted, key, iv) {
  * جرّب مرشّحات المفتاح مع IV من الـ playlist على أول مقطع — يرجع المفتاح الصالح أو null
  */
 async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, ticket, logTag = "weave-v3" }) {
+  if (keyBuf && Buffer.isBuffer(keyBuf) && keyBuf.length === 16) {
+    console.log(`[${logTag}] raw 16-byte key detected`);
+    const rawKey = Buffer.from(keyBuf);
+    const ivs = [];
+    if (iv && Buffer.isBuffer(iv) && iv.length === 16) ivs.push({ iv, tag: "playlist" });
+    for (let s = 0; s < 4; s++) ivs.push({ iv: ivFromMediaSequence(s), tag: `seq${s}` });
+    ivs.push({ iv: Buffer.alloc(16, 0), tag: "zero" });
+    if (!sampleEncrypted || sampleEncrypted.length < 32) return { key: rawKey, mode: "cbc", ivMode: "playlist", tag: "raw-16" };
+    for (const { iv: ti, tag: it } of ivs) {
+      try { if (looksLikeMpegTs(decryptSegment(sampleEncrypted, rawKey, ti), true)) return { key: rawKey, mode: "cbc", ivMode: it.startsWith("seq") ? "seq" : "playlist", tag: "raw-16" }; } catch {}
+    }
+    for (const { iv: ti, tag: it } of ivs) {
+      try { if (looksLikeMpegTs(decryptSegmentCtr(sampleEncrypted, rawKey, ti), true)) return { key: rawKey, mode: "ctr", ivMode: it.startsWith("seq") ? "seq" : "playlist", tag: "raw-16" }; } catch {}
+    }
+    return { key: rawKey, mode: "cbc", ivMode: "playlist", tag: "raw-16-fallback" };
+  }
   const cands = weaveV3KeyCandidates(keyBuf, keySeed, ticket);
   if (!cands.length) {
     console.warn(`[${logTag}] no key candidates (binLen=${keyBuf?.length || 0} seed=${keySeed ? "yes" : "no"})`);
