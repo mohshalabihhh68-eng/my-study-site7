@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.19 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.20 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.19";
+const APP_VERSION = "v1.7.20";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -2917,11 +2917,36 @@ const HOSSAM_CATALOG = {
   libraryId: "396717",
   courses: [
     {
+      id: "hormonal-coordination",
+      name: "باب التنسيق الهرموني",
+      courseId: 7,
+      courseSlug: "باب-التنسيق-الهرموني-7",
+      lessons: [
+        // lessonId أرقام تقريبية — الاستيراد بالكوكيز يملأ videoId/guid الحقيقي
+        { lessonId: 70, title: "مقدمة الهرمونات في النبات والهرمونات في الانسان", videoId: null, guid: null },
+        { lessonId: 71, title: "حل كتاب التفوق المحاضره الاولى هرمونات", videoId: null, guid: null },
+        { lessonId: 72, title: "كتاب دكتور حسام المحاضره الاولى هرمونات", videoId: null, guid: null },
+        { lessonId: 73, title: "الغدة النخامية (هرمونات الجزء الغدي)", videoId: null, guid: null },
+        { lessonId: 74, title: "الغدة النخامية (هرمونات الجزء العصبي)", videoId: null, guid: null },
+        { lessonId: 75, title: "حل كتاب التفوق المحاضره الثانيه هرمونات", videoId: null, guid: null },
+        { lessonId: 76, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null },
+        { lessonId: 77, title: "حل كتاب التفوق المحاضره الثالثة", videoId: null, guid: null },
+        { lessonId: 78, title: "الغدة الكظرية", videoId: null, guid: null },
+        { lessonId: 79, title: "البنكرياس", videoId: null, guid: null },
+        { lessonId: 80, title: "الغدد التناسلية وملحقات القناة الهضمية", videoId: null, guid: null },
+        { lessonId: 81, title: "شرح الورشة", videoId: null, guid: null },
+        { lessonId: 82, title: "حل كتاب الامتحان", videoId: null, guid: null },
+        { lessonId: 83, title: "حل كتاب المرشد", videoId: null, guid: null },
+        { lessonId: 84, title: "حل كتاب دكتور حسام", videoId: null, guid: null }
+      ]
+    },
+    {
       id: "hormones-workshop",
       name: "ورشة الهرمونات",
       courseId: 9,
+      courseSlug: "ورشة-الهرمونات-9",
       lessons: [
-        { lessonId: 120, title: "ورشة الهرمونات — الدرس المتاح", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" },
+        { lessonId: 120, title: "ورشة الهرمونات — درس متاح", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" },
         { lessonId: 121, title: "الدرس الاول", videoId: null, guid: null },
         { lessonId: 122, title: "الدرس الثاني", videoId: null, guid: null },
         { lessonId: 123, title: "حل الدرس الاول", videoId: null, guid: null },
@@ -2929,9 +2954,7 @@ const HOSSAM_CATALOG = {
         { lessonId: 125, title: "حل كتاب المرشد", videoId: null, guid: null },
         { lessonId: 126, title: "مقدمة الهرمونات في النبات والإنسان", videoId: null, guid: null },
         { lessonId: 127, title: "الغدة النخامية", videoId: null, guid: null },
-        { lessonId: 128, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null },
-        { lessonId: 129, title: "الهرمونات — تكملة", videoId: null, guid: null },
-        { lessonId: 130, title: "الهرمونات — مراجعة", videoId: null, guid: null }
+        { lessonId: 128, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null }
       ]
     }
   ]
@@ -3959,11 +3982,68 @@ app.get("/api/public/hossam", rateLimit({ max: 60, windowMs: 60_000, scope: "hos
 
 
 // استيراد كل دروس كورس حسام دفعة واحدة (يحتاج cookies صالحة من المتصفح)
+
+app.post("/api/bunny/import-all", requireStudent, rateLimit({ max: 3, windowMs: 300_000, scope: "bunny-import-all" }), async (req, res) => {
+  try {
+    const cookies = String(req.body?.cookies || process.env.HOSSAM_COOKIES || process.env.DRHOSSAM_COOKIES || "").trim();
+    if (!cookies) return jsonError(res, 400, "ابعت cookies أو حط HOSSAM_COOKIES في Variables");
+    const courses = [
+      { slug: "باب-التنسيق-الهرموني-7", start: 50, end: 150 },
+      { slug: "ورشة-الهرمونات-9", start: 100, end: 160 }
+    ];
+    const all = [];
+    for (const c of courses) {
+      for (let lessonId = c.start; lessonId <= c.end; lessonId++) {
+        try {
+          const pageUrl = `https://drhossamissa.com/play-course/${encodeURIComponent(c.slug)}/${lessonId}`;
+          const r = await fetch(pageUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+              Accept: "text/html",
+              Cookie: cookies,
+              Referer: "https://drhossamissa.com/my-courses"
+            },
+            redirect: "follow",
+            signal: AbortSignal.timeout(18_000)
+          });
+          const html = await r.text();
+          if (lessonId === c.start && (r.status === 401 || r.status === 403 || (/login|تسجيل الدخول/i.test(html.slice(0, 2500)) && !/mediadelivery|iframe/i.test(html)))) {
+            return jsonError(res, 401, "الكوكيز منتهية — جدّدها من المتصفح وابعته تاني");
+          }
+          const guidM = html.match(/mediadelivery\.net\/embed\/\d+\/([a-f0-9-]{36})/i)
+            || html.match(/vz-[a-z0-9-]+\.b-cdn\.net\/([a-f0-9-]{36})\//i);
+          if (!guidM) continue;
+          const guid = guidM[1];
+          const titleM = html.match(/<title>([^<]+)<\/title>/i);
+          const title = (titleM && titleM[1] ? titleM[1].replace(/\s*\|\s*.*$/, "").trim() : `درس ${lessonId}`);
+          const videoId = "bn_" + guid;
+          const entry = { courseSlug: c.slug, lessonId, title, videoId, guid };
+          all.push(entry);
+          // update matching course in catalog
+          for (const course of (HOSSAM_CATALOG.courses || [])) {
+            if (String(course.courseSlug) === c.slug || String(course.courseId) === String(c.slug.split("-").pop())) {
+              const existing = (course.lessons || []).find((l) => Number(l.lessonId) === lessonId);
+              if (existing) { existing.videoId = videoId; existing.guid = guid; if (title) existing.title = title; }
+              else (course.lessons || (course.lessons = [])).push({ lessonId, title, videoId, guid });
+            }
+          }
+          console.log("[bunny-import-all]", c.slug, lessonId, videoId);
+        } catch (e) {
+          console.warn("[bunny-import-all]", c.slug, lessonId, e.message);
+        }
+      }
+    }
+    res.json({ success: true, imported: all.length, lessons: all });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
 app.post("/api/bunny/import-course", requireStudent, rateLimit({ max: 5, windowMs: 300_000, scope: "bunny-import" }), async (req, res) => {
   try {
     const cookies = String(req.body?.cookies || process.env.HOSSAM_COOKIES || "").trim();
     if (!cookies) return jsonError(res, 400, "ابعت cookies من جلسة drhossamissa.com");
-    const courseSlug = String(req.body?.courseSlug || "ورشة-الهرمونات-9").trim();
+    const courseSlug = String(req.body?.courseSlug || req.body?.slug || "باب-التنسيق-الهرموني-7").trim();
     const start = Math.max(1, Number(req.body?.start || 100) || 100);
     const end = Math.min(start + 80, Number(req.body?.end || start + 40) || start + 40);
     const found = [];
