@@ -1316,8 +1316,8 @@ function decodeKeySeed(seed) {
   try { return Buffer.from(s, "utf8"); } catch { return null; }
 }
 
-/** مرشّحات مفتاح AES-128 لـ stream-weave key_version=3 */
-function weaveV3KeyCandidates(keyBin, keySeed) {
+/** مرشّحات مفتاح AES-128 لـ stream-weave key_version=3 (من تحليل player.js: PBKDF2 iterations=1337) */
+function weaveV3KeyCandidates(keyBin, keySeed, extraTicket) {
   const out = [];
   const push = (buf, tag) => {
     if (!buf || buf.length < 16) return;
@@ -1333,26 +1333,88 @@ function weaveV3KeyCandidates(keyBin, keySeed) {
     push(bin.subarray(16, 32), "bin32-lo");
   }
   const seed = decodeKeySeed(keySeed);
+  let ticketBuf = null;
+  if (extraTicket) {
+    try {
+      ticketBuf = Buffer.from(String(extraTicket), "base64url");
+    } catch {
+      try { ticketBuf = Buffer.from(String(extraTicket), "base64"); } catch {}
+    }
+  }
+
+  const pbkdf = (password, salt, iter, tag) => {
+    try {
+      const derived = crypto.pbkdf2Sync(password, salt, iter, 32, "sha256");
+      push(derived, tag + "-hi");
+      push(derived.subarray(16), tag + "-lo");
+    } catch {}
+  };
+
   if (seed) {
     push(seed, "seed16");
     if (seed.length >= 32) push(seed.subarray(16, 32), "seed32-lo");
     const sh = crypto.createHash("sha256").update(seed).digest();
     push(sh, "sha256(seed)");
     if (bin.length >= 16) {
+      const b16 = bin.subarray(0, 16);
       const x = Buffer.alloc(16);
-      for (let i = 0; i < 16; i++) x[i] = bin[i] ^ seed[i % seed.length];
+      for (let i = 0; i < 16; i++) x[i] = b16[i] ^ seed[i % seed.length];
       push(x, "bin16-xor-seed");
       const x2 = Buffer.alloc(16);
-      for (let i = 0; i < 16; i++) x2[i] = bin[i] ^ sh[i];
+      for (let i = 0; i < 16; i++) x2[i] = b16[i] ^ sh[i];
       push(x2, "bin16-xor-sha256seed");
-      push(crypto.createHash("sha256").update(Buffer.concat([bin.subarray(0, 16), seed])).digest(), "sha256(bin||seed)");
-      push(crypto.createHash("sha256").update(Buffer.concat([seed, bin.subarray(0, 16)])).digest(), "sha256(seed||bin)");
+      push(crypto.createHash("sha256").update(Buffer.concat([b16, seed])).digest(), "sha256(bin||seed)");
+      push(crypto.createHash("sha256").update(Buffer.concat([seed, b16])).digest(), "sha256(seed||bin)");
       try {
-        push(crypto.createHmac("sha256", seed).update(bin.subarray(0, Math.min(16, bin.length))).digest(), "hmac(seed,bin)");
-        push(crypto.createHmac("sha256", bin.subarray(0, 16)).update(seed).digest(), "hmac(bin,seed)");
+        push(crypto.createHmac("sha256", seed).update(b16).digest(), "hmac(seed,bin)");
+        push(crypto.createHmac("sha256", b16).update(seed).digest(), "hmac(bin,seed)");
+      } catch {}
+
+      // player.js: deriveBits / PBKDF2 iterations = 1337
+      for (const iter of [1337, 1000, 1, 100, 10000]) {
+        pbkdf(seed, b16, iter, `pbkdf2(seed,bin,${iter})`);
+        pbkdf(b16, seed, iter, `pbkdf2(bin,seed,${iter})`);
+        pbkdf(seed, Buffer.concat([b16, seed]), iter, `pbkdf2(seed,bin||seed,${iter})`);
+      }
+      // HKDF-SHA256 style expand
+      try {
+        const prk = crypto.createHmac("sha256", b16).update(seed).digest();
+        const okm = crypto.createHmac("sha256", prk).update(Buffer.concat([Buffer.from([1])])).digest();
+        push(okm, "hkdf-ish(bin,seed)");
+        const prk2 = crypto.createHmac("sha256", seed).update(b16).digest();
+        push(crypto.createHmac("sha256", prk2).update(Buffer.concat([Buffer.from([1])])).digest(), "hkdf-ish(seed,bin)");
+      } catch {}
+
+      // AES-ECB "unwrap" of bin using seed as key (and reverse)
+      try {
+        if (seed.length >= 16) {
+          const d1 = crypto.createDecipheriv("aes-128-ecb", seed.subarray(0, 16), null);
+          d1.setAutoPadding(false);
+          push(Buffer.concat([d1.update(b16), d1.final()]), "aes-ecb-dec(seed,bin)");
+          const e1 = crypto.createCipheriv("aes-128-ecb", seed.subarray(0, 16), null);
+          e1.setAutoPadding(false);
+          push(Buffer.concat([e1.update(b16), e1.final()]), "aes-ecb-enc(seed,bin)");
+        }
+        const d2 = crypto.createDecipheriv("aes-128-ecb", b16, null);
+        d2.setAutoPadding(false);
+        if (seed.length >= 16) push(Buffer.concat([d2.update(seed.subarray(0, 16)), d2.final()]), "aes-ecb-dec(bin,seed)");
       } catch {}
     }
   }
+
+  if (ticketBuf && ticketBuf.length >= 16) {
+    push(ticketBuf, "ticket16");
+    if (bin.length >= 16) {
+      const x = Buffer.alloc(16);
+      for (let i = 0; i < 16; i++) x[i] = bin[i] ^ ticketBuf[i];
+      push(x, "bin-xor-ticket");
+      if (seed) {
+        pbkdf(seed, ticketBuf.subarray(0, 16), 1337, "pbkdf2(seed,ticket,1337)");
+        pbkdf(ticketBuf.subarray(0, 16), bin.subarray(0, 16), 1337, "pbkdf2(ticket,bin,1337)");
+      }
+    }
+  }
+
   try {
     const t = bin.toString("utf8").trim();
     if (/^[0-9a-fA-F]{32}$/.test(t)) push(Buffer.from(t, "hex"), "hex-text");
@@ -1371,21 +1433,31 @@ function looksLikeMpegTs(buf) {
   for (let i = 0; i < Math.min(188, buf.length - 188); i++) {
     if (buf[i] === 0x47 && buf[i + 188] === 0x47) return true;
   }
+  // fMP4 / CMAF: starts with size+ftype or mdat
+  const head = buf.slice(0, 12).toString("ascii");
+  if (head.includes("ftyp") || head.includes("moof") || head.includes("mdat") || head.includes("sidx")) return true;
   return false;
+}
+
+function decryptSegmentCtr(encrypted, key, iv) {
+  const decipher = crypto.createDecipheriv("aes-128-ctr", key, iv);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 }
 
 /**
  * جرّب مرشّحات المفتاح مع IV من الـ playlist على أول مقطع — يرجع المفتاح الصالح أو null
  */
-async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, logTag = "weave-v3" }) {
-  const cands = weaveV3KeyCandidates(keyBuf, keySeed);
+async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, ticket, logTag = "weave-v3" }) {
+  const cands = weaveV3KeyCandidates(keyBuf, keySeed, ticket);
   if (!cands.length) {
     console.warn(`[${logTag}] no key candidates (binLen=${keyBuf?.length || 0} seed=${keySeed ? "yes" : "no"})`);
     return null;
   }
   const ivs = [];
-  if (iv && Buffer.isBuffer(iv) && iv.length === 16) ivs.push(iv);
-  for (let s = 0; s < 4; s++) ivs.push(ivFromMediaSequence(s));
+  if (iv && Buffer.isBuffer(iv) && iv.length === 16) ivs.push({ iv, tag: "playlist" });
+  for (let s = 0; s < 4; s++) ivs.push({ iv: ivFromMediaSequence(s), tag: `seq${s}` });
+  // zero IV
+  ivs.push({ iv: Buffer.alloc(16, 0), tag: "zero" });
 
   if (!sampleEncrypted || sampleEncrypted.length < 32) {
     const prefer = cands.find((c) => c.tag === "bin16") || cands[0];
@@ -1393,20 +1465,46 @@ async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, lo
     return prefer.key;
   }
 
+  console.log(`[${logTag}] testing ${cands.length} keys × ${ivs.length} IVs on sample len=${sampleEncrypted.length}`);
+
   for (const cand of cands) {
-    for (const testIv of ivs) {
+    for (const { iv: testIv, tag: ivTag } of ivs) {
+      // CBC with PKCS7
       try {
         const plain = decryptSegment(sampleEncrypted, cand.key, testIv);
         if (looksLikeMpegTs(plain)) {
-          console.log(`[${logTag}] plainKey OK via ${cand.tag} iv=${testIv.toString("hex").slice(0, 8)}…`);
+          console.log(`[${logTag}] plainKey OK via ${cand.tag} CBC iv=${ivTag}`);
           return cand.key;
         }
-      } catch {
-        // padding error → مفتاح/IV غلط
-      }
+      } catch {}
+      // CBC without padding check — لو المقطع مش multiple of 16 أو padding مخصص
+      try {
+        const d = crypto.createDecipheriv("aes-128-cbc", cand.key, testIv);
+        d.setAutoPadding(false);
+        const aligned = sampleEncrypted.subarray(0, sampleEncrypted.length - (sampleEncrypted.length % 16));
+        if (aligned.length >= 188) {
+          const plain = Buffer.concat([d.update(aligned), d.final()]);
+          if (looksLikeMpegTs(plain)) {
+            console.log(`[${logTag}] plainKey OK via ${cand.tag} CBC-nopad iv=${ivTag}`);
+            return cand.key;
+          }
+        }
+      } catch {}
+      // CTR
+      try {
+        const plain = decryptSegmentCtr(sampleEncrypted, cand.key, testIv);
+        if (looksLikeMpegTs(plain)) {
+          console.log(`[${logTag}] plainKey OK via ${cand.tag} CTR iv=${ivTag}`);
+          return cand.key;
+        }
+      } catch {}
     }
   }
   console.warn(`[${logTag}] reject key candidates all IVs failed (tried ${cands.length} keys × ${ivs.length} IVs)`);
+  // debug: log key.bin + seed prefixes
+  try {
+    console.warn(`[${logTag}] debug bin16=${Buffer.from(keyBuf).subarray(0, 16).toString("hex")} seedPrefix=${String(keySeed || "").slice(0, 12)}`);
+  } catch {}
   return null;
 }
 
@@ -3455,6 +3553,7 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         keySeed: src.keySeed,
         iv: src.defaultIv || currentIv,
         sampleEncrypted,
+        ticket: src.swTicket || null,
         logTag: "weave-v3"
       });
       if (resolved) {
@@ -3798,8 +3897,9 @@ async function buildVideoSource(videoId, clientHeaders) {
         const wHb = data.data.heartbeat_url || data.data.heartbeatUrl || null;
         console.log(`[weave] play ok vid=${wVid} sid=${wSid || "-"} kv=${wKv} seed=${wSeed ? "yes" : "no"}`);
 
-        // —— v3: POST key-ticket هو اللي بيرجع الـ media playlist الفعلي (floravon + token)
+        // —— v3: POST key-ticket → غالبًا JSON {ticket, key_version, expires_in}
         let mediaFromTicket = null;
+        let swTicket = null;
         if (wSid && wKv >= 3) {
           try {
             const ktUrl = `https://api.stream-weave.com/api/v1/playback/session/${wSid}/key-ticket`;
@@ -3823,15 +3923,17 @@ async function buildVideoSource(videoId, clientHeaders) {
               )
             );
             const ktText = await ktRes.text();
-            console.log(`[weave-v3] key-ticket status=${ktRes.status} len=${ktText.length} head=${ktText.slice(0, 40).replace(/\n/g, " ")}`);
+            console.log(`[weave-v3] key-ticket status=${ktRes.status} len=${ktText.length} head=${ktText.slice(0, 60).replace(/\n/g, " ")}`);
             if (ktRes.ok && ktText.includes("#EXTM3U") && /#EXTINF/i.test(ktText)) {
               mediaFromTicket = ktText;
             } else if (ktRes.ok) {
-              // أحيانًا JSON فيه playlist
               try {
                 const j = JSON.parse(ktText);
+                if (j.ticket) swTicket = String(j.ticket);
+                if (j.key_version) wKv = Number(j.key_version) || wKv;
                 const maybe = j.playlist || j.media || j.data?.playlist || j.data?.media;
                 if (typeof maybe === "string" && maybe.includes("#EXTM3U")) mediaFromTicket = maybe;
+                console.log(`[weave-v3] key-ticket ticket=${swTicket ? "yes" : "no"} kv=${wKv}`);
               } catch {}
             }
           } catch (kte) {
@@ -3899,7 +4001,8 @@ async function buildVideoSource(videoId, clientHeaders) {
           sessionId: wSid,
           keySeed: wSeed,
           keyVersion: wKv,
-          heartbeatUrl: wHb
+          heartbeatUrl: wHb,
+          swTicket: swTicket || null
         };
       } catch (e) {
         lastWeaveErr = e;
@@ -3944,7 +4047,7 @@ async function buildVideoSource(videoId, clientHeaders) {
         keyVersion: got.keyVersion || 0,
         heartbeatUrl: got.heartbeatUrl || null,
         mediaPlaylistText: got.mediaPlaylistText || null,
-        swTicket: null,
+        swTicket: got.swTicket || null,
         swProof: null
       };
       try {
