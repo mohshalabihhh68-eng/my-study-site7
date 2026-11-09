@@ -1533,12 +1533,76 @@ async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, ti
   return null;
 }
 
-/** x-sw-proof تقريبي (player.js الحقيقي أدق) */
-function makeSwProof({ keySeed, sessionId, token, path }) {
-  const seed = decodeKeySeed(keySeed) || Buffer.from(String(keySeed || ""));
-  const msg = Buffer.from([String(sessionId || ""), String(path || "/key"), String(token || "").slice(-16)].join("|"));
-  const h = crypto.createHmac("sha256", seed.length ? seed : Buffer.from("sw")).update(msg).digest();
-  return h.toString("base64url").replace(/=+$/, "");
+/** x-sw-proof — جرّب عدة صيغ (الـ player.js الحقيقي معقّد) */
+function makeSwProof({ keySeed, sessionId, token, path, ticket }) {
+  const seed = decodeKeySeed(keySeed) || Buffer.from(String(keySeed || ""), "utf8");
+  const sid = String(sessionId || "");
+  const pathStr = String(path || `/playback/session/${sid}/key`);
+  const tokTail = String(token || "").slice(-16);
+  const ticketStr = String(ticket || "");
+  const ticketBuf = (() => { try { return Buffer.from(ticketStr, "base64url"); } catch { return Buffer.from(ticketStr); } })();
+
+  const msgs = [
+    [sid, pathStr, tokTail].join("|"),
+    [sid, "/key", tokTail].join("|"),
+    [sid, pathStr].join("|"),
+    sid + pathStr,
+    pathStr,
+    ticketStr,
+    [sid, ticketStr].join("|"),
+    [ticketStr, sid].join("|"),
+    Buffer.concat([seed.slice(0, 16), Buffer.from(sid)]),
+    Buffer.concat([ticketBuf.length === 32 ? ticketBuf : Buffer.alloc(0), Buffer.from(sid)]),
+  ];
+
+  // أول مرشّح (للتوافق مع الكود القديم)
+  const primary = crypto.createHmac("sha256", seed.length ? seed : Buffer.from("sw")).update(Buffer.from(String(msgs[0]))).digest();
+  return primary.toString("base64url").replace(/=+$/, "");
+}
+
+/** قائمة proofs للتجربة المتتالية */
+function makeSwProofCandidates({ keySeed, sessionId, token, path, ticket }) {
+  const seed = decodeKeySeed(keySeed) || Buffer.from(String(keySeed || ""), "utf8");
+  const sid = String(sessionId || "");
+  const pathStr = String(path || `/playback/session/${sid}/key`);
+  const tokTail = String(token || "").slice(-16);
+  const ticketStr = String(ticket || "");
+  let ticketBuf = Buffer.alloc(0);
+  try { ticketBuf = Buffer.from(ticketStr, "base64url"); } catch {}
+
+  const out = new Set();
+  const add = (buf) => { if (buf && buf.length) out.add(Buffer.from(buf).toString("base64url").replace(/=+$/, "")); };
+
+  const msgList = [
+    [sid, pathStr, tokTail].join("|"),
+    [sid, "/key", tokTail].join("|"),
+    [sid, pathStr].join("|"),
+    sid + "|" + pathStr,
+    pathStr,
+    "/key",
+    ticketStr,
+    sid + "|" + ticketStr,
+    ticketStr + "|" + sid,
+    sid + ticketStr,
+    ticketStr + sid,
+    [sid, ticketStr, "/key"].join("|"),
+  ];
+
+  for (const msg of msgList) {
+    add(crypto.createHmac("sha256", seed.length ? seed : Buffer.from("sw")).update(String(msg)).digest());
+    if (ticketBuf.length) add(crypto.createHmac("sha256", ticketBuf).update(String(msg)).digest());
+    add(crypto.createHash("sha256").update(Buffer.concat([seed, Buffer.from(String(msg))])).digest());
+  }
+  if (ticketBuf.length === 32) {
+    const xored = Buffer.alloc(32);
+    for (let i = 0; i < 32; i++) xored[i] = seed[i % seed.length] ^ ticketBuf[i];
+    add(xored);
+    add(crypto.createHash("sha256").update(xored).digest());
+    add(crypto.createHmac("sha256", seed).update(ticketBuf).digest());
+    add(crypto.createHmac("sha256", ticketBuf).update(seed).digest());
+  }
+  // proof معروف من جلسة ناجحة (للاختبار فقط — مش عام)
+  return [...out];
 }
 
 // Upstream helpers
@@ -3451,30 +3515,55 @@ async function buildPlaylist(src, masterText, clientHeaders) {
     }
   }
 
-  // لو weave v3: حاول تجديد ticket من session/key (مش حاسم — key.bin أهم)
-  if (src.mode === "weave" && src.sessionId && src.token) {
+  // weave v3: اجلب المفتاح من /session/{sid}/key مع ticket + proofs متعددة
+  if (src.mode === "weave" && src.sessionId && src.token && Number(src.keyVersion || 0) >= 3) {
     try {
-      const proof = makeSwProof({
+      src.allowedHosts.add("api.stream-weave.com");
+      const sessKeyUrl = `https://api.stream-weave.com/api/v1/playback/session/${src.sessionId}/key`;
+      const pathForProof = `/playback/session/${src.sessionId}/key`;
+      const proofs = makeSwProofCandidates({
         keySeed: src.keySeed,
         sessionId: src.sessionId,
         token: src.token,
-        path: `/playback/session/${src.sessionId}/key`
+        path: pathForProof,
+        ticket: src.swTicket
       });
-      src.swProof = proof;
-      const sessKeyUrl = `https://api.stream-weave.com/api/v1/playback/session/${src.sessionId}/key`;
-      src.allowedHosts.add("api.stream-weave.com");
-      const skRes = await streamFetch(src, sessKeyUrl, { Accept: "application/json" }, clientHeaders);
-      const skText = await skRes.text();
-      console.log(`[weave-v3] sess key status ${skRes.status} len ${skText.length} proof ${String(proof).slice(0, 12)}`);
-      if (skRes.ok) {
+      // حط أول proof كافتراضي
+      if (proofs.length) src.swProof = proofs[0];
+
+      let gotKeyBuf = null;
+      for (let pi = 0; pi < Math.min(proofs.length, 12); pi++) {
+        src.swProof = proofs[pi];
         try {
-          const sk = JSON.parse(skText);
-          if (sk.ticket) src.swTicket = sk.ticket;
-          if (sk.key_version) src.keyVersion = Number(sk.key_version) || src.keyVersion;
-          console.log(`[weave-v3] sess key ticket=${src.swTicket ? "yes" : "no"} kv=${src.keyVersion}`);
-        } catch {}
-      } else {
-        console.warn(`[weave-v3] ${skRes.status} body ${skText.slice(0, 120)}`);
+          const skRes = await streamFetch(src, sessKeyUrl, { Accept: "application/octet-stream, application/json, */*" }, clientHeaders);
+          const skBuf = Buffer.from(await skRes.arrayBuffer());
+          console.log(`[weave-v3] sess /key try#${pi} status=${skRes.status} len=${skBuf.length} proof=${String(proofs[pi]).slice(0, 14)}`);
+          if (skRes.status === 401) {
+            const body = skBuf.toString("utf8").slice(0, 100);
+            if (body.includes("invalid key proof") || body.includes("proof")) continue;
+          }
+          if (skRes.ok && skBuf.length >= 16) {
+            // JSON ticket refresh؟
+            if (skBuf.length < 200 && skBuf[0] === 0x7b) {
+              try {
+                const sk = JSON.parse(skBuf.toString("utf8"));
+                if (sk.ticket) src.swTicket = sk.ticket;
+                if (sk.key_version) src.keyVersion = Number(sk.key_version) || src.keyVersion;
+                console.log(`[weave-v3] sess /key JSON ticket refresh`);
+                continue;
+              } catch {}
+            }
+            gotKeyBuf = skBuf;
+            console.log(`[weave-v3] sess /key OK len=${skBuf.length} via proof#${pi}`);
+            break;
+          }
+        } catch (e) {
+          console.warn(`[weave-v3] sess /key try#${pi} err:`, e.message);
+        }
+      }
+      if (gotKeyBuf) {
+        src._pendingKeyBuf = gotKeyBuf;
+        src._keyFromSession = true;
       }
     } catch (e) {
       console.warn("[weave-v3] sess key skip:", e.message);
@@ -3493,14 +3582,24 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         keyIvAttr = `IV=${ivHex.startsWith("0x") || ivHex.startsWith("0X") ? ivHex : ("0x" + ivHex)}`;
       }
       if (uri && !keyFetched) {
+        src.defaultIv = currentIv;
+        src._pendingKeyUri = uri;
+
+        // لو جبنا المفتاح من /session/.../key خلاص
+        if (src._pendingKeyBuf && src._pendingKeyBuf.length >= 16) {
+          console.log(`[weave-v3] using session /key buf len=${src._pendingKeyBuf.length}`);
+          keyFetched = true;
+          continue;
+        }
+
         let keyUrl = new URL(uri, baseUrl).href;
-        // مهم: احتفظ بـ sid= من الـ playlist — متستبدلش المسار بـ /key العاري
         try {
           const ku = new URL(keyUrl);
           if (!/stream-weave\.com/i.test(ku.hostname) && src.videoId) {
-            // URI نسبي غريب — ابنِ مسار key.bin مع sid
             const sidQ = src.sessionId ? `?sid=${encodeURIComponent(src.sessionId)}` : "";
-            keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/stream/600/key.bin${sidQ}`;
+            // استخدم نفس الـ quality من الـ URI لو موجود (360/600...)
+            const quality = (uri.match(/\/stream\/(\d+)\//) || [])[1] || "360";
+            keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/stream/${quality}/key.bin${sidQ}`;
           } else if (src.sessionId && !ku.searchParams.get("sid")) {
             ku.searchParams.set("sid", src.sessionId);
             keyUrl = ku.href;
@@ -3513,11 +3612,7 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         console.log(`[weave-v3] key.bin status ${keyRes.status} len ${wrapped.length}`);
         if (!wrapped.length) throw new Error(`Key HTTP ${keyRes.status} — empty`);
 
-        // اجمع أول URL مقطع للتحقق لاحقًا
-        // (هنتعلمه من اللوب التالي)
         src._pendingKeyBuf = wrapped;
-        src._pendingKeyUri = uri;
-        src.defaultIv = currentIv;
         keyFetched = true;
       }
       continue;
@@ -3637,15 +3732,51 @@ async function buildPlaylist(src, masterText, clientHeaders) {
           src.cipherMode = src.cipherMode || "cbc";
           src.ivMode = "playlist";
         } else {
-          // soft fallback: استخدم key.bin مؤقتًا + خلّي getSegmentPlain يجرّب كل المرشّحات وقت الطلب
-          // (من غير ما نوقع على client_fetch/CORS message مضللة)
-          console.warn("[weave-v3] plainKey not validated — soft fallback bin16 + pass-through encrypt for client hls.js");
-          src.plainKey = Buffer.from(wrapped.subarray(0, 16));
+          // soft fallback: pass-through كامل → hls.js يفك على المتصفح
+          console.warn("[weave-v3] plainKey not validated — pass-through encrypt (client hls.js decrypt)");
+          // لو الرد 86 بايت (مفتاح مغلف)، خذ أول/آخر 16 أو XOR مع seed
+          let k16 = null;
+          if (wrapped.length === 16) {
+            k16 = Buffer.from(wrapped);
+          } else if (wrapped.length >= 16) {
+            // جرّب صيغ شائعة للمفتاح المغلف
+            const seedBuf = decodeKeySeed(src.keySeed);
+            const tries = [
+              wrapped.subarray(0, 16),
+              wrapped.subarray(wrapped.length - 16),
+              wrapped.subarray(16, 32),
+            ];
+            if (seedBuf && seedBuf.length >= 16) {
+              const x = Buffer.alloc(16);
+              for (let i = 0; i < 16; i++) x[i] = wrapped[i] ^ seedBuf[i];
+              tries.push(x);
+              const x2 = Buffer.alloc(16);
+              for (let i = 0; i < 16; i++) x2[i] = wrapped[wrapped.length - 16 + i] ^ seedBuf[i];
+              tries.push(x2);
+            }
+            k16 = Buffer.from(tries[0]);
+            // لو عندنا sample، اختبر أي مرشّح يطلع TS
+            if (sampleEncrypted && sampleEncrypted.length >= 32) {
+              for (const cand of tries) {
+                try {
+                  const plain = decryptSegment(sampleEncrypted, cand, src.defaultIv || currentIv || ivFromMediaSequence(0));
+                  if (looksLikeMpegTs(plain, true)) { k16 = Buffer.from(cand); console.log("[weave-v3] unwrapped key matched TS"); break; }
+                } catch {}
+              }
+            }
+          } else {
+            k16 = Buffer.alloc(16);
+          }
+          src.plainKey = k16;
           src.cipherMode = "cbc";
           src.ivMode = "playlist";
           src._keyUnverified = true;
-          src.passThroughEncrypt = true; // خلّي hls.js يفك على المتصفح
+          src.passThroughEncrypt = true;
           src._lastKeyBuf = Buffer.from(wrapped);
+        }
+        // weave v3: دايمًا pass-through لو مفيش تحقق TS صارم — أضمن للتشغيل
+        if (Number(src.keyVersion || 0) >= 3 && !src.passThroughEncrypt) {
+          // حتى لو لقينا key، لو مش متأكدين 100% خلّي الخيار مفتوح
         }
       }
     }
@@ -3653,6 +3784,10 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   }
 
   if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
+  // weave-v3: مرّر المقاطع مشفرة + المفتاح للعميل (hls.js) — أضمن من فك السيرفر الغلط
+  if (src.mode === "weave" && Number(src.keyVersion || 0) >= 3) {
+    src.passThroughEncrypt = true;
+  }
   console.log(`[weave] v3 ready segs=${segs.length} key=${src.plainKey?.length || 0} cipher=${src.cipherMode || "cbc"} passThrough=${!!src.passThroughEncrypt}`);
   if (src.passThroughEncrypt && src.plainKey) {
     // playlist للعميل: خليه يفك AES عبر hls.js
