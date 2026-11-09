@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.21 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.22 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.21";
+const APP_VERSION = "v1.7.22";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -3707,11 +3707,88 @@ async function buildVideoSource(videoId, clientHeaders) {
             }
           }
 
-          if (!plainKey && keySeed) {
+        }
+
+        // عيّنة مقطع مشفّر للتحقق من صحة المفتاح
+        let sampleEnc = null, sampleIv = null;
+        {
+          const keyLine0 = mediaText.split(/\r?\n/).find((l) => l.startsWith("#EXT-X-KEY:"));
+          if (keyLine0) {
+            const ivHex0 = (keyLine0.match(/IV=(0x[0-9a-fA-F]+)/i) || [])[1];
+            if (ivHex0) sampleIv = Buffer.from(ivHex0.replace(/^0x/i, ""), "hex");
+          }
+          if (!sampleIv) sampleIv = defaultIv || ivFromMediaSequence(0);
+          for (const raw of mediaText.split(/\r?\n/)) {
+            const line = raw.trim();
+            if (line && !line.startsWith("#")) {
+              try {
+                const segU = new URL(line, mediaUrl).href;
+                const sr = await fetchT(segU, {
+                  headers: {
+                    Accept: "*/*",
+                    Origin: CONFIG.STREAM_ORIGIN,
+                    Referer: CONFIG.STREAM_REFERER,
+                    "User-Agent": CONFIG.STREAM_UA
+                  },
+                  cache: "no-store"
+                }, { timeout: 20_000, retries: 1 });
+                sampleEnc = Buffer.from(await sr.arrayBuffer());
+                console.log("[weave-v3] sample seg status", sr.status, "len", sampleEnc.length);
+              } catch (e) {
+                console.warn("[weave-v3] sample seg", e.message);
+              }
+              break;
+            }
+          }
+        }
+
+        // ticket إضافي إن لم يُجلب
+        let ticketForKey = null;
+        if (sessionId) {
+          try {
+            const ticketUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key-ticket`;
+            const tr = await fetchT(ticketUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${wToken}`,
+                Accept: "application/json",
+                Origin: CONFIG.STREAM_ORIGIN,
+                Referer: CONFIG.STREAM_REFERER,
+                "User-Agent": CONFIG.STREAM_UA,
+                "Content-Length": "0"
+              },
+              cache: "no-store"
+            }, { timeout: 12_000, retries: 0 });
             try {
-              const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-              if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
+              const tj = await tr.json();
+              ticketForKey = tj.ticket || tj.data?.ticket || null;
             } catch {}
+          } catch {}
+        }
+
+        // لو عندنا sample — اختبر كل مرشّحات المفتاح
+        if (sampleEnc && sampleIv) {
+          const resolved = await resolveWeavePlainKey({
+            keySeed,
+            ticket: ticketForKey,
+            wrapped: plainKey && plainKey.length !== 16 ? plainKey : null,
+            sampleEncrypted: sampleEnc,
+            sampleIv,
+            videoId: wVid
+          });
+          if (resolved) plainKey = resolved;
+        } else if (!plainKey && keySeed) {
+          try {
+            const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+            if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
+          } catch {}
+        }
+        if (plainKey && sampleEnc && sampleIv) {
+          try {
+            const test = decryptSegment(sampleEnc, plainKey, sampleIv);
+            console.log("[weave-v3] key TS check", looksLikeTs(test), "plainLen", test.length);
+          } catch (e) {
+            console.warn("[weave-v3] key TS decrypt err", e.message);
           }
         }
 
