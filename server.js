@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.22 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.23 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.22";
+const APP_VERSION = "v1.7.23";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1299,6 +1299,108 @@ async function unwrapCdnKey(wrappedBuf) {
 }
 
 function decryptSegment(encrypted, key, iv) { const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv); return Buffer.concat([decipher.update(encrypted), decipher.final()]); }
+
+function looksLikeTs(buf) {
+  if (!buf || buf.length < 188) return false;
+  let hits = 0, checks = 0;
+  for (let i = 0; i + 188 <= Math.min(buf.length, 188 * 8); i += 188) {
+    checks++;
+    if (buf[i] === 0x47) hits++;
+  }
+  return checks > 0 && hits >= Math.ceil(checks * 0.7);
+}
+
+function weaveKeyCandidates(keySeed, ticket, wrapped) {
+  const out = [];
+  const push = (b, tag) => {
+    if (!b) return;
+    const buf = Buffer.isBuffer(b) ? b : Buffer.from(b);
+    if (buf.length >= 16) out.push({ key: buf.subarray(0, 16), tag });
+    if (buf.length >= 32) out.push({ key: buf.subarray(16, 32), tag: tag + "+16" });
+  };
+  let seedBuf = null;
+  if (keySeed) {
+    try {
+      seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    } catch {
+      try { seedBuf = Buffer.from(String(keySeed), "base64"); } catch { seedBuf = Buffer.from(String(keySeed)); }
+    }
+    push(seedBuf, "seed");
+    push(crypto.createHash("sha256").update(seedBuf).digest(), "seed-sha256");
+  }
+  if (ticket && seedBuf) {
+    const tbuf = Buffer.from(String(ticket));
+    push(crypto.createHmac("sha256", seedBuf).update(tbuf).digest(), "hmac-seed-ticket");
+    push(crypto.createHmac("sha256", tbuf).update(seedBuf).digest(), "hmac-ticket-seed");
+    try {
+      push(crypto.pbkdf2Sync(seedBuf, tbuf, 1337, 32, "sha256"), "pbkdf2-1337");
+      push(crypto.pbkdf2Sync(seedBuf, tbuf, 1000, 32, "sha256"), "pbkdf2-1000");
+      push(crypto.pbkdf2Sync(String(keySeed), String(ticket), 1337, 32, "sha256"), "pbkdf2-str");
+    } catch {}
+    try {
+      const prk2 = crypto.createHmac("sha256", tbuf).update(seedBuf).digest();
+      push(prk2, "hkdf-ish");
+      const info = Buffer.from("X-SW-Proof");
+      const okm = crypto.createHmac("sha256", prk2).update(Buffer.concat([info, Buffer.from([1])])).digest();
+      push(okm, "hkdf-expand");
+    } catch {}
+  }
+  if (wrapped && wrapped.length) {
+    push(wrapped, "wrapped-raw");
+    if (seedBuf) {
+      const x = Buffer.alloc(16);
+      for (let i = 0; i < 16; i++) x[i] = wrapped[i % wrapped.length] ^ seedBuf[i % seedBuf.length];
+      push(x, "xor-seed");
+      try {
+        const decipher = crypto.createDecipheriv("aes-128-ecb", seedBuf.subarray(0, 16), null);
+        decipher.setAutoPadding(false);
+        const dec = Buffer.concat([decipher.update(wrapped.subarray(0, Math.floor(wrapped.length / 16) * 16)), decipher.final()]);
+        push(dec, "aes-ecb-seed");
+      } catch {}
+    }
+  }
+  const seen = new Set();
+  const uniq = [];
+  for (const c of out) {
+    const h = c.key.toString("hex");
+    if (seen.has(h)) continue;
+    seen.add(h);
+    uniq.push(c);
+  }
+  return uniq;
+}
+
+async function resolveWeavePlainKey({ keySeed, ticket, wrapped, sampleEncrypted, sampleIv, videoId }) {
+  const candidates = weaveKeyCandidates(keySeed, ticket, wrapped);
+  if (wrapped && wrapped.length === 16) candidates.unshift({ key: wrapped, tag: "wrapped-16" });
+  if (wrapped && wrapped.length) {
+    for (const fn of [
+      async () => unwrapKey(wrapped, videoId),
+      async () => unwrapCdnKey(wrapped)
+    ]) {
+      try {
+        const k = await fn();
+        if (k && k.length === 16) candidates.unshift({ key: Buffer.from(k), tag: "unwrap-fn" });
+      } catch {}
+    }
+  }
+  if (!sampleEncrypted || !sampleIv) {
+    return candidates[0] ? candidates[0].key : null;
+  }
+  for (const c of candidates) {
+    try {
+      const plain = decryptSegment(sampleEncrypted, c.key, sampleIv);
+      if (looksLikeTs(plain)) {
+        console.log("[weave-v3] key matched via", c.tag);
+        return c.key;
+      }
+    } catch {}
+  }
+  console.warn("[weave-v3] no candidate produced valid TS, tried", candidates.length);
+  return candidates[0] ? candidates[0].key : null;
+}
+
+
 function parseIvHex(hex) { const h = String(hex || "").replace(/^0x/i, "").trim(); if (!/^[0-9a-fA-F]{32}$/.test(h)) return null; return Buffer.from(h, "hex"); }
 function ivFromMediaSequence(seq) { const iv = Buffer.alloc(16, 0); iv.writeUInt32BE(Number(seq) >>> 0, 12); return iv; }
 
@@ -3767,28 +3869,38 @@ async function buildVideoSource(videoId, clientHeaders) {
         }
 
         // لو عندنا sample — اختبر كل مرشّحات المفتاح
-        if (sampleEnc && sampleIv) {
-          const resolved = await resolveWeavePlainKey({
-            keySeed,
-            ticket: ticketForKey,
-            wrapped: plainKey && plainKey.length !== 16 ? plainKey : null,
-            sampleEncrypted: sampleEnc,
-            sampleIv,
-            videoId: wVid
-          });
-          if (resolved) plainKey = resolved;
-        } else if (!plainKey && keySeed) {
-          try {
-            const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
-            if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
-          } catch {}
-        }
-        if (plainKey && sampleEnc && sampleIv) {
-          try {
-            const test = decryptSegment(sampleEnc, plainKey, sampleIv);
-            console.log("[weave-v3] key TS check", looksLikeTs(test), "plainLen", test.length);
-          } catch (e) {
-            console.warn("[weave-v3] key TS decrypt err", e.message);
+        try {
+          if (sampleEnc && sampleIv) {
+            const resolved = await resolveWeavePlainKey({
+              keySeed,
+              ticket: ticketForKey,
+              wrapped: plainKey && plainKey.length !== 16 ? plainKey : null,
+              sampleEncrypted: sampleEnc,
+              sampleIv,
+              videoId: wVid
+            });
+            if (resolved) plainKey = resolved;
+          } else if (!plainKey && keySeed) {
+            try {
+              const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+              if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
+            } catch {}
+          }
+          if (plainKey && sampleEnc && sampleIv) {
+            try {
+              const test = decryptSegment(sampleEnc, plainKey, sampleIv);
+              console.log("[weave-v3] key TS check", looksLikeTs(test), "plainLen", test.length);
+            } catch (e) {
+              console.warn("[weave-v3] key TS decrypt err", e.message);
+            }
+          }
+        } catch (e) {
+          console.warn("[weave-v3] key resolve soft-fail", e.message);
+          if (!plainKey && keySeed) {
+            try {
+              const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+              if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
+            } catch {}
           }
         }
 
@@ -4601,14 +4713,10 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
     console.error("[play]", e.message);
     const msg = String(e && e.message || "");
     const blocked = /CDN|weave|playlist|403|500|426|cloudflare|blocked|غير صالح|fetch failed|UPSTREAM/i.test(msg);
+    // client_fetch يفشل غالبًا بسبب CORS من المتصفح — نرجّع خطأ واضح بدل مسار مكسور
     if (blocked && !/^bn_/i.test(String(req.params.videoId || "")) && !/^th/i.test(String(req.params.videoId || ""))) {
-      try {
-        const tok = await getCoursatkToken();
-        if (tok) {
-          console.warn("[play] falling back to client_fetch for", req.params.videoId, msg);
-          return res.json({ success: true, data: clientFetchPayload(String(req.params.videoId), tok) });
-        }
-      } catch (e2) { console.warn("[play] client_fetch payload failed", e2.message); }
+      console.warn("[play] upstream failed for", req.params.videoId, msg);
+      return jsonError(res, 502, msg || "تعذر جلب الفيديو من كورساتك — أعد المحاولة");
     }
     jsonError(res, e.status || 502, e.message);
   }
