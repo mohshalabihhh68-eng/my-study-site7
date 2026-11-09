@@ -1422,20 +1422,26 @@ function weaveV3KeyCandidates(keyBin, keySeed, extraTicket) {
   return out;
 }
 
-function looksLikeMpegTs(buf) {
+function looksLikeMpegTs(buf, strict = false) {
   if (!buf || buf.length < 188) return false;
+  // fMP4 / CMAF
+  try {
+    const head = buf.slice(4, 8).toString("ascii");
+    if (head === "ftyp" || head === "moof" || head === "mdat" || head === "sidx" || head === "styp") return true;
+  } catch {}
+  const need = strict ? 8 : 5;
   let hits = 0;
-  const limit = Math.min(buf.length, 188 * 8);
+  const limit = Math.min(buf.length, 188 * 12);
   for (let off = 0; off + 188 <= limit; off += 188) {
     if (buf[off] === 0x47) hits++;
   }
-  if (hits >= 3) return true;
-  for (let i = 0; i < Math.min(188, buf.length - 188); i++) {
-    if (buf[i] === 0x47 && buf[i + 188] === 0x47) return true;
+  if (hits >= need) return true;
+  // scan for alignment
+  for (let i = 0; i < Math.min(188, buf.length - 188 * 3); i++) {
+    let h = 0;
+    for (let k = 0; k < 4; k++) if (buf[i + k * 188] === 0x47) h++;
+    if (h >= 4) return true;
   }
-  // fMP4 / CMAF: starts with size+ftype or mdat
-  const head = buf.slice(0, 12).toString("ascii");
-  if (head.includes("ftyp") || head.includes("moof") || head.includes("mdat") || head.includes("sidx")) return true;
   return false;
 }
 
@@ -1462,46 +1468,59 @@ async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, ti
   if (!sampleEncrypted || sampleEncrypted.length < 32) {
     const prefer = cands.find((c) => c.tag === "bin16") || cands[0];
     console.warn(`[${logTag}] no sample segment — using candidate ${prefer.tag} without TS validate`);
-    return prefer.key;
+    return { key: prefer.key, mode: "cbc", ivMode: "playlist", tag: prefer.tag };
   }
 
   console.log(`[${logTag}] testing ${cands.length} keys × ${ivs.length} IVs on sample len=${sampleEncrypted.length}`);
 
+  let ctrFallback = null;
+
+  // 1) فضّل CBC أولاً (HLS AES-128 القياسي + player.html)
   for (const cand of cands) {
     for (const { iv: testIv, tag: ivTag } of ivs) {
-      // CBC with PKCS7
       try {
         const plain = decryptSegment(sampleEncrypted, cand.key, testIv);
-        if (looksLikeMpegTs(plain)) {
+        if (looksLikeMpegTs(plain, true)) {
           console.log(`[${logTag}] plainKey OK via ${cand.tag} CBC iv=${ivTag}`);
-          return cand.key;
+          return { key: cand.key, mode: "cbc", ivMode: ivTag.startsWith("seq") ? "seq" : "playlist", tag: cand.tag, ivTag };
         }
       } catch {}
-      // CBC without padding check — لو المقطع مش multiple of 16 أو padding مخصص
       try {
         const d = crypto.createDecipheriv("aes-128-cbc", cand.key, testIv);
         d.setAutoPadding(false);
         const aligned = sampleEncrypted.subarray(0, sampleEncrypted.length - (sampleEncrypted.length % 16));
         if (aligned.length >= 188) {
           const plain = Buffer.concat([d.update(aligned), d.final()]);
-          if (looksLikeMpegTs(plain)) {
+          if (looksLikeMpegTs(plain, true)) {
             console.log(`[${logTag}] plainKey OK via ${cand.tag} CBC-nopad iv=${ivTag}`);
-            return cand.key;
+            return { key: cand.key, mode: "cbc-nopad", ivMode: ivTag.startsWith("seq") ? "seq" : "playlist", tag: cand.tag, ivTag };
           }
-        }
-      } catch {}
-      // CTR
-      try {
-        const plain = decryptSegmentCtr(sampleEncrypted, cand.key, testIv);
-        if (looksLikeMpegTs(plain)) {
-          console.log(`[${logTag}] plainKey OK via ${cand.tag} CTR iv=${ivTag}`);
-          return cand.key;
         }
       } catch {}
     }
   }
+
+  // 2) CTR — قبول فقط مع تحقق صارم (تقليل false positive)
+  for (const cand of cands) {
+    for (const { iv: testIv, tag: ivTag } of ivs) {
+      try {
+        const plain = decryptSegmentCtr(sampleEncrypted, cand.key, testIv);
+        if (looksLikeMpegTs(plain, true)) {
+          console.log(`[${logTag}] plainKey OK via ${cand.tag} CTR iv=${ivTag}`);
+          const hit = { key: cand.key, mode: "ctr", ivMode: ivTag.startsWith("seq") ? "seq" : "playlist", tag: cand.tag, ivTag };
+          // لو playlist IV مع CTR نفضّله؛ seq CTR نخزّنه كـ fallback
+          if (ivTag === "playlist") return hit;
+          if (!ctrFallback) ctrFallback = hit;
+        }
+      } catch {}
+    }
+  }
+  if (ctrFallback) {
+    console.log(`[${logTag}] using CTR fallback ${ctrFallback.tag} iv=${ctrFallback.ivTag}`);
+    return ctrFallback;
+  }
+
   console.warn(`[${logTag}] reject key candidates all IVs failed (tried ${cands.length} keys × ${ivs.length} IVs)`);
-  // debug: log key.bin + seed prefixes
   try {
     console.warn(`[${logTag}] debug bin16=${Buffer.from(keyBuf).subarray(0, 16).toString("hex")} seedPrefix=${String(keySeed || "").slice(0, 12)}`);
   } catch {}
@@ -3556,16 +3575,26 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         ticket: src.swTicket || null,
         logTag: "weave-v3"
       });
-      if (resolved) {
+      if (resolved && resolved.key) {
+        src.plainKey = resolved.key;
+        src.cipherMode = resolved.mode || "cbc";
+        src.ivMode = resolved.ivMode || "playlist";
+        console.log(`[weave-v3] cipherMode=${src.cipherMode} ivMode=${src.ivMode} tag=${resolved.tag || "?"}`);
+      } else if (resolved && Buffer.isBuffer(resolved)) {
         src.plainKey = resolved;
+        src.cipherMode = "cbc";
+        src.ivMode = "playlist";
       } else {
-        // fallback القديم القديمة
         try {
           src.plainKey = await unwrapKey(wrapped, src.videoId);
+          src.cipherMode = "cbc";
+          src.ivMode = "playlist";
           console.log("[weave-v3] fallback unwrapKey len=" + src.plainKey?.length);
         } catch (ke) {
           try {
             src.plainKey = await unwrapCdnKey(wrapped);
+            src.cipherMode = "cbc";
+            src.ivMode = "playlist";
           } catch (ke2) {
             console.warn("[weave-v3] plainKey still null after all paths");
             throw new Error(`Key unwrap failed: ${ke.message}`);
@@ -3573,11 +3602,11 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         }
       }
     }
-    console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${src.plainKey?.length} kv=${src.keyVersion || 0}`);
+    console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${src.plainKey?.length} kv=${src.keyVersion || 0} mode=${src.cipherMode || "cbc"}`);
   }
 
   if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
-  console.log(`[weave] v3 ready segs=${segs.length} key=${src.plainKey?.length || 0}`);
+  console.log(`[weave] v3 ready segs=${segs.length} key=${src.plainKey?.length || 0} cipher=${src.cipherMode || "cbc"}`);
   src.mediaSeq = mediaSeq; src.segs = segs; src.playlist = out.join("\n");
 }
 
@@ -4839,37 +4868,57 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
     }
 
     let plain;
+    const mode = (usedSrc.cipherMode || "cbc").toLowerCase();
+    // لو ivMode=seq استخدم media sequence لكل مقطع
+    if (usedSrc.ivMode === "seq" && Number.isFinite(meta.s)) {
+      usedIv = ivFromMediaSequence(meta.s);
+    }
     try {
-      plain = decryptSegment(encrypted, usedSrc.plainKey, usedIv);
+      if (mode === "ctr") {
+        plain = decryptSegmentCtr(encrypted, usedSrc.plainKey, usedIv);
+      } else if (mode === "cbc-nopad") {
+        const d = crypto.createDecipheriv("aes-128-cbc", usedSrc.plainKey, usedIv);
+        d.setAutoPadding(false);
+        const aligned = encrypted.subarray(0, encrypted.length - (encrypted.length % 16));
+        plain = Buffer.concat([d.update(aligned), d.final()]);
+      } else {
+        plain = decryptSegment(encrypted, usedSrc.plainKey, usedIv);
+      }
       if (usedSrc.mode === "weave" && !looksLikeMpegTs(plain)) {
-        // المفتاح غلط رغم عدم رمي padding error — جرّب مرشّحات تانية
         throw new Error("not mpeg-ts after decrypt");
       }
     } catch (decErr) {
       let recovered = null;
       if (usedSrc.mode === "weave" && usedSrc.keySeed && encrypted.length >= 32) {
         try {
-          const cands = weaveV3KeyCandidates(usedSrc.plainKey, usedSrc.keySeed);
-          // أعد توليد من keyBuf لو موجود
-          if (usedSrc._lastKeyBuf) {
-            for (const c of weaveV3KeyCandidates(usedSrc._lastKeyBuf, usedSrc.keySeed)) {
-              if (!cands.some((x) => x.hex === c.hex)) cands.push(c);
-            }
-          }
+          const cands = weaveV3KeyCandidates(usedSrc._lastKeyBuf || usedSrc.plainKey, usedSrc.keySeed, usedSrc.swTicket);
           const ivs = [usedIv, usedSrc.defaultIv, ivFromMediaSequence(meta.s || 0)].filter(
             (x) => x && Buffer.isBuffer(x) && x.length === 16
           );
           for (const cand of cands) {
             for (const testIv of ivs) {
-              try {
-                const p = decryptSegment(encrypted, cand.key, testIv);
-                if (looksLikeMpegTs(p)) {
-                  recovered = p;
-                  usedSrc.plainKey = cand.key;
-                  console.log(`[seg] recovered plainKey via ${cand.tag}`);
-                  break;
-                }
-              } catch {}
+              for (const m of ["cbc", "ctr", "cbc-nopad"]) {
+                try {
+                  let p;
+                  if (m === "ctr") p = decryptSegmentCtr(encrypted, cand.key, testIv);
+                  else if (m === "cbc-nopad") {
+                    const d = crypto.createDecipheriv("aes-128-cbc", cand.key, testIv);
+                    d.setAutoPadding(false);
+                    const aligned = encrypted.subarray(0, encrypted.length - (encrypted.length % 16));
+                    p = Buffer.concat([d.update(aligned), d.final()]);
+                  } else {
+                    p = decryptSegment(encrypted, cand.key, testIv);
+                  }
+                  if (looksLikeMpegTs(p, true)) {
+                    recovered = p;
+                    usedSrc.plainKey = cand.key;
+                    usedSrc.cipherMode = m;
+                    console.log(`[seg] recovered plainKey via ${cand.tag} ${m}`);
+                    break;
+                  }
+                } catch {}
+              }
+              if (recovered) break;
             }
             if (recovered) break;
           }
