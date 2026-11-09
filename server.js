@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.20 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.21 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.20";
+const APP_VERSION = "v1.7.21";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1424,6 +1424,9 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
       "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
       "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
     };
+    if (session.mode === "weave" || session.keyVersion != null) {
+      headers["x-sw-key-version"] = String(session.keyVersion != null ? session.keyVersion : 3);
+    }
   }
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
@@ -3545,36 +3548,249 @@ async function buildVideoSource(videoId, clientHeaders) {
     let lastWeaveErr = null;
     for (let attempt = 1; attempt <= UPSTREAM_FETCH_RETRIES; attempt++) {
       try {
-        const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
-        if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-        const wToken = data.data.token;
-        const wUrl = data.data.stream_url;
-        const wVid = String(data.data.video_id || videoId);
-        // اجلب الماستر فورًا — لو 426 جرّب مسارات بديلة
-        let probeText = null;
-        const candidates = [wUrl];
-        try {
-          const u = new URL(wUrl);
-          // بدائل شائعة لـ stream-weave
-          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/master.m3u8`);
-          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/playlist.m3u8`);
-          if (!/master\.m3u8|playlist\.m3u8/i.test(u.pathname)) {
-            candidates.push(wUrl.replace(/\/?$/, "/playlist.m3u8"));
-            candidates.push(wUrl.replace(/\/?$/, "/master.m3u8"));
-          }
-        } catch {}
+        const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, {
+          method: "POST",
+          headers: { Accept: "application/json" }
+        });
+        if (!data?.success || !data?.data?.token || !data?.data?.stream_url) {
+          throw new Error("Weave response ناقص");
+        }
+        const d = data.data;
+        const wToken = d.token;
+        const wUrl = d.stream_url;
+        const wVid = String(d.video_id || videoId);
+        const sessionId = d.session_id || null;
+        const keySeed = d.key_seed || null;
+        const keyVersion = d.key_version != null ? Number(d.key_version) : 3;
+        const apiBase = String(d.api_base || "https://api.stream-weave.com").replace(/\/$/, "");
+        const heartbeatUrl = d.heartbeat_url || (sessionId ? `${apiBase}/api/v1/playback/session/${sessionId}/heartbeat` : null);
+
+        const weaveHeaders = {
+          Authorization: `Bearer ${wToken}`,
+          Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+          Origin: CONFIG.STREAM_ORIGIN,
+          Referer: CONFIG.STREAM_REFERER,
+          "User-Agent": CONFIG.STREAM_UA,
+          "x-sw-key-version": String(keyVersion),
+          "Cache-Control": "no-cache"
+        };
+
+        const candidates = [wUrl, `${apiBase}/api/v1/videos/${wVid}/stream/master.m3u8`];
+        let masterText = null;
+        let masterUrl = null;
         let lastPlErr = null;
         for (const cand of [...new Set(candidates)]) {
           try {
-            const got = await fetchPlaylistSmart(cand, wToken, "weave");
-            probeText = got.text;
-            return { mode: "weave", sessionToken: wToken, streamUrl: cand, resolvedVideoId: wVid, probeText };
-          } catch (pe) {
-            lastPlErr = pe;
-            console.warn("[weave] playlist candidate fail", cand.slice(0, 80), pe.message);
+            const r = await upstreamSlot(() =>
+              fetchT(cand, { headers: weaveHeaders, cache: "no-store" }, { timeout: 22_000, retries: 1 })
+            );
+            const body = await r.text();
+            if (body.includes("#EXTM3U")) {
+              masterText = body;
+              masterUrl = cand;
+              break;
+            }
+            lastPlErr = new Error(`weave master HTTP ${r.status}`);
+          } catch (e) {
+            lastPlErr = e;
           }
         }
-        throw lastPlErr || new Error("Weave playlist failed");
+        if (!masterText) throw lastPlErr || new Error("Weave master failed");
+
+        let mediaText = masterText;
+        let mediaUrl = masterUrl;
+        if (masterText.includes("#EXT-X-STREAM-INF")) {
+          const lines = masterText.split(/\r?\n/);
+          let best = null, bestBw = -1, pending = null;
+          for (const raw of lines) {
+            const line = raw.trim();
+            if (line.startsWith("#EXT-X-STREAM-INF:")) {
+              pending = Number((line.match(/BANDWIDTH=(\d+)/) || [])[1] || 0);
+            } else if (line && !line.startsWith("#") && pending != null) {
+              if (pending >= bestBw) { bestBw = pending; best = line; }
+              pending = null;
+            }
+          }
+          if (!best) throw new Error("weave master فاضي");
+          mediaUrl = new URL(best, masterUrl).href;
+          const mr = await upstreamSlot(() =>
+            fetchT(mediaUrl, { headers: weaveHeaders, cache: "no-store" }, { timeout: 22_000, retries: 1 })
+          );
+          mediaText = await mr.text();
+          if (!mediaText.includes("#EXTM3U")) throw new Error(`weave media HTTP ${mr.status}`);
+        }
+
+        const keyLine = mediaText.split(/\r?\n/).find((l) => l.startsWith("#EXT-X-KEY:"));
+        let plainKey = null;
+        let defaultIv = null;
+        if (keyLine) {
+          const uri = (keyLine.match(/URI="([^"]+)"/) || [])[1];
+          const ivHex = (keyLine.match(/IV=(0x[0-9a-fA-F]+)/i) || [])[1];
+          if (ivHex) defaultIv = Buffer.from(ivHex.replace(/^0x/i, ""), "hex");
+          const keyUrl = uri ? new URL(uri, mediaUrl).href : null;
+
+          if (keyUrl && !plainKey) {
+            try {
+              const kr = await fetchT(keyUrl, { headers: weaveHeaders, cache: "no-store" }, { timeout: 15_000, retries: 1 });
+              const kb = Buffer.from(await kr.arrayBuffer());
+              if (kb.length === 16) plainKey = kb;
+              else if (kb.length > 0) {
+                try { plainKey = await unwrapKey(kb, wVid); } catch {
+                  try { plainKey = await unwrapCdnKey(kb); } catch {}
+                }
+              }
+            } catch (e) {
+              console.warn("[weave-v3] key.bin fail", e.message);
+            }
+          }
+
+          if (!plainKey && sessionId) {
+            try {
+              const ticketUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key-ticket`;
+              const tr = await fetchT(ticketUrl, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${wToken}`,
+                  Accept: "application/json",
+                  Origin: CONFIG.STREAM_ORIGIN,
+                  Referer: CONFIG.STREAM_REFERER,
+                  "User-Agent": CONFIG.STREAM_UA,
+                  "Content-Length": "0"
+                },
+                cache: "no-store"
+              }, { timeout: 15_000, retries: 1 });
+              let ticket = null;
+              const tct = tr.headers.get("content-type") || "";
+              if (tct.includes("json")) {
+                const tj = await tr.json();
+                ticket = tj.ticket || tj.data?.ticket || null;
+              } else {
+                const tt = await tr.text();
+                try { ticket = JSON.parse(tt).ticket; } catch { ticket = (tt || "").trim() || null; }
+              }
+
+              const keySessUrl = `${apiBase}/api/v1/playback/session/${encodeURIComponent(sessionId)}/key`;
+              const kh = {
+                Authorization: `Bearer ${wToken}`,
+                Accept: "*/*",
+                Origin: CONFIG.STREAM_ORIGIN,
+                Referer: CONFIG.STREAM_REFERER,
+                "User-Agent": CONFIG.STREAM_UA,
+                "x-sw-key-version": String(keyVersion)
+              };
+              if (ticket) kh["X-SW-Ticket"] = ticket;
+              if (ticket && keySeed) {
+                try {
+                  const cryptoMod = await import("crypto");
+                  const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+                  kh["X-SW-Proof"] = cryptoMod.createHmac("sha256", seedBuf).update(String(ticket)).digest("base64url");
+                } catch (e) {
+                  console.warn("[weave-v3] proof gen", e.message);
+                }
+              }
+              const kr2 = await fetchT(keySessUrl, { headers: kh, cache: "no-store" }, { timeout: 15_000, retries: 1 });
+              const kb2 = Buffer.from(await kr2.arrayBuffer());
+              const asText = kb2.toString("utf8");
+              if (asText.trim().startsWith("{")) {
+                console.warn("[weave-v3] key endpoint JSON", asText.slice(0, 120));
+              } else if (kb2.length === 16) {
+                plainKey = kb2;
+              } else if (kb2.length > 0) {
+                try { plainKey = await unwrapKey(kb2, wVid); } catch {
+                  try { plainKey = await unwrapCdnKey(kb2); } catch {
+                    if (kb2.length >= 16) plainKey = kb2.subarray(0, 16);
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("[weave-v3] session key fail", e.message);
+            }
+          }
+
+          if (!plainKey && keySeed) {
+            try {
+              const seedBuf = Buffer.from(String(keySeed).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+              if (seedBuf.length >= 16) plainKey = seedBuf.subarray(0, 16);
+            } catch {}
+          }
+        }
+
+        const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+        allowedHosts.add("api.stream-weave.com");
+        allowedHosts.add("floravon.online");
+        allowedHosts.add("floravon.shop");
+        try { allowedHosts.add(new URL(mediaUrl).hostname); } catch {}
+        try { allowedHosts.add(new URL(masterUrl).hostname); } catch {}
+
+        const lines = mediaText.split(/\r?\n/);
+        let mediaSeq = 0;
+        const msm = mediaText.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/);
+        if (msm) mediaSeq = Number(msm[1]) || 0;
+        const tdm = mediaText.match(/#EXT-X-TARGETDURATION:([\d.]+)/);
+        const targetDuration = tdm ? Number(tdm[1]) : 10;
+
+        const segs = [];
+        const out = ["#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(targetDuration))}`, "#EXT-X-PLAYLIST-TYPE:VOD", `#EXT-X-MEDIA-SEQUENCE:${mediaSeq}`];
+        let pendingDur = targetDuration;
+        let segIndex = 0;
+        for (const raw of lines) {
+          const line = raw.trim();
+          if (line.startsWith("#EXTINF:")) {
+            const dnum = Number((line.match(/#EXTINF:([\d.]+)/) || [])[1]);
+            if (Number.isFinite(dnum) && dnum > 0) pendingDur = dnum;
+            continue;
+          }
+          if (line.startsWith("#") || !line) continue;
+          const segUrl = new URL(line, mediaUrl).href;
+          try { allowedHosts.add(new URL(segUrl).hostname); } catch {}
+          const seq = mediaSeq + segIndex;
+          const iv = defaultIv || ivFromMediaSequence(seq);
+          segs.push({ u: segUrl, iv: Buffer.isBuffer(iv) ? iv.toString("hex") : String(iv), s: seq, i: segIndex, dur: pendingDur });
+          out.push(`#EXTINF:${Number(pendingDur).toFixed(5)},`);
+          out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+          segIndex++;
+        }
+        if (!segs.length) throw new Error("weave playlist مفيش مقاطع");
+
+        if (heartbeatUrl) {
+          const beat = () => {
+            fetchT(heartbeatUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${wToken}`,
+                Origin: CONFIG.STREAM_ORIGIN,
+                Referer: CONFIG.STREAM_REFERER,
+                "User-Agent": CONFIG.STREAM_UA,
+                "Content-Length": "0"
+              },
+              cache: "no-store"
+            }, { timeout: 10_000, retries: 0 }).catch(() => {});
+          };
+          beat();
+          const hb = setInterval(beat, 25_000);
+          setTimeout(() => clearInterval(hb), 2 * 60 * 60 * 1000);
+        }
+
+        console.log(`[weave-v3] ok video=${videoId} segs=${segs.length} key=${plainKey ? plainKey.length : 0} kv=${keyVersion}`);
+        return {
+          mode: "weave",
+          sessionToken: wToken,
+          streamUrl: mediaUrl,
+          resolvedVideoId: wVid,
+          probeText: mediaText,
+          _v3: {
+            plainKey,
+            defaultIv,
+            segs,
+            playlist: out.join("\n"),
+            allowedHosts,
+            mediaSeq,
+            targetDuration,
+            sessionId,
+            keySeed,
+            keyVersion
+          }
+        };
       } catch (e) {
         lastWeaveErr = e;
         console.warn(`[weave] play attempt ${attempt}/${UPSTREAM_FETCH_RETRIES}:`, e.message);
@@ -3593,7 +3809,28 @@ async function buildVideoSource(videoId, clientHeaders) {
       const got = which === "cdn" ? await tryCdn() : await tryWeave();
       mode = got.mode; streamUrl = got.streamUrl; sessionToken = got.sessionToken;
       resolvedVideoId = got.resolvedVideoId; probeText = got.probeText;
-      // جهّز الـ playlist — لو فشل (426 وغيره) جرّب المنصة التالية
+      if (got._v3 && got._v3.segs && got._v3.segs.length) {
+        const v3 = got._v3;
+        const src = {
+          reqVideoId: videoId,
+          videoId: resolvedVideoId,
+          mode,
+          token: sessionToken,
+          streamUrl,
+          allowedHosts: v3.allowedHosts,
+          plainKey: v3.plainKey,
+          defaultIv: v3.defaultIv,
+          mediaSeq: v3.mediaSeq || 0,
+          targetDuration: v3.targetDuration || 10,
+          segs: v3.segs,
+          playlist: v3.playlist,
+          createdAt: now(),
+          weaveSessionId: v3.sessionId || null,
+          keyVersion: v3.keyVersion
+        };
+        console.log(`[${mode}] v3 ready segs=${src.segs.length} key=${src.plainKey ? src.plainKey.length : 0}`);
+        return src;
+      }
       const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
       try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
       allowedHosts.add("floravon.shop");
