@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.18 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.19 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.18";
+const APP_VERSION = "v1.7.19";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -3258,6 +3258,178 @@ async function tryResolveYoutube(videoId) {
 
 
 /** جلب playlist مع تعدد محاولات (H1.1 / Accept / بدون auth أحيانًا) */
+
+/** بناء مصدر تشغيل من playlist جلبها المتصفح (تجاوز حظر Cloudflare على IP السيرفر) */
+async function buildSrcFromClientPlaylists(videoId, { masterText, mediaText, keyBase64, keyUrl, variantUrl }) {
+  const master = String(masterText || "");
+  let media = String(mediaText || "");
+  let baseUrl = String(variantUrl || `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/`);
+  if (!media.includes("#EXTM3U") && master.includes("#EXTM3U")) {
+    // اختار أعلى variant من الماستر
+    const lines = master.split(/\r?\n/);
+    let best = null; let bestBw = -1; let pending = null;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.startsWith("#EXT-X-STREAM-INF:")) {
+        const bw = Number((line.match(/BANDWIDTH=(\d+)/) || [])[1] || 0);
+        pending = bw;
+      } else if (line && !line.startsWith("#") && pending != null) {
+        if (pending >= bestBw) { bestBw = pending; best = line; }
+        pending = null;
+      }
+    }
+    if (!best) throw new Error("الماستر مفيهوش جودة");
+    // المتصفح لازم يبعت mediaText — لو مش موجود نفشل بوضوح
+    throw new Error("ابعت mediaPlaylist مع الـ hydrate (نص الـ variant)");
+  }
+  if (!media.includes("#EXTM3U")) throw new Error("media playlist غير صالح");
+
+  let keyBuf = null;
+  if (keyBase64) {
+    keyBuf = Buffer.from(String(keyBase64), "base64");
+  }
+  const upstreamTok = await getCoursatkToken();
+  const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+  allowedHosts.add("floravon.shop");
+  allowedHosts.add("floravon.online");
+  allowedHosts.add("api.coursatk.online");
+  allowedHosts.add("api.stream-weave.com");
+  try { allowedHosts.add(new URL(baseUrl).hostname); } catch {}
+
+  const src = {
+    reqVideoId: videoId,
+    videoId: String(videoId),
+    mode: "cdn",
+    token: upstreamTok || "client",
+    streamUrl: baseUrl,
+    allowedHosts,
+    plainKey: null,
+    defaultIv: null,
+    mediaSeq: 0,
+    segs: [],
+    playlist: "",
+    createdAt: now()
+  };
+
+  // parse media playlist similar to buildPlaylist
+  const lines = media.split(/\r?\n/);
+  let mediaSeq = 0;
+  const msm = media.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/);
+  if (msm) mediaSeq = Number(msm[1]) || 0;
+  src.mediaSeq = mediaSeq;
+  const tdm = media.match(/#EXT-X-TARGETDURATION:([\d.]+)/);
+  src.targetDuration = tdm ? Number(tdm[1]) : 6;
+
+  let currentIv = null;
+  let keyIvAttr = null;
+  let segIndex = 0;
+  const segs = [];
+  const out = ["#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(src.targetDuration || 6))}`, "#EXT-X-PLAYLIST-TYPE:VOD", `#EXT-X-MEDIA-SEQUENCE:${mediaSeq}`];
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#EXT-X-KEY:")) {
+      const uri = (line.match(/URI="([^"]+)"/) || [])[1];
+      const ivHex = (line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i) || [])[1];
+      if (ivHex) {
+        currentIv = parseIvHex(ivHex);
+        keyIvAttr = `IV=${ivHex.startsWith("0x") || ivHex.startsWith("0X") ? ivHex : ("0x" + ivHex)}`;
+      }
+      if (!keyBuf && uri) {
+        // حاول جلب المفتاح من السيرفر كمحاولة أخيرة
+        try {
+          const keyUrlAbs = new URL(uri, baseUrl).href;
+          const keyRes = await streamFetch(src, keyUrlAbs, {}, null);
+          keyBuf = Buffer.from(await keyRes.arrayBuffer());
+        } catch (e) {
+          console.warn("[hydrate] server key fetch failed", e.message);
+        }
+      }
+      if (keyBuf && keyBuf.length) {
+        try {
+          if (keyBuf.length === 16) src.plainKey = keyBuf;
+          else if (String(uri || keyUrl || "").includes("/user/auth/") || src.mode === "cdn") src.plainKey = await unwrapCdnKey(keyBuf);
+          else src.plainKey = await unwrapKey(keyBuf, src.videoId);
+        } catch (e1) {
+          try { src.plainKey = await unwrapCdnKey(keyBuf); } catch (e2) {
+            try { src.plainKey = await unwrapKey(keyBuf, src.videoId); } catch (e3) {
+              throw new Error("فشل فك مفتاح التشغيل من العميل: " + e1.message);
+            }
+          }
+        }
+        src.defaultIv = currentIv;
+      }
+      continue;
+    }
+    if (line.startsWith("#EXTINF:")) {
+      // duration handled with next uri line
+      continue;
+    }
+    if (line && !line.startsWith("#")) {
+      // find preceding EXTINF duration
+      let dur = src.targetDuration || 6;
+      // scan previous non-empty in original - approximate
+      const segUrl = new URL(line, baseUrl).href;
+      try { src.allowedHosts.add(new URL(segUrl).hostname); } catch {}
+      const seq = mediaSeq + segIndex;
+      const iv = currentIv || ivFromMediaSequence(seq);
+      segs.push({ u: segUrl, iv: iv.toString("hex"), s: seq, i: segIndex, dur });
+      out.push(`#EXTINF:${Number(dur).toFixed(5)},`);
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      segIndex++;
+    }
+  }
+  // better duration parse
+  segs.length = 0; out.length = 0;
+  out.push("#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(src.targetDuration || 6))}`, "#EXT-X-PLAYLIST-TYPE:VOD", `#EXT-X-MEDIA-SEQUENCE:${mediaSeq}`);
+  let pendingDur = src.targetDuration || 6;
+  segIndex = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#EXTINF:")) {
+      const d = Number((line.match(/#EXTINF:([\d.]+)/) || [])[1]);
+      if (Number.isFinite(d) && d > 0) pendingDur = d;
+      continue;
+    }
+    if (line.startsWith("#EXT-X-KEY:")) continue;
+    if (line && !line.startsWith("#")) {
+      const segUrl = new URL(line, baseUrl).href;
+      try { src.allowedHosts.add(new URL(segUrl).hostname); } catch {}
+      const seq = mediaSeq + segIndex;
+      const iv = currentIv || ivFromMediaSequence(seq);
+      segs.push({ u: segUrl, iv: iv.toString("hex"), s: seq, i: segIndex, dur: pendingDur });
+      out.push(`#EXTINF:${Number(pendingDur).toFixed(5)},`);
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      segIndex++;
+    }
+  }
+  if (!segs.length) throw new Error("مفيش مقاطع في الـ playlist");
+  if (!src.plainKey) throw new Error("مفيش مفتاح تشغيل — ابعت keyBase64 في الـ hydrate");
+  src.segs = segs;
+  src.playlist = out.join("\n");
+  src.directSegments = false;
+  return src;
+}
+
+function clientFetchPayload(videoId, upstreamTok) {
+  return {
+    type: "client_fetch",
+    videoId: String(videoId),
+    reason: "upstream_blocked",
+    message: "سيرفر الاستضافة محظور من Cloudflare/كورساتك — المشغّل هيجلب القائمة من جهازك",
+    playlistUrl: `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`,
+    headers: {
+      Authorization: `Bearer ${upstreamTok}`,
+      Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+      Origin: CONFIG.STREAM_ORIGIN,
+      Referer: CONFIG.STREAM_REFERER,
+      "User-Agent": CONFIG.STREAM_UA,
+      "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH || "com.mycompany.app.soulbrowser"
+    },
+    hydratePath: `/api/play/${encodeURIComponent(videoId)}/hydrate`
+  };
+}
+
 async function fetchPlaylistSmart(url, token, label = "pl") {
   const accepts = [
     "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
@@ -3330,6 +3502,12 @@ async function buildVideoSource(videoId, clientHeaders) {
   } catch (e) { console.warn("[platforms]", e.message); }
   const preferCdn = platformNames.includes("cdn") && !platformNames.includes("stream-weave") && !platformNames.includes("weave");
   const preferYoutube = platformNames.includes("youtube") && !platformNames.includes("cdn") && !platformNames.includes("stream-weave");
+  const onlyRutube = platformNames.length && platformNames.every((n) => n === "rutube" || n === "youtube") && !platformNames.includes("cdn") && !platformNames.includes("stream-weave") && !platformNames.includes("weave");
+  if (onlyRutube && !platformNames.includes("youtube")) {
+    const err = new Error("الفيديو على منصة Rutube فقط — مش مدعوم حاليًا. جرّب فيديو CDN أو يوتيوب.");
+    err.status = 501;
+    throw err;
+  }
 
   let mode = null; let streamUrl = null; let sessionToken = null; let resolvedVideoId = videoId; let probeText = null;
   const errors = [];
@@ -3913,6 +4091,56 @@ app.get("/api/debug/stream-probe/:videoId", requireStudent, rateLimit({ max: 10,
   }
 });
 
+
+app.post("/api/play/:videoId/hydrate", requireStudent, playLimiter, async (req, res) => {
+  try {
+    const videoId = String(req.params.videoId || "");
+    if (!videoId) return jsonError(res, 400, "videoId مطلوب");
+    if (/^bn_/i.test(videoId) || /^th/i.test(videoId)) return jsonError(res, 400, "hydrate لكورساتك فقط");
+    const body = req.body || {};
+    const masterText = body.masterPlaylist || body.master || body.playlist || "";
+    const mediaText = body.mediaPlaylist || body.media || body.variant || "";
+    const keyBase64 = body.keyBase64 || body.key || null;
+    const keyUrl = body.keyUrl || null;
+    const variantUrl = body.variantUrl || body.mediaUrl || null;
+    if (!mediaText && !masterText) return jsonError(res, 400, "ابعت masterPlaylist أو mediaPlaylist");
+
+    const src = await buildSrcFromClientPlaylists(videoId, {
+      masterText,
+      mediaText: mediaText || masterText,
+      keyBase64,
+      keyUrl,
+      variantUrl: variantUrl || `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/480.m3u8`
+    });
+    // cache source briefly
+    sourceCache.set(videoId, { src, exp: now() + 10 * 60_000 });
+
+    const id = crypto.randomBytes(12).toString("hex");
+    const streamKey = crypto.randomBytes(18).toString("base64url");
+    const deviceId = (req.session && req.session.deviceId) || null;
+    const sessionRow = {
+      id,
+      src,
+      ownerCode: req.session && req.session.code,
+      ownerToken: req.sessionToken,
+      ownerDeviceId: deviceId,
+      streamKey,
+      createdAt: now(),
+      lastUsed: now()
+    };
+    streamSessions.set(id, sessionRow);
+    try {
+      const secure = (req.secure || req.headers["x-forwarded-proto"] === "https") ? "; Secure" : "";
+      res.setHeader("Set-Cookie", `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`);
+    } catch {}
+    const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
+    res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, mode: "client_hydrated", segs: (src.segs || []).length } });
+  } catch (e) {
+    console.error("[hydrate]", e.message);
+    jsonError(res, 502, e.message);
+  }
+});
+
 app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => {
   try {
     let videoId = String(req.params.videoId);
@@ -3977,6 +4205,17 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
   } catch (e) {
     try { const yt = await tryResolveYoutube(String(req.params.videoId || "")); if (yt) return res.json({ success: true, data: { type: "youtube", youtube_url: yt, url: yt } }); } catch {}
     console.error("[play]", e.message);
+    const msg = String(e && e.message || "");
+    const blocked = /CDN|weave|playlist|403|500|426|cloudflare|blocked|غير صالح|fetch failed|UPSTREAM/i.test(msg);
+    if (blocked && !/^bn_/i.test(String(req.params.videoId || "")) && !/^th/i.test(String(req.params.videoId || ""))) {
+      try {
+        const tok = await getCoursatkToken();
+        if (tok) {
+          console.warn("[play] falling back to client_fetch for", req.params.videoId, msg);
+          return res.json({ success: true, data: clientFetchPayload(String(req.params.videoId), tok) });
+        }
+      } catch (e2) { console.warn("[play] client_fetch payload failed", e2.message); }
+    }
     jsonError(res, e.status || 502, e.message);
   }
 });
