@@ -1524,6 +1524,12 @@ async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, ti
   try {
     console.warn(`[${logTag}] debug bin16=${Buffer.from(keyBuf).subarray(0, 16).toString("hex")} seedPrefix=${String(keySeed || "").slice(0, 12)}`);
   } catch {}
+  // player.js Vd: 16-byte key payload returns as raw AES key — keep it for per-segment recovery
+  const prefer = cands.find((c) => c.tag === "bin16") || cands[0];
+  if (prefer) {
+    console.warn(`[${logTag}] soft-accept ${prefer.tag} without sample TS match (player.js treats bin16 as plain key)`);
+    return { key: prefer.key, mode: "cbc", ivMode: "playlist", tag: prefer.tag + "-soft" };
+  }
   return null;
 }
 
@@ -3631,9 +3637,14 @@ async function buildPlaylist(src, masterText, clientHeaders) {
           src.cipherMode = src.cipherMode || "cbc";
           src.ivMode = "playlist";
         } else {
-          console.warn("[weave-v3] plainKey still null after all paths — need valid x-sw-proof / player.js algo");
-          console.warn("[weave-v3] hint: upload player.stream-weave.cache.js from browser Network tab (coursatk) to extract proof algorithm");
-          throw new Error("فشل فك مفتاح weave v3 — proof غير صالح أو خوارزمية المفتاح غير معروفة");
+          // soft fallback: استخدم key.bin مؤقتًا + خلّي getSegmentPlain يجرّب كل المرشّحات وقت الطلب
+          // (من غير ما نوقع على client_fetch/CORS message مضللة)
+          console.warn("[weave-v3] plainKey not validated — soft fallback bin16; need player.js proof algo for reliable decrypt");
+          src.plainKey = Buffer.from(wrapped.subarray(0, 16));
+          src.cipherMode = "cbc";
+          src.ivMode = "playlist";
+          src._keyUnverified = true;
+          src._lastKeyBuf = Buffer.from(wrapped);
         }
       }
     }
@@ -4924,12 +4935,24 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
       }
     } catch (decErr) {
       let recovered = null;
-      if (usedSrc.mode === "weave" && usedSrc.keySeed && encrypted.length >= 32) {
+      if (usedSrc.mode === "weave" && encrypted.length >= 32) {
         try {
-          const cands = weaveV3KeyCandidates(usedSrc._lastKeyBuf || usedSrc.plainKey, usedSrc.keySeed, usedSrc.swTicket);
-          const ivs = [usedIv, usedSrc.defaultIv, ivFromMediaSequence(meta.s || 0)].filter(
-            (x) => x && Buffer.isBuffer(x) && x.length === 16
-          );
+          const raw = usedSrc._lastKeyBuf || usedSrc.plainKey;
+          const cands = weaveV3KeyCandidates(raw, usedSrc.keySeed, usedSrc.swTicket);
+          // player.js: len===16 → raw AES key as-is (Vd early return)
+          if (raw && raw.length >= 16) {
+            const bin16 = Buffer.from(raw.subarray(0, 16));
+            if (!cands.some((c) => c.hex === bin16.toString("hex"))) {
+              cands.unshift({ key: bin16, tag: "bin16-raw", hex: bin16.toString("hex") });
+            }
+          }
+          const ivs = [];
+          for (const x of [usedIv, usedSrc.defaultIv, meta && meta.iv ? parseIvHex(meta.iv) : null]) {
+            if (x && Buffer.isBuffer(x) && x.length === 16) ivs.push(x);
+          }
+          const seqBase = Number.isFinite(meta.s) ? meta.s : 0;
+          for (let s = Math.max(0, seqBase - 2); s <= seqBase + 5; s++) ivs.push(ivFromMediaSequence(s));
+          ivs.push(Buffer.alloc(16, 0));
           for (const cand of cands) {
             for (const testIv of ivs) {
               for (const m of ["cbc", "ctr", "cbc-nopad"]) {
