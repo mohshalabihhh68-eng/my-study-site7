@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.23 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.7.24 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -55,7 +55,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.23";
+const APP_VERSION = "v1.7.24";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1299,6 +1299,123 @@ async function unwrapCdnKey(wrappedBuf) {
 }
 
 function decryptSegment(encrypted, key, iv) { const decipher = crypto.createDecipheriv("aes-128-cbc", key, iv); return Buffer.concat([decipher.update(encrypted), decipher.final()]); }
+
+
+/** stream-weave v3 key package (86 bytes) → AES-128 content key */
+const SW_NE = [11,48,0,37,74,26,63,15,52,4,41,78,30,67,19,56,8,45,82,34,71,23,60,12,49,1,38,75,27,64,16,53,5,42,79,31,68,20,57,9,46,83,35,72,24,61,13,50,2,39,76,28,65,17,54,6,43,80,32,69,21,58,10,47,84,36,73,25,62,14,51,3,40,77,29,66,18,55,7,44,81,33,70,22,59];
+
+function swB64UrlToBuf(s) {
+  const t = String(s).replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(t, "base64");
+}
+function swBufToB64Url(buf) {
+  return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function swHmacSha256(keyBuf, ...parts) {
+  const h = crypto.createHmac("sha256", keyBuf);
+  for (const p of parts) {
+    if (p == null) continue;
+    h.update(typeof p === "string" ? Buffer.from(p) : Buffer.from(p));
+  }
+  return h.digest();
+}
+
+async function unwrapStreamWeaveKeyV3(packageBuf, keySeedB64, idA, idB, keyVersion = 3) {
+  if (!packageBuf || packageBuf.length !== 86) throw new Error("sw key package must be 86 bytes, got " + (packageBuf && packageBuf.length));
+  const seed = swB64UrlToBuf(keySeedB64);
+  if (seed.length !== 32) throw new Error("key_seed must decode to 32 bytes, got " + seed.length);
+  const n = String(idA || "").trim().toLowerCase();
+  const t = String(idB || "").trim().toLowerCase();
+  if (!n || !t) throw new Error("sw unwrap needs two ids");
+
+  const k = packageBuf.subarray(1);
+  const f = Buffer.alloc(85);
+  for (let i = 0; i < 85; i++) f[SW_NE[i]] = k[i];
+  const a = f.subarray(0, 16);
+  const s = f.subarray(16, 28); // 12-byte GCM iv
+  const O = f.subarray(28); // 57 bytes
+
+  // header check: payload[0] should equal 90 XOR a[0]
+  if (packageBuf[0] !== ((90 ^ a[0]) & 0xff)) {
+    // try soft continue — some versions may differ
+    console.warn("[sw-v3] header byte mismatch", packageBuf[0], (90 ^ a[0]) & 0xff);
+  }
+
+  const msgCandidates = [
+    `${n}|${t}|`,
+    `${n}|${t}|${keyVersion}`,
+    `${n}|${t}`,
+    `${t}|${n}|`,
+    `${t}|${n}|${keyVersion}`,
+    `${n}|${t}|${String(keyVersion).toLowerCase()}`,
+  ];
+
+  let lastErr = null;
+  for (const msg of msgCandidates) {
+    try {
+      // HMAC keySeed over msg (and optionally a)
+      let m = await swHmacSha256(seed, msg);
+      // Also try with a appended as in Je(..., a)
+      const m2 = await swHmacSha256(seed, msg, a);
+      for (const mm of [m, m2]) {
+        // PBKDF2: password=mm, salt=a, iter=1337, 32 bytes
+        const derived = crypto.pbkdf2Sync(mm, a, 1337, 32, "sha256");
+        // AES-256-GCM? or AES-128-GCM — key 32 bytes suggests AES-256-GCM
+        try {
+          const decipher = crypto.createDecipheriv("aes-256-gcm", derived, s);
+          // O = ciphertext (41) + tag (16) = 57
+          const ct = O.subarray(0, O.length - 16);
+          const tag = O.subarray(O.length - 16);
+          decipher.setAuthTag(tag);
+          const S = Buffer.concat([decipher.update(ct), decipher.final()]);
+          if (S.length !== 41) throw new Error("plain len " + S.length);
+          const h = Buffer.alloc(41);
+          for (let i = 0; i < 41; i++) h[i] = S[i] ^ a[i % 16];
+          // first 32 bytes are base64 of 16-byte key?
+          const b64 = h.subarray(0, 32).toString("utf8");
+          let key;
+          try {
+            key = Buffer.from(b64, "base64");
+          } catch {
+            key = h.subarray(0, 16);
+          }
+          if (key.length >= 16) {
+            console.log("[sw-v3] unwrap ok msg=", JSON.stringify(msg), "keylen", key.length);
+            return key.subarray(0, 16);
+          }
+        } catch (e) {
+          lastErr = e;
+        }
+        // try AES-128-GCM with first 16 of derived
+        try {
+          const decipher = crypto.createDecipheriv("aes-128-gcm", derived.subarray(0, 16), s);
+          const ct = O.subarray(0, O.length - 16);
+          const tag = O.subarray(O.length - 16);
+          decipher.setAuthTag(tag);
+          const S = Buffer.concat([decipher.update(ct), decipher.final()]);
+          if (S.length === 41) {
+            const h = Buffer.alloc(41);
+            for (let i = 0; i < 41; i++) h[i] = S[i] ^ a[i % 16];
+            const b64 = h.subarray(0, 32).toString("utf8");
+            let key;
+            try { key = Buffer.from(b64, "base64"); } catch { key = h.subarray(0, 16); }
+            if (key.length >= 16) {
+              console.log("[sw-v3] unwrap ok aes128 msg=", JSON.stringify(msg));
+              return key.subarray(0, 16);
+            }
+          }
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("sw-v3 unwrap failed");
+}
+
 
 function looksLikeTs(buf) {
   if (!buf || buf.length < 188) return false;
@@ -3735,7 +3852,14 @@ async function buildVideoSource(videoId, clientHeaders) {
             try {
               const kr = await fetchT(keyUrl, { headers: weaveHeaders, cache: "no-store" }, { timeout: 15_000, retries: 1 });
               const kb = Buffer.from(await kr.arrayBuffer());
-              if (kb.length === 16) plainKey = kb;
+              console.log("[weave-v3] key.bin len", kb.length);
+              if (kb.length === 86 && keySeed) {
+                try { plainKey = await unwrapStreamWeaveKeyV3(kb, keySeed, wVid, sessionId, keyVersion); }
+                catch (e) {
+                  try { plainKey = await unwrapStreamWeaveKeyV3(kb, keySeed, sessionId, wVid, keyVersion); }
+                  catch (e2) { console.warn("[weave-v3] key.bin unwrap", e2.message); }
+                }
+              } else if (kb.length === 16) plainKey = kb;
               else if (kb.length > 0) {
                 try { plainKey = await unwrapKey(kb, wVid); } catch {
                   try { plainKey = await unwrapCdnKey(kb); } catch {}
@@ -3793,8 +3917,21 @@ async function buildVideoSource(videoId, clientHeaders) {
               const kr2 = await fetchT(keySessUrl, { headers: kh, cache: "no-store" }, { timeout: 15_000, retries: 1 });
               const kb2 = Buffer.from(await kr2.arrayBuffer());
               const asText = kb2.toString("utf8");
+              console.log("[weave-v3] sess key status", kr2.status, "len", kb2.length);
               if (asText.trim().startsWith("{")) {
                 console.warn("[weave-v3] key endpoint JSON", asText.slice(0, 120));
+              } else if (kb2.length === 86 && keySeed) {
+                try {
+                  plainKey = await unwrapStreamWeaveKeyV3(kb2, keySeed, wVid, sessionId, keyVersion);
+                  console.log("[weave-v3] unwrapped 86-byte package");
+                } catch (e) {
+                  console.warn("[weave-v3] unwrap 86 fail", e.message);
+                  try {
+                    plainKey = await unwrapStreamWeaveKeyV3(kb2, keySeed, sessionId, wVid, keyVersion);
+                  } catch (e2) {
+                    console.warn("[weave-v3] unwrap 86 swap fail", e2.message);
+                  }
+                }
               } else if (kb2.length === 16) {
                 plainKey = kb2;
               } else if (kb2.length > 0) {
