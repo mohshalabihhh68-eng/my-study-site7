@@ -3639,11 +3639,12 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         } else {
           // soft fallback: استخدم key.bin مؤقتًا + خلّي getSegmentPlain يجرّب كل المرشّحات وقت الطلب
           // (من غير ما نوقع على client_fetch/CORS message مضللة)
-          console.warn("[weave-v3] plainKey not validated — soft fallback bin16; need player.js proof algo for reliable decrypt");
+          console.warn("[weave-v3] plainKey not validated — soft fallback bin16 + pass-through encrypt for client hls.js");
           src.plainKey = Buffer.from(wrapped.subarray(0, 16));
           src.cipherMode = "cbc";
           src.ivMode = "playlist";
           src._keyUnverified = true;
+          src.passThroughEncrypt = true; // خلّي hls.js يفك على المتصفح
           src._lastKeyBuf = Buffer.from(wrapped);
         }
       }
@@ -3652,7 +3653,26 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   }
 
   if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
-  console.log(`[weave] v3 ready segs=${segs.length} key=${src.plainKey?.length || 0} cipher=${src.cipherMode || "cbc"}`);
+  console.log(`[weave] v3 ready segs=${segs.length} key=${src.plainKey?.length || 0} cipher=${src.cipherMode || "cbc"} passThrough=${!!src.passThroughEncrypt}`);
+  if (src.passThroughEncrypt && src.plainKey) {
+    // playlist للعميل: خليه يفك AES عبر hls.js
+    const keyLine = `#EXT-X-KEY:METHOD=AES-128,URI="/api/hls/${SID_TOKEN}/key"${keyIvAttr ? "," + keyIvAttr : ""}`;
+    // حط KEY بعد الهيدر وقبل أول EXTINF
+    const rebuilt = [];
+    let keyInserted = false;
+    for (const L of out) {
+      if (!keyInserted && L.startsWith("#EXTINF")) {
+        rebuilt.push(keyLine);
+        keyInserted = true;
+      }
+      // لو كان فيه KEY قديم امسحه
+      if (L.startsWith("#EXT-X-KEY:")) continue;
+      rebuilt.push(L);
+    }
+    if (!keyInserted) rebuilt.splice(1, 0, keyLine);
+    out.length = 0;
+    out.push(...rebuilt);
+  }
   src.mediaSeq = mediaSeq; src.segs = segs; src.playlist = out.join("\n");
 }
 
@@ -5030,6 +5050,15 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   const meta = { ...sg, u: url, iv: sg.iv, s: sg.s, i: idx };
   const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
   try {
+    // pass-through: رجّع المقطع مشفّر وخلي hls.js يفك بمفتاح /key
+    if (session.src.passThroughEncrypt) {
+      const up = await streamFetch(session.src, url, {}, req.headers);
+      if (!up.ok) throw Object.assign(new Error(`Segment HTTP ${up.status}`), { status: up.status });
+      const buf = Buffer.from(await up.arrayBuffer());
+      res.status(200);
+      res.set({ "Content-Type": "video/mp2t", "Content-Length": String(buf.length), "Cache-Control": "no-store", "Accept-Ranges": "bytes" });
+      return res.send(buf);
+    }
     const plain = await getSegmentPlain(session, meta, url, iv, req.headers);
     res.status(200);
     res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Accept-Ranges": "bytes" });
