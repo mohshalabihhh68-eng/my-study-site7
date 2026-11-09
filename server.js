@@ -3340,7 +3340,7 @@ async function buildVideoSource(videoId, clientHeaders) {
     return { mode: "cdn", streamUrl: masterUrl, sessionToken: upstreamTok, probeText: got.text, resolvedVideoId: String(videoId) };
   }
 
-  async function tryWeaveasync function tryWeave() {
+  async function tryWeave() {
     let lastWeaveErr = null;
     for (let attempt = 1; attempt <= UPSTREAM_FETCH_RETRIES; attempt++) {
       try {
