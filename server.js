@@ -3213,6 +3213,39 @@ app.patch("/api/auth/profile", requireStudent, rateLimit({ max: 20, windowMs: 60
 
 
 // ===== كتالوج taleb.pro الكامل =====
+
+/** إخفاء روابط المنصة الأصلية — الصور تتلبس عبر بروكسي محلي */
+function maskMediaUrl(raw) {
+  if (!raw) return null;
+  const u = String(raw).trim();
+  if (!u) return null;
+  // لو أصلاً بروكسي محلي
+  if (u.startsWith("/api/img") || u.startsWith("/api/file-proxy")) return u;
+  try {
+    const host = new URL(u, "https://local.invalid").hostname.toLowerCase();
+    // أي صورة من talep/taleb أو CDN خارجي نمررها من البروكسي
+    if (/talep\.pro|taleb|b-cdn|cloudinary|googleapis|googleusercontent|fbcdn|cdn/i.test(host) || /^https?:\/\//i.test(u)) {
+      const b64 = Buffer.from(u, "utf8").toString("base64url");
+      return "/api/img?u=" + b64;
+    }
+  } catch {}
+  return u;
+}
+
+function maskTreeImages(node) {
+  if (!node || typeof node !== "object") return node;
+  if (Array.isArray(node)) return node.map(maskTreeImages);
+  const out = { ...node };
+  for (const k of Object.keys(out)) {
+    if (k === "image_url" || k === "image" || k === "avatar" || k === "cover") {
+      out[k] = maskMediaUrl(out[k]);
+    } else if (out[k] && typeof out[k] === "object") {
+      out[k] = maskTreeImages(out[k]);
+    }
+  }
+  return out;
+}
+
 async function getTalebCatalog() {
   const cat = await crawlTalebFullCatalog();
   // نحافظ على تقسيم طالب برو: كورس → محاضرة → أجزاء
@@ -3230,7 +3263,8 @@ async function getTalebCatalog() {
     })),
     lectures: th.lectures || []
   }));
-  return { subjects: cat.subjects, teachers, stats: cat.stats };
+  const out = { subjects: cat.subjects, teachers, stats: cat.stats };
+  return maskTreeImages(out);
 }
 function subjectNameAr(sid) {
   try { return talebSubjectNameAr(sid); } catch { return String(sid || "مادة"); }
@@ -6745,6 +6779,62 @@ function extractDriveFileId(rawUrl) {
     return null;
   } catch { return null; }
 }
+
+
+// بروكسي صور عام — يخفي المصدر عن العميل
+app.get("/api/img", rateLimit({ max: 240, windowMs: 60_000, scope: "img-proxy" }), async (req, res) => {
+  try {
+    let raw = String(req.query.u || "").trim();
+    if (!raw) return res.status(400).end();
+    // base64url decode
+    try {
+      raw = Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    } catch {
+      return res.status(400).end();
+    }
+    let parsed;
+    try {
+      parsed = new URL(raw);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return res.status(400).end();
+    } catch {
+      return res.status(400).end();
+    }
+    const host = parsed.hostname.toLowerCase();
+    // allowlist hosts محتملة للصور
+    const ok =
+      host.endsWith("talep.pro") ||
+      host.endsWith("taleb.pro") ||
+      host.includes("cdn") ||
+      host.includes("cloudinary") ||
+      host.includes("googleusercontent") ||
+      host.includes("b-cdn") ||
+      host.includes("amazonaws") ||
+      host.includes("supabase") ||
+      host.includes("storage");
+    if (!ok) return res.status(403).end();
+
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+      Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      Referer: "https://talep.pro/",
+      Origin: "https://talep.pro"
+    };
+    const upstream = await fetchT(raw, { headers }, { timeout: 20_000, retries: 1 });
+    if (!upstream.ok) return res.status(502).end();
+    const ct = (upstream.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
+    if (!/^image\//i.test(ct) && !/octet-stream/i.test(ct)) return res.status(502).end();
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (!buf.length || buf.length > 8 * 1024 * 1024) return res.status(502).end();
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    // لا نكشف المصدر
+    res.removeHeader("Content-Encoding");
+    return res.end(buf);
+  } catch {
+    return res.status(502).end();
+  }
+});
 
 app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
   try {
