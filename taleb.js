@@ -151,6 +151,23 @@ function subjectNameAr(sid) {
   return SUBJECT_NAME_AR[String(sid || "").toLowerCase()] || String(sid || "مادة");
 }
 
+function cleanArName(s, fallback = "") {
+  s = String(s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  // شيل بقايا UI
+  s = s.replace(/^(د\.?|دكتور|أ\.?|أستاذ)\s*/i, (m) => m) // keep title prefix if present
+       .replace(/طالب\s*برو/gi, "")
+       .replace(/talep\.pro|taleb/gi, "")
+       .replace(/["']+/g, "")
+       .replace(/\s{2,}/g, " ")
+       .trim();
+  // لو الاسم قصير أو أرقام فقط
+  if (!s || s.length < 2 || /^[\d\s]+$/.test(s)) return fallback || s;
+  // خُد أول جملة عربية معقولة
+  const m = s.match(/[\u0600-\u06FF][\u0600-\u06FF\s.·\-ـ]{1,60}/);
+  if (m) return m[0].replace(/\s+/g, " ").trim();
+  return s.slice(0, 80);
+}
+
 function absUrl(u) {
   if (!u) return null;
   u = String(u).trim();
@@ -165,9 +182,11 @@ function extractImagesFromHtml(html, limit = 12) {
   const out = [];
   const re = /(?:src|data-src)=["']([^"']+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^"']*)?)["']/gi;
   let m;
-  while ((m = re.exec(html)) && out.length < limit) {
+  while ((m = re.exec(html)) && out.length < limit * 2) {
     const u = absUrl(m[1]);
-    if (u && !/logo|icon|sprite|placeholder|flag|emoji|favicon/i.test(u) && !out.includes(u)) out.push(u);
+    if (!u) continue;
+    if (/logo|icon|sprite|placeholder|flag|emoji|favicon|svg|1x1|pixel/i.test(u)) continue;
+    if (!out.includes(u)) out.push(u);
   }
   const og = html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
     || html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
@@ -175,7 +194,12 @@ function extractImagesFromHtml(html, limit = 12) {
     const u = absUrl(og[1]);
     if (u && !out.includes(u)) out.unshift(u);
   }
-  return out;
+  // فضّل صور أكبر / avatars / uploads
+  out.sort((a, b) => {
+    const score = (u) => (/upload|avatar|teacher|course|storage|cdn|media/i.test(u) ? 2 : 0) + (/\d{3,}/.test(u) ? 1 : 0);
+    return score(b) - score(a);
+  });
+  return out.slice(0, limit);
 }
 
 function extractTeacherCard(html, subjectSlug, id) {
@@ -190,7 +214,7 @@ function extractTeacherCard(html, subjectSlug, id) {
     const imgs = extractImagesFromHtml(slice, 4);
     if (imgs[0]) image_url = imgs[0];
   }
-  name = String(name || "").replace(/["'].*$/, "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() || `مدرس ${id}`;
+  name = cleanArName(name, `مدرس ${id}`);
   return { name, image_url };
 }
 
@@ -202,10 +226,11 @@ function extractCourseCard(html, courseId) {
   if (idx >= 0) {
     const slice = html.slice(Math.max(0, idx - 200), idx + 900);
     const ar = slice.match(/[\u0600-\u06FF][\u0600-\u06FF\s\w.+ـ\-]{3,90}/);
-    if (ar) title = ar[0].replace(/\s+/g, " ").trim();
+    if (ar) title = cleanArName(ar[0], title);
     const imgs = extractImagesFromHtml(slice, 4);
     if (imgs[0]) image_url = imgs[0];
   }
+  title = cleanArName(title, `كورس ${courseId}`);
   return { title, image_url };
 }
 
@@ -270,7 +295,7 @@ async function parseCourseParts(courseId) {
   const html = await talebText(`${TALEB_BASE}/courses/${courseId}`, 45_000);
   const titleM = html.match(/<title>([^<]+)<\/title>/i);
   let courseTitle = titleM ? titleM[1].replace(/\s*\|\s*.*$/i, "").trim() : `كورس ${courseId}`;
-  courseTitle = courseTitle.replace(/^طالب\s*برو\s*\|\s*/i, "").trim();
+  courseTitle = cleanArName(courseTitle.replace(/^طالب\s*برو\s*\|\s*/i, "").trim(), `كورس ${courseId}`);
   const imgs = extractImagesFromHtml(html, 6);
   const courseImage = imgs[0] || null;
 
@@ -420,7 +445,7 @@ export async function crawlTalebFullCatalog() {
         for (const ln of sortedKeys) {
           const parts = byLec.get(ln) || [];
           parts.sort((a, b) => Number(a.partNum) - Number(b.partNum));
-          const mainTitle = (parts[0]?.title || `محاضرة ${ln}`).replace(/\s+/g, " ").trim();
+          const mainTitle = cleanArName(parts[0]?.title || `محاضرة ${ln}`, `محاضرة ${ln}`);
           const lec = {
             id: `taleb_lec_${c.id}_${ln}`,
             title: mainTitle.slice(0, 120),
