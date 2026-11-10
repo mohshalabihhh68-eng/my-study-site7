@@ -49,7 +49,7 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .page-head h1 .count{font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:4px 14px;border-radius:99px;font-weight:900}
 
-/* كارت الاشتراك (الوقت المتبقي) */
+/* كارت الاشتراك */
 .sub-card{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px;padding:14px 18px;border-radius:18px;background:var(--card);border:1px solid var(--line);box-shadow:0 4px 15px rgba(108,99,255,.05);animation:fadeUp .4s ease both}
 .sub-card .sub-ico{width:44px;height:44px;flex-shrink:0;border-radius:13px;display:grid;place-items:center;background:rgba(16,185,129,.12);color:var(--green)}
 .sub-card .sub-ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -149,10 +149,6 @@ const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(T
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 
-// subjectId: من الـ URL، أو من آخر استخدام، أو أول مادة في المواد
-let subjectId = qs.get('subjectId') || localStorage.getItem('last_subject_id') || null;
-const subjectName = qs.get('subjectName') || localStorage.getItem('last_subject_name') || '';
-
 /* ===== شريط التقدم ===== */
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
@@ -184,7 +180,7 @@ function setGreeting(name){
   $('greeting').innerHTML = `${greet} يا <span class="name-span">${esc(name)}</span>`;
 }
 
-/* ===== الاشتراك — بيقرأ من expiresAt ===== */
+/* ===== كارت الاشتراك ===== */
 function renderSubscription(expiresAt){
   const card = $('sub-card');
   if (!card) return;
@@ -209,25 +205,26 @@ function renderSubscription(expiresAt){
   const days = Math.floor(totalMin / (60 * 24));
   const hours = Math.floor((totalMin % (60 * 24)) / 60);
   const mins = totalMin % 60;
-  // لو الأيام = 0، نعرض الساعات + الدقايق بدل ما تبقى 0
-  const showDays = days;
-  const showMins = days > 0 ? (hours * 60 + mins) : (hours * 60 + mins);
 
   card.style.display = 'flex';
   card.classList.toggle('warn', days < 3);
   card.classList.remove('expired');
   $('sub-title').textContent = days < 1 ? 'اشتراكك ينتهي قريبًا' : (days < 3 ? 'اشتراكك على وشك الانتهاء' : 'اشتراكك فعّال');
   $('sub-note').textContent = 'الوقت المتبقي في اشتراكك';
-  $('sub-days').textContent = showDays;
-  $('sub-mins').textContent = showMins;
+  $('sub-days').textContent = days;
+  $('sub-mins').textContent = (hours * 60 + mins);
 }
 
 /* ===== عرض المدرسين ===== */
 function renderTeachers(payload){
   const grid = $('teachers-grid');
-  // السيرفر بيرجع: { data: { id, name, image_url, teachers: [...] } }
-  const teachersList = (payload && payload.teachers) || (Array.isArray(payload) ? payload : []);
-  const subjName = (payload && payload.name) || subjectName || 'مدرس';
+  // السيرفر بيرجع: { data: { id, name, image_url, teachers: [...] } } أو { teachers: [...] }
+  const teachersList = (payload && payload.teachers)
+    || (payload && payload.data && payload.data.teachers)
+    || (Array.isArray(payload) ? payload : []);
+  const subjName = (payload && payload.name)
+    || (payload && payload.data && payload.data.name)
+    || 'مدرس';
 
   if (!teachersList.length) {
     grid.innerHTML = `<div class="empty-state">لا يوجد مدرسين متاحين لهذه المادة حالياً.</div>`;
@@ -241,10 +238,9 @@ function renderTeachers(payload){
     const teacherId = t.id;
     const name = t.name || 'مدرس';
     const img = t.image_url || '';
-    const coursesCount = Number(t.chapter_count) || 0;
+    const coursesCount = Number(t.chapter_count) || Number(t.courses_count) || 0;
     const subText = coursesCount > 0 ? `${coursesCount} كورس` : subjName;
-    // ⚠️ عدّل المسار لو صفحة الكورسات اسمها مختلف عندك
-    const url = `courses.html?teacherId=${encodeURIComponent(teacherId)}&teacherName=${encodeURIComponent(name)}&subjectId=${encodeURIComponent(subjectId || '')}`;
+    const url = `courses.html?teacherId=${encodeURIComponent(teacherId)}&teacherName=${encodeURIComponent(name)}`;
     return `
       <div class="card" id="card-${esc(teacherId)}">
         <div class="side-progress-bar"><div class="fill"></div></div>
@@ -284,9 +280,9 @@ async function init() {
 
   try {
     // 2) /api/auth/me يجيب الاسم + expiresAt + subjectIds
-    const me = await api('/api/auth/me');
+    const meResp = await api('/api/auth/me');
+    const me = meResp.data || meResp;
 
-    // تحديث البروفايل + الاشتراك
     if (me) {
       if (me.name) {
         $('nav-name').textContent = me.name;
@@ -294,36 +290,50 @@ async function init() {
         localStorage.setItem('student_name', me.name);
         setGreeting(me.name);
       }
-      // ✅ expiresAt رقم (timestamp ms) — هو الأساس
+      // expiresAt (timestamp ms)
       renderSubscription(me.expiresAt);
-
-      // لو مفيش subjectId، خده من subjectIds أول عنصر
-      if (!subjectId && Array.isArray(me.subjectIds) && me.subjectIds.length) {
-        subjectId = String(me.subjectIds[0]);
-      }
     }
 
-    // 3) لو لسه مفيش subjectId، بليه بالـ default (4)
-    if (!subjectId) subjectId = '4';
-    localStorage.setItem('last_subject_id', subjectId);
-    if (subjectName) localStorage.setItem('last_subject_name', subjectName);
+    // 3) نحدد الـ yearId (المفروض 4 = ثانوية عامة)
+    const yearId = me && me.yearId ? me.yearId : 4;
 
-    // 4) جلب المدرسين
-    const teachersPayload = await api('/api/subjects/' + encodeURIComponent(subjectId) + '/teachers');
+    // 4) نجيب قائمة المواد
+    // الأولوية: subjectId من الـ URL → وإلا نجيب المواد ونختار أول واحدة
+    let realSubjectId = qs.get('subjectId');
+    let realSubjectName = qs.get('subjectName') || '';
+
+    if (!realSubjectId) {
+      // نجيب المواد من API
+      const subjectsResp = await api('/api/subjects/' + yearId);
+      const subjectsList = Array.isArray(subjectsResp) ? subjectsResp
+        : (subjectsResp.data || subjectsResp.subjects || []);
+
+      if (!subjectsList || !subjectsList.length) {
+        $('teachers-grid').innerHTML = `<div class="empty-state">لا توجد مواد متاحة لحسابك حالياً.</div>`;
+        return;
+      }
+      // اختار أول مادة
+      realSubjectId = subjectsList[0].id;
+      realSubjectName = subjectsList[0].name || '';
+    }
+
+    // 5) نجيب المدرسين بالمادة الصح
+    const teachersResp = await api('/api/subjects/' + encodeURIComponent(realSubjectId) + '/teachers');
+    // السيرفر بيرجع { data: { teachers: [...] } }
+    const teachersPayload = teachersResp.data || teachersResp;
     renderTeachers(teachersPayload);
+
   } catch (e) {
     console.error('[subjects]', e);
     $('teachers-grid').innerHTML = `<div class="empty-state" style="color:var(--red)">خطأ: ${esc(e.message)}</div>`;
   }
 }
 
-/* ===== تحديث حي للوقت المتبقي كل دقيقة ===== */
+/* ===== تحديث حي للوقت كل دقيقة ===== */
 let lastExpiresAt = null;
 setInterval(() => {
   if (lastExpiresAt) renderSubscription(lastExpiresAt);
 }, 60000);
-
-// نضيف حفظ expiresAt بعد ما نجيبه
 const _origRender = renderSubscription;
 renderSubscription = function(exp){
   if (exp) lastExpiresAt = exp;
