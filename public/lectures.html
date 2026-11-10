@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f8fafc">
+<meta name="theme-color" content="#f7f8fc">
 <title>المحاضرات | ثانوية club</title>
 <script>
 (function(){
@@ -11,508 +11,787 @@
     var t = localStorage.getItem('thanawya_theme') || 'light';
     document.documentElement.setAttribute('data-theme', t);
     var m = document.querySelector('meta[name="theme-color"]');
-    if(m) m.setAttribute('content', t === 'dark' ? '#070b14' : '#f8fafc');
+    if(m) m.setAttribute('content', t === 'dark' ? '#080c16' : '#f7f8fc');
   } catch(e){}
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root,[data-theme="dark"]{
-  --bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;
-  --ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);
-  --blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;
-  --nav-bg:rgba(7,11,20,.88);--bg-pattern:radial-gradient(circle at top right,rgba(59,130,246,.05),transparent 40%);
-  --placeholder-bg:linear-gradient(135deg,#1e293b,#0f172a);
+/* ═══════════════════════════════════
+   TOKENS
+═══════════════════════════════════ */
+:root {
+  --bg:          #f7f8fc;
+  --bg2:         #eef0f7;
+  --card:        #ffffff;
+  --card-hover:  #f4f5fb;
+  --card-inner:  #f0f1f8;
+  --ink:         #18213a;
+  --ink2:        #3a4560;
+  --muted:       #7a85a0;
+  --line:        rgba(99,102,241,.10);
+  --line2:       rgba(99,102,241,.18);
+
+  --accent:      #5b5ef4;
+  --accent2:     #818cf8;
+  --accent-soft: rgba(91,94,244,.08);
+  --accent-glow: rgba(91,94,244,.18);
+
+  --green:       #10b981;
+  --green-soft:  rgba(16,185,129,.10);
+  --amber:       #f59e0b;
+  --amber-soft:  rgba(245,158,11,.10);
+  --red:         #ef4444;
+  --purple:      #8b5cf6;
+  --purple-soft: rgba(139,92,246,.10);
+
+  --nav-h:       64px;
+  --nav-bg:      rgba(247,248,252,.90);
+  --radius-card: 20px;
+  --radius-row:  13px;
+  --shadow-card: 0 2px 16px rgba(91,94,244,.07);
+  --shadow-btn:  0 4px 14px rgba(91,94,244,.22);
+  --transition:  .22s cubic-bezier(.4,0,.2,1);
 }
-[data-theme="light"]{
-  --bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
-  --ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);
-  --blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;
-  --nav-bg:rgba(255,255,255,.88);--bg-pattern:radial-gradient(circle at top right,rgba(108,99,255,.05),transparent 40%);
-  --placeholder-bg:linear-gradient(135deg,#e2e8f0,#f1f5f9);
+[data-theme="dark"] {
+  --bg:          #080c16;
+  --bg2:         #0e1424;
+  --card:        #111827;
+  --card-hover:  #182035;
+  --card-inner:  #0c1120;
+  --ink:         #e8ecff;
+  --ink2:        #9aa5c4;
+  --muted:       #5c6a88;
+  --line:        rgba(129,140,248,.10);
+  --line2:       rgba(129,140,248,.20);
+
+  --accent:      #6366f1;
+  --accent2:     #818cf8;
+  --accent-soft: rgba(99,102,241,.10);
+  --accent-glow: rgba(99,102,241,.22);
+
+  --green:       #34d399;
+  --green-soft:  rgba(52,211,153,.10);
+  --amber:       #fbbf24;
+  --amber-soft:  rgba(251,191,36,.10);
+  --red:         #f87171;
+  --purple:      #a78bfa;
+  --purple-soft: rgba(167,139,250,.10);
+
+  --nav-bg:      rgba(8,12,22,.90);
+  --shadow-card: 0 2px 20px rgba(0,0,0,.35);
+  --shadow-btn:  0 4px 18px rgba(99,102,241,.28);
 }
+
+/* ═══════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════ */
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
-body{background:var(--bg);background-image:var(--bg-pattern);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
-button{font:inherit;cursor:pointer;outline:none;border:none}
+[hidden]{display:none !important}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:Cairo,sans-serif;
+  min-height:100vh;
+  transition:background var(--transition),color var(--transition);
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;cursor:pointer;outline:none;border:none;background:none}
 a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
 
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out}
-#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;border-radius:0 0 0 4px}
+/* ═══════════════════════════════════
+   SCROLL INDICATOR
+═══════════════════════════════════ */
+#sp-top{
+  position:fixed;top:0;left:0;right:0;height:3px;z-index:9999;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  transform-origin:left;transform:scaleX(0);transition:transform .08s linear;
+}
 
-@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+/* ═══════════════════════════════════
+   NAV
+═══════════════════════════════════ */
+.nav{
+  position:sticky;top:0;z-index:40;height:var(--nav-h);
+  background:var(--nav-bg);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--line);
+  transition:background var(--transition),border-color var(--transition);
+}
+.nav-in{
+  max-width:1140px;margin:0 auto;height:100%;
+  padding:0 20px;display:flex;align-items:center;gap:14px;
+}
+.brand{
+  display:flex;align-items:center;gap:11px;
+  font-weight:900;font-size:15px;color:var(--ink);cursor:pointer;
+  user-select:none;
+}
+.brand-logo{
+  width:40px;height:40px;border-radius:13px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:grid;place-items:center;color:#fff;
+  box-shadow:var(--shadow-btn);
+}
+.brand-logo svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9}
+.brand-sub{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-2px}
+.nav-gap{flex:1}
+.nav-btn{
+  display:flex;align-items:center;gap:9px;
+  border:1px solid var(--line2);
+  background:var(--card);
+  border-radius:999px;
+  padding:5px 15px 5px 5px;
+  font-weight:800;font-size:13px;color:var(--ink);
+  transition:var(--transition);cursor:pointer;
+}
+.nav-btn:hover{background:var(--card-hover);border-color:var(--accent2)}
+.nav-av{
+  width:36px;height:36px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;display:grid;place-items:center;
+  font-weight:900;font-size:15px;
+}
+.theme-btn{
+  width:40px;height:40px;border-radius:12px;
+  border:1px solid var(--line2);background:var(--card);
+  color:var(--ink);display:grid;place-items:center;
+  transition:var(--transition);cursor:pointer;flex-shrink:0;
+}
+.theme-btn:hover{background:var(--card-hover);border-color:var(--accent2)}
+.theme-btn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.9}
+.icon-sun{display:none}.icon-moon{display:block}
+[data-theme="dark"] .icon-sun{display:block}[data-theme="dark"] .icon-moon{display:none}
 
-/* ===== nav ===== */
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
-.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
-.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
-.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8}
-.brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
-.nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
-.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
-.profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
-.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0;transition:.25s}
-.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
-.theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
-[data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
+/* ═══════════════════════════════════
+   PAGE WRAPPER
+═══════════════════════════════════ */
+.page{max-width:1140px;margin:0 auto;padding:28px 20px 72px}
 
-/* ===== layout ===== */
-.cv{max-width:1120px;margin:0 auto;padding:24px 16px 60px}
-.cv-shell{animation:fadeUp .45s ease both}
+/* ═══════════════════════════════════
+   HERO HEADER
+═══════════════════════════════════ */
+.hero{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius-card);
+  padding:22px 24px 20px;
+  margin-bottom:22px;
+  box-shadow:var(--shadow-card);
+}
+.back-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:7px 14px;border-radius:11px;
+  background:var(--card-inner);
+  border:1px solid var(--line);
+  font-size:13px;font-weight:800;color:var(--ink);
+  transition:var(--transition);cursor:pointer;
+  margin-bottom:14px;
+}
+.back-btn:hover{background:var(--accent-soft);border-color:var(--accent2);color:var(--accent)}
+.back-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2}
+.breadcrumb{
+  list-style:none;padding:0;margin:0 0 12px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:5px;
+  font-size:12px;color:var(--muted);font-weight:700;
+}
+.breadcrumb li{display:flex;align-items:center;gap:5px}
+.breadcrumb a{color:var(--accent);font-weight:800;transition:opacity .15s}
+.breadcrumb a:hover{opacity:.75}
+.breadcrumb svg{width:13px;height:13px;opacity:.5}
+.hero-title{font-size:clamp(20px,3vw,30px);font-weight:900;line-height:1.35;color:var(--ink)}
 
-/* ===== hero ===== */
-.cv-hero{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;margin-bottom:20px;box-shadow:0 4px 15px rgba(108,99,255,.05)}
-.cv-back{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:var(--card-inner);border:1px solid var(--line);font-size:13px;font-weight:800;color:var(--ink);transition:.2s;cursor:pointer;margin-bottom:14px}
-.cv-back:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
-.cv-back svg{width:18px;height:18px}
-.breadcrumbs ol{list-style:none;padding:0;margin:0 0 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:700}
-.breadcrumbs li{display:flex;align-items:center;gap:6px}
-.breadcrumbs a{color:var(--blue);font-weight:800}
-.breadcrumbs a:hover{text-decoration:underline}
-.breadcrumbs svg{width:14px;height:14px;opacity:.6}
-.cv-hero h1{font-size:clamp(22px,3.4vw,32px);font-weight:900;margin:0;line-height:1.4}
+/* ═══════════════════════════════════
+   TWO-COL GRID
+═══════════════════════════════════ */
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+.aside{position:sticky;top:calc(var(--nav-h) + 16px)}
 
-/* ===== two-col layout ===== */
-.cv-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);gap:20px;align-items:start}
-.cv-side{position:sticky;top:90px}
-.cv-card{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 4px 15px rgba(108,99,255,.05)}
-.course-image-slot{width:100%;aspect-ratio:1/1;background:var(--card-inner);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.course-image-slot img{width:100%;height:100%;object-fit:cover;display:block}
-.course-image-placeholder{width:100%;height:100%;display:grid;place-items:center;color:var(--muted)}
-.course-image-placeholder svg{width:60px;height:60px;opacity:.4}
-.cv-cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-weight:900;font-size:14px;border-radius:0;transition:.25s;box-shadow:0 4px 12px rgba(108,99,255,.2);cursor:pointer}
-.cv-cta:hover{filter:brightness(1.08)}
+/* ═══════════════════════════════════
+   SIDE CARD
+═══════════════════════════════════ */
+.side-card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius-card);
+  overflow:hidden;
+  box-shadow:var(--shadow-card);
+}
+.thumb{width:100%;aspect-ratio:1/1;background:var(--card-inner);overflow:hidden;position:relative}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb-ph{
+  width:100%;height:100%;
+  display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--card-inner),var(--bg2));
+}
+.thumb-ph svg{width:52px;height:52px;stroke:var(--muted);fill:none;opacity:.4;stroke-width:1.5}
 
-/* stats strip */
-.cv-stats{display:flex;flex-direction:column;gap:1px;background:var(--line)}
-.cv-stat{background:var(--card);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700}
-.cv-stat span:last-child{color:var(--blue);font-weight:900}
+/* stats */
+.stats{border-top:1px solid var(--line)}
+.stat{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:11px 18px;
+  border-bottom:1px solid var(--line);
+  font-size:13px;font-weight:700;color:var(--ink2);
+}
+.stat:last-child{border-bottom:none}
+.stat b{color:var(--accent);font-weight:900}
 
-/* ===== lessons box ===== */
-.cv-box{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 4px 15px rgba(108,99,255,.05)}
-.cv-lessons-title{font-size:20px;font-weight:900;margin:0 0 16px;color:var(--ink);display:flex;align-items:center;gap:8px}
-.cv-lessons-title::before{content:"";width:5px;height:22px;border-radius:3px;background:linear-gradient(180deg,var(--blue),var(--blue2))}
-.cv-lectures{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+/* CTA */
+.cta-btn{
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  width:100%;padding:14px 18px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;font-weight:900;font-size:14px;
+  border-radius:0;cursor:pointer;
+  box-shadow:var(--shadow-btn);
+  transition:filter var(--transition);
+  letter-spacing:.3px;
+}
+.cta-btn:hover{filter:brightness(1.08)}
+.cta-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.2}
 
-/* lecture accordion */
-.cv-lecture{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card-inner);transition:border-color .2s}
-.cv-lecture:hover{border-color:rgba(108,99,255,.25)}
-.cv-lecture-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:none;color:var(--ink);text-align:right;transition:background .2s;cursor:pointer}
-.cv-lecture-toggle:hover{background:var(--card-hover)}
-.cv-lecture-name{display:flex;flex-direction:column;gap:4px;min-width:0}
-.cv-lecture-name strong{font-size:15px;font-weight:900;color:var(--ink)}
-.cv-lecture-name small{font-size:11px;color:var(--muted);font-weight:700}
-.cv-lecture-end{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.cv-lecture-count{font-size:12px;font-weight:800;color:var(--muted);background:var(--card);padding:4px 10px;border-radius:99px;border:1px solid var(--line)}
-.cv-round{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);color:var(--blue);transition:transform .3s,background .2s;flex-shrink:0}
-.cv-round svg{width:16px;height:16px}
-.cv-lecture-toggle[aria-expanded="true"] .cv-round{transform:rotate(-90deg);background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;border-color:transparent}
+/* ═══════════════════════════════════
+   LESSONS PANEL
+═══════════════════════════════════ */
+.lessons-box{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius-card);
+  padding:22px;
+  box-shadow:var(--shadow-card);
+}
+.section-title{
+  font-size:18px;font-weight:900;color:var(--ink);
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:18px;
+}
+.section-title::before{
+  content:"";width:4px;height:20px;border-radius:3px;
+  background:linear-gradient(180deg,var(--accent),var(--accent2));
+  flex-shrink:0;
+}
+.lectures-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+
+/* ═══════════════════════════════════
+   LECTURE ACCORDION
+═══════════════════════════════════ */
+.lec-wrap{
+  border:1px solid var(--line);
+  border-radius:var(--radius-row);
+  overflow:hidden;
+  background:var(--card-inner);
+  transition:border-color var(--transition),box-shadow var(--transition);
+}
+.lec-wrap:has(.lec-toggle[aria-expanded="true"]){
+  border-color:var(--line2);
+  box-shadow:0 4px 20px var(--accent-glow);
+}
+.lec-toggle{
+  width:100%;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:14px 16px;
+  color:var(--ink);text-align:right;
+  transition:background var(--transition);cursor:pointer;
+}
+.lec-toggle:hover{background:rgba(91,94,244,.04)}
+.lec-name{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.lec-name strong{font-size:14px;font-weight:900;color:var(--ink)}
+.lec-name small{font-size:11px;color:var(--muted);font-weight:700}
+.lec-end{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.lec-badge{
+  font-size:11px;font-weight:800;color:var(--muted);
+  background:var(--card);border:1px solid var(--line);
+  padding:3px 10px;border-radius:99px;white-space:nowrap;
+}
+.lec-arrow{
+  width:28px;height:28px;border-radius:50%;
+  display:grid;place-items:center;
+  background:var(--card);border:1px solid var(--line);
+  color:var(--accent);flex-shrink:0;
+  transition:transform .3s var(--transition),background var(--transition),border-color var(--transition);
+}
+.lec-arrow svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
+.lec-toggle[aria-expanded="true"] .lec-arrow{
+  transform:rotate(-90deg);
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;border-color:transparent;
+  box-shadow:0 2px 8px var(--accent-glow);
+}
 
 /* panel */
-.cv-panel{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
-.cv-groups{display:flex;flex-direction:column;gap:8px}
-.cv-group{border:1px solid var(--line-soft);border-radius:12px;overflow:hidden;background:var(--card)}
-.cv-group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;background:none;color:var(--ink);font-size:13px;font-weight:800;transition:background .2s;cursor:pointer}
-.cv-group-toggle:hover{background:var(--card-hover)}
-.cv-group-title{color:var(--blue);font-weight:900}
-.cv-group-action{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:700}
-.cv-group-action svg{width:16px;height:16px;transition:transform .3s}
-.cv-group-toggle[aria-expanded="true"] .cv-group-action svg{transform:rotate(-90deg)}
-.cv-group-toggle[aria-expanded="true"] .cv-group-action span{color:var(--blue)}
-.cv-group-body{padding:6px 8px 10px;display:flex;flex-direction:column;gap:4px}
+.lec-panel{padding:4px 10px 10px}
 
-/* items */
-.cv-item{display:block;width:100%;text-align:right;padding:10px 12px;border-radius:9px;background:none;color:var(--ink);transition:background .18s,border-color .18s;border:1px solid transparent;cursor:pointer}
-.cv-item:hover{background:var(--card-hover);border-color:var(--line-soft)}
-.cv-item.watched{opacity:.6}
-.cv-item-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.cv-item-start{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
-.cv-item-icon{width:26px;height:26px;flex-shrink:0;border-radius:8px;display:grid;place-items:center;background:rgba(108,99,255,.1);color:var(--blue)}
-.cv-item-icon svg{width:14px;height:14px}
-.cv-item-icon.green{background:rgba(16,185,129,.12);color:var(--green)}
-.cv-item-icon.amber{background:rgba(245,158,11,.12);color:#f59e0b}
-.cv-item-icon.purple{background:rgba(139,92,246,.12);color:var(--purple)}
-.cv-item-title{font-size:12.5px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cv-item-action{font-size:11px;font-weight:800;color:var(--blue);padding:4px 10px;border-radius:99px;background:rgba(108,99,255,.08);white-space:nowrap;flex-shrink:0}
-.cv-item-action.green{color:var(--green);background:rgba(16,185,129,.08)}
-.cv-item-action.amber{color:#f59e0b;background:rgba(245,158,11,.08)}
-.cv-item-watched-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;display:none}
-.cv-item.watched .cv-item-watched-dot{display:block}
-
-/* loading */
-.cv-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;color:var(--muted)}
-.spinner{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px}
-
-/* skeleton */
-.cv-skeleton .sk{border-radius:10px;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear}
-
-/* responsive */
-@media(max-width:900px){
-  .cv-layout{grid-template-columns:1fr}
-  .cv-side{position:static;order:-1}
-  .cv-card{display:flex;align-items:center;gap:12px;padding:10px}
-  .course-image-slot{width:90px;aspect-ratio:1/1;flex-shrink:0;border-radius:12px}
-  .cv-cta{flex:1;border-radius:12px;padding:14px}
-  .cv-stats{display:none}
+/* ═══════════════════════════════════
+   GROUPS
+═══════════════════════════════════ */
+.groups{display:flex;flex-direction:column;gap:7px}
+.group{
+  border:1px solid var(--line);
+  border-radius:11px;overflow:hidden;
+  background:var(--card);
+  transition:border-color var(--transition);
 }
-@media(max-width:700px){
-  .app-nav-in{padding:10px 14px}
-  .brand small{display:none}
-  .cv{padding:18px 12px 50px}
-  .cv-hero{padding:16px;border-radius:20px}
-  .cv-box{padding:16px;border-radius:20px}
-  .cv-lecture-toggle{padding:12px 14px}
-  .cv-item-title{white-space:normal}
-  #scroll-progress-side{width:3px}
+.group:has(.group-toggle[aria-expanded="true"]){border-color:var(--line2)}
+.group-toggle{
+  width:100%;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;padding:10px 14px;
+  color:var(--ink);font-size:13px;font-weight:800;
+  transition:background var(--transition);cursor:pointer;
+}
+.group-toggle:hover{background:var(--card-hover)}
+.group-label{color:var(--accent);font-weight:900;font-size:13px}
+.group-action{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);font-weight:700}
+.group-action svg{
+  width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;
+  transition:transform .28s var(--transition);
+}
+.group-toggle[aria-expanded="true"] .group-action svg{transform:rotate(-90deg)}
+.group-toggle[aria-expanded="true"] .group-action .g-txt{color:var(--accent)}
+.group-body{padding:6px 8px 8px;display:flex;flex-direction:column;gap:3px}
+
+/* ═══════════════════════════════════
+   ITEMS
+═══════════════════════════════════ */
+.item{
+  display:block;width:100%;text-align:right;
+  padding:9px 11px;border-radius:9px;
+  background:none;color:var(--ink);
+  border:1px solid transparent;
+  transition:background var(--transition),border-color var(--transition);
+  cursor:pointer;
+}
+.item:hover{background:var(--card-hover);border-color:var(--line)}
+.item.watched{opacity:.55}
+.item-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.item-start{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
+.item-icon{
+  width:28px;height:28px;flex-shrink:0;border-radius:8px;
+  display:grid;place-items:center;
+  background:var(--accent-soft);color:var(--accent);
+  transition:background var(--transition);
+}
+.item-icon svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.9}
+.item-icon.g{background:var(--green-soft);color:var(--green)}
+.item-icon.a{background:var(--amber-soft);color:var(--amber)}
+.item-icon.p{background:var(--purple-soft);color:var(--purple)}
+.item-title{
+  font-size:12.5px;font-weight:700;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.item-tag{
+  font-size:11px;font-weight:800;
+  padding:3px 10px;border-radius:99px;
+  background:var(--accent-soft);color:var(--accent);
+  white-space:nowrap;flex-shrink:0;
+}
+.item-tag.g{background:var(--green-soft);color:var(--green)}
+.item-tag.a{background:var(--amber-soft);color:var(--amber)}
+.watched-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--green);flex-shrink:0;display:none;
+}
+.item.watched .watched-dot{display:block}
+
+/* ═══════════════════════════════════
+   LOADING / EMPTY / ERROR
+═══════════════════════════════════ */
+.state-box{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:56px 24px;
+  color:var(--muted);gap:12px;
+}
+.spinner{
+  width:34px;height:34px;border-radius:50%;
+  border:3px solid var(--line2);border-top-color:var(--accent);
+  animation:spin 1s linear infinite;
+}
+.spinner-sm{
+  width:22px;height:22px;border-width:2.5px;
+  display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+.page-anim{animation:fadeUp .4s ease both}
+
+/* ═══════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════ */
+@media(max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .aside{position:static}
+  .side-card{display:flex;align-items:stretch;border-radius:var(--radius-card)}
+  .thumb{width:96px;aspect-ratio:1/1;flex-shrink:0;border-radius:var(--radius-card) 0 0 var(--radius-card)}
+  .stats{display:none}
+  .cta-btn{flex:1;border-radius:0 var(--radius-card) var(--radius-card) 0;min-height:96px}
+}
+@media(max-width:620px){
+  .nav-in{padding:0 14px}
+  .nav-btn span:not(.nav-av){display:none}
+  .nav-btn{padding:5px 5px}
+  .page{padding:16px 14px 60px}
+  .hero{padding:16px 16px 14px;border-radius:16px}
+  .lessons-box{padding:16px;border-radius:16px}
+  .item-title{white-space:normal}
 }
 </style>
 </head>
 <body>
-<div id="scroll-progress"></div>
-<div id="scroll-progress-side"></div>
+<div id="sp-top"></div>
 
-<header class="app-nav"><div class="app-nav-in">
+<header class="nav"><div class="nav-in">
   <div class="brand" onclick="window.location.href='index.html'">
-    <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
-    <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
+    <span class="brand-logo">
+      <svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg>
+    </span>
+    <span>ثانوية <span style="color:var(--accent)">club</span><small class="brand-sub">مستقبلك الدراسي في مكان واحد</small></span>
   </div>
-  <div class="nav-right">
-    <button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button>
-    <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
-      <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
-      <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-    </button>
-  </div>
+  <div class="nav-gap"></div>
+  <button class="nav-btn" onclick="window.location.href='profile.html'">
+    <span class="nav-av" id="nav-av">?</span>
+    <span id="nav-name">—</span>
+  </button>
+  <button class="theme-btn" data-theme-toggle aria-label="تبديل الثيم">
+    <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+    <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+  </button>
 </div></header>
 
-<main class="cv" id="main">
-  <div class="cv-loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
+<main class="page" id="main">
+  <div class="state-box"><div class="spinner"></div><p>جاري التحميل...</p></div>
 </main>
 
 <script>
 (function(){
 'use strict';
-const API_BASE = '', TOKEN_KEY = 'student_token';
-const token = localStorage.getItem(TOKEN_KEY);
+
+/* ── utils ── */
+const API = '', TK = 'student_token';
+const token = localStorage.getItem(TK);
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// URL params — نقبل chapterId أو lectureId (في حالة الدخول المباشر)
 const chapterId   = qs.get('chapterId');
 const teacherName = qs.get('teacherName') || '';
 const subjectName = qs.get('subjectName') || '';
 const chapterName = qs.get('chapterName') || '';
 
-// scroll progress
-const bar = $('scroll-progress'), barS = $('scroll-progress-side');
+/* ── scroll progress ── */
+const spTop = $('sp-top');
 window.addEventListener('scroll', () => {
   const p = document.documentElement.scrollHeight - innerHeight;
-  const pct = p > 0 ? (scrollY / p) * 100 : 0;
-  if(bar) bar.style.width = pct + '%';
-  if(barS) barS.style.height = pct + '%';
-}, { passive: true });
+  if(spTop) spTop.style.transform = 'scaleX(' + (p > 0 ? scrollY/p : 0) + ')';
+}, {passive:true});
 
-// api
-const api = async (path, opts = {}) => {
-  const headers = { Accept: 'application/json', ...opts.headers };
-  if (token) headers['Authorization'] = 'Bearer ' + token;
-  const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body });
-  if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); location.replace('login.html'); return null; }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ');
-  return data.data;
+/* ── api ── */
+const api = async (path, opts={}) => {
+  const h = {Accept:'application/json', ...opts.headers};
+  if(token) h['Authorization'] = 'Bearer ' + token;
+  const r = await fetch(API + path, {method: opts.method||'GET', headers:h, body:opts.body});
+  if(r.status === 401){ localStorage.removeItem(TK); location.replace('login.html'); return null; }
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok || d.success===false) throw new Error(d.message||d.error||'خطأ');
+  return d.data;
 };
-const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// video progress
-function getWatched(videoId) {
+/* ── watched state ── */
+const isWatched = id => {
   try {
-    const s = JSON.parse(localStorage.getItem('cstk_w_' + videoId) || 'null');
+    const s = JSON.parse(localStorage.getItem('cstk_w_'+id)||'null');
     return s && (s.watched || s.percent >= 90);
   } catch { return false; }
-}
-
-// classify part by title
-function classifyPart(title, type) {
-  if (type === 'pdf' || type === 'file') return 'file';
-  if (type === 'exam') return 'exam';
-  const t = String(title || '').toLowerCase();
-  if (/امتحان|اختبار|كويز|quiz|exam/.test(t)) return 'exam';
-  if (/تدريب|تطبيق|حصة|تمرين|تكليف|worksheet/.test(t)) return 'practice';
-  return 'lesson';
-}
-
-// group config
-const GROUP_CFG = {
-  lesson:   { label: 'الشرح',           iconColor: '',       actionLabel: 'مشاهدة',     actionClass: '' },
-  practice: { label: 'التطبيق التفاعلي', iconColor: 'green',  actionLabel: 'مشاهدة',     actionClass: 'green' },
-  exam:     { label: 'الامتحان',         iconColor: 'amber',  actionLabel: 'حل الامتحان', actionClass: 'amber' },
-  file:     { label: 'الملفات',          iconColor: 'purple', actionLabel: 'فتح الملف',   actionClass: 'amber' },
 };
 
-// SVG icons
-const ICON_VIDEO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 4 13 8-13 8V4Z"/></svg>`;
-const ICON_FILE  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>`;
-const ICON_EXAM  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
-const ICON_CHEVRON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg>`;
+/* ── classify ── */
+const classify = (title, type) => {
+  if(type==='pdf'||type==='file') return 'file';
+  if(type==='exam') return 'exam';
+  const t = String(title||'').toLowerCase();
+  if(/امتحان|اختبار|كويز|quiz|exam/.test(t)) return 'exam';
+  if(/تدريب|تطبيق|حصة|تمرين|تكليف|worksheet/.test(t)) return 'practice';
+  return 'lesson';
+};
 
-// build one item row
-function buildItem(item, lectureId) {
-  const { id, title, type, url } = item;
-  const cat = classifyPart(title, type);
-  const cfg = GROUP_CFG[cat] || GROUP_CFG.lesson;
-  const watched = type === 'video' ? getWatched(id) : false;
-  const icon = (type === 'pdf' || type === 'file') ? ICON_FILE : (type === 'exam' ? ICON_EXAM : ICON_VIDEO);
+/* ── group config ── */
+const GRP = {
+  lesson:   {label:'الشرح',           iconCls:'',  tagCls:'',  tagTxt:'مشاهدة'},
+  practice: {label:'التطبيق التفاعلي', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
+  exam:     {label:'الامتحان',         iconCls:'a', tagCls:'a', tagTxt:'حل الامتحان'},
+  file:     {label:'الملفات',          iconCls:'p', tagCls:'a', tagTxt:'فتح الملف'},
+};
+
+/* ── SVG ── */
+const IC_PLAY = `<svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>`;
+const IC_FILE = `<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>`;
+const IC_EXAM = `<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+const IC_CHEV = `<svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg>`;
+
+/* ── build one item ── */
+const buildItem = (item, lid) => {
+  const {id, title, type, url} = item;
+  const cat = classify(title, type);
+  const cfg = GRP[cat]||GRP.lesson;
+  const watched = type==='video' ? isWatched(id) : false;
+  const icon = (type==='pdf'||type==='file') ? IC_FILE : (type==='exam' ? IC_EXAM : IC_PLAY);
 
   let onclick = '';
-  if (type === 'pdf' || type === 'file') {
-    const proxyUrl = url ? ('/api/file-proxy/document.pdf?url=' + encodeURIComponent(url)) : '#';
-    onclick = `window.open('${esc(proxyUrl)}','_blank')`;
-  } else if (type === 'exam') {
-    onclick = `window.location.href='exam.html?examId=${esc(id)}&lectureId=${esc(lectureId)}'`;
+  if(type==='pdf'||type==='file'){
+    const pu = url ? '/api/file-proxy/document.pdf?url='+encodeURIComponent(url) : '#';
+    onclick = `window.open('${esc(pu)}','_blank')`;
+  } else if(type==='exam'){
+    onclick = `window.location.href='exam.html?examId=${esc(id)}&lectureId=${esc(lid)}'`;
   } else {
-    onclick = `window.location.href='player.html?lectureId=${esc(lectureId)}&videoId=${esc(id)}'`;
+    onclick = `window.location.href='player.html?lectureId=${esc(lid)}&videoId=${esc(id)}'`;
   }
 
   return `
-  <button type="button" class="cv-item${watched ? ' watched' : ''}" onclick="${onclick}">
-    <span class="cv-item-row">
-      <span class="cv-item-start">
-        <span class="cv-item-icon ${cfg.iconColor}">${icon}</span>
-        <span class="cv-item-title">${esc(title || 'بدون عنوان')}</span>
-        <span class="cv-item-watched-dot"></span>
+  <button type="button" class="item${watched?' watched':''}" onclick="${onclick}">
+    <span class="item-row">
+      <span class="item-start">
+        <span class="item-icon ${cfg.iconCls}">${icon}</span>
+        <span class="item-title">${esc(title||'بدون عنوان')}</span>
+        <span class="watched-dot"></span>
       </span>
-      <span class="cv-item-action ${cfg.actionClass}">${cfg.actionLabel}</span>
+      <span class="item-tag ${cfg.tagCls}">${cfg.tagTxt}</span>
     </span>
   </button>`;
-}
+};
 
-// build groups from items array
-function buildGroups(items, lectureId) {
-  // if server sent pre-grouped data use it, otherwise group by classification
-  const buckets = { lesson: [], practice: [], exam: [], file: [] };
-  for (const it of items) {
-    const cat = classifyPart(it.title || it.name || '', it.type || 'video');
-    (buckets[cat] || buckets.lesson).push({ ...it, title: it.title || it.name || '' });
+/* ── build groups ── */
+const buildGroups = (items, lid) => {
+  const bk = {lesson:[],practice:[],exam:[],file:[]};
+  for(const it of items){
+    const cat = classify(it.title||it.name||'', it.type||'video');
+    (bk[cat]||bk.lesson).push({...it, title:it.title||it.name||''});
   }
-  let gIdx = 0;
   let html = '';
-  for (const key of ['lesson', 'practice', 'exam', 'file']) {
-    const list = buckets[key];
-    if (!list.length) continue;
-    const cfg = GROUP_CFG[key];
-    const gId = `gbd-${lectureId}-${key}`;
-    const tId = `gbt-${lectureId}-${key}`;
+  for(const key of ['lesson','practice','exam','file']){
+    const list = bk[key];
+    if(!list.length) continue;
+    const cfg = GRP[key];
+    const gId = `gbd-${lid}-${key}`;
+    const tId = `gbt-${lid}-${key}`;
     html += `
-    <div class="cv-group">
-      <button type="button" class="cv-group-toggle" id="${tId}" aria-expanded="false" aria-controls="${gId}">
-        <span class="cv-group-title">${cfg.label}</span>
-        <span class="cv-group-action"><span>عرض</span>${ICON_CHEVRON}</span>
+    <div class="group">
+      <button type="button" class="group-toggle" id="${tId}" aria-expanded="false" aria-controls="${gId}">
+        <span class="group-label">${cfg.label}</span>
+        <span class="group-action"><span class="g-txt">عرض</span>${IC_CHEV}</span>
       </button>
-      <div id="${gId}" role="region" aria-labelledby="${tId}" hidden class="cv-group-body">
-        ${list.map(it => buildItem(it, lectureId)).join('')}
+      <div id="${gId}" role="region" aria-labelledby="${tId}" hidden class="group-body">
+        ${list.map(it=>buildItem(it,lid)).join('')}
       </div>
     </div>`;
-    gIdx++;
   }
   return html || `<p style="padding:12px;color:var(--muted);font-size:13px">لا يوجد محتوى.</p>`;
-}
+};
 
-// flatten grouped-content response into items array
-function flattenGrouped(groupedData) {
+/* ── flatten grouped response ── */
+const flatten = d => {
   const items = [];
-  for (const g of groupedData.groups || []) {
-    const typeMap = { lesson: 'video', practice: 'video', exam: 'exam', file: 'file' };
-    for (const it of g.items || []) {
-      items.push({ ...it, type: it.type || typeMap[g.key] || 'video' });
-    }
+  for(const g of d.groups||[]){
+    const tm = {lesson:'video',practice:'video',exam:'exam',file:'file'};
+    for(const it of g.items||[]) items.push({...it, type:it.type||tm[g.key]||'video'});
   }
   return items;
-}
+};
 
-// fetch content for one lecture (tries grouped-content first, falls back to /content)
-async function fetchLectureItems(lectureId) {
+/* ── fetch items ── */
+const fetchItems = async lid => {
   try {
-    const d = await api('/api/lectures/' + lectureId + '/grouped-content');
-    if (d && d.groups) return flattenGrouped(d);
+    const d = await api('/api/lectures/'+lid+'/grouped-content');
+    if(d&&d.groups) return flatten(d);
   } catch {}
-  // fallback
-  const d = await api('/api/lectures/' + lectureId + '/content');
-  if (!d) return [];
-  const videos = (d.videos || []).map(v => ({ ...v, title: v.name || v.title, type: 'video' }));
-  const files  = (d.pdfs || d.files || d.attachments || d.documents || []).map(f => ({ ...f, title: f.name || f.title || f.file_name, type: 'file', url: f.file_url || f.url }));
-  const exams  = (d.exams || []).map(e => ({ ...e, title: e.name || e.title, type: 'exam' }));
-  return [...videos, ...files, ...exams];
-}
+  const d = await api('/api/lectures/'+lid+'/content');
+  if(!d) return [];
+  const videos = (d.videos||[]).map(v=>({...v,title:v.name||v.title,type:'video'}));
+  const files  = (d.pdfs||d.files||d.attachments||d.documents||[]).map(f=>({...f,title:f.name||f.title||f.file_name,type:'file',url:f.file_url||f.url}));
+  const exams  = (d.exams||[]).map(e=>({...e,title:e.name||e.title,type:'exam'}));
+  return [...videos,...files,...exams];
+};
 
-// build full page
-async function load() {
-  if (!chapterId) {
-    $('main').innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">معرف الفصل غير موجود.</div>';
+/* ── build page ── */
+const load = async () => {
+  if(!chapterId){
+    $('main').innerHTML = `<div class="state-box"><p>معرف الفصل غير موجود.</p></div>`;
     return;
   }
   try {
-    const lectures = await api('/api/chapters/' + chapterId + '/lectures');
-    if (!lectures || !lectures.length) {
-      $('main').innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">لا يوجد محاضرات.</div>';
+    const lectures = await api('/api/chapters/'+chapterId+'/lectures');
+    if(!lectures||!lectures.length){
+      $('main').innerHTML = `<div class="state-box"><p>لا يوجد محاضرات في هذا الفصل.</p></div>`;
       return;
     }
 
-    // pick first lecture image as course cover
-    const cover = lectures[0]?.image_url || '';
-    const title = chapterName || subjectName || 'المحاضرات';
+    const cover = lectures[0]?.image_url||'';
+    const title = chapterName||subjectName||'المحاضرات';
+    const totalParts = lectures.reduce((s,l)=>s+(l.parts_count||l.video_count||l.count||0),0);
 
-    // total parts count (sum parts_count or video_count)
-    const totalParts = lectures.reduce((s, l) => s + (l.parts_count || l.video_count || l.count || 0), 0);
-
-    // ===== render page shell immediately =====
     $('main').innerHTML = `
-    <div class="cv-shell">
-      <section class="cv-hero">
-        <button class="cv-back" onclick="history.back()">
-          ${ICON_CHEVRON} العودة
-        </button>
+    <div class="page-anim">
+      <!-- hero -->
+      <section class="hero">
+        <button class="back-btn" onclick="history.back()">${IC_CHEV} العودة</button>
         <nav aria-label="مسار الصفحة">
-          <ol class="breadcrumbs" style="list-style:none;padding:0;margin:0 0 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:700">
+          <ol class="breadcrumb">
             <li><a href="index.html">الرئيسية</a></li>
-            <li>${ICON_CHEVRON}<a href="subjects.html">المواد</a></li>
-            ${subjectName ? `<li>${ICON_CHEVRON}<a href="teachers.html?subjectId=${esc(qs.get('subjectId')||'')}">${esc(subjectName)}</a></li>` : ''}
-            <li>${ICON_CHEVRON}<span aria-current="page">${esc(title)}</span></li>
+            <li>${IC_CHEV}<a href="subjects.html">المواد</a></li>
+            ${subjectName?`<li>${IC_CHEV}<a href="teachers.html?subjectId=${esc(qs.get('subjectId')||'')}">${esc(subjectName)}</a></li>`:''}
+            <li>${IC_CHEV}<span aria-current="page">${esc(title)}</span></li>
           </ol>
         </nav>
-        <h1 id="course-title">${esc(title)}</h1>
+        <h1 class="hero-title">${esc(title)}</h1>
       </section>
 
-      <div class="cv-layout">
-        <!-- side card -->
-        <aside class="cv-side">
-          <div class="cv-card">
-            <div class="course-image-slot">
+      <!-- body -->
+      <div class="layout">
+
+        <!-- aside -->
+        <aside class="aside">
+          <div class="side-card">
+            <div class="thumb">
               ${cover
-                ? `<img src="${esc(cover)}" alt="${esc(title)}" loading="eager">`
-                : `<div class="course-image-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>`}
+                ?`<img src="${esc(cover)}" alt="${esc(title)}" loading="eager">`
+                :`<div class="thumb-ph"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>`}
             </div>
-            <div class="cv-stats">
-              <div class="cv-stat"><span>عدد المحاضرات</span><span>${lectures.length}</span></div>
-              ${totalParts ? `<div class="cv-stat"><span>إجمالي الأجزاء</span><span>${totalParts}</span></div>` : ''}
-              ${teacherName ? `<div class="cv-stat"><span>المدرس</span><span>${esc(teacherName)}</span></div>` : ''}
+            <div class="stats">
+              <div class="stat"><span>عدد المحاضرات</span><b>${lectures.length}</b></div>
+              ${totalParts?`<div class="stat"><span>إجمالي الأجزاء</span><b>${totalParts}</b></div>`:''}
+              ${teacherName?`<div class="stat"><span>المدرس</span><b>${esc(teacherName)}</b></div>`:''}
             </div>
-            <button class="cv-cta" onclick="document.getElementById('lessons').scrollIntoView({behavior:'smooth'})">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 4 13 8-13 8V4Z"/></svg>
+            <button class="cta-btn" onclick="document.getElementById('lessons').scrollIntoView({behavior:'smooth'})">
+              <svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>
               ابدأ المشاهدة
             </button>
           </div>
         </aside>
 
         <!-- lessons -->
-        <div class="cv-main">
-          <section class="cv-box" id="lessons">
-            <h2 class="cv-lessons-title">المحاضرات</h2>
-            <ul class="cv-lectures" id="lectures-list">
-              ${lectures.map((l, i) => {
-                const count = l.parts_count || l.video_count || l.count || 0;
+        <div>
+          <section class="lessons-box" id="lessons">
+            <h2 class="section-title">المحاضرات</h2>
+            <ul class="lectures-list" id="lec-list">
+              ${lectures.map((l,i)=>{
+                const cnt = l.parts_count||l.video_count||l.count||0;
                 const lid = l.id;
                 return `
-                <li class="cv-lecture" id="lec-wrap-${lid}">
-                  <button class="cv-lecture-toggle" type="button"
-                    id="lec-${lid}" aria-expanded="false" aria-controls="lec-panel-${lid}"
+                <li class="lec-wrap" id="lw-${lid}">
+                  <button class="lec-toggle" type="button"
+                    id="lt-${lid}" aria-expanded="false" aria-controls="lp-${lid}"
                     data-lid="${lid}" data-loaded="0">
-                    <span class="cv-lecture-name">
-                      <strong>${esc(l.name || `محاضرة ${i+1}`)}</strong>
-                      <small>${count ? count + ' جزء' : 'اضغط لتحميل المحتوى'}</small>
+                    <span class="lec-name">
+                      <strong>${esc(l.name||`محاضرة ${i+1}`)}</strong>
+                      <small id="lsub-${lid}">${cnt?cnt+' جزء':'اضغط للتحميل'}</small>
                     </span>
-                    <span class="cv-lecture-end">
-                      <span class="cv-lecture-count" id="lec-count-${lid}"><bdi>( 0 / ${count} )</bdi></span>
-                      <span class="cv-round" aria-hidden="true">${ICON_CHEVRON}</span>
+                    <span class="lec-end">
+                      <span class="lec-badge" id="lbdg-${lid}">0 / ${cnt}</span>
+                      <span class="lec-arrow" aria-hidden="true">${IC_CHEV}</span>
                     </span>
                   </button>
-                  <div class="cv-panel" id="lec-panel-${lid}" role="region" aria-labelledby="lec-${lid}" hidden>
-                    <div class="cv-groups" id="lec-groups-${lid}"></div>
+                  <div class="lec-panel" id="lp-${lid}" role="region" aria-labelledby="lt-${lid}" hidden>
+                    <div class="groups" id="lg-${lid}"></div>
                   </div>
                 </li>`;
               }).join('')}
             </ul>
           </section>
         </div>
+
       </div>
     </div>`;
 
-    // ===== accordion: lazy-load content on first open =====
-    document.addEventListener('click', async function(e) {
-      const toggle = e.target.closest('.cv-lecture-toggle, .cv-group-toggle');
-      if (!toggle) return;
+    /* ── accordion delegation ── */
+    document.addEventListener('click', async e => {
 
-      // group toggle (simple open/close)
-      if (toggle.classList.contains('cv-group-toggle')) {
-        const panel = document.getElementById(toggle.getAttribute('aria-controls'));
-        if (!panel) return;
-        const open = toggle.getAttribute('aria-expanded') === 'true';
-        toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
-        if (open) panel.setAttribute('hidden', ''); else panel.removeAttribute('hidden');
-        const span = toggle.querySelector('.cv-group-action > span');
-        if (span) span.textContent = open ? 'إخفاء' : 'عرض';
+      /* group toggle */
+      const gt = e.target.closest('.group-toggle');
+      if(gt){
+        const panel = $(gt.getAttribute('aria-controls'));
+        if(!panel) return;
+        const open = gt.getAttribute('aria-expanded')==='true';
+        gt.setAttribute('aria-expanded', open?'false':'true');
+        // FIX: use hidden attribute correctly
+        if(open){ panel.setAttribute('hidden',''); } else { panel.removeAttribute('hidden'); }
+        // FIX: label was inverted — now correct
+        const txt = gt.querySelector('.g-txt');
+        if(txt) txt.textContent = open ? 'عرض' : 'إخفاء';
         return;
       }
 
-      // lecture toggle
-      const lid = toggle.dataset.lid;
-      if (!lid) return;
-      const panel = document.getElementById('lec-panel-' + lid);
-      if (!panel) return;
-      const open = toggle.getAttribute('aria-expanded') === 'true';
+      /* lecture toggle */
+      const lt = e.target.closest('.lec-toggle');
+      if(!lt) return;
+      const lid = lt.dataset.lid;
+      if(!lid) return;
+      const panel = $('lp-'+lid);
+      if(!panel) return;
+      const open = lt.getAttribute('aria-expanded')==='true';
 
-      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
-      if (open) { panel.setAttribute('hidden', ''); return; }
+      lt.setAttribute('aria-expanded', open?'false':'true');
+      if(open){ panel.setAttribute('hidden',''); return; }
       panel.removeAttribute('hidden');
 
-      if (toggle.dataset.loaded === '1') return; // already loaded
+      if(lt.dataset.loaded==='1') return;
+      lt.dataset.loaded = '1';
 
-      toggle.dataset.loaded = '1';
-      // spinner يظهر بس بعد الضغط
-      const groupsElPre = document.getElementById('lec-groups-' + lid);
-      if (groupsElPre) groupsElPre.innerHTML = `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>جاري التحميل...</div>`;
+      // spinner inline
+      const ge = $('lg-'+lid);
+      if(ge) ge.innerHTML = `<div class="state-box" style="padding:20px"><div class="spinner spinner-sm"></div><span style="font-size:12px;color:var(--muted)">جاري التحميل...</span></div>`;
+
       try {
-        const items = await fetchLectureItems(lid);
-        const groupsEl = document.getElementById('lec-groups-' + lid);
-        if (groupsEl) groupsEl.innerHTML = buildGroups(items, lid);
-
-        // update small count badge
-        const countEl = document.getElementById('lec-count-' + lid);
-        if (countEl) countEl.innerHTML = `<bdi>( 0 / ${items.length} )</bdi>`;
-
-        // update subtitle
-        const sub = toggle.querySelector('small');
-        if (sub) sub.textContent = items.length + ' جزء';
-      } catch(err) {
-        const groupsEl = document.getElementById('lec-groups-' + lid);
-        if (groupsEl) groupsEl.innerHTML = `<p style="padding:12px;color:var(--red);font-size:13px">خطأ في تحميل المحتوى: ${esc(err.message)}</p>`;
+        const items = await fetchItems(lid);
+        const ge2 = $('lg-'+lid);
+        if(ge2) ge2.innerHTML = buildGroups(items, lid);
+        const bdg = $('lbdg-'+lid);
+        if(bdg) bdg.textContent = '0 / '+items.length;
+        const sub = $('lsub-'+lid);
+        if(sub) sub.textContent = items.length+' جزء';
+      } catch(err){
+        const ge2 = $('lg-'+lid);
+        if(ge2) ge2.innerHTML = `<p style="padding:12px;color:var(--red);font-size:13px">خطأ: ${esc(err.message)}</p>`;
       }
     });
 
-  } catch(e) {
-    $('main').innerHTML = `<div style="text-align:center;color:#ef4444;padding:60px;font-weight:700">خطأ: ${esc(e.message)}</div>`;
+  } catch(e){
+    $('main').innerHTML = `<div class="state-box"><p style="color:var(--red)">خطأ: ${esc(e.message)}</p></div>`;
   }
-}
+};
 
-async function loadProfile() {
+/* ── profile ── */
+const loadProfile = async () => {
   try {
-    const cached = localStorage.getItem('student_name');
-    if (cached) { $('nav-name').textContent = cached; $('nav-av').textContent = cached.charAt(0); }
-    if (!token) return;
+    const c = localStorage.getItem('student_name');
+    if(c){ $('nav-name').textContent=c; $('nav-av').textContent=c.charAt(0); }
+    if(!token) return;
     const me = await api('/api/auth/me');
-    if (me && me.name) {
-      $('nav-name').textContent = me.name;
-      $('nav-av').textContent = me.name.charAt(0);
-      localStorage.setItem('student_name', me.name);
+    if(me&&me.name){
+      $('nav-name').textContent=me.name;
+      $('nav-av').textContent=me.name.charAt(0);
+      localStorage.setItem('student_name',me.name);
     }
   } catch {}
-}
+};
 
 load(); loadProfile();
 })();
 </script>
-<script src="theme.js"></script>
+
+<script>
+/* theme toggle */
+(function(){
+  document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme')||'light';
+      const next = cur==='dark'?'light':'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try{ localStorage.setItem('thanawya_theme', next); }catch(e){}
+      const m = document.querySelector('meta[name="theme-color"]');
+      if(m) m.setAttribute('content', next==='dark'?'#080c16':'#f7f8fc');
+    });
+  });
+})();
+</script>
 </body>
 </html>
