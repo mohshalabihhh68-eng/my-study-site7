@@ -17,116 +17,159 @@
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--nav-bg:rgba(7,11,20,.88);--back-btn-bg:#111a2b;--back-btn-bg-hover:#1a253a;--placeholder-bg:linear-gradient(135deg,#1e293b,#0f172a)}
-[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--nav-bg:rgba(255,255,255,.88);--back-btn-bg:#ffffff;--back-btn-bg-hover:#f1f5f9;--placeholder-bg:linear-gradient(135deg,#e2e8f0,#f1f5f9)}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s}
-button{font:inherit;cursor:pointer;outline:none}
+:root,[data-theme="dark"]{
+  --bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;
+  --ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);
+  --blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;
+  --nav-bg:rgba(7,11,20,.88);--bg-pattern:radial-gradient(circle at top right,rgba(59,130,246,.05),transparent 40%);
+  --placeholder-bg:linear-gradient(135deg,#1e293b,#0f172a);
+}
+[data-theme="light"]{
+  --bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
+  --ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);
+  --blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;
+  --nav-bg:rgba(255,255,255,.88);--bg-pattern:radial-gradient(circle at top right,rgba(108,99,255,.05),transparent 40%);
+  --placeholder-bg:linear-gradient(135deg,#e2e8f0,#f1f5f9);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+body{background:var(--bg);background-image:var(--bg-pattern);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
+button{font:inherit;cursor:pointer;outline:none;border:none}
+a{color:inherit;text-decoration:none}
 
-/* شريط التقدم العلوي */
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear;box-shadow:none}
-
-/* شريط التقدم الجانبي */
-#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .05s linear;box-shadow:none;border-radius:0 0 0 4px}
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out}
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;border-radius:0 0 0 4px}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes spin{to{transform:rotate(360deg)}}
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+
+/* ===== nav ===== */
+.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
 .brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
-.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
-
-/* تكبير خانة البروفايل */
-.profile-wrap{position:relative}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
-.profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
 .profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0;transition:.25s}
+.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
+.theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
+[data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
 
-.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
-.theme-toggle:hover{background:var(--card-hover);border-color:var(--blue);transform:rotate(15deg)}
-.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;display:block}
-.theme-toggle .icon-sun{display:none}
-.theme-toggle .icon-moon{display:block}
-[data-theme="dark"] .theme-toggle .icon-sun{display:block}
-[data-theme="dark"] .theme-toggle .icon-moon{display:none}
-.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
-.header-action{display:flex;justify-content:flex-start;margin-bottom:20px}
-.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line-soft);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700;font-size:14px;cursor:pointer;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s}
-.back-btn:hover{background:var(--back-btn-bg-hover)}
-.back-btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.page-head{margin-bottom:22px;animation:fadeUp .4s ease}
-.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
-.page-head h1{margin:0;font-size:26px;font-weight:900;color:var(--ink)}
-.page-head p{margin:8px 0 0;color:var(--muted);font-size:13px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;align-items:stretch}
+/* ===== layout ===== */
+.cv{max-width:1120px;margin:0 auto;padding:24px 16px 60px}
+.cv-shell{animation:fadeUp .45s ease both}
 
-/* الكارت */
-.lecture-card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:20px;display:flex;flex-direction:column;gap:16px;transition:transform .3s,background .3s,border-color .3s,box-shadow .3s,color .3s ease;animation:fadeUp .45s ease both;box-shadow:0 2px 8px rgba(108,99,255,.04);height:100%;position:relative;overflow:hidden}
-.lecture-card:hover{border-color:rgba(108,99,255,.35);box-shadow:0 8px 24px rgba(108,99,255,.12);transform:translateY(-4px)}
+/* ===== hero ===== */
+.cv-hero{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;margin-bottom:20px;box-shadow:0 4px 15px rgba(108,99,255,.05)}
+.cv-back{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:var(--card-inner);border:1px solid var(--line);font-size:13px;font-weight:800;color:var(--ink);transition:.2s;cursor:pointer;margin-bottom:14px}
+.cv-back:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
+.cv-back svg{width:18px;height:18px}
+.breadcrumbs ol{list-style:none;padding:0;margin:0 0 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:700}
+.breadcrumbs li{display:flex;align-items:center;gap:6px}
+.breadcrumbs a{color:var(--blue);font-weight:800}
+.breadcrumbs a:hover{text-decoration:underline}
+.breadcrumbs svg{width:14px;height:14px;opacity:.6}
+.cv-hero h1{font-size:clamp(22px,3.4vw,32px);font-weight:900;margin:0;line-height:1.4}
 
-/* الشريط الجانبي للكارت */
-.side-progress-bar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 6px;
-  background: rgba(0, 0, 0, 0.05);
-  z-index: 10;
-  border-radius: 24px 0 0 24px;
+/* ===== two-col layout ===== */
+.cv-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);gap:20px;align-items:start}
+.cv-side{position:sticky;top:90px}
+.cv-card{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 4px 15px rgba(108,99,255,.05)}
+.course-image-slot{width:100%;aspect-ratio:1/1;background:var(--card-inner);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.course-image-slot img{width:100%;height:100%;object-fit:cover;display:block}
+.course-image-placeholder{width:100%;height:100%;display:grid;place-items:center;color:var(--muted)}
+.course-image-placeholder svg{width:60px;height:60px;opacity:.4}
+.cv-cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-weight:900;font-size:14px;border-radius:0;transition:.25s;box-shadow:0 4px 12px rgba(108,99,255,.2);cursor:pointer}
+.cv-cta:hover{filter:brightness(1.08)}
+
+/* stats strip */
+.cv-stats{display:flex;flex-direction:column;gap:1px;background:var(--line)}
+.cv-stat{background:var(--card);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700}
+.cv-stat span:last-child{color:var(--blue);font-weight:900}
+
+/* ===== lessons box ===== */
+.cv-box{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 4px 15px rgba(108,99,255,.05)}
+.cv-lessons-title{font-size:20px;font-weight:900;margin:0 0 16px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.cv-lessons-title::before{content:"";width:5px;height:22px;border-radius:3px;background:linear-gradient(180deg,var(--blue),var(--blue2))}
+.cv-lectures{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+
+/* lecture accordion */
+.cv-lecture{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card-inner);transition:border-color .2s}
+.cv-lecture:hover{border-color:rgba(108,99,255,.25)}
+.cv-lecture-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:none;color:var(--ink);text-align:right;transition:background .2s;cursor:pointer}
+.cv-lecture-toggle:hover{background:var(--card-hover)}
+.cv-lecture-name{display:flex;flex-direction:column;gap:4px;min-width:0}
+.cv-lecture-name strong{font-size:15px;font-weight:900;color:var(--ink)}
+.cv-lecture-name small{font-size:11px;color:var(--muted);font-weight:700}
+.cv-lecture-end{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.cv-lecture-count{font-size:12px;font-weight:800;color:var(--muted);background:var(--card);padding:4px 10px;border-radius:99px;border:1px solid var(--line)}
+.cv-round{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);color:var(--blue);transition:transform .3s,background .2s;flex-shrink:0}
+.cv-round svg{width:16px;height:16px}
+.cv-lecture-toggle[aria-expanded="true"] .cv-round{transform:rotate(-90deg);background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;border-color:transparent}
+
+/* panel */
+.cv-panel{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.cv-groups{display:flex;flex-direction:column;gap:8px}
+.cv-group{border:1px solid var(--line-soft);border-radius:12px;overflow:hidden;background:var(--card)}
+.cv-group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;background:none;color:var(--ink);font-size:13px;font-weight:800;transition:background .2s;cursor:pointer}
+.cv-group-toggle:hover{background:var(--card-hover)}
+.cv-group-title{color:var(--blue);font-weight:900}
+.cv-group-action{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:700}
+.cv-group-action svg{width:16px;height:16px;transition:transform .3s}
+.cv-group-toggle[aria-expanded="true"] .cv-group-action svg{transform:rotate(-90deg)}
+.cv-group-toggle[aria-expanded="true"] .cv-group-action span{color:var(--blue)}
+.cv-group-body{padding:6px 8px 10px;display:flex;flex-direction:column;gap:4px}
+
+/* items */
+.cv-item{display:block;width:100%;text-align:right;padding:10px 12px;border-radius:9px;background:none;color:var(--ink);transition:background .18s,border-color .18s;border:1px solid transparent;cursor:pointer}
+.cv-item:hover{background:var(--card-hover);border-color:var(--line-soft)}
+.cv-item.watched{opacity:.6}
+.cv-item-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cv-item-start{display:flex;align-items:center;gap:9px;min-width:0;flex:1}
+.cv-item-icon{width:26px;height:26px;flex-shrink:0;border-radius:8px;display:grid;place-items:center;background:rgba(108,99,255,.1);color:var(--blue)}
+.cv-item-icon svg{width:14px;height:14px}
+.cv-item-icon.green{background:rgba(16,185,129,.12);color:var(--green)}
+.cv-item-icon.amber{background:rgba(245,158,11,.12);color:#f59e0b}
+.cv-item-icon.purple{background:rgba(139,92,246,.12);color:var(--purple)}
+.cv-item-title{font-size:12.5px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv-item-action{font-size:11px;font-weight:800;color:var(--blue);padding:4px 10px;border-radius:99px;background:rgba(108,99,255,.08);white-space:nowrap;flex-shrink:0}
+.cv-item-action.green{color:var(--green);background:rgba(16,185,129,.08)}
+.cv-item-action.amber{color:#f59e0b;background:rgba(245,158,11,.08)}
+.cv-item-watched-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;display:none}
+.cv-item.watched .cv-item-watched-dot{display:block}
+
+/* loading */
+.cv-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;color:var(--muted)}
+.spinner{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px}
+
+/* skeleton */
+.cv-skeleton .sk{border-radius:10px;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:800px 100%;animation:shimmer 1.4s infinite linear}
+
+/* responsive */
+@media(max-width:900px){
+  .cv-layout{grid-template-columns:1fr}
+  .cv-side{position:static;order:-1}
+  .cv-card{display:flex;align-items:center;gap:12px;padding:10px}
+  .course-image-slot{width:90px;aspect-ratio:1/1;flex-shrink:0;border-radius:12px}
+  .cv-cta{flex:1;border-radius:12px;padding:14px}
+  .cv-stats{display:none}
 }
-.side-progress-bar .fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 0%;
-  background: linear-gradient(180deg, #10b981, #34d399, #6ee7b7);
-  box-shadow: 0 0 15px #34d399;
-  transition: height 0.5s ease-in-out;
-  border-radius: 24px 0 0 24px;
+@media(max-width:700px){
+  .app-nav-in{padding:10px 14px}
+  .brand small{display:none}
+  .cv{padding:18px 12px 50px}
+  .cv-hero{padding:16px;border-radius:20px}
+  .cv-box{padding:16px;border-radius:20px}
+  .cv-lecture-toggle{padding:12px 14px}
+  .cv-item-title{white-space:normal}
+  #scroll-progress-side{width:3px}
 }
-
-.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex:1;margin-right: 6px;}
-.card-text{flex:1;padding-top:4px;display:flex;flex-direction:column}
-.lecture-label{font-size:13px;font-weight:800;color:var(--blue);margin-bottom:4px;display:block}
-.lecture-title{font-size:18px;font-weight:900;color:var(--ink);line-height:1.5;margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:81px}
-.lecture-meta{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px}
-.card-image{width:90px;height:90px;border-radius:18px;position:relative;flex-shrink:0;background:var(--placeholder-bg);padding:3px;pointer-events:none}
-.card-image::before{content:'';position:absolute;inset:0;border-radius:18px;padding:2px;background:linear-gradient(135deg,var(--blue),var(--blue2));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;z-index:1}
-.card-image img{width:100%;height:100%;object-fit:cover;border-radius:16px;position:relative;z-index:2;background:var(--card-inner)}
-.image-placeholder{width:100%;height:100%;border-radius:16px;background:var(--placeholder-bg);display:grid;place-items:center;color:var(--muted);position:relative;z-index:2}
-.image-placeholder svg{width:30px;height:30px;opacity:.6}
-.videos-bar{display:flex;align-items:center;justify-content:space-between;background:var(--card-inner);border:1px solid var(--line-soft);border-radius:14px;padding:12px 16px;margin-top:auto;margin-right: 6px;}
-.videos-bar-label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink)}
-.videos-bar-label svg{width:18px;height:18px;color:var(--blue)}
-.videos-badge{background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-size:14px;font-weight:900;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;box-shadow:0 4px 10px rgba(108,99,255,.3)}
-.view-btn{background:linear-gradient(90deg,var(--blue3),var(--blue));color:#fff;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s ease;width:100%;margin-right: 6px;}
-.view-btn:hover{background:linear-gradient(90deg,var(--blue),var(--blue2));box-shadow:0 6px 20px rgba(108,99,255,.35);transform:translateY(-2px)}
-.view-btn svg{width:18px;height:18px;fill:currentColor}
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
-.spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
-@media (max-width:768px){.grid{grid-template-columns:1fr}.brand small{display:none}#scroll-progress-side{width:3px}}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-.grid > *, .video-grid > * {
-  content-visibility: auto;
-  contain-intrinsic-size: 280px;
-}
-
 </style>
 </head>
 <body>
-<!-- شريط التقدم العلوي والجانبي -->
 <div id="scroll-progress"></div>
 <div id="scroll-progress-side"></div>
 
@@ -136,99 +179,339 @@ button{font:inherit;cursor:pointer;outline:none}
     <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <div class="nav-right">
-    <!-- تم تكبير خانة البروفايل هنا -->
-    <div class="profile-wrap"><button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
+    <button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button>
     <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
       <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
       <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
     </button>
   </div>
 </div></header>
-<main class="wrap" id="main"><div class="loading"><div class="spinner"></div><p>جاري تحميل المحاضرات...</p></div></main>
+
+<main class="cv" id="main">
+  <div class="cv-loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
+</main>
+
 <script>
 (function(){
 'use strict';
-const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(TOKEN_KEY);
+const API_BASE = '', TOKEN_KEY = 'student_token';
+const token = localStorage.getItem(TOKEN_KEY);
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
-const chapterId = qs.get('chapterId');
-const chapterName = qs.get('chapterName') || '';
+
+// URL params — نقبل chapterId أو lectureId (في حالة الدخول المباشر)
+const chapterId   = qs.get('chapterId');
 const teacherName = qs.get('teacherName') || '';
 const subjectName = qs.get('subjectName') || '';
+const chapterName = qs.get('chapterName') || '';
 
-// تحديث شريط التقدم (العلوي والجانبي)
-const progressBar = $('scroll-progress');
-const progressBarSide = $('scroll-progress-side');
-let scrollTicking = false;
+// scroll progress
+const bar = $('scroll-progress'), barS = $('scroll-progress-side');
 window.addEventListener('scroll', () => {
-  if (scrollTicking) return;
-  scrollTicking = true;
-  requestAnimationFrame(() => {
-    const scrollTop = window.scrollY;
-    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-    const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
-    if (progressBar) progressBar.style.width = progress + '%';
-    if (progressBarSide) progressBarSide.style.height = progress + '%';
-    scrollTicking = false;
-  });
+  const p = document.documentElement.scrollHeight - innerHeight;
+  const pct = p > 0 ? (scrollY / p) * 100 : 0;
+  if(bar) bar.style.width = pct + '%';
+  if(barS) barS.style.height = pct + '%';
 }, { passive: true });
 
+// api
 const api = async (path, opts = {}) => {
   const headers = { Accept: 'application/json', ...opts.headers };
   if (token) headers['Authorization'] = 'Bearer ' + token;
   const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body });
-  if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); window.location.replace('login.html'); return; }
+  if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); location.replace('login.html'); return null; }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ في السيرفر');
+  if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ');
   return data.data;
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-window.goToContent = function(url, cardEl) {
-  const barFill = cardEl.querySelector('.side-progress-bar .fill');
-  if(barFill) {
-    barFill.style.height = '100%';
-  }
-  setTimeout(() => {
-    window.location.href = url;
-  }, 650);
+// video progress
+function getWatched(videoId) {
+  try {
+    const s = JSON.parse(localStorage.getItem('cstk_w_' + videoId) || 'null');
+    return s && (s.watched || s.percent >= 90);
+  } catch { return false; }
+}
+
+// classify part by title
+function classifyPart(title, type) {
+  if (type === 'pdf' || type === 'file') return 'file';
+  if (type === 'exam') return 'exam';
+  const t = String(title || '').toLowerCase();
+  if (/امتحان|اختبار|كويز|quiz|exam/.test(t)) return 'exam';
+  if (/تدريب|تطبيق|حصة|تمرين|تكليف|worksheet/.test(t)) return 'practice';
+  return 'lesson';
+}
+
+// group config
+const GROUP_CFG = {
+  lesson:   { label: 'الشرح',           iconColor: '',       actionLabel: 'مشاهدة',     actionClass: '' },
+  practice: { label: 'التطبيق التفاعلي', iconColor: 'green',  actionLabel: 'مشاهدة',     actionClass: 'green' },
+  exam:     { label: 'الامتحان',         iconColor: 'amber',  actionLabel: 'حل الامتحان', actionClass: 'amber' },
+  file:     { label: 'الملفات',          iconColor: 'purple', actionLabel: 'فتح الملف',   actionClass: 'amber' },
 };
 
+// SVG icons
+const ICON_VIDEO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 4 13 8-13 8V4Z"/></svg>`;
+const ICON_FILE  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>`;
+const ICON_EXAM  = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+const ICON_CHEVRON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg>`;
+
+// build one item row
+function buildItem(item, lectureId) {
+  const { id, title, type, url } = item;
+  const cat = classifyPart(title, type);
+  const cfg = GROUP_CFG[cat] || GROUP_CFG.lesson;
+  const watched = type === 'video' ? getWatched(id) : false;
+  const icon = (type === 'pdf' || type === 'file') ? ICON_FILE : (type === 'exam' ? ICON_EXAM : ICON_VIDEO);
+
+  let onclick = '';
+  if (type === 'pdf' || type === 'file') {
+    const proxyUrl = url ? ('/api/file-proxy/document.pdf?url=' + encodeURIComponent(url)) : '#';
+    onclick = `window.open('${esc(proxyUrl)}','_blank')`;
+  } else if (type === 'exam') {
+    onclick = `window.location.href='exam.html?examId=${esc(id)}&lectureId=${esc(lectureId)}'`;
+  } else {
+    onclick = `window.location.href='player.html?lectureId=${esc(lectureId)}&videoId=${esc(id)}'`;
+  }
+
+  return `
+  <button type="button" class="cv-item${watched ? ' watched' : ''}" onclick="${onclick}">
+    <span class="cv-item-row">
+      <span class="cv-item-start">
+        <span class="cv-item-icon ${cfg.iconColor}">${icon}</span>
+        <span class="cv-item-title">${esc(title || 'بدون عنوان')}</span>
+        <span class="cv-item-watched-dot"></span>
+      </span>
+      <span class="cv-item-action ${cfg.actionClass}">${cfg.actionLabel}</span>
+    </span>
+  </button>`;
+}
+
+// build groups from items array
+function buildGroups(items, lectureId) {
+  // if server sent pre-grouped data use it, otherwise group by classification
+  const buckets = { lesson: [], practice: [], exam: [], file: [] };
+  for (const it of items) {
+    const cat = classifyPart(it.title || it.name || '', it.type || 'video');
+    (buckets[cat] || buckets.lesson).push({ ...it, title: it.title || it.name || '' });
+  }
+  let gIdx = 0;
+  let html = '';
+  for (const key of ['lesson', 'practice', 'exam', 'file']) {
+    const list = buckets[key];
+    if (!list.length) continue;
+    const cfg = GROUP_CFG[key];
+    const gId = `gbd-${lectureId}-${key}`;
+    const tId = `gbt-${lectureId}-${key}`;
+    html += `
+    <div class="cv-group">
+      <button type="button" class="cv-group-toggle" id="${tId}" aria-expanded="false" aria-controls="${gId}">
+        <span class="cv-group-title">${cfg.label}</span>
+        <span class="cv-group-action"><span>عرض</span>${ICON_CHEVRON}</span>
+      </button>
+      <div id="${gId}" role="region" aria-labelledby="${tId}" hidden class="cv-group-body">
+        ${list.map(it => buildItem(it, lectureId)).join('')}
+      </div>
+    </div>`;
+    gIdx++;
+  }
+  return html || `<p style="padding:12px;color:var(--muted);font-size:13px">لا يوجد محتوى.</p>`;
+}
+
+// flatten grouped-content response into items array
+function flattenGrouped(groupedData) {
+  const items = [];
+  for (const g of groupedData.groups || []) {
+    const typeMap = { lesson: 'video', practice: 'video', exam: 'exam', file: 'file' };
+    for (const it of g.items || []) {
+      items.push({ ...it, type: it.type || typeMap[g.key] || 'video' });
+    }
+  }
+  return items;
+}
+
+// fetch content for one lecture (tries grouped-content first, falls back to /content)
+async function fetchLectureItems(lectureId) {
+  try {
+    const d = await api('/api/lectures/' + lectureId + '/grouped-content');
+    if (d && d.groups) return flattenGrouped(d);
+  } catch {}
+  // fallback
+  const d = await api('/api/lectures/' + lectureId + '/content');
+  if (!d) return [];
+  const videos = (d.videos || []).map(v => ({ ...v, title: v.name || v.title, type: 'video' }));
+  const files  = (d.pdfs || d.files || d.attachments || d.documents || []).map(f => ({ ...f, title: f.name || f.title || f.file_name, type: 'file', url: f.file_url || f.url }));
+  const exams  = (d.exams || []).map(e => ({ ...e, title: e.name || e.title, type: 'exam' }));
+  return [...videos, ...files, ...exams];
+}
+
+// build full page
 async function load() {
-  if (!chapterId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف الفصل غير موجود.</div>'; return; }
+  if (!chapterId) {
+    $('main').innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">معرف الفصل غير موجود.</div>';
+    return;
+  }
   try {
     const lectures = await api('/api/chapters/' + chapterId + '/lectures');
-    if (!lectures || !lectures.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد محاضرات.</div>'; return; }
-    
-    let html = `
-    <div class="header-action"><button class="back-btn" onclick="history.back()"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للفصول</button></div>
-    <div class="page-head"><div class="badge">المحاضرات</div><h1>محاضرات الفصل</h1><p>اختار المحاضرة لفتح المحتوى</p></div>
-    <div class="grid">`;
-    
-    lectures.forEach((l, index) => {
-      const imgUrl = l.image_url || '';
-      const imgHtml = imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(l.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">` : '';
-      const phHtml = `<div class="image-placeholder" style="display:${imgUrl?'none':'grid'};"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`;
-      
-      html += `<div class="lecture-card" id="card-${l.id}">
-        <div class="side-progress-bar">
-          <div class="fill"></div>
+    if (!lectures || !lectures.length) {
+      $('main').innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">لا يوجد محاضرات.</div>';
+      return;
+    }
+
+    // pick first lecture image as course cover
+    const cover = lectures[0]?.image_url || '';
+    const title = chapterName || subjectName || 'المحاضرات';
+
+    // total parts count (sum parts_count or video_count)
+    const totalParts = lectures.reduce((s, l) => s + (l.parts_count || l.video_count || l.count || 0), 0);
+
+    // ===== render page shell immediately =====
+    $('main').innerHTML = `
+    <div class="cv-shell">
+      <section class="cv-hero">
+        <button class="cv-back" onclick="history.back()">
+          ${ICON_CHEVRON} العودة
+        </button>
+        <nav aria-label="مسار الصفحة">
+          <ol class="breadcrumbs" style="list-style:none;padding:0;margin:0 0 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:700">
+            <li><a href="index.html">الرئيسية</a></li>
+            <li>${ICON_CHEVRON}<a href="subjects.html">المواد</a></li>
+            ${subjectName ? `<li>${ICON_CHEVRON}<a href="teachers.html?subjectId=${esc(qs.get('subjectId')||'')}">${esc(subjectName)}</a></li>` : ''}
+            <li>${ICON_CHEVRON}<span aria-current="page">${esc(title)}</span></li>
+          </ol>
+        </nav>
+        <h1 id="course-title">${esc(title)}</h1>
+      </section>
+
+      <div class="cv-layout">
+        <!-- side card -->
+        <aside class="cv-side">
+          <div class="cv-card">
+            <div class="course-image-slot">
+              ${cover
+                ? `<img src="${esc(cover)}" alt="${esc(title)}" loading="eager">`
+                : `<div class="course-image-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>`}
+            </div>
+            <div class="cv-stats">
+              <div class="cv-stat"><span>عدد المحاضرات</span><span>${lectures.length}</span></div>
+              ${totalParts ? `<div class="cv-stat"><span>إجمالي الأجزاء</span><span>${totalParts}</span></div>` : ''}
+              ${teacherName ? `<div class="cv-stat"><span>المدرس</span><span>${esc(teacherName)}</span></div>` : ''}
+            </div>
+            <button class="cv-cta" onclick="document.getElementById('lessons').scrollIntoView({behavior:'smooth'})">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 4 13 8-13 8V4Z"/></svg>
+              ابدأ المشاهدة
+            </button>
+          </div>
+        </aside>
+
+        <!-- lessons -->
+        <div class="cv-main">
+          <section class="cv-box" id="lessons">
+            <h2 class="cv-lessons-title">المحاضرات</h2>
+            <ul class="cv-lectures" id="lectures-list">
+              ${lectures.map((l, i) => {
+                const count = l.parts_count || l.video_count || l.count || 0;
+                const lid = l.id;
+                return `
+                <li class="cv-lecture" id="lec-wrap-${lid}">
+                  <button class="cv-lecture-toggle" type="button"
+                    id="lec-${lid}" aria-expanded="false" aria-controls="lec-panel-${lid}"
+                    data-lid="${lid}" data-loaded="0">
+                    <span class="cv-lecture-name">
+                      <strong>${esc(l.name || `محاضرة ${i+1}`)}</strong>
+                      <small>${count ? count + ' جزء' : 'اضغط لتحميل المحتوى'}</small>
+                    </span>
+                    <span class="cv-lecture-end">
+                      <span class="cv-lecture-count" id="lec-count-${lid}"><bdi>( 0 / ${count} )</bdi></span>
+                      <span class="cv-round" aria-hidden="true">${ICON_CHEVRON}</span>
+                    </span>
+                  </button>
+                  <div class="cv-panel" id="lec-panel-${lid}" role="region" aria-labelledby="lec-${lid}" hidden>
+                    <div class="cv-groups" id="lec-groups-${lid}">
+                      <div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">
+                        <div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>
+                        جاري التحميل...
+                      </div>
+                    </div>
+                  </div>
+                </li>`;
+              }).join('')}
+            </ul>
+          </section>
         </div>
-        <div class="card-top">
-          <div class="card-text"><span class="lecture-label">المحاضرة ${index+1}</span><h2 class="lecture-title">${esc(l.name)}</h2><div class="lecture-meta">${l.video_count || l.count || 0} فيديو</div></div>
-          <div class="card-image">${imgHtml}${phHtml}</div>
-        </div>
-        <div class="videos-bar">
-          <div class="videos-bar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>محتوى المحاضرة</div>
-          <div class="videos-badge">${l.video_count || l.count || 0}</div>
-        </div>
-        <button class="view-btn" onclick="goToContent('content.html?lectureId=${l.id}&chapterName=${encodeURIComponent(chapterName)}&teacherName=${encodeURIComponent(teacherName)}&subjectName=${encodeURIComponent(subjectName)}&lectureName=${encodeURIComponent(l.name)}', document.getElementById('card-${l.id}'))">عرض المحتوى<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
-      </div>`;
+      </div>
+    </div>`;
+
+    // ===== accordion: lazy-load content on first open =====
+    document.addEventListener('click', async function(e) {
+      const toggle = e.target.closest('.cv-lecture-toggle, .cv-group-toggle');
+      if (!toggle) return;
+
+      // group toggle (simple open/close)
+      if (toggle.classList.contains('cv-group-toggle')) {
+        const panel = document.getElementById(toggle.getAttribute('aria-controls'));
+        if (!panel) return;
+        const open = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+        if (open) panel.setAttribute('hidden', ''); else panel.removeAttribute('hidden');
+        const span = toggle.querySelector('.cv-group-action > span');
+        if (span) span.textContent = open ? 'عرض' : 'إخفاء';
+        return;
+      }
+
+      // lecture toggle
+      const lid = toggle.dataset.lid;
+      if (!lid) return;
+      const panel = document.getElementById('lec-panel-' + lid);
+      if (!panel) return;
+      const open = toggle.getAttribute('aria-expanded') === 'true';
+
+      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+      if (open) { panel.setAttribute('hidden', ''); return; }
+      panel.removeAttribute('hidden');
+
+      if (toggle.dataset.loaded === '1') return; // already loaded
+
+      toggle.dataset.loaded = '1';
+      try {
+        const items = await fetchLectureItems(lid);
+        const groupsEl = document.getElementById('lec-groups-' + lid);
+        if (groupsEl) groupsEl.innerHTML = buildGroups(items, lid);
+
+        // update small count badge
+        const countEl = document.getElementById('lec-count-' + lid);
+        if (countEl) countEl.innerHTML = `<bdi>( 0 / ${items.length} )</bdi>`;
+
+        // update subtitle
+        const sub = toggle.querySelector('small');
+        if (sub) sub.textContent = items.length + ' جزء';
+      } catch(err) {
+        const groupsEl = document.getElementById('lec-groups-' + lid);
+        if (groupsEl) groupsEl.innerHTML = `<p style="padding:12px;color:var(--red);font-size:13px">خطأ في تحميل المحتوى: ${esc(err.message)}</p>`;
+      }
     });
-    html += '</div>'; $('main').innerHTML = html;
-  } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
+
+  } catch(e) {
+    $('main').innerHTML = `<div style="text-align:center;color:#ef4444;padding:60px;font-weight:700">خطأ: ${esc(e.message)}</div>`;
+  }
 }
-async function loadProfile(){try{const me=await api('/api/auth/me');if(me){$('nav-name').textContent=me.name||'طالب';$('nav-av').textContent=(me.name||'ط').charAt(0);}}catch(e){}}
+
+async function loadProfile() {
+  try {
+    const cached = localStorage.getItem('student_name');
+    if (cached) { $('nav-name').textContent = cached; $('nav-av').textContent = cached.charAt(0); }
+    if (!token) return;
+    const me = await api('/api/auth/me');
+    if (me && me.name) {
+      $('nav-name').textContent = me.name;
+      $('nav-av').textContent = me.name.charAt(0);
+      localStorage.setItem('student_name', me.name);
+    }
+  } catch {}
+}
+
 load(); loadProfile();
 })();
 </script>
