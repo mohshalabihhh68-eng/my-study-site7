@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f8fafc">
-<title>المواد | ثانوية club</title>
+<title>المدرسين | ثانوية club</title>
 <script>
 (function(){
   try {
@@ -44,17 +44,34 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .page-head{margin-bottom:20px}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
 .greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
-.name-span{font-size: 26px;font-weight: 900;background: linear-gradient(to right, #00d4ff, #3b82f6, #1e3a8a);-webkit-background-clip: text;background-clip: text;-webkit-text-fill-color: transparent;color: transparent;display: inline-block;}
-[data-theme="dark"] .name-span {background: linear-gradient(to right, #00d4ff, #60a5fa, #3b82f6);-webkit-background-clip: text;background-clip: text;-webkit-text-fill-color: transparent;color: transparent;}
-.page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
+.name-span{font-size:26px;font-weight:900;background:linear-gradient(to right,#00d4ff,#3b82f6,#1e3a8a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;display:inline-block}
+[data-theme="dark"] .name-span{background:linear-gradient(to right,#00d4ff,#60a5fa,#3b82f6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .page-head h1 .count{font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:4px 14px;border-radius:99px;font-weight:900}
+
+/* كارت الاشتراك (الوقت المتبقي) */
+.sub-card{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px;padding:14px 18px;border-radius:18px;background:var(--card);border:1px solid var(--line);box-shadow:0 4px 15px rgba(108,99,255,.05);animation:fadeUp .4s ease both}
+.sub-card .sub-ico{width:44px;height:44px;flex-shrink:0;border-radius:13px;display:grid;place-items:center;background:rgba(16,185,129,.12);color:var(--green)}
+.sub-card .sub-ico svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sub-card .sub-txt{flex:1;min-width:150px}
+.sub-card .sub-txt strong{display:block;font-size:14px;font-weight:900;color:var(--ink)}
+.sub-card .sub-txt small{display:block;font-size:11px;color:var(--muted);margin-top:2px;font-weight:700}
+.sub-card .sub-timer{display:flex;gap:8px;flex-shrink:0}
+.sub-pill{padding:9px 16px;border-radius:12px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-weight:900;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:70px;box-shadow:0 4px 12px rgba(108,99,255,.22)}
+.sub-pill b{font-size:20px;line-height:1;font-weight:900}
+.sub-pill span{font-size:9px;opacity:.92;font-weight:800;letter-spacing:.3px}
+.sub-card.expired .sub-ico{background:rgba(239,68,68,.12);color:var(--red)}
+.sub-card.expired .sub-pill{background:linear-gradient(135deg,#ef4444,#f87171);box-shadow:0 4px 12px rgba(239,68,68,.25)}
+.sub-card.warn .sub-ico{background:rgba(245,158,11,.12);color:#f59e0b}
+.sub-card.warn .sub-pill{background:linear-gradient(135deg,#f59e0b,#fbbf24);box-shadow:0 4px 12px rgba(245,158,11,.25)}
+
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;margin-top:24px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
 .card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
 .side-progress-bar{position:absolute;top:0;bottom:0;left:0;width:6px;background:rgba(0,0,0,.05);z-index:10;border-radius:0 0 0 24px}
-.side-progress-bar .fill{position:absolute;top:0;left:0;width:100%;height:0%;background:linear-gradient(180deg,#10b981,#34d399,#6ee7b7);box-shadow:0 0 15px #34d399;transition:height 0.5s ease-in-out;border-radius:0 0 0 24px}
+.side-progress-bar .fill{position:absolute;top:0;left:0;width:100%;height:0%;background:linear-gradient(180deg,#10b981,#34d399,#6ee7b7);box-shadow:0 0 15px #34d399;transition:height .5s ease-in-out;border-radius:0 0 0 24px}
 .card-img{width:100%;aspect-ratio:16/10;background:var(--card-inner);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;position:relative;pointer-events:none}
-.card-img img{width:100%;height:100%;object-fit:cover;object-position:center 80%;transition:transform .4s ease}
+.card-img img{width:100%;height:100%;object-fit:cover;object-position:center 30%;transition:transform .4s ease}
 .card-img .ph{position:absolute;inset:0;display:none;place-items:center;background:var(--card-inner);color:var(--blue)}
 .card-body{padding:20px;display:flex;flex-direction:column;flex:1;background:var(--card)}
 .card-body h3{margin:0;font-size:20px;font-weight:900;margin-bottom:4px;color:var(--ink)}
@@ -68,11 +85,24 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .sk-line.title{width:70%;height:18px;margin-bottom:8px}
 .sk-line.sub{width:40%}
 .sk-line.btn{width:100%;height:40px;margin-top:16px;border-radius:14px}
-@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9}.card-body{padding:16px;align-items:center;text-align:center}.action-btn{width:100%;padding:14px}.brand small{display:none}#scroll-progress-side{width:3px}}
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);font-weight:800;font-size:14px;grid-column:1/-1}
+@media(max-width:700px){
+  .grid{display:flex;flex-direction:column;gap:16px}
+  .card{border-radius:20px;width:100%}
+  .card-img{aspect-ratio:16/9}
+  .card-body{padding:16px;align-items:center;text-align:center}
+  .action-btn{width:100%;padding:14px}
+  .brand small{display:none}
+  #scroll-progress-side{width:3px}
+  .sub-card{padding:12px 14px}
+  .sub-card .sub-timer{width:100%;justify-content:stretch}
+  .sub-pill{flex:1;min-width:0}
+}
 </style>
 </head>
 <body>
 <div id="scroll-progress"></div><div id="scroll-progress-side"></div>
+
 <header class="app-nav"><div class="app-nav-in">
   <div class="brand" onclick="window.location.href='index.html'">
     <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
@@ -80,30 +110,50 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
   </div>
   <div class="nav-right">
     <div class="profile-wrap"><button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
-    <button type="button" class="theme-toggle" data-theme-toggle><svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+    <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم"><svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
   </div>
 </div></header>
+
 <main class="wrap" id="main">
   <div class="page-head">
-    <div class="badge">المواد الدراسية</div>
+    <div class="badge">المدرسين</div>
     <h1 class="greeting" id="greeting">جاري التحميل...</h1>
-    <p>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></p>
+    <p>المدرسين المتاحين <span class="count" id="teacher-count" style="display:none">0</span></p>
+
+    <!-- كارت الاشتراك -->
+    <div class="sub-card" id="sub-card" style="display:none">
+      <div class="sub-ico" id="sub-ico">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </div>
+      <div class="sub-txt">
+        <strong id="sub-title">اشتراكك فعّال</strong>
+        <small id="sub-note">الوقت المتبقي في اشتراكك</small>
+      </div>
+      <div class="sub-timer">
+        <div class="sub-pill"><b id="sub-days">—</b><span>يوم</span></div>
+        <div class="sub-pill"><b id="sub-mins">—</b><span>دقيقة</span></div>
+      </div>
+    </div>
   </div>
-  <div class="grid" id="subjects-grid">
-    <!-- سكيلتون -->
+
+  <div class="grid" id="teachers-grid">
     <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
     <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
   </div>
 </main>
+
 <script>
 (function(){
 'use strict';
 const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(TOKEN_KEY);
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
-const subjectId = qs.get('subjectId') || '4';
 
-// شريط التقدم
+// subjectId: من الـ URL، أو من آخر استخدام، أو أول مادة في المواد
+let subjectId = qs.get('subjectId') || localStorage.getItem('last_subject_id') || null;
+const subjectName = qs.get('subjectName') || localStorage.getItem('last_subject_name') || '';
+
+/* ===== شريط التقدم ===== */
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
 window.addEventListener('scroll', () => {
@@ -114,6 +164,7 @@ window.addEventListener('scroll', () => {
   if (progressBarSide) progressBarSide.style.height = progress + '%';
 }, { passive: true });
 
+/* ===== API ===== */
 const api = async (path, opts = {}) => {
   const headers = { Accept: 'application/json', ...opts.headers };
   if (token) headers['Authorization'] = 'Bearer ' + token;
@@ -121,71 +172,164 @@ const api = async (path, opts = {}) => {
   if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); window.location.replace('login.html'); return; }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ');
-  return data.data;
+  return data;
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+/* ===== الترحيب ===== */
 function setGreeting(name){
   const hour = new Date().getHours();
-  let greet = "صباح الخير"; 
+  let greet = "صباح الخير";
   if (hour >= 18 || hour < 4) { greet = "مساء الخير"; }
   $('greeting').innerHTML = `${greet} يا <span class="name-span">${esc(name)}</span>`;
 }
 
-window.goToTeachers = function(url, cardEl) {
-  const barFill = cardEl.querySelector('.side-progress-bar .fill');
+/* ===== الاشتراك — بيقرأ من expiresAt ===== */
+function renderSubscription(expiresAt){
+  const card = $('sub-card');
+  if (!card) return;
+  if (!expiresAt) { card.style.display = 'none'; return; }
+
+  const end = Number(expiresAt);
+  const now = Date.now();
+  const diff = end - now;
+
+  if (!end || isNaN(end) || diff <= 0) {
+    card.style.display = 'flex';
+    card.classList.add('expired');
+    card.classList.remove('warn');
+    $('sub-title').textContent = 'انتهى اشتراكك';
+    $('sub-note').textContent = 'جدد اشتراكك مع المسؤول لتكمل مذاكرتك';
+    $('sub-days').textContent = '0';
+    $('sub-mins').textContent = '0';
+    return;
+  }
+
+  const totalMin = Math.floor(diff / 60000);
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin % (60 * 24)) / 60);
+  const mins = totalMin % 60;
+  // لو الأيام = 0، نعرض الساعات + الدقايق بدل ما تبقى 0
+  const showDays = days;
+  const showMins = days > 0 ? (hours * 60 + mins) : (hours * 60 + mins);
+
+  card.style.display = 'flex';
+  card.classList.toggle('warn', days < 3);
+  card.classList.remove('expired');
+  $('sub-title').textContent = days < 1 ? 'اشتراكك ينتهي قريبًا' : (days < 3 ? 'اشتراكك على وشك الانتهاء' : 'اشتراكك فعّال');
+  $('sub-note').textContent = 'الوقت المتبقي في اشتراكك';
+  $('sub-days').textContent = showDays;
+  $('sub-mins').textContent = showMins;
+}
+
+/* ===== عرض المدرسين ===== */
+function renderTeachers(payload){
+  const grid = $('teachers-grid');
+  // السيرفر بيرجع: { data: { id, name, image_url, teachers: [...] } }
+  const teachersList = (payload && payload.teachers) || (Array.isArray(payload) ? payload : []);
+  const subjName = (payload && payload.name) || subjectName || 'مدرس';
+
+  if (!teachersList.length) {
+    grid.innerHTML = `<div class="empty-state">لا يوجد مدرسين متاحين لهذه المادة حالياً.</div>`;
+    return;
+  }
+  const countEl = $('teacher-count');
+  countEl.textContent = teachersList.length;
+  countEl.style.display = 'inline-block';
+
+  grid.innerHTML = teachersList.map(t => {
+    const teacherId = t.id;
+    const name = t.name || 'مدرس';
+    const img = t.image_url || '';
+    const coursesCount = Number(t.chapter_count) || 0;
+    const subText = coursesCount > 0 ? `${coursesCount} كورس` : subjName;
+    // ⚠️ عدّل المسار لو صفحة الكورسات اسمها مختلف عندك
+    const url = `courses.html?teacherId=${encodeURIComponent(teacherId)}&teacherName=${encodeURIComponent(name)}&subjectId=${encodeURIComponent(subjectId || '')}`;
+    return `
+      <div class="card" id="card-${esc(teacherId)}">
+        <div class="side-progress-bar"><div class="fill"></div></div>
+        <div class="card-img">
+          ${img ? `<img src="${esc(img)}" alt="${esc(name)}" loading="lazy" onerror="this.style.display='none'">` : ''}
+          <div class="ph" style="display:${img?'none':'grid'}">
+            <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+          </div>
+        </div>
+        <div class="card-body">
+          <h3>${esc(name)}</h3>
+          <div class="sub">${esc(subText)}</div>
+          <button class="action-btn" onclick="goToCourses('${url}', document.getElementById('card-${esc(teacherId)}'))">
+            عرض الكورسات
+            <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ===== انتقال بأنيميشن ===== */
+window.goToCourses = function(url, cardEl) {
+  const barFill = cardEl && cardEl.querySelector('.side-progress-bar .fill');
   if(barFill) barFill.style.height = '100%';
-  setTimeout(() => { window.location.href = url; }, 400); // سرعنا وقت النقل
+  setTimeout(() => { window.location.href = url; }, 400);
 };
 
+/* ===== init ===== */
 async function init() {
-  // 1. نعرض اسم الطالب من الكاش فوراً عشان نحس بالسرعة
+  // 1) اسم الطالب من الكاش فوراً
   const cachedName = localStorage.getItem('student_name');
   if (cachedName) setGreeting(cachedName);
 
   try {
-    // 2. نطلب الداتا والبروفايل في نفس الوقت (السرعة القصوى)
-    const [subjects, me] = await Promise.all([
-      api('/api/subjects/' + subjectId),
-      cachedName ? Promise.resolve({name: cachedName}) : api('/api/auth/me').catch(()=>null)
-    ]);
+    // 2) /api/auth/me يجيب الاسم + expiresAt + subjectIds
+    const me = await api('/api/auth/me');
 
-    // تحديث البروفايل
-    if (me && me.name) {
-      $('nav-name').textContent = me.name;
-      $('nav-av').textContent = me.name.charAt(0);
-      localStorage.setItem('student_name', me.name);
-      if(!cachedName) setGreeting(me.name);
+    // تحديث البروفايل + الاشتراك
+    if (me) {
+      if (me.name) {
+        $('nav-name').textContent = me.name;
+        $('nav-av').textContent = me.name.charAt(0);
+        localStorage.setItem('student_name', me.name);
+        setGreeting(me.name);
+      }
+      // ✅ expiresAt رقم (timestamp ms) — هو الأساس
+      renderSubscription(me.expiresAt);
+
+      // لو مفيش subjectId، خده من subjectIds أول عنصر
+      if (!subjectId && Array.isArray(me.subjectIds) && me.subjectIds.length) {
+        subjectId = String(me.subjectIds[0]);
+      }
     }
 
-    // عرض المواد
-    if (!subjects || !subjects.length) { 
-      $('subjects-grid').innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">لا يوجد مواد متاحة.</div>`; 
-      return; 
-    }
-    
-    const countEl = $('subject-count');
-    countEl.textContent = subjects.length;
-    countEl.style.display = 'inline-block';
-    
-    $('subjects-grid').innerHTML = subjects.map(s => `
-      <div class="card" id="card-${s.id}">
-        <div class="side-progress-bar"><div class="fill"></div></div>
-        <div class="card-img">
-          ${s.image_url ? `<img src="${esc(s.image_url)}" alt="${esc(s.name)}" loading="lazy" onerror="this.style.display='none'">` : ''}
-          <div class="ph" style="display:${s.image_url?'none':'grid'}"><svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-        </div>
-        <div class="card-body">
-          <h3>${esc(s.name)}</h3>
-          <div class="sub">مادة دراسية</div>
-          <button class="action-btn" onclick="goToTeachers('teachers.html?subjectId=${s.id}&subjectName=${encodeURIComponent(s.name)}', document.getElementById('card-${s.id}'))">عرض المدرسين<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
-        </div>
-      </div>
-    `).join('');
+    // 3) لو لسه مفيش subjectId، بليه بالـ default (4)
+    if (!subjectId) subjectId = '4';
+    localStorage.setItem('last_subject_id', subjectId);
+    if (subjectName) localStorage.setItem('last_subject_name', subjectName);
+
+    // 4) جلب المدرسين
+    const teachersPayload = await api('/api/subjects/' + encodeURIComponent(subjectId) + '/teachers');
+    renderTeachers(teachersPayload);
   } catch (e) {
-    $('subjects-grid').innerHTML = `<div style="text-align:center;color:var(--red);padding:40px">خطأ: ${esc(e.message)}</div>`;
+    console.error('[subjects]', e);
+    $('teachers-grid').innerHTML = `<div class="empty-state" style="color:var(--red)">خطأ: ${esc(e.message)}</div>`;
   }
 }
+
+/* ===== تحديث حي للوقت المتبقي كل دقيقة ===== */
+let lastExpiresAt = null;
+setInterval(() => {
+  if (lastExpiresAt) renderSubscription(lastExpiresAt);
+}, 60000);
+
+// نضيف حفظ expiresAt بعد ما نجيبه
+const _origRender = renderSubscription;
+renderSubscription = function(exp){
+  if (exp) lastExpiresAt = exp;
+  return _origRender(exp);
+};
+
 init();
 })();
 </script>
