@@ -495,25 +495,42 @@ export async function buildTalebSource(partId) {
  */
 export async function buildTalebSourceFromAnyId(rawId) {
   let id = String(rawId || "").trim();
-  if (id.startsWith("taleb_w_")) {
-    const rest = id.slice("taleb_w_".length);
-    const [courseId, lectureNum, partNum] = rest.split("_");
+
+  // إزالة تكرار البادئة: taleb_taleb_w_... أو taleb_taleb_...
+  while (/^taleb_taleb_/i.test(id)) {
+    id = id.replace(/^taleb_/i, "");
+  }
+
+  // taleb_w_{course}_{lec}_{part}
+  let wm = id.match(/^taleb_w_(\d+)_(\d+)_(\d+)$/i);
+  if (!wm) wm = id.match(/^w_(\d+)_(\d+)_(\d+)$/i);
+  if (wm) {
+    const courseId = wm[1], lectureNum = wm[2], partNum = wm[3];
     const uuid = await resolveTalebPartId(courseId, lectureNum, partNum);
     const src = await buildTalebSource(uuid);
-    src.reqVideoId = id;
+    src.reqVideoId = `taleb_w_${courseId}_${lectureNum}_${partNum}`;
     return src;
   }
-  if (id.startsWith("taleb_")) id = id.slice(6);
+
+  // watch path: 91/1/12
+  let pm = id.match(/^(\d+)[\/_](\d+)[\/_](\d+)$/);
+  if (pm) {
+    const uuid = await resolveTalebPartId(pm[1], pm[2], pm[3]);
+    const src = await buildTalebSource(uuid);
+    src.reqVideoId = `taleb_w_${pm[1]}_${pm[2]}_${pm[3]}`;
+    return src;
+  }
+
+  // أزل taleb_ مرة واحدة لو موجود
+  if (/^taleb_/i.test(id)) id = id.replace(/^taleb_/i, "");
+
   // uuid
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    return buildTalebSource(id);
+    const src = await buildTalebSource(id);
+    src.reqVideoId = `taleb_${id}`;
+    return src;
   }
-  // watch numeric path course/lec/part
-  if (/^\d+\/\d+\/\d+$/.test(id)) {
-    const [c, l, p] = id.split("/");
-    const uuid = await resolveTalebPartId(c, l, p);
-    return buildTalebSource(uuid);
-  }
+
   throw new Error("معرّف taleb غير معروف: " + rawId);
 }
 
