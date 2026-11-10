@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.8.1 — taleb.pro primary + coursatk/bunny optional — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.8.2 — taleb.pro primary + coursatk/bunny optional — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -53,11 +53,15 @@ import {
 // ===== taleb.pro adapter =====
 import {
   buildTalebSource,
+  buildTalebSourceFromAnyId,
   getTalebTeachers,
+  crawlTalebFullCatalog,
   getTalebKey,
   getTalebPlaylist,
+  resolveTalebPartId,
   TALEB_STREAM_HOSTS,
-  updateTalebCookies
+  updateTalebCookies,
+  subjectNameAr as talebSubjectNameAr
 } from "./taleb.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,7 +69,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.8.1";
+const APP_VERSION = "v1.8.2";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -3097,62 +3101,39 @@ app.patch("/api/auth/profile", requireStudent, rateLimit({ max: 20, windowMs: 60
 });
 
 
-// ===== كتالوج taleb.pro كبديل لكورساتك =====
-let _talebCatalogCache = { exp: 0, data: null };
+// ===== كتالوج taleb.pro الكامل =====
 async function getTalebCatalog() {
-  const nowMs = Date.now();
-  if (_talebCatalogCache.data && nowMs < _talebCatalogCache.exp) return _talebCatalogCache.data;
-  const teachers = await getTalebTeachers();
-  // materials by subjectId
-  const subjectsMap = new Map();
-  for (const th of teachers) {
-    const sid = String(th.subjectId || "general");
-    if (!subjectsMap.has(sid)) {
-      subjectsMap.set(sid, {
-        id: sid,
-        name: subjectNameAr(sid),
-        image_url: th.subjectIcon || null,
-        teachers: []
-      });
-    }
-    subjectsMap.get(sid).teachers.push({
-      id: th.id,
-      name: th.name,
-      image_url: null,
-      lectures: (th.lectures || []).map((lec, i) => ({
-        id: `taleb_lec_${lec.partId}`,
-        title: lec.title || `محاضرة ${i + 1}`,
-        partId: lec.partId,
-        courseId: lec.courseId,
-        lectureId: lec.lectureId,
-        videoId: `taleb_${lec.partId}`,
-        createdAt: lec.createdAt
-      }))
-    });
-  }
-  const subjects = [...subjectsMap.values()];
-  const data = { subjects, teachers };
-  _talebCatalogCache = { exp: nowMs + 5 * 60_000, data };
-  return data;
+  const cat = await crawlTalebFullCatalog();
+  // طبّع lectures للأجزاء كفيديوهات قابلة للتشغيل
+  const teachers = (cat.teachers || []).map((th) => ({
+    ...th,
+    lectures: (th.lectures || []).flatMap((lec) => {
+      const parts = lec.parts || [];
+      if (!parts.length) {
+        return [{
+          id: lec.id,
+          title: lec.title,
+          videoId: null,
+          courseId: lec.courseId,
+          parts: []
+        }];
+      }
+      return parts.map((p) => ({
+        id: p.id,
+        title: p.title || lec.title,
+        partId: p.id,
+        courseId: p.courseId,
+        lectureNum: p.lectureNum,
+        partNum: p.partNum,
+        videoId: p.videoId || p.id,
+        watchPath: p.watchPath
+      }));
+    })
+  }));
+  return { subjects: cat.subjects, teachers, stats: cat.stats };
 }
 function subjectNameAr(sid) {
-  const map = {
-    biology: "أحياء",
-    chemistry: "كيمياء",
-    physics: "فيزياء",
-    math: "رياضة",
-    maths: "رياضة",
-    arabic: "عربي",
-    english: "إنجليزي",
-    french: "فرنساوي",
-    history: "تاريخ",
-    geography: "جغرافيا",
-    philosophy: "فلسفة",
-    psychology: "علم نفس",
-    geology: "جيولوجيا",
-    general: "عام"
-  };
-  return map[String(sid || "").toLowerCase()] || String(sid || "مادة");
+  try { return talebSubjectNameAr(sid); } catch { return String(sid || "مادة"); }
 }
 function useTalebAsPrimary() {
   // لو مفيش توكن كورساتك → taleb هو المصدر
@@ -4540,15 +4521,15 @@ function getVideoSource(videoId, clientHeaders) {
     // —— Bunny / د. حسام عيسى (drhossamissa.com iframe protect bypass)
     // ===== taleb.pro: taleb_{partId} =====
     if (String(videoId).startsWith("taleb_")) {
-      const partId = String(videoId).slice(6); // بعد "taleb_"
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(partId)) {
-        const e = new Error("معرّف فيديو taleb غير صالح — استخدم taleb_{uuid}");
-        e.status = 400;
+      try {
+        const src = await buildTalebSourceFromAnyId(String(videoId));
+        src.reqVideoId = String(videoId);
+        sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+        return src;
+      } catch (e) {
+        e.status = e.status || 502;
         throw e;
       }
-      const src = await buildTalebSource(partId);
-      sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
-      return src;
     }
 
     if (CONFIG.BUNNY_ENABLED !== false && isBunnyVideoId(videoId)) {
@@ -6750,6 +6731,10 @@ if (!isVercel) {
   const server = app.listen(PORT, HOST, () => {
     console.log(`[API ${APP_VERSION}] ${HOST}:${PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
+    // تسخين كتالوج taleb في الخلفية
+    crawlTalebFullCatalog()
+      .then((c) => console.log("[taleb] warm catalog", c.stats))
+      .catch((e) => console.warn("[taleb] warm catalog failed:", e.message));
   });
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
