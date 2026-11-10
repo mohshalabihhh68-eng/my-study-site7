@@ -1,14 +1,28 @@
 /**
- * taleb.pro adapter — كتالوج كامل (مواد / مدرسين / كورسات / محاضرات)
- * التشغيل: AES-128-CBC من video.talep.pro
+ * upstream catalog + stream adapter (internal)
+ * AES-128-CBC segment path
+ *
+ * SECURITY:
+ * - Never hardcode device/session.
+ * - Creds only via env TALEB_DEVICE / TALEB_SESSION or runtime update.
+ * - Client-facing errors stay generic.
  */
-
-const DEFAULT_DEVICE_COOKIE = process.env.TALEB_DEVICE || "u8XREM1sQS-oA25H4ap7Mkx59H5JFyHQ2brfZvgU-x8";
-const DEFAULT_SESSION_COOKIE = process.env.TALEB_SESSION || "3VdToBgYg6TRxOAbCSHzfLeWXmVAM---UjUIeQCgZwz4pNA018wKOA9r1ZON0gGaV28cEgS4rQzVVhxc1YaglcDaO7yQ6WKR0nwc8qosdur0Ej-t6k-DrbackMb877kHeJC7OCzJqtD0Ete8sxtBttuJcBWLaEW6fzjvK12zWPCvANIZQihAvlcGAvwZeJJpn-ulo-NIXJGTqXZZb-I37w5yxLxLaE-NBxqcjSdm8M_Ad4FF4RfT0ON2fXaSthsI4UmbuXmbGIdzWDgNYLG1ewrK344rYq1dVouSW1XKo51dBLUV25-D_EerIW4";
 
 const TALEB_BASE = "https://talep.pro";
 const TALEB_VIDEO_BASE = "https://video.talep.pro";
 const TALEB_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36";
+
+function requireUpstreamCreds() {
+  const device = String(process.env.TALEB_DEVICE || "").trim();
+  const session = String(process.env.TALEB_SESSION || "").trim();
+  if (!device || !session) {
+    const err = new Error("خدمة البث غير مهيأة حالياً");
+    err.status = 503;
+    err.expose = true;
+    throw err;
+  }
+  return { device, session };
+}
 
 const SUBJECT_NAME_AR = {
   biology: "أحياء",
@@ -31,8 +45,7 @@ const SUBJECT_NAME_AR = {
 };
 
 function talebHeaders(extra = {}) {
-  const device = process.env.TALEB_DEVICE || DEFAULT_DEVICE_COOKIE;
-  const session = process.env.TALEB_SESSION || DEFAULT_SESSION_COOKIE;
+  const { device, session } = requireUpstreamCreds();
   return {
     "user-agent": TALEB_UA,
     accept: "*/*",
@@ -61,7 +74,11 @@ async function talebFetch(url, opts = {}, timeout = 25_000) {
 
 async function talebText(url, timeout = 30_000) {
   const r = await talebFetch(url, { headers: talebHeaders({ accept: "text/html" }) }, timeout);
-  if (!r.ok) throw new Error(`taleb HTTP ${r.status} ${url}`);
+  if (!r.ok) {
+    const err = new Error("تعذر جلب الصفحة");
+    err.status = r.status >= 400 && r.status < 600 ? r.status : 502;
+    throw err;
+  }
   return r.text();
 }
 
@@ -70,25 +87,45 @@ export async function getTalebNotifications() {
   const r = await talebFetch(`${TALEB_BASE}/api/notifications`, {
     headers: talebHeaders({ pragma: "no-cache", "cache-control": "no-cache" })
   });
-  if (!r.ok) throw new Error(`taleb notifications HTTP ${r.status}`);
+  if (!r.ok) {
+    const err = new Error("تعذر جلب الإشعارات");
+    err.status = r.status >= 400 && r.status < 600 ? r.status : 502;
+    throw err;
+  }
   return r.json();
 }
 
 export async function getTalebPlaylist(partId) {
   const url = `${TALEB_VIDEO_BASE}/api/video/${partId}/index.m3u8`;
   const r = await talebFetch(url, { headers: talebVideoHeaders() });
-  if (!r.ok) throw new Error(`taleb playlist HTTP ${r.status}`);
+  if (!r.ok) {
+    const err = new Error("تعذر جلب قائمة التشغيل");
+    err.status = r.status >= 400 && r.status < 600 ? r.status : 502;
+    throw err;
+  }
   const text = await r.text();
-  if (!text.includes("#EXTM3U")) throw new Error("taleb playlist غير صالح");
+  if (!text.includes("#EXTM3U")) {
+    const err = new Error("قائمة التشغيل غير صالحة");
+    err.status = 502;
+    throw err;
+  }
   return text;
 }
 
 export async function getTalebKey(partId) {
   const url = `${TALEB_VIDEO_BASE}/api/video/${partId}/key`;
   const r = await talebFetch(url, { headers: talebVideoHeaders({ accept: "*/*" }) });
-  if (!r.ok) throw new Error(`taleb key HTTP ${r.status}`);
+  if (!r.ok) {
+    const err = new Error("تعذر جلب مفتاح التشفير");
+    err.status = r.status >= 400 && r.status < 600 ? r.status : 502;
+    throw err;
+  }
   const buf = Buffer.from(await r.arrayBuffer());
-  if (buf.length !== 16) throw new Error(`taleb key length ${buf.length} (expected 16)`);
+  if (buf.length !== 16) {
+    const err = new Error("مفتاح التشفير غير صالح");
+    err.status = 502;
+    throw err;
+  }
   return buf;
 }
 
@@ -217,7 +254,11 @@ export async function resolveTalebPartId(courseId, lectureNum, partNum) {
       if (m2) m = m2;
     }
   }
-  if (!m) throw new Error(`تعذر استخراج partId من /watch/${key}`);
+  if (!m) {
+    const err = new Error("تعذر تحديد مصدر الفيديو");
+    err.status = 502;
+    throw err;
+  }
   const uuid = m[1];
   partIdCache.set(key, uuid);
   return uuid;
@@ -231,7 +272,7 @@ export async function crawlTalebFullCatalog() {
   const nowMs = Date.now();
   if (catalogCache.data && nowMs < catalogCache.exp) return catalogCache.data;
 
-  console.log("[taleb] crawling full catalog…");
+  console.log("[catalog] refresh start");
   const subjectSlugs = await discoverSubjects();
   const subjects = [];
   const teachersFlat = [];
@@ -241,7 +282,7 @@ export async function crawlTalebFullCatalog() {
     try {
       teachers = await discoverTeachers(slug);
     } catch (e) {
-      console.warn("[taleb] subject", slug, e.message);
+      console.warn("[catalog] subject skip");
       continue;
     }
     const subjectTeachers = [];
@@ -251,7 +292,7 @@ export async function crawlTalebFullCatalog() {
       try {
         courses = await discoverCourses(slug, th.numericId);
       } catch (e) {
-        console.warn("[taleb] teacher courses", th.id, e.message);
+        console.warn("[catalog] teacher courses skip");
       }
 
       const courseDetails = await mapPool(courses, COURSE_CONCURRENCY, async (c) => {
@@ -259,7 +300,7 @@ export async function crawlTalebFullCatalog() {
           const parsed = await parseCourseParts(c.id);
           return { ...c, title: parsed.courseTitle || c.title, parts: parsed.items || [] };
         } catch (e) {
-          console.warn("[taleb] course", c.id, e.message);
+          console.warn("[catalog] course skip");
           return { ...c, parts: [] };
         }
       });
@@ -345,7 +386,7 @@ export async function crawlTalebFullCatalog() {
       )
     }
   };
-  console.log("[taleb] catalog ready", data.stats);
+  console.log("[catalog] ready", data.stats);
   catalogCache.data = data;
   catalogCache.exp = nowMs + 30 * 60_000; // 30 دقيقة
   return data;
@@ -372,7 +413,7 @@ export async function getTalebTeachers() {
       )
     }));
   } catch (e) {
-    console.warn("[taleb] full catalog failed, fallback notifications:", e.message);
+    console.warn("[catalog] full crawl failed, fallback path");
     // fallback إشعارات
     const data = await getTalebNotifications();
     const items = data.items || [];
@@ -465,7 +506,11 @@ export async function buildTalebSource(partId) {
     outLines.push(raw);
   }
 
-  if (!segs.length) throw new Error("taleb: مفيش مقاطع في الـ playlist");
+  if (!segs.length) {
+    const err = new Error("لا توجد مقاطع فيديو");
+    err.status = 502;
+    throw err;
+  }
 
   return {
     reqVideoId: `taleb_${partId}`,
@@ -531,7 +576,9 @@ export async function buildTalebSourceFromAnyId(rawId) {
     return src;
   }
 
-  throw new Error("معرّف taleb غير معروف: " + rawId);
+  const err = new Error("معرّف الفيديو غير معروف");
+  err.status = 400;
+  throw err;
 }
 
 export const TALEB_STREAM_HOSTS = ["video.talep.pro", "talep.pro"];
