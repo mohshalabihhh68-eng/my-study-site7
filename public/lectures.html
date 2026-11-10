@@ -150,13 +150,18 @@ img{display:block;max-width:100%}
 .hero-chip svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 
 /* ═══════════════ LAYOUT ═══════════════ */
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;align-items:start}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:24px;align-items:start}
 .aside{position:sticky;top:calc(var(--nav-h) + 18px)}
+
+/* hero accent bar */
+.hero{position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;top:0;right:0;left:0;height:3px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:var(--radius-lg) var(--radius-lg) 0 0}
 
 /* ═══════════════ SIDE CARD ═══════════════ */
 .side-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);
   overflow:hidden;box-shadow:var(--shadow-card)}
-.thumb{width:100%;aspect-ratio:16/10;background:var(--card-inner);overflow:hidden;position:relative}
+.thumb{width:100%;aspect-ratio:4/3;background:var(--card-inner);overflow:hidden;position:relative}
 .thumb img{width:100%;height:100%;object-fit:cover;transition:transform .4s var(--tr)}
 .thumb:hover img{transform:scale(1.03)}
 .thumb-ph{width:100%;height:100%;display:grid;place-items:center;
@@ -290,9 +295,9 @@ img{display:block;max-width:100%}
   .layout{grid-template-columns:1fr}
   .aside{position:static}
   .side-card{display:flex;align-items:stretch;border-radius:var(--radius-lg)}
-  .thumb{width:100px;aspect-ratio:1/1;flex-shrink:0;border-radius:var(--radius-lg) 0 0 var(--radius-lg)}
+  .thumb{width:90px;aspect-ratio:1/1;flex-shrink:0;border-radius:var(--radius-lg) 0 0 var(--radius-lg)}
   .stats{display:none}
-  .cta-btn{flex:1;min-height:100px}
+  .cta-btn{flex:1;min-height:90px;border-radius:0 var(--radius-lg) var(--radius-lg) 0}
 }
 @media(max-width:640px){
   .nav-in{padding:0 14px}
@@ -523,23 +528,6 @@ const load=async()=>{
       </section>
 
       <div class="layout">
-        <aside class="aside">
-          <div class="side-card">
-            <div class="thumb">
-              ${cover?`<img src="${esc(cover)}" alt="${esc(title)}" loading="eager">`:`<div class="thumb-ph"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>`}
-            </div>
-            <div class="stats">
-              <div class="stat"><span>عدد المحاضرات</span><span class="stat-val">${lectures.length}</span></div>
-              ${totalParts?`<div class="stat"><span>إجمالي الأجزاء</span><span class="stat-val">${totalParts}</span></div>`:''}
-              ${teacherName?`<div class="stat"><span>المدرس</span><span class="stat-val">${esc(teacherName)}</span></div>`:''}
-            </div>
-            <button class="cta-btn" onclick="document.getElementById('lessons').scrollIntoView({behavior:'smooth'})">
-              <svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>
-              ابدأ المشاهدة
-            </button>
-          </div>
-        </aside>
-
         <div>
           <section class="lessons-box" id="lessons">
             <h2 class="section-title">المحاضرات</h2>
@@ -576,6 +564,24 @@ const load=async()=>{
             <div class="empty-search" id="empty-search" style="display:none">لا توجد محاضرات بهذا الاسم.</div>
           </section>
         </div>
+
+        <aside class="aside">
+          <div class="side-card">
+            <div class="thumb">
+              ${cover?`<img src="${esc(cover)}" alt="${esc(title)}" loading="eager">`:`<div class="thumb-ph"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>`}
+            </div>
+            <div class="stats">
+              <div class="stat"><span>عدد المحاضرات</span><span class="stat-val">${lectures.length}</span></div>
+              ${totalParts?`<div class="stat"><span>إجمالي الأجزاء</span><span class="stat-val">${totalParts}</span></div>`:''}
+              ${teacherName?`<div class="stat"><span>المدرس</span><span class="stat-val">${esc(teacherName)}</span></div>`:''}
+            </div>
+            <button class="cta-btn" onclick="document.getElementById('lessons').scrollIntoView({behavior:'smooth'})">
+              <svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>
+              ابدأ المشاهدة
+            </button>
+          </div>
+        </aside>
+
       </div>
     </div>`;
 
