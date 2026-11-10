@@ -429,12 +429,7 @@ async function load() {
                     </span>
                   </button>
                   <div class="cv-panel" id="lec-panel-${lid}" role="region" aria-labelledby="lec-${lid}" hidden>
-                    <div class="cv-groups" id="lec-groups-${lid}">
-                      <div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">
-                        <div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>
-                        جاري التحميل...
-                      </div>
-                    </div>
+                    <div class="cv-groups" id="lec-groups-${lid}"></div>
                   </div>
                 </li>`;
               }).join('')}
@@ -457,7 +452,7 @@ async function load() {
         toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
         if (open) panel.setAttribute('hidden', ''); else panel.removeAttribute('hidden');
         const span = toggle.querySelector('.cv-group-action > span');
-        if (span) span.textContent = open ? 'عرض' : 'إخفاء';
+        if (span) span.textContent = open ? 'إخفاء' : 'عرض';
         return;
       }
 
@@ -475,6 +470,9 @@ async function load() {
       if (toggle.dataset.loaded === '1') return; // already loaded
 
       toggle.dataset.loaded = '1';
+      // spinner يظهر بس بعد الضغط
+      const groupsElPre = document.getElementById('lec-groups-' + lid);
+      if (groupsElPre) groupsElPre.innerHTML = `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>جاري التحميل...</div>`;
       try {
         const items = await fetchLectureItems(lid);
         const groupsEl = document.getElementById('lec-groups-' + lid);
