@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.19 — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.8.0 — taleb.pro primary + coursatk/bunny optional — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -65,7 +65,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.19";
+const APP_VERSION = "v1.8.0";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
