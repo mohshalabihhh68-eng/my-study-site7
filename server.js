@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.8.0 — taleb.pro primary + coursatk/bunny optional — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.8.1 — taleb.pro primary + coursatk/bunny optional — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -65,7 +65,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.8.0";
+const APP_VERSION = "v1.8.1";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -1650,10 +1650,16 @@ function makeSwProofCandidates({ keySeed, sessionId, token, path, ticket }) {
 
 // Upstream helpers
 async function upstreamHeaders(extra = {}, profileIdx = 0) {
-  const tok = await getCoursatkToken();
+  const tok = String(await getCoursatkToken() || "").trim();
+  if (!tok) throw new Error("COURSATK_TOKEN غير مضبوط — الموقع يعتمد taleb.pro الآن");
+  // لو التوكن اتحط فيه كلمة Bearer بالغلط
+  const clean = tok.replace(/^Bearer\s+/i, "");
+  if (!clean || clean === "undefined" || clean === "null") {
+    throw new Error("COURSATK_TOKEN فاضي أو غير صالح");
+  }
   const profile = UA_PROFILES[profileIdx % UA_PROFILES.length];
   return {
-    Authorization: `Bearer ${tok}`,
+    Authorization: `Bearer ${clean}`,
     Accept: "application/json",
     ...profile,
     ...extra
@@ -3090,6 +3096,71 @@ app.patch("/api/auth/profile", requireStudent, rateLimit({ max: 20, windowMs: 60
   }
 });
 
+
+// ===== كتالوج taleb.pro كبديل لكورساتك =====
+let _talebCatalogCache = { exp: 0, data: null };
+async function getTalebCatalog() {
+  const nowMs = Date.now();
+  if (_talebCatalogCache.data && nowMs < _talebCatalogCache.exp) return _talebCatalogCache.data;
+  const teachers = await getTalebTeachers();
+  // materials by subjectId
+  const subjectsMap = new Map();
+  for (const th of teachers) {
+    const sid = String(th.subjectId || "general");
+    if (!subjectsMap.has(sid)) {
+      subjectsMap.set(sid, {
+        id: sid,
+        name: subjectNameAr(sid),
+        image_url: th.subjectIcon || null,
+        teachers: []
+      });
+    }
+    subjectsMap.get(sid).teachers.push({
+      id: th.id,
+      name: th.name,
+      image_url: null,
+      lectures: (th.lectures || []).map((lec, i) => ({
+        id: `taleb_lec_${lec.partId}`,
+        title: lec.title || `محاضرة ${i + 1}`,
+        partId: lec.partId,
+        courseId: lec.courseId,
+        lectureId: lec.lectureId,
+        videoId: `taleb_${lec.partId}`,
+        createdAt: lec.createdAt
+      }))
+    });
+  }
+  const subjects = [...subjectsMap.values()];
+  const data = { subjects, teachers };
+  _talebCatalogCache = { exp: nowMs + 5 * 60_000, data };
+  return data;
+}
+function subjectNameAr(sid) {
+  const map = {
+    biology: "أحياء",
+    chemistry: "كيمياء",
+    physics: "فيزياء",
+    math: "رياضة",
+    maths: "رياضة",
+    arabic: "عربي",
+    english: "إنجليزي",
+    french: "فرنساوي",
+    history: "تاريخ",
+    geography: "جغرافيا",
+    philosophy: "فلسفة",
+    psychology: "علم نفس",
+    geology: "جيولوجيا",
+    general: "عام"
+  };
+  return map[String(sid || "").toLowerCase()] || String(sid || "مادة");
+}
+function useTalebAsPrimary() {
+  // لو مفيش توكن كورساتك → taleb هو المصدر
+  const tok = String(getCoursatkTokenSync() || "").trim();
+  return !tok || process.env.CONTENT_SOURCE === "taleb" || process.env.TALEB_PRIMARY === "1";
+}
+
+
 app.get("/api/config", requireStudent, async (req, res) => {
   const yearOverride = req.query.year != null ? req.query.year : null;
   let yearId = yearOverride != null ? resolveYearId(yearOverride) : CONFIG.DEFAULT_YEAR_ID;
@@ -3104,6 +3175,18 @@ function studentAllowsThanawica(student) { const sec = normalizeSection(student 
 
 app.get("/api/subjects/:id", requireStudent, async (req, res) => {
   try {
+    if (useTalebAsPrimary()) {
+      const cat = await getTalebCatalog();
+      const data = cat.subjects.map((s, i) => ({
+        id: s.id,
+        name: s.name,
+        image_url: s.image_url,
+        year_id: resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID),
+        is_published: true,
+        teachers_count: (s.teachers || []).length
+      }));
+      return res.json({ success: true, message: "Success", data, source: "taleb" });
+    }
     const yearId = resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID);
     const secInfo = await resolveSection(req.student.section, yearId);
     let wantedIds = [];
@@ -3175,6 +3258,29 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (useTalebAsPrimary()) {
+      const cat = await getTalebCatalog();
+      const sid = String(req.params.id);
+      let teachers = [];
+      if (sid === "all" || sid === "0") teachers = cat.teachers;
+      else {
+        const sub = cat.subjects.find((s) => String(s.id) === sid);
+        teachers = sub ? sub.teachers : cat.teachers.filter((x) => String(x.subjectId || "") === sid);
+      }
+      const list = (teachers || []).map((th) => ({
+        id: th.id,
+        name: th.name,
+        image_url: null,
+        chapter_count: (th.lectures || []).length,
+        subject_id: th.subjectId || sid
+      }));
+      return res.json({
+        success: true,
+        message: "Success",
+        data: { id: sid, name: subjectNameAr(sid), image_url: null, teachers: list },
+        source: "taleb"
+      });
+    }
     if (String(req.params.id) === String(HOSSAM_SUBJECT_ID) || String(req.params.id) === "hos_biology") {
       return res.json({
         success: true,
@@ -3198,6 +3304,24 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_t_")) {
+      const cat = await getTalebCatalog();
+      const tid = String(req.params.id);
+      const th = cat.teachers.find((x) => x.id === tid || x.name === tid);
+      const lectures = th?.lectures || [];
+      return res.json({
+        success: true,
+        message: "Success",
+        data: [{
+          id: `taleb_ch_${tid}`,
+          name: "المحاضرات",
+          image_url: null,
+          teacher_name: th?.name || "",
+          lectures_count: lectures.length
+        }],
+        source: "taleb"
+      });
+    }
     if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
       const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
         id: HOSSAM_CHAPTER_BASE + i,
@@ -3222,6 +3346,27 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_ch_")) {
+      const cat = await getTalebCatalog();
+      const cid = String(req.params.id);
+      let lectures = [];
+      if (cid.startsWith("taleb_ch_")) {
+        const tid = cid.slice("taleb_ch_".length);
+        const th = cat.teachers.find((x) => x.id === tid);
+        lectures = th?.lectures || [];
+      } else {
+        for (const th of cat.teachers) lectures.push(...(th.lectures || []));
+      }
+      const data = lectures.map((lec, i) => ({
+        id: lec.id || `taleb_lec_${lec.partId}`,
+        name: lec.title || `محاضرة ${i + 1}`,
+        title: lec.title,
+        image_url: null,
+        video_id: lec.videoId || `taleb_${lec.partId}`,
+        is_published: true
+      }));
+      return res.json({ success: true, message: "Success", data, source: "taleb" });
+    }
     const cid = Number(req.params.id);
     if (Number.isFinite(cid) && cid >= HOSSAM_CHAPTER_BASE && cid < HOSSAM_CHAPTER_BASE + 100) {
       const idx = cid - HOSSAM_CHAPTER_BASE;
@@ -3252,6 +3397,41 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
 
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
+    const rawId = String(req.params.id || "");
+    if (useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || (rawId.startsWith("taleb_") && rawId.includes("-"))) {
+      const cat = await getTalebCatalog();
+      let partId = null;
+      let title = null;
+      if (rawId.startsWith("taleb_lec_")) partId = rawId.slice("taleb_lec_".length);
+      else if (rawId.startsWith("taleb_")) partId = rawId.replace(/^taleb_/, "");
+      for (const th of cat.teachers) {
+        for (const lec of th.lectures || []) {
+          if (lec.partId === partId || lec.id === rawId || lec.videoId === rawId) {
+            partId = lec.partId;
+            title = lec.title;
+            break;
+          }
+        }
+        if (title) break;
+      }
+      if (!partId) return jsonError(res, 404, "محاضرة taleb غير موجودة");
+      return res.json({
+        success: true,
+        message: "Success",
+        data: {
+          id: rawId,
+          name: title || "محاضرة",
+          videos: [{
+            id: `taleb_${partId}`,
+            video_id: `taleb_${partId}`,
+            name: title || "فيديو",
+            type: "video",
+            platform: "taleb"
+          }]
+        },
+        source: "taleb"
+      });
+    }
     const lid = Number(req.params.id);
     if (Number.isFinite(lid) && lid >= HOSSAM_LECTURE_BASE) {
       const lessonId = lid - HOSSAM_LECTURE_BASE;
