@@ -3215,31 +3215,20 @@ app.patch("/api/auth/profile", requireStudent, rateLimit({ max: 20, windowMs: 60
 // ===== كتالوج taleb.pro الكامل =====
 async function getTalebCatalog() {
   const cat = await crawlTalebFullCatalog();
-  // طبّع lectures للأجزاء كفيديوهات قابلة للتشغيل
+  // نحافظ على تقسيم طالب برو: كورس → محاضرة → أجزاء
+  // (ما نفردش الأجزاء على مستوى المدرس عشان ما تتلغبطش)
   const teachers = (cat.teachers || []).map((th) => ({
     ...th,
-    lectures: (th.lectures || []).flatMap((lec) => {
-      const parts = lec.parts || [];
-      if (!parts.length) {
-        return [{
-          id: lec.id,
-          title: lec.title,
-          videoId: null,
-          courseId: lec.courseId,
-          parts: []
-        }];
-      }
-      return parts.map((p) => ({
-        id: p.id,
-        title: p.title || lec.title,
-        partId: p.id,
-        courseId: p.courseId,
-        lectureNum: p.lectureNum,
-        partNum: p.partNum,
-        videoId: p.videoId || p.id,
-        watchPath: p.watchPath
-      }));
-    })
+    image_url: th.image_url || null,
+    courses: (th.courses || []).map((c) => ({
+      id: String(c.id),
+      title: c.title,
+      image_url: c.image_url || null,
+      lecturesCount: c.lecturesCount || (c.lectures || []).length,
+      partsCount: c.partsCount || 0,
+      lectures: c.lectures || []
+    })),
+    lectures: th.lectures || []
   }));
   return { subjects: cat.subjects, teachers, stats: cat.stats };
 }
@@ -3362,14 +3351,20 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
       const list = (teachers || []).map((th) => ({
         id: th.id,
         name: th.name,
-        image_url: null,
-        chapter_count: (th.lectures || []).length,
+        image_url: th.image_url || null,
+        chapter_count: (th.courses && th.courses.length) ? th.courses.length : (th.lectures || []).length,
         subject_id: th.subjectId || sid
       }));
+      const subMeta = (sid === "all" || sid === "0") ? null : cat.subjects.find((s) => String(s.id) === sid);
       return res.json({
         success: true,
         message: "Success",
-        data: { id: sid, name: subjectNameAr(sid), image_url: null, teachers: list },
+        data: {
+          id: sid,
+          name: (subMeta && subMeta.name) || subjectNameAr(sid),
+          image_url: (subMeta && subMeta.image_url) || null,
+          teachers: list
+        },
         source: "taleb"
       });
     }
@@ -3400,19 +3395,25 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
       const cat = await getTalebCatalog();
       const tid = String(req.params.id);
       const th = cat.teachers.find((x) => x.id === tid || x.name === tid);
-      const lectures = th?.lectures || [];
-      return res.json({
-        success: true,
-        message: "Success",
-        data: [{
-          id: `taleb_ch_${tid}`,
-          name: "المحاضرات",
-          image_url: null,
-          teacher_name: th?.name || "",
-          lectures_count: lectures.length
-        }],
-        source: "taleb"
-      });
+      const courses = th?.courses || [];
+      // كل كورس = فصل/مجموعة زي تقسيم طالب برو
+      const data = courses.length
+        ? courses.map((c) => ({
+            id: `taleb_course_${c.id}`,
+            name: c.title || `كورس ${c.id}`,
+            image_url: c.image_url || null,
+            teacher_name: th?.name || "",
+            lectures_count: c.lecturesCount || (c.lectures || []).length,
+            _courseId: String(c.id)
+          }))
+        : [{
+            id: `taleb_ch_${tid}`,
+            name: "المحاضرات",
+            image_url: th?.image_url || null,
+            teacher_name: th?.name || "",
+            lectures_count: (th?.lectures || []).length
+          }];
+      return res.json({ success: true, message: "Success", data, source: "taleb" });
     }
     if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
       const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
@@ -3438,25 +3439,48 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
-    if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_ch_")) {
+    if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_ch_") || String(req.params.id).startsWith("taleb_course_")) {
       const cat = await getTalebCatalog();
       const cid = String(req.params.id);
       let lectures = [];
-      if (cid.startsWith("taleb_ch_")) {
+      if (cid.startsWith("taleb_course_")) {
+        const courseId = cid.slice("taleb_course_".length);
+        for (const th of cat.teachers) {
+          const course = (th.courses || []).find((c) => String(c.id) === String(courseId));
+          if (course) {
+            lectures = course.lectures || [];
+            break;
+          }
+        }
+      } else if (cid.startsWith("taleb_ch_")) {
         const tid = cid.slice("taleb_ch_".length);
         const th = cat.teachers.find((x) => x.id === tid);
         lectures = th?.lectures || [];
       } else {
         for (const th of cat.teachers) lectures.push(...(th.lectures || []));
       }
-      const data = lectures.map((lec, i) => ({
-        id: lec.id || `taleb_lec_${lec.partId}`,
-        name: lec.title || `محاضرة ${i + 1}`,
-        title: lec.title,
-        image_url: null,
-        video_id: lec.videoId || `taleb_${lec.partId}`,
-        is_published: true
-      }));
+      // كل عنصر = محاضرة؛ لو فيها أكتر من جزء نستخدم أول جزء كفيديو رئيسي
+      const data = lectures.map((lec, i) => {
+        const parts = lec.parts || [];
+        const main = parts[0] || null;
+        return {
+          id: lec.id || `taleb_lec_${i}`,
+          name: lec.title || `محاضرة ${i + 1}`,
+          title: lec.title,
+          image_url: lec.image_url || null,
+          video_id: main ? (main.videoId || main.id) : null,
+          parts_count: parts.length,
+          parts: parts.map((p) => ({
+            id: p.id,
+            title: p.title,
+            video_id: p.videoId || p.id,
+            partNum: p.partNum
+          })),
+          is_published: true,
+          course_id: lec.courseId || null,
+          lecture_num: lec.lectureNum || null
+        };
+      });
       return res.json({ success: true, message: "Success", data, source: "taleb" });
     }
     const cid = Number(req.params.id);
@@ -3492,65 +3516,65 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
     const rawId = String(req.params.id || "");
     if (useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_")) {
       const cat = await getTalebCatalog();
-      let found = null;
-      let title = null;
-      let playId = null;
-      // طبيع المعرف
       let key = rawId;
       while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
 
+      // 1) محاضرة كاملة متعددة الأجزاء
+      let lecture = null;
       for (const th of cat.teachers) {
         for (const lec of th.lectures || []) {
-          if (lec.id === key || lec.id === rawId || lec.partId === key || lec.videoId === key || lec.videoId === rawId) {
-            found = lec;
-            title = lec.title;
-            playId = lec.videoId || lec.id || lec.partId;
-            break;
-          }
+          if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
         }
-        if (found) break;
+        if (lecture) break;
+      }
+      if (lecture && Array.isArray(lecture.parts) && lecture.parts.length) {
+        return res.json({
+          success: true,
+          message: "Success",
+          data: {
+            id: lecture.id,
+            name: lecture.title || "محاضرة",
+            image_url: lecture.image_url || null,
+            course_id: lecture.courseId || null,
+            videos: lecture.parts.map((p, i) => ({
+              id: p.videoId || p.id,
+              video_id: p.videoId || p.id,
+              name: p.title || `جزء ${i + 1}`,
+              type: "video",
+              platform: "stream"
+            }))
+          },
+          source: "taleb"
+        });
       }
 
-      // لو المعرف أصلاً taleb_w_...
-      if (!playId && /^taleb_w_\d+_\d+_\d+$/i.test(key)) playId = key;
+      // 2) جزء فيديو مباشر taleb_w_c_l_p
+      let playId = null;
+      let title = null;
+      if (/^taleb_w_\d+_\d+_\d+$/i.test(key)) playId = key;
       if (!playId && /^taleb_w_\d+_\d+_\d+$/i.test(rawId)) playId = rawId.replace(/^(taleb_)+/i, "taleb_");
 
       if (!playId) {
-        // محاضرة متعددة الأجزاء؟
-        if (key.startsWith("taleb_lec_")) {
-          const parts = [];
-          for (const th of cat.teachers) {
-            for (const lec of th.lectures || []) {
-              if (String(lec.id).startsWith(key) || lec.courseId && key.includes(String(lec.courseId))) {
-                if (lec.videoId || lec.id) parts.push(lec);
+        for (const th of cat.teachers) {
+          for (const lec of th.lectures || []) {
+            for (const p of lec.parts || []) {
+              if (p.id === key || p.videoId === key || p.id === rawId || p.videoId === rawId) {
+                playId = p.videoId || p.id;
+                title = p.title || lec.title;
+                break;
               }
             }
+            if (playId) break;
           }
-          if (parts.length) {
-            return res.json({
-              success: true,
-              message: "Success",
-              data: {
-                id: rawId,
-                name: parts[0].title || "محاضرة",
-                videos: parts.map((p, i) => ({
-                  id: p.videoId || p.id,
-                  video_id: p.videoId || p.id,
-                  name: p.title || `جزء ${i + 1}`,
-                  type: "video",
-                  platform: "taleb"
-                }))
-              },
-              source: "taleb"
-            });
-          }
+          if (playId) break;
         }
-        return jsonError(res, 404, "محاضرة taleb غير موجودة");
       }
 
-      // لا تضف taleb_ تاني لو موجود
-      if (!/^taleb_/i.test(playId)) playId = `taleb_${playId}`;
-      while (/^taleb_taleb_/i.test(playId)) playId = playId.replace(/^taleb_/i, "");
+      if (!playId && /^[0-9a-f-]{36}$/i.test(key)) playId = key.startsWith("taleb_") ? key : `taleb_${key}`;
+      if (playId && !/^taleb_/i.test(playId) && !/^[0-9a-f-]{36}$/i.test(playId)) playId = `taleb_${playId}`;
+      while (playId && /^taleb_taleb_/i.test(playId)) playId = playId.replace(/^taleb_/i, "");
+
+      if (!playId) return jsonError(res, 404, "المحاضرة غير موجودة");
 
       return res.json({
         success: true,
@@ -3563,13 +3587,13 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
             video_id: playId,
             name: title || "فيديو",
             type: "video",
-            platform: "taleb"
+            platform: "stream"
           }]
         },
         source: "taleb"
       });
     }
-    const lid = Number(req.params.id);
+
     if (Number.isFinite(lid) && lid >= HOSSAM_LECTURE_BASE) {
       const lessonId = lid - HOSSAM_LECTURE_BASE;
       let found = null; let courseName = "";
