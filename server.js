@@ -69,7 +69,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.8.2";
+const APP_VERSION = "v1.8.3";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -3379,23 +3379,68 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
-    if (useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || (rawId.startsWith("taleb_") && rawId.includes("-"))) {
+    if (useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_")) {
       const cat = await getTalebCatalog();
-      let partId = null;
+      let found = null;
       let title = null;
-      if (rawId.startsWith("taleb_lec_")) partId = rawId.slice("taleb_lec_".length);
-      else if (rawId.startsWith("taleb_")) partId = rawId.replace(/^taleb_/, "");
+      let playId = null;
+      // طبيع المعرف
+      let key = rawId;
+      while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
+
       for (const th of cat.teachers) {
         for (const lec of th.lectures || []) {
-          if (lec.partId === partId || lec.id === rawId || lec.videoId === rawId) {
-            partId = lec.partId;
+          if (lec.id === key || lec.id === rawId || lec.partId === key || lec.videoId === key || lec.videoId === rawId) {
+            found = lec;
             title = lec.title;
+            playId = lec.videoId || lec.id || lec.partId;
             break;
           }
         }
-        if (title) break;
+        if (found) break;
       }
-      if (!partId) return jsonError(res, 404, "محاضرة taleb غير موجودة");
+
+      // لو المعرف أصلاً taleb_w_...
+      if (!playId && /^taleb_w_\d+_\d+_\d+$/i.test(key)) playId = key;
+      if (!playId && /^taleb_w_\d+_\d+_\d+$/i.test(rawId)) playId = rawId.replace(/^(taleb_)+/i, "taleb_");
+
+      if (!playId) {
+        // محاضرة متعددة الأجزاء؟
+        if (key.startsWith("taleb_lec_")) {
+          const parts = [];
+          for (const th of cat.teachers) {
+            for (const lec of th.lectures || []) {
+              if (String(lec.id).startsWith(key) || lec.courseId && key.includes(String(lec.courseId))) {
+                if (lec.videoId || lec.id) parts.push(lec);
+              }
+            }
+          }
+          if (parts.length) {
+            return res.json({
+              success: true,
+              message: "Success",
+              data: {
+                id: rawId,
+                name: parts[0].title || "محاضرة",
+                videos: parts.map((p, i) => ({
+                  id: p.videoId || p.id,
+                  video_id: p.videoId || p.id,
+                  name: p.title || `جزء ${i + 1}`,
+                  type: "video",
+                  platform: "taleb"
+                }))
+              },
+              source: "taleb"
+            });
+          }
+        }
+        return jsonError(res, 404, "محاضرة taleb غير موجودة");
+      }
+
+      // لا تضف taleb_ تاني لو موجود
+      if (!/^taleb_/i.test(playId)) playId = `taleb_${playId}`;
+      while (/^taleb_taleb_/i.test(playId)) playId = playId.replace(/^taleb_/i, "");
+
       return res.json({
         success: true,
         message: "Success",
@@ -3403,8 +3448,8 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
           id: rawId,
           name: title || "محاضرة",
           videos: [{
-            id: `taleb_${partId}`,
-            video_id: `taleb_${partId}`,
+            id: playId,
+            video_id: playId,
             name: title || "فيديو",
             type: "video",
             platform: "taleb"
@@ -4520,11 +4565,15 @@ function getVideoSource(videoId, clientHeaders) {
   return coalesce("src:" + videoId, async () => {
     // —— Bunny / د. حسام عيسى (drhossamissa.com iframe protect bypass)
     // ===== taleb.pro: taleb_{partId} =====
-    if (String(videoId).startsWith("taleb_")) {
+    // taleb: أي معرّف فيه taleb_ أو taleb_w_ (مع تكرار البادئة)
+    if (/taleb_/i.test(String(videoId)) || /^\d+_\d+_\d+$/.test(String(videoId))) {
       try {
-        const src = await buildTalebSourceFromAnyId(String(videoId));
-        src.reqVideoId = String(videoId);
-        sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+        let vid = String(videoId);
+        while (/^taleb_taleb_/i.test(vid)) vid = vid.replace(/^taleb_/i, "");
+        const src = await buildTalebSourceFromAnyId(vid);
+        src.reqVideoId = vid;
+        sourceCache.set(String(videoId), { src, exp: now() + SOURCE_TTL_MS });
+        sourceCache.set(vid, { src, exp: now() + SOURCE_TTL_MS });
         return src;
       } catch (e) {
         e.status = e.status || 502;
