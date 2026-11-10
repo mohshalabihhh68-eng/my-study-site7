@@ -1,6 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.8.2 — taleb.pro primary + coursatk/bunny optional — + Bunny/HossamEssa (iframe protect bypass) + anti-bulk-download
+ * VERSION v1.8.4 — multi-source stream + credential hardening + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -50,7 +50,7 @@ import {
   getThanawicaSessionInfo
 } from "./thanawica.js";
 
-// ===== taleb.pro adapter =====
+// ===== upstream catalog adapter =====
 import {
   buildTalebSource,
   buildTalebSourceFromAnyId,
@@ -69,7 +69,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.8.3";
+const APP_VERSION = "v1.8.4";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -686,17 +686,14 @@ if (!runtime.firebaseUrl) {
   runtime.firebaseUrl = (process.env.FIREBASE_URL || CONFIG.FIREBASE || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, "");
 }
 
-// تحميل كوكيز taleb.pro من Firebase عند الـ startup
+// تحميل بيانات مصادقة البث (مشفرة) عند الـ startup — بدون طباعة قيم
 (async () => {
   try {
-    const talebCookies = await fbGet("config/taleb_cookies");
-    if (talebCookies && talebCookies.device && talebCookies.session) {
-      process.env.TALEB_DEVICE = talebCookies.device;
-      process.env.TALEB_SESSION = talebCookies.session;
-      console.log("[taleb] cookies loaded from Firebase");
-    }
-  } catch (e) {
-    console.warn("[taleb] couldn't load cookies from Firebase:", e.message);
+    const creds = await loadStreamCredentials();
+    if (creds) console.log("[stream-auth] credentials ready (" + creds.source + ")");
+    else console.warn("[stream-auth] no credentials configured");
+  } catch {
+    console.warn("[stream-auth] load skipped");
   }
 })();
 
@@ -989,6 +986,94 @@ function getFirebaseSecret() {
   return (process.env.FIREBASE_SECRET || process.env.FIREBASE_DATABASE_SECRET || process.env.FB_SECRET || runtime.firebaseSecret || "").trim();
 }
 
+/** مفتاح تشفير بيانات المصادقة عند التخزين (AES-256-GCM) */
+function getCredCryptoKey() {
+  const raw = String(
+    process.env.STREAM_CRED_SECRET ||
+    process.env.STUDENT_JWT_SECRET ||
+    process.env.JWT_SECRET ||
+    process.env.SESSION_SECRET ||
+    process.env.FIREBASE_SECRET ||
+    "thanawya-stream-cred-fallback"
+  );
+  return crypto.createHash("sha256").update("stream-cred-v1|" + raw).digest();
+}
+
+function encryptCredPayload(obj) {
+  const iv = crypto.randomBytes(12);
+  const key = getCredCryptoKey();
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const pt = Buffer.from(JSON.stringify(obj), "utf8");
+  const enc = Buffer.concat([cipher.update(pt), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    v: 1,
+    iv: iv.toString("base64"),
+    tag: tag.toString("base64"),
+    data: enc.toString("base64"),
+    updatedAt: Date.now()
+  };
+}
+
+function decryptCredPayload(row) {
+  if (!row || typeof row !== "object") return null;
+  // backward compat: plaintext legacy
+  if (row.device && row.session && !row.data) {
+    return { device: String(row.device), session: String(row.session) };
+  }
+  if (!row.data || !row.iv || !row.tag) return null;
+  try {
+    const key = getCredCryptoKey();
+    const iv = Buffer.from(row.iv, "base64");
+    const tag = Buffer.from(row.tag, "base64");
+    const data = Buffer.from(row.data, "base64");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    const pt = Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
+    const obj = JSON.parse(pt);
+    if (!obj.device || !obj.session) return null;
+    return { device: String(obj.device), session: String(obj.session) };
+  } catch {
+    return null;
+  }
+}
+
+async function loadStreamCredentials() {
+  // 1) env wins if both set
+  const envD = String(process.env.TALEB_DEVICE || "").trim();
+  const envS = String(process.env.TALEB_SESSION || "").trim();
+  if (envD && envS) return { device: envD, session: envS, source: "env" };
+  // 2) encrypted (or legacy) firebase
+  try {
+    const row = await fbGet("config/stream_auth");
+    const dec = decryptCredPayload(row);
+    if (dec) {
+      process.env.TALEB_DEVICE = dec.device;
+      process.env.TALEB_SESSION = dec.session;
+      return { ...dec, source: "firebase" };
+    }
+  } catch {}
+  // 3) legacy path
+  try {
+    const legacy = await fbGet("config/taleb_cookies");
+    const dec = decryptCredPayload(legacy);
+    if (dec) {
+      process.env.TALEB_DEVICE = dec.device;
+      process.env.TALEB_SESSION = dec.session;
+      return { ...dec, source: "legacy" };
+    }
+  } catch {}
+  return null;
+}
+
+async function persistStreamCredentials(device, session, by) {
+  const payload = encryptCredPayload({ device, session, by: by || null });
+  await fbSet("config/stream_auth", payload);
+  // wipe legacy plaintext if exists
+  try { await fbSet("config/taleb_cookies", null); } catch {}
+}
+
+
 function fbUrl(p) {
   const base = getFirebaseUrl();
   if (!base) throw new Error("Firebase غير مضبوط");
@@ -1113,7 +1198,24 @@ function openSse(req, res) {
   res.on("error", () => clearInterval(hb));
 }
 
-function jsonError(res, status, message) { return res.status(status).json({ success: false, message }); }
+function sanitizeClientMessage(message) {
+  const msg = String(message || "").trim();
+  if (!msg) return "حدث خطأ";
+  if (/talep\.pro|taleb\.pro|\btaleb\b|coursatk|stream-weave|thanawica|bunny|mediadelivery|b-cdn\.net|cookie|taleb-device|taleb-session|TALEB_|FIREBASE|scrypt\$|Bearer\s+[A-Za-z0-9._-]{10,}/i.test(msg)) {
+    return "تعذر إكمال الطلب";
+  }
+  if (/https?:\/\//i.test(msg) || /\/api\/video\/|\/watch\/\d+/i.test(msg)) {
+    return "تعذر إكمال الطلب";
+  }
+  if (msg.length > 160 || /[A-Za-z0-9_-]{40,}/.test(msg)) {
+    return "تعذر إكمال الطلب";
+  }
+  return msg;
+}
+
+function jsonError(res, status, message) {
+  return res.status(status).json({ success: false, message: sanitizeClientMessage(message) });
+}
 
 function getBearer(req) {
   const h = req.headers.authorization || "";
@@ -1655,7 +1757,7 @@ function makeSwProofCandidates({ keySeed, sessionId, token, path, ticket }) {
 // Upstream helpers
 async function upstreamHeaders(extra = {}, profileIdx = 0) {
   const tok = String(await getCoursatkToken() || "").trim();
-  if (!tok) throw new Error("COURSATK_TOKEN غير مضبوط — الموقع يعتمد taleb.pro الآن");
+  if (!tok) throw new Error("COURSATK_TOKEN غير مضبوط");
   // لو التوكن اتحط فيه كلمة Bearer بالغلط
   const clean = tok.replace(/^Bearer\s+/i, "");
   if (!clean || clean === "undefined" || clean === "null") {
@@ -1760,15 +1862,24 @@ function allowedStreamUrl(raw, session = null) {
 }
 
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
-  if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
+  if (!allowedStreamUrl(url, session)) {
+    const err = new Error("مصدر غير مسموح");
+    err.status = 403;
+    throw err;
+  }
   const ch = clientHeaders || {};
   const isBunny = session && (session.mode === "bunny" || session.mode === "hossam");
   const isTaleb = session && session.mode === "taleb";
   let headers;
   if (isTaleb) {
-    // taleb.pro: كوكيز بدل Bearer
-    const device = process.env.TALEB_DEVICE || "";
-    const sess = process.env.TALEB_SESSION || "";
+    const device = String(process.env.TALEB_DEVICE || "").trim();
+    const sess = String(process.env.TALEB_SESSION || "").trim();
+    if (!device || !sess) {
+      const err = new Error("خدمة البث غير مهيأة حالياً");
+      err.status = 503;
+      err.expose = true;
+      throw err;
+    }
     headers = {
       Accept: "*/*",
       "Cache-Control": "no-cache",
@@ -1776,7 +1887,7 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
       Referer: "https://talep.pro/",
       "User-Agent": ch["user-agent"] || "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
       "accept-language": "ar-AE,ar;q=0.9,en-US;q=0.8,en;q=0.7",
-      "cookie": `taleb-device=${device}; taleb-session=${sess}`
+      cookie: `taleb-device=${device}; taleb-session=${sess}`
     };
   } else if (isBunny) {
     // فك حماية Bunny: Referer من iframe.mediadelivery.net مطلوب
@@ -6386,36 +6497,41 @@ app.post("/api/video/:id/play", async function (req, res) {
   res.status(200).json(r);
 });
 
-// ==================== taleb.pro endpoints ====================
+// ==================== catalog / stream-auth endpoints ====================
 
-/** جلب المدرسين من taleb.pro */
-app.get("/api/taleb/teachers", requireStudent, async (req, res) => {
+/** كتالوج المدرسين — مسار عام جديد + alias قديم للتوافق */
+async function handleCatalogTeachers(req, res) {
   try {
     const teachers = await getTalebTeachers();
     res.json({ success: true, data: teachers });
   } catch (e) {
-    console.error("[taleb teachers]", e.message);
-    jsonError(res, 502, "فشل جلب المدرسين من taleb.pro: " + e.message);
+    console.error("[catalog] teachers failed");
+    jsonError(res, e.status || 502, e.expose ? e.message : "تعذر جلب قائمة المدرسين");
   }
-});
+}
+app.get("/api/catalog/teachers", requireStudent, handleCatalogTeachers);
+app.get("/api/taleb/teachers", requireStudent, handleCatalogTeachers); // alias
 
-/** جلب playlist لـ partId مباشرة */
-app.get("/api/taleb/playlist/:partId", requireStudent, async (req, res) => {
+/** playlist داخلي — طلاب فقط، أخطاء عامة */
+async function handleCatalogPlaylist(req, res) {
   try {
     const partId = String(req.params.partId || "").trim();
-    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "partId غير صالح");
+    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "معرّف غير صالح");
     const text = await getTalebPlaylist(partId);
+    res.setHeader("Cache-Control", "private, no-store");
     res.type("application/vnd.apple.mpegurl").send(text);
   } catch (e) {
-    jsonError(res, 502, e.message);
+    jsonError(res, e.status || 502, e.expose ? e.message : "تعذر جلب قائمة التشغيل");
   }
-});
+}
+app.get("/api/catalog/playlist/:partId", requireStudent, handleCatalogPlaylist);
+app.get("/api/taleb/playlist/:partId", requireStudent, handleCatalogPlaylist); // alias
 
-/** تشغيل فيديو taleb مباشرة بـ partId (بدون حاجة لـ /api/play/taleb_{uuid}) */
-app.post("/api/taleb/play/:partId", requireStudent, playLimiter, async (req, res) => {
+/** تشغيل بمعرّف الجزء — بدون إرجاع videoId الخام للعميل */
+async function handleCatalogPlay(req, res) {
   try {
     const partId = String(req.params.partId || "").trim();
-    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "partId (UUID) غير صالح");
+    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "معرّف غير صالح");
 
     const videoId = `taleb_${partId}`;
     checkPlayBurst(req.session && req.session.code, videoId);
@@ -6447,62 +6563,128 @@ app.post("/api/taleb/play/:partId", requireStudent, playLimiter, async (req, res
     };
     streamSessions.set(id, sessionRow);
     const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
-    res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, shared: false, partId, videoId } });
-  } catch (be) {
-    jsonError(res, be.status || 502, be.message);
-  }
-});
-
-/** تحديث كوكيز taleb.pro من لوحة الأدمن */
-app.put("/api/admin/taleb/cookies", requireAdmin("admins_manage"), async (req, res) => {
-  try {
-    const device = String(req.body?.device || "").trim();
-    const session = String(req.body?.session || "").trim();
-    if (!device || !session) return jsonError(res, 400, "device و session مطلوبان");
-    updateTalebCookies(device, session);
-    // احفظهم في Firebase للاستمرارية
-    try {
-      await fbSet("config/taleb_cookies", { device, session, updatedAt: now(), updatedBy: req.admin.username });
-    } catch (e) { console.warn("[taleb cookies] fb save:", e.message); }
-    res.json({ success: true, message: "تم تحديث كوكيز taleb.pro" });
-  } catch (e) { jsonError(res, 500, e.message); }
-});
-
-/** جلب حالة كوكيز taleb */
-app.get("/api/admin/taleb/status", requireAdmin(null), async (_req, res) => {
-  try {
-    const device = process.env.TALEB_DEVICE || "";
-    const session = process.env.TALEB_SESSION || "";
-    // اختبر بطلب notifications
-    let alive = false;
-    let error = null;
-    try {
-      const r = await fetch("https://talep.pro/api/notifications", {
-        headers: {
-          "user-agent": "Mozilla/5.0",
-          "cookie": `taleb-device=${device}; taleb-session=${session}`,
-          "accept": "*/*"
-        },
-        signal: AbortSignal.timeout(8000)
-      });
-      alive = r.ok;
-      if (!r.ok) error = `HTTP ${r.status}`;
-    } catch (e) { error = e.message; }
     res.json({
       success: true,
       data: {
-        deviceSet: Boolean(device),
-        sessionSet: Boolean(session),
-        devicePrefix: device ? device.slice(0, 12) + "…" : null,
-        sessionPrefix: session ? session.slice(0, 20) + "…" : null,
-        alive,
-        error
+        play_url: hlsPath,
+        manifest_url: hlsPath,
+        shared: false
       }
     });
-  } catch (e) { jsonError(res, 500, e.message); }
+  } catch (be) {
+    jsonError(res, be.status || 502, be.expose ? be.message : "تعذر بدء التشغيل");
+  }
+}
+app.post("/api/catalog/play/:partId", requireStudent, playLimiter, handleCatalogPlay);
+app.post("/api/taleb/play/:partId", requireStudent, playLimiter, handleCatalogPlay); // alias
+
+const streamAuthLimiter = rateLimit({
+  max: 8,
+  windowMs: 60_000,
+  scope: "stream-auth-admin",
+  banAfter: 12,
+  banMs: 15 * 60_000,
+  message: "طلبات كثيرة"
 });
 
-// ===== END taleb.pro endpoints =====
+/** تحديث بيانات مصادقة البث — مشفّرة في Firebase، بدون إرجاع قيم */
+app.put(
+  "/api/admin/stream-auth",
+  requireAdmin("admins_manage"),
+  streamAuthLimiter,
+  async (req, res) => {
+    try {
+      const device = String(req.body?.device || "").trim();
+      const session = String(req.body?.session || "").trim();
+      if (!device || !session) return jsonError(res, 400, "البيانات المطلوبة ناقصة");
+      if (device.length < 8 || session.length < 16) return jsonError(res, 400, "بيانات غير صالحة");
+      if (device.length > 512 || session.length > 4096) return jsonError(res, 400, "بيانات غير صالحة");
+      updateTalebCookies(device, session);
+      try {
+        await persistStreamCredentials(device, session, req.admin && req.admin.username);
+      } catch {
+        console.warn("[stream-auth] persist failed");
+        return jsonError(res, 500, "فشل حفظ البيانات");
+      }
+      res.json({ success: true, message: "تم تحديث بيانات المصادقة" });
+    } catch {
+      jsonError(res, 500, "فشل التحديث");
+    }
+  }
+);
+// alias قديم
+app.put("/api/admin/taleb/cookies", requireAdmin("admins_manage"), streamAuthLimiter, async (req, res) => {
+  req.url = "/api/admin/stream-auth";
+  // reuse body
+  try {
+    const device = String(req.body?.device || "").trim();
+    const session = String(req.body?.session || "").trim();
+    if (!device || !session) return jsonError(res, 400, "البيانات المطلوبة ناقصة");
+    if (device.length < 8 || session.length < 16) return jsonError(res, 400, "بيانات غير صالحة");
+    updateTalebCookies(device, session);
+    try { await persistStreamCredentials(device, session, req.admin && req.admin.username); }
+    catch { return jsonError(res, 500, "فشل حفظ البيانات"); }
+    res.json({ success: true, message: "تم تحديث بيانات المصادقة" });
+  } catch {
+    jsonError(res, 500, "فشل التحديث");
+  }
+});
+
+/** حالة المصادقة فقط — configured/alive بدون أي قيم */
+app.get("/api/admin/stream-auth/status", requireAdmin("admins_manage"), streamAuthLimiter, async (_req, res) => {
+  try {
+    const device = String(process.env.TALEB_DEVICE || "").trim();
+    const session = String(process.env.TALEB_SESSION || "").trim();
+    const configured = Boolean(device && session);
+    let alive = false;
+    if (configured) {
+      try {
+        const r = await fetch("https://talep.pro/api/notifications", {
+          headers: {
+            "user-agent": "Mozilla/5.0",
+            cookie: `taleb-device=${device}; taleb-session=${session}`,
+            accept: "*/*"
+          },
+          signal: AbortSignal.timeout(8000)
+        });
+        alive = r.ok;
+      } catch {
+        alive = false;
+      }
+    }
+    res.json({ success: true, data: { configured, alive } });
+  } catch {
+    jsonError(res, 500, "تعذر فحص الحالة");
+  }
+});
+app.get("/api/admin/taleb/status", requireAdmin("admins_manage"), streamAuthLimiter, async (_req, res) => {
+  try {
+    const device = String(process.env.TALEB_DEVICE || "").trim();
+    const session = String(process.env.TALEB_SESSION || "").trim();
+    const configured = Boolean(device && session);
+    let alive = false;
+    if (configured) {
+      try {
+        const r = await fetch("https://talep.pro/api/notifications", {
+          headers: {
+            "user-agent": "Mozilla/5.0",
+            cookie: `taleb-device=${device}; taleb-session=${session}`,
+            accept: "*/*"
+          },
+          signal: AbortSignal.timeout(8000)
+        });
+        alive = r.ok;
+      } catch {
+        alive = false;
+      }
+    }
+    res.json({ success: true, data: { configured, alive } });
+  } catch {
+    jsonError(res, 500, "تعذر فحص الحالة");
+  }
+});
+
+// ===== END catalog / stream-auth endpoints =====
 
 app.post("/api/heartbeat", async function (req, res) {
   try {
@@ -6782,8 +6964,8 @@ if (!isVercel) {
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
     // تسخين كتالوج taleb في الخلفية
     crawlTalebFullCatalog()
-      .then((c) => console.log("[taleb] warm catalog", c.stats))
-      .catch((e) => console.warn("[taleb] warm catalog failed:", e.message));
+      .then((c) => console.log("[catalog] warm ok", c.stats))
+      .catch(() => console.warn("[catalog] warm skipped"));
   });
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
