@@ -1972,10 +1972,24 @@ app.get("/api/public/code-types", (_req, res) => {
   res.json({ success: true, data: types });
 });
 
+
+function dayGreeting(d = new Date()) {
+  // توقيت مصر
+  let hour = d.getHours();
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Africa/Cairo" }).formatToParts(d);
+    const h = parts.find((x) => x.type === "hour");
+    if (h) hour = Number(h.value);
+  } catch {}
+  // صباح: 5–11 | مساء: 12–4 صباحًا
+  if (hour >= 5 && hour < 12) return "صباح النور";
+  return "مساء النور";
+}
+
 app.get("/api/public/site", rateLimit({ max: 120, windowMs: 60_000, scope: "public-site" }), (_req, res) => {
   const packages = (runtime.packages || []).filter((p) => p.active !== false).map((p) => ({ id: p.id, name: p.name, price: p.price ?? 0, days: p.days || 0, hours: p.hours || 0 }));
   const agents = (runtime.agents || []).filter((a) => a.active !== false).map((a) => ({ id: a.id, name: a.name, telegram: a.telegram || "" }));
-  res.json({ success: true, data: { siteName: runtime.siteName || "ثانوية World", packages, agents, firebaseConfigured: Boolean(getFirebaseUrl()), tokenConfigured: Boolean(getCoursatkTokenSync()) } });
+  res.json({ success: true, data: { siteName: runtime.siteName || "ثانوية World", packages, agents, firebaseConfigured: Boolean(getFirebaseUrl()), tokenConfigured: Boolean(getCoursatkTokenSync()), greeting: dayGreeting() } });
 });
 
 // ==================== تتبع فتح الموقع للطالب ====================
@@ -3153,6 +3167,7 @@ app.get("/api/auth/me", requireStudent, async (req, res) => {
         phone: profile.phone,
         governorate: profile.governorate,
         needsProfile: profile.needsProfile,
+        greeting: dayGreeting(),
         missingFields: profile.missingFields,
         visitCount: Number(s.visitCount) || 0,
         lastSeen: s.lastSeen || null
@@ -3264,14 +3279,17 @@ async function getTalebCatalog() {
     })),
     lectures: th.lectures || []
   }));
-  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology","geology","mathematics","math","statistics","history","geography","philosophy","psychology"];
+  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology"];
   const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
-  const subjects = [...(cat.subjects || [])].sort((a, b) => {
-    const ra = rank.has(a.id) ? rank.get(a.id) : 100;
-    const rb = rank.has(b.id) ? rank.get(b.id) : 100;
-    if (ra !== rb) return ra - rb;
-    return String(a.name || "").localeCompare(String(b.name || ""), "ar");
-  });
+  const allowed = new Set(SUBJECT_ORDER);
+  const subjects = [...(cat.subjects || [])]
+    .filter((s) => allowed.has(String(s.id || "")))
+    .sort((a, b) => {
+      const ra = rank.has(a.id) ? rank.get(a.id) : 100;
+      const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+      if (ra !== rb) return ra - rb;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+    });
   const out = { subjects, teachers, stats: cat.stats };
   return maskTreeImages(out);
 }
@@ -3301,14 +3319,20 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
   try {
     if (useTalebAsPrimary()) {
       const cat = await getTalebCatalog();
-      const data = cat.subjects.map((s, i) => ({
-        id: s.id,
-        name: s.name,
-        image_url: s.image_url,
-        year_id: resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID),
-        is_published: true,
-        teachers_count: (s.teachers || []).length
-      }));
+      const data = cat.subjects.map((s, i) => {
+        const teachers = s.teachers || [];
+        const coursesCount = teachers.reduce((a, th) => a + ((th.courses && th.courses.length) || 0), 0);
+        return {
+          id: s.id,
+          name: s.name,
+          image_url: s.image_url,
+          year_id: resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID),
+          is_published: true,
+          teachers_count: teachers.length,
+          courses_count: coursesCount,
+          chapters_count: coursesCount
+        };
+      });
       return res.json({ success: true, message: "Success", data, source: "taleb" });
     }
     const yearId = resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID);
@@ -3503,16 +3527,27 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
             .map((c) => ({
             id: `taleb_course_${c.id}`,
             name: (function () {
-              let n = String(c.title || "").trim();
-              const tn = String(th?.name || "").trim();
-              if (!n || /^كورس\s*\d+$/i.test(n) || (tn && (n === tn || n.includes(tn) || tn.includes(n)))) {
-                n = `كورس ${c.id}`;
+              let n = String(c.title || "").replace(/\s+/g, " ").trim();
+              const tn = String(th?.name || "").replace(/\s+/g, " ").trim();
+              if (tn) {
+                const first = tn.split(/\s+/).filter(Boolean)[0] || "";
+                n = n.replace(new RegExp("\\s*[-–—|]\\s*" + tn.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + "\\s*$", "i"), "");
+                n = n.replace(new RegExp("\\s+و\\s+" + tn.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + "\\s*$", "i"), "");
+                if (first.length >= 3) {
+                  n = n.replace(new RegExp("\\s*[-–—|]?\\s*(?:أ\\.?|د\\.?|مستر)?\\s*" + first.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + ".*$", "i"), "");
+                }
               }
+              n = n.replace(/\s*[-–—|]\s*(?:أ\.?|د\.?|مستر)\s*[\u0600-\u06FF].*$/u, "");
+              n = n.replace(/\s+و\s+(?:أ\.?|د\.?|مستر)\s*[\u0600-\u06FF].*$/u, "");
+              n = n.trim();
+              if (!n || /^كورس\s*\d+$/i.test(n) || (tn && (n === tn || tn.includes(n)))) n = `كورس ${c.id}`;
               return n;
             })(),
             image_url: c.image_url || null,
             teacher_name: th?.name || "",
-            lectures_count: c.lecturesCount || (c.lectures || []).length,
+            lectures_count: Number(c.lecturesCount || (c.lectures || []).length || 0),
+            lecture_count: Number(c.lecturesCount || (c.lectures || []).length || 0),
+            parts_count: Number(c.partsCount || 0),
             _courseId: String(c.id)
           }))
         : [{
@@ -3569,7 +3604,6 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
         for (const th of cat.teachers) lectures.push(...(th.lectures || []));
       }
       // كل عنصر = محاضرة بأقسام: الشرح / الحل / الامتحان / الملفات
-      const SECTION_ORDER = ["الشرح", "الحل", "الامتحان", "الملفات"];
       const data = lectures.map((lec, i) => {
         const parts = lec.parts || [];
         const main = parts.find((p) => (p.kind || "video") === "video") || parts.find((p) => p.kind !== "file") || null;
@@ -3577,34 +3611,32 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
         if (/^محاضرة\s*\d+/i.test(name) && main && main.title) name = main.title;
 
         const mapped = parts.map((p) => {
-          const kind = p.kind === "file" ? "file" : (p.kind === "exam" ? "exam" : (p.kind === "solution" ? "solution" : "video"));
-          let group = p.group || "الشرح";
-          if (kind === "file") group = "الملفات";
-          else if (kind === "exam") group = "الامتحان";
-          else if (kind === "solution") group = "الحل";
-          else if (!SECTION_ORDER.includes(group)) group = "الشرح";
+          const isFile = p.kind === "file" || /ملف/i.test(String(p.group || "")) || /ملف|pdf/i.test(String(p.title || ""));
+          const kind = isFile ? "file" : (p.kind || "video");
+          const group = isFile ? "الملفات" : (p.group || "الشرح");
           return {
             id: p.id,
             title: p.title,
             group,
             kind,
-            type: kind === "file" ? "file" : "video",
-            // الملفات متتفتحش في البلير
-            video_id: kind === "file" ? null : (p.videoId || p.id),
-            file_id: kind === "file" ? (p.id || p.videoId) : null,
+            type: isFile ? "file" : "video",
+            video_id: isFile ? null : (p.videoId || p.id),
+            file_id: isFile ? (p.id || p.videoId) : null,
             partNum: p.partNum,
-            is_file: kind === "file"
+            is_file: isFile
           };
         });
 
-        const bySection = new Map(SECTION_ORDER.map((s) => [s, []]));
+        // ترتيب الأقسام كما ظهرت في الموقع
+        const bySection = new Map();
         for (const p of mapped) {
           if (!bySection.has(p.group)) bySection.set(p.group, []);
           bySection.get(p.group).push(p);
         }
-        const sections = SECTION_ORDER
-          .filter((s) => (bySection.get(s) || []).length)
-          .map((s) => ({ title: s, items: bySection.get(s) }));
+        // الملفات في الآخر دائمًا
+        const sectionKeys = [...bySection.keys()].filter((k) => k !== "الملفات");
+        if (bySection.has("الملفات")) sectionKeys.push("الملفات");
+        const sections = sectionKeys.map((s) => ({ title: s, items: bySection.get(s) }));
 
         return {
           id: lec.id || `taleb_lec_${i}`,
