@@ -190,271 +190,331 @@ function extractImagesFromHtml(html, limit = 12) {
     if (/logo|icon|sprite|placeholder|flag|emoji|favicon|svg|1x1|pixel/i.test(u)) continue;
     if (!out.includes(u)) out.push(u);
   }
-  const og = html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
-    || html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-  if (og) {
-    const u = absUrl(og[1]);
-    if (u && !out.includes(u)) out.unshift(u);
-  }
-  // فضّل صور أكبر / avatars / uploads
-  out.sort((a, b) => {
-    const score = (u) => (/upload|avatar|teacher|course|storage|cdn|media/i.test(u) ? 2 : 0) + (/\d{3,}/.test(u) ? 1 : 0);
-    return score(b) - score(a);
-  });
   return out.slice(0, limit);
 }
 
-function extractTeacherCard(html, subjectSlug, id) {
-  const needle = `/subjects/${subjectSlug}/teachers/${id}`;
-  const idx = html.indexOf(needle);
-  let name = `مدرس ${id}`;
-  let image_url = null;
-  if (idx >= 0) {
-    // خُد بلوك أوسع حوالين رابط المدرس
-    const slice = html.slice(Math.max(0, idx - 1200), idx + 1200);
-    // 1) alt على صورة
-    const alt = slice.match(/alt=["']([^"']*[\u0600-\u06FF][^"']{1,60})["']/i);
-    if (alt) name = alt[1];
-    // 2) عناوين قريبة
-    if (name.startsWith("مدرس") || name.length < 4) {
-      const h = slice.match(/<(?:h[1-6]|p|span|div)[^>]*>\s*([أا]?\.?\s*[\u0600-\u06FF][\u0600-\u06FF\s.·]{2,40})\s*</i);
-      if (h) name = h[1];
-    }
-    // 3) أي نص عربي واضح في البلوك (بعد تنظيف)
-    if (name.startsWith("مدرس") || name.length < 4) {
-      const candidates = [...slice.matchAll(/[\u0600-\u06FF][\u0600-\u06FF\s.·]{2,40}/g)].map((x) => x[0].replace(/\s+/g, " ").trim());
-      const bad = /مادة|عرض|مدرس|فصل|كورس|محاضرة|اشتراك|دخول|رجوع|المتاحة|متاح/;
-      const good = candidates.find((c) => c.length >= 4 && c.length <= 40 && !bad.test(c));
-      if (good) name = good;
-    }
-    const imgs = extractImagesFromHtml(slice, 6);
-    if (imgs[0]) image_url = imgs[0];
-  }
-  // تطبيع ألقاب شائعة
-  name = cleanArName(name, `مدرس ${id}`);
-  name = name
-    .replace(/^أ\s*\.\s*/u, "أ. ")
-    .replace(/^د\s*\.\s*/u, "د. ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return { name, image_url };
-}
-
-function extractCourseCard(html, courseId) {
-  const needle = `/courses/${courseId}`;
-  // ابحث عن كل ظهور واختار أقرب بلوك فيه عنوان عربي واضح
-  let title = `كورس ${courseId}`;
-  let image_url = null;
-  let pos = 0;
-  const candidates = [];
-  while (true) {
-    const idx = html.indexOf(needle, pos);
-    if (idx < 0) break;
-    const slice = html.slice(Math.max(0, idx - 300), idx + 1200);
-    const imgs = extractImagesFromHtml(slice, 4);
-    // فضّل title / h2 / h3 / aria-label
-    let t =
-      (slice.match(/aria-label=["']([^"']*[\u0600-\u06FF][^"']{2,80})["']/i) || [])[1] ||
-      (slice.match(/<(?:h[1-6]|strong|b)[^>]*>\s*([^<]*[\u0600-\u06FF][^<]{2,80})\s*</i) || [])[1] ||
-      null;
-    if (!t) {
-      const ar = slice.match(/[\u0600-\u06FF][\u0600-\u06FF\s\w.+ـ\-]{3,80}/);
-      if (ar) t = ar[0];
-    }
-    if (t) {
-      t = cleanArName(t, "");
-      const bad = /عرض|تفاصيل|اشترك|دخول|رجوع|المزيد|مشاهدة/;
-      if (t && t.length >= 4 && !bad.test(t)) candidates.push({ title: t, image_url: imgs[0] || null, score: t.length });
-    } else if (imgs[0]) {
-      candidates.push({ title: `كورس ${courseId}`, image_url: imgs[0], score: 0 });
-    }
-    pos = idx + needle.length;
-  }
-  candidates.sort((a, b) => b.score - a.score);
-  if (candidates[0]) {
-    title = candidates[0].title;
-    image_url = candidates[0].image_url;
-  }
-  title = cleanArName(title, `كورس ${courseId}`);
-  return { title, image_url };
-}
-
-/** اكتشاف المواد من الصفحة الرئيسية */
-async function discoverSubjects() {
-  const html = await talebText(`${TALEB_BASE}/home`);
-  const slugs = [...new Set([...html.matchAll(/\/subjects\/([a-zA-Z0-9_-]+)/g)].map((m) => m[1]))];
-  const base = ["biology", "chemistry", "physics", "arabic", "english", "geology", "history", "geography", "math", "maths", "pure_math", "applied_math"];
-  for (const s of base) if (!slugs.includes(s)) slugs.push(s);
-  const filtered = slugs.filter((s) => s && s !== "teachers");
-  const images = {};
-  for (const slug of filtered) {
-    const idx = html.indexOf(`/subjects/${slug}`);
-    if (idx >= 0) {
-      const slice = html.slice(Math.max(0, idx - 400), idx + 600);
-      const imgs = extractImagesFromHtml(slice, 3);
-      if (imgs[0]) images[slug] = imgs[0];
-    }
-  }
-  return { slugs: filtered, images };
-}
-
-/** مدرسو مادة */
-async function discoverTeachers(subjectSlug) {
-  const html = await talebText(`${TALEB_BASE}/subjects/${encodeURIComponent(subjectSlug)}`);
-  // ids فريدة فقط
-  const ids = [...new Set([...html.matchAll(new RegExp(`/subjects/${subjectSlug}/teachers/(\\d+)`, "g"))].map((m) => m[1]))];
-  const byId = new Map();
-  for (const id of ids) {
-    const card = extractTeacherCard(html, subjectSlug, id);
-    let name = card.name || `مدرس ${id}`;
-    // رفض أسماء UI
-    if (/رجوع|المواد|عرض|اختر|متاح|فصل/i.test(name)) name = `مدرس ${id}`;
-    byId.set(String(id), {
-      id: `taleb_t_${subjectSlug}_${id}`,
-      numericId: String(id),
-      name,
-      image_url: card.image_url || null,
-      subjectId: subjectSlug,
-      subjectSlug
-    });
-  }
-  // دمج بالاسم المتشابه (نفس المدرس ظهر أكتر من مرة)
-  const list = [...byId.values()];
-  const merged = [];
-  const used = new Set();
-  for (const th of list) {
-    if (used.has(th.numericId)) continue;
-    const norm = String(th.name || "").replace(/[^\u0600-\u06FFa-zA-Z]/g, "").toLowerCase();
-    const dup = merged.find((x) => {
-      const n2 = String(x.name || "").replace(/[^\u0600-\u06FFa-zA-Z]/g, "").toLowerCase();
-      return n2 && norm && (n2 === norm || n2.includes(norm) || norm.includes(n2));
-    });
-    if (dup) {
-      // احتفظ باللي عنده صورة أو اسم أطول
-      if ((!dup.image_url && th.image_url) || (th.name.length > dup.name.length)) {
-        dup.name = th.name;
-        if (th.image_url) dup.image_url = th.image_url;
+function extractHomeCatalog(html) {
+  function pyUnescape(s) {
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] !== "\\") { out += s[i]; continue; }
+      const n = s[i + 1];
+      if (n === "u" && /^[0-9a-fA-F]{4}/.test(s.slice(i + 2, i + 6))) {
+        out += String.fromCharCode(parseInt(s.slice(i + 2, i + 6), 16));
+        i += 5; continue;
       }
-      used.add(th.numericId);
-      continue;
+      if (n === '"') { out += '"'; i++; continue; }
+      if (n === "\\") { out += "\\"; i++; continue; }
+      if (n === "/") { out += "/"; i++; continue; }
+      if (n === "n") { out += "\n"; i++; continue; }
+      if (n === "r") { out += "\r"; i++; continue; }
+      if (n === "t") { out += "\t"; i++; continue; }
+      if (n != null) { out += n; i++; continue; }
+      out += "\\";
     }
-    used.add(th.numericId);
-    merged.push(th);
+    return out;
   }
-  return merged;
+  function extractBetween(key, nextKey) {
+    const startTok = key + '\\":';
+    let a = html.indexOf(startTok);
+    if (a < 0) return [];
+    a = html.indexOf("[", a);
+    if (a < 0) return [];
+    let b;
+    if (nextKey) {
+      const endTok = ',\\"' + nextKey + '\\":';
+      b = html.indexOf(endTok, a);
+      if (b < 0) return [];
+    } else {
+      b = Math.min(html.length, a + 400000);
+    }
+    const raw = html.slice(a, b);
+    const last = raw.lastIndexOf("]");
+    if (last < 0) return [];
+    const arrRaw = raw.slice(0, last + 1);
+    try {
+      return JSON.parse(pyUnescape(arrRaw));
+    } catch (e) {
+      console.warn("[catalog] parse", key, e && e.message);
+      return [];
+    }
+  }
+  return {
+    subjects: extractBetween("subjects", "teachers"),
+    teachers: extractBetween("teachers", "courses"),
+    courses: extractBetween("courses", "lectures")
+  };
 }
 
-/** كورسات مدرس */
-async function discoverCourses(subjectSlug, teacherNumericId) {
-  const url = `${TALEB_BASE}/subjects/${encodeURIComponent(subjectSlug)}/teachers/${teacherNumericId}`;
-  const html = await talebText(url);
-  // خُد روابط الكورسات من صفحة المدرس فقط — ومتكررش
-  const ids = [...new Set([...html.matchAll(/\/courses\/(\d+)/g)].map((m) => m[1]))];
-  const courses = [];
-  for (const id of ids) {
-    const card = extractCourseCard(html, id);
-    // لو العنوان لسه "كورس N" سيبه فاضي — parseCourseParts هيصلّحه من <title>
-    let title = card.title || "";
-    if (/^كورس\s*\d+$/i.test(title)) title = "";
-    courses.push({
-      id: String(id),
-      title,
-      image_url: card.image_url || null,
-      subjectSlug,
-      teacherNumericId: String(teacherNumericId)
-    });
-  }
-  return courses;
+function parseSourceRefNumber(ref, prefix) {
+  const s = String(ref || "");
+  // c:864 | t:159 | th:t:50 | th:c:400
+  const re = new RegExp("(?:^|:)" + prefix + ":(\\d+)(?:$|[^0-9])", "i");
+  const m = s.match(re);
+  if (m) return m[1];
+  const re2 = new RegExp(prefix + ":(\\d+)", "i");
+  const m2 = s.match(re2);
+  return m2 ? m2[1] : null;
 }
 
-/** محاضرات/أجزاء كورس — بنفس تقسيم طالب برو (مجموعات + عناصر) */
 async function parseCourseParts(courseId) {
   const html = await talebText(`${TALEB_BASE}/courses/${courseId}`, 45_000);
   let courseTitle = "";
-  const h1 = html.match(/<h1[^>]*>\s*([^<]{3,120})\s*<\/h1>/i);
+  const h1 = html.match(/<h1[^>]*>\\s*([^<]{3,120})\\s*<\\/h1>/i);
   if (h1) courseTitle = h1[1];
   if (!courseTitle) {
-    const og = html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i)
-      || html.match(/content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
+    const og = html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
     if (og) courseTitle = og[1];
   }
   if (!courseTitle) {
-    const titleM = html.match(/<title>([^<]+)<\/title>/i);
+    const titleM = html.match(/<title>([^<]+)<\\/title>/i);
     if (titleM) courseTitle = titleM[1];
   }
-  courseTitle = String(courseTitle || "")
-    .replace(/\s*[|\-]\s*.*$/i, "")
-    .replace(/طالب\s*برو/gi, "")
-    .replace(/talep\.pro/gi, "")
-    .trim();
-  courseTitle = cleanArName(courseTitle, `كورس ${courseId}`);
-  // لو لسه رقم فقط
-  if (/^كورس\s*\d+$/i.test(courseTitle)) {
-    const ar = html.match(/<(?:h1|h2|h3)[^>]*>\s*([^<]*[\u0600-\u06FF][^<]{2,80})\s*</i);
-    if (ar) courseTitle = cleanArName(ar[1], courseTitle);
-  }
+  courseTitle = cleanArName(String(courseTitle || "").replace(/\\s*[|\\-]\\s*.*$/i, "").replace(/طالب\\s*برو/gi, "").trim(), `كورس ${courseId}`);
   const imgs = extractImagesFromHtml(html, 6);
   const courseImage = imgs[0] || null;
 
-  // جمع كل روابط المشاهدة مع سياق قريب لاستخراج العنوان والمجموعة
   const items = [];
-  const linkRe = /href="(\/watch\/(\d+)\/(\d+)\/(\d+))"/g;
+  const linkRe = /href="(\\/watch\\/(\\d+)\\/(\\d+)\\/(\\d+))"/g;
   let m;
   const seen = new Set();
   while ((m = linkRe.exec(html))) {
-    const watchPath = m[1];
     const cId = m[2], lec = m[3], part = m[4];
+    if (String(cId) !== String(courseId)) continue;
     const key = `${cId}/${lec}/${part}`;
     if (seen.has(key)) continue;
     seen.add(key);
-
-    const around = html.slice(Math.max(0, m.index - 500), Math.min(html.length, m.index + 500));
-    // عنوان العنصر
+    const around = html.slice(Math.max(0, m.index - 800), Math.min(html.length, m.index + 600));
     let title =
       (around.match(/cv-item-title[^>]*>([^<]+)</i) || [])[1] ||
       (around.match(/<span[^>]*class="[^"]*title[^"]*"[^>]*>([^<]+)</i) || [])[1] ||
-      (around.match(/aria-label=["']([^"']+)["']/i) || [])[1] ||
       null;
     if (!title) {
-      const ar = around.match(/[\u0600-\u06FF][\u0600-\u06FF\s\w.+\-ـ]{3,70}/);
+      const ar = around.match(/[\\u0600-\\u06FF][\\u0600-\\u06FF\\s\\w.+\\-ـ]{3,70}/);
       if (ar) title = ar[0];
     }
     title = cleanArName(title || `محاضرة ${lec} — جزء ${part}`, `محاضرة ${lec} — جزء ${part}`);
-
-    // اسم المجموعة (شرح / حل أسئلة / ملفات...)
     let group = null;
-    const g1 = around.match(/cv-group-title[^>]*>([^<]+)/i);
-    if (g1) group = cleanArName(g1[1], null);
+    const before = html.slice(Math.max(0, m.index - 3000), m.index);
+    const allG = [...before.matchAll(/cv-group-title[^>]*>([^<]+)/gi)];
+    if (allG.length) group = cleanArName(allG[allG.length - 1][1], null);
     if (!group) {
-      // ابحث للخلف عن آخر group title قبل الرابط
-      const before = html.slice(Math.max(0, m.index - 2500), m.index);
-      const allG = [...before.matchAll(/cv-group-title[^>]*>([^<]+)/gi)];
-      if (allG.length) group = cleanArName(allG[allG.length - 1][1], null);
+      const sec = before.match(/(شرح\\s*المحاضرة|حل\\s*الأسئلة[^<]*|حل\\s*الكتب|الملفات[^<]*|المذكرات|امتحان|التقييم)/i);
+      if (sec) group = cleanArName(sec[1], null);
     }
-
-    // نوع تقريبي
     let kind = "video";
-    if (/ملف|pdf|مذكر|سبورة|كتاب/i.test(title) || /ملف|pdf/i.test(group || "")) kind = "file";
-
+    if (/ملف|pdf|مذكر|سبورة/i.test(title) || /ملف|مذكر/i.test(group || "")) kind = "file";
+    else if (/امتحان|اختبار|تقييم/i.test(title) || /امتحان|تقييم/i.test(group || "")) kind = "exam";
+    else if (/حل/i.test(group || "")) kind = "solution";
     items.push({
-      courseId: cId,
-      lectureNum: lec,
-      partNum: part,
+      courseId: String(cId),
+      lectureNum: String(lec),
+      partNum: String(part),
       title,
-      group: group || null,
+      group: group || "شرح المحاضرة",
       kind,
-      watchPath
+      watchPath: m[1]
+    });
+  }
+  items.sort((a, b) => Number(a.lectureNum) - Number(b.lectureNum) || Number(a.partNum) - Number(b.partNum));
+  const groups = [...html.matchAll(/cv-group-title[^>]*>([^<]+)/g)].map((x) => cleanArName(x[1], x[1].trim())).filter(Boolean);
+  return { courseTitle, items, groups, courseImage };
+}
+
+function ensureTeacher(subjects, teachersFlat, subjectSlug, name) {
+  const first = String(name).split(/\\s+/).filter(Boolean)[0] || name;
+  const exists = teachersFlat.some((t) =>
+    String(t.subjectSlug || t.subjectId) === subjectSlug &&
+    String(t.name || "").includes(first)
+  );
+  if (exists) return;
+  const teacherObj = {
+    id: `taleb_t_${subjectSlug}_manual_${String(name).replace(/\\s+/g, "_")}`,
+    name,
+    image_url: null,
+    subjectId: subjectSlug,
+    subjectSlug,
+    numericId: null,
+    courses: [],
+    lectures: [],
+    manual: true
+  };
+  teachersFlat.push(teacherObj);
+  let sub = subjects.find((s) => s.id === subjectSlug);
+  if (!sub) {
+    sub = { id: subjectSlug, name: subjectNameAr(subjectSlug), image_url: null, teachers: [] };
+    subjects.push(sub);
+  }
+  (sub.teachers = sub.teachers || []).push(teacherObj);
+}
+
+export async function crawlTalebFullCatalog() {
+  const nowMs = Date.now();
+  if (catalogCache.data && nowMs < catalogCache.exp) return catalogCache.data;
+
+  console.log("[catalog] refresh start (home-json)");
+  const html = await talebText(`${TALEB_BASE}/home`);
+  const home = extractHomeCatalog(html);
+  const subjectRows = Array.isArray(home.subjects) ? home.subjects : [];
+  const teacherRows = Array.isArray(home.teachers) ? home.teachers : [];
+  const courseRows = Array.isArray(home.courses) ? home.courses : [];
+  console.log("[catalog] home parsed", { subjects: subjectRows.length, teachers: teacherRows.length, courses: courseRows.length });
+
+  const teacherByUuid = new Map();
+  for (const tr of teacherRows) {
+    const uuid = String(tr.id || "");
+    if (!uuid) continue;
+    const numericId = parseSourceRefNumber(tr.sourceRef, "t") || (tr.number != null ? String(tr.number) : null);
+    teacherByUuid.set(uuid, {
+      uuid,
+      numericId: numericId ? String(numericId) : null,
+      name: cleanArName(tr.name || "", tr.name || "مدرس"),
+      image_url: absUrl(tr.image || "") || null
     });
   }
 
-  // رتب حسب رقم المحاضرة ثم الجزء
-  items.sort((a, b) => Number(a.lectureNum) - Number(b.lectureNum) || Number(a.partNum) - Number(b.partNum));
+  const coursesByTeacher = new Map();
+  for (const cr of courseRows) {
+    if (cr.status && String(cr.status).toLowerCase() !== "published") continue;
+    const tid = String(cr.teacherId || "");
+    if (!tid) continue;
+    const num = parseSourceRefNumber(cr.sourceRef, "c");
+    if (!num) continue;
+    const row = {
+      id: String(num),
+      uuid: String(cr.id || ""),
+      title: cleanArName(cr.title || "", `كورس ${num}`),
+      image_url: absUrl(cr.image || "") || null,
+      subjectId: cr.subjectId || null,
+      teacherId: tid,
+      position: cr.position ?? 0
+    };
+    if (!coursesByTeacher.has(tid)) coursesByTeacher.set(tid, []);
+    coursesByTeacher.get(tid).push(row);
+  }
+  for (const [, arr] of coursesByTeacher) arr.sort((a, b) => (a.position - b.position) || Number(a.id) - Number(b.id));
 
-  // مجموعات العناوين العامة
-  const groups = [...html.matchAll(/cv-group-title[^>]*>([^<]+)/g)].map((x) => cleanArName(x[1], x[1].trim())).filter(Boolean);
+  const subjects = [];
+  const teachersFlat = [];
 
-  return { courseTitle, items, groups, courseImage };
+  for (const sr of subjectRows) {
+    const slug = String(sr.id || "");
+    if (!slug) continue;
+    const subjectTeachers = [];
+    for (const tid of (sr.teacherIds || [])) {
+      const meta = teacherByUuid.get(String(tid));
+      if (!meta) continue;
+      const subjectCourses = (coursesByTeacher.get(String(tid)) || []).filter((c) => !c.subjectId || c.subjectId === slug);
+
+      const courseDetails = await mapPool(subjectCourses, COURSE_CONCURRENCY, async (c) => {
+        try {
+          const parsed = await parseCourseParts(c.id);
+          const finalTitle = (c.title && !/^كورس\\s*\\d+$/i.test(c.title))
+            ? c.title
+            : ((parsed.courseTitle && !/^كورس\\s*\\d+$/i.test(parsed.courseTitle)) ? parsed.courseTitle : (c.title || `كورس ${c.id}`));
+          return {
+            ...c,
+            title: finalTitle,
+            image_url: c.image_url || parsed.courseImage || null,
+            parts: (parsed.items || []).filter((it) => String(it.courseId) === String(c.id)),
+            groups: parsed.groups || []
+          };
+        } catch {
+          return { ...c, parts: [], groups: [] };
+        }
+      });
+
+      const lectures = [];
+      const coursesOut = [];
+      for (const c of courseDetails) {
+        const byLec = new Map();
+        for (const p of c.parts || []) {
+          const ln = String(p.lectureNum);
+          if (!byLec.has(ln)) byLec.set(ln, []);
+          byLec.get(ln).push(p);
+        }
+        const courseLectures = [];
+        for (const ln of [...byLec.keys()].sort((a, b) => Number(a) - Number(b))) {
+          const parts = (byLec.get(ln) || []).sort((a, b) => Number(a.partNum) - Number(b.partNum));
+          const main = parts.find((p) => p.kind === "video") || parts[0];
+          const lecTitle = cleanArName(main?.title || `محاضرة ${ln}`, `محاضرة ${ln}`);
+          const lec = {
+            id: `taleb_lec_${c.id}_${ln}`,
+            title: lecTitle.slice(0, 120),
+            courseId: String(c.id),
+            lectureNum: String(ln),
+            courseTitle: c.title,
+            image_url: c.image_url || null,
+            parts: parts.map((p) => ({
+              id: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`,
+              title: p.title,
+              group: p.group || null,
+              kind: p.kind || "video",
+              courseId: String(p.courseId),
+              lectureNum: String(p.lectureNum),
+              partNum: String(p.partNum),
+              watchPath: p.watchPath,
+              videoId: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
+            }))
+          };
+          courseLectures.push(lec);
+          lectures.push(lec);
+        }
+        coursesOut.push({
+          id: String(c.id),
+          title: c.title,
+          image_url: c.image_url || null,
+          partsCount: (c.parts || []).length,
+          lecturesCount: courseLectures.length,
+          lectures: courseLectures
+        });
+      }
+
+      const teacherObj = {
+        id: `taleb_t_${slug}_${meta.numericId || meta.uuid.slice(0, 8)}`,
+        uuid: meta.uuid,
+        name: meta.name,
+        image_url: meta.image_url,
+        subjectId: slug,
+        subjectSlug: slug,
+        numericId: meta.numericId,
+        courses: coursesOut,
+        lectures
+      };
+      subjectTeachers.push(teacherObj);
+      teachersFlat.push(teacherObj);
+    }
+
+    subjects.push({
+      id: slug,
+      name: sr.name || subjectNameAr(slug),
+      image_url: absUrl(sr.image || "") || null,
+      teachers: subjectTeachers
+    });
+  }
+
+  ensureTeacher(subjects, teachersFlat, "biology", "أحمد رضوان");
+  ensureTeacher(subjects, teachersFlat, "biology", "حسام عيسى");
+  ensureTeacher(subjects, teachersFlat, "english", "شريف المصري");
+
+  const data = {
+    subjects,
+    teachers: teachersFlat,
+    crawledAt: nowMs,
+    stats: {
+      subjects: subjects.length,
+      teachers: teachersFlat.length,
+      courses: teachersFlat.reduce((a, t) => a + (t.courses || []).length, 0),
+      lectures: teachersFlat.reduce((a, t) => a + (t.lectures || []).length, 0),
+      parts: teachersFlat.reduce((a, t) => a + (t.lectures || []).reduce((b, l) => b + (l.parts || []).length, 0), 0)
+    }
+  };
+  console.log("[catalog] ready", data.stats);
+  catalogCache.data = data;
+  catalogCache.exp = nowMs + 30 * 60_000;
+  return data;
 }
+
 
 /** تحويل مسار watch → UUID الجزء (part.id) */
 export async function resolveTalebPartId(courseId, lectureNum, partNum) {
