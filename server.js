@@ -3280,14 +3280,23 @@ async function getTalebCatalog() {
     })),
     lectures: th.lectures || []
   }));
-  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology"];
+  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology","mathematics","math","pure_math","applied_math","statistics"];
   const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
   const allowed = new Set(SUBJECT_ORDER);
   const subjects = [...(cat.subjects || [])]
-    .filter((s) => allowed.has(String(s.id || "")))
+    .filter((s) => {
+      const id = String(s.id || "").toLowerCase();
+      return allowed.has(id) || /math|رياض/i.test(id) || /رياض/i.test(String(s.name || ""));
+    })
     .sort((a, b) => {
-      const ra = rank.has(a.id) ? rank.get(a.id) : 100;
-      const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+      const rankOf = (id) => {
+        const s = String(id || "").toLowerCase();
+        if (rank.has(s)) return rank.get(s);
+        if (/math|رياض/i.test(s)) return rank.get("mathematics") ?? 50;
+        return 100;
+      };
+      const ra = rankOf(a.id);
+      const rb = rankOf(b.id);
       if (ra !== rb) return ra - rb;
       return String(a.name || "").localeCompare(String(b.name || ""), "ar");
     });
