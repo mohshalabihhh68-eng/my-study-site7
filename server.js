@@ -56,6 +56,7 @@ import {
   buildTalebSourceFromAnyId,
   getTalebTeachers,
   crawlTalebFullCatalog,
+  clearTalebCatalogCache,
   getTalebKey,
   getTalebPlaylist,
   resolveTalebPartId,
@@ -3387,8 +3388,21 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
         name: th.name,
         image_url: th.image_url || null,
         chapter_count: (th.courses && th.courses.length) ? th.courses.length : (th.lectures || []).length,
-        subject_id: th.subjectId || sid
+        subject_id: th.subjectId || sid,
+        _numericId: th.numericId || null
       }));
+      // إزالة تكرار الاسم/الرقم
+      {
+        const out = [];
+        const seen = new Set();
+        for (const th of list) {
+          const key = (String(th.name || "").replace(/[^\u0600-\u06FFa-zA-Z]/g, "").toLowerCase()) || String(th.id);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(th);
+        }
+        list = out;
+      }
       // دمج د. حسام عيسى ضمن مدرسي الأحياء (Bunny) حتى لو مش ظاهر في زحف طالب برو
       const isBio = sid === "biology" || /أحياء|احياء/i.test(String(sid));
       if (isBio || sid === "all" || sid === "0") {
@@ -3607,6 +3621,23 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
         if (lecture) break;
       }
       if (lecture && Array.isArray(lecture.parts) && lecture.parts.length) {
+        // تنظيم زي طالب برو: مجموعات (شرح / حل / ملفات) داخل المحاضرة
+        const groupMap = new Map();
+        for (const p of lecture.parts) {
+          const g = p.group || "شرح المحاضرة";
+          if (!groupMap.has(g)) groupMap.set(g, []);
+          groupMap.get(g).push(p);
+        }
+        const groups = [...groupMap.entries()].map(([gName, parts]) => ({
+          name: gName,
+          items: parts.map((p, i) => ({
+            id: p.videoId || p.id,
+            video_id: p.videoId || p.id,
+            name: p.title || `جزء ${i + 1}`,
+            type: (p.kind === "file" ? "file" : "video"),
+            platform: "stream"
+          }))
+        }));
         return res.json({
           success: true,
           message: "Success",
@@ -3615,11 +3646,13 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
             name: lecture.title || "محاضرة",
             image_url: lecture.image_url || null,
             course_id: lecture.courseId || null,
+            groups,
             videos: lecture.parts.map((p, i) => ({
               id: p.videoId || p.id,
               video_id: p.videoId || p.id,
               name: p.title || `جزء ${i + 1}`,
-              type: "video",
+              group: p.group || null,
+              type: (p.kind === "file" ? "file" : "video"),
               platform: "stream"
             }))
           },
@@ -7122,6 +7155,7 @@ if (!isVercel) {
     console.log(`[API ${APP_VERSION}] ${HOST}:${PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
     // تسخين كتالوج taleb في الخلفية
+    try { clearTalebCatalogCache(); } catch {}
     crawlTalebFullCatalog()
       .then((c) => console.log("[catalog] warm ok", c.stats))
       .catch(() => console.warn("[catalog] warm skipped"));
