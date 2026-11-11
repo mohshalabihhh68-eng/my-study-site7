@@ -3264,7 +3264,15 @@ async function getTalebCatalog() {
     })),
     lectures: th.lectures || []
   }));
-  const out = { subjects: cat.subjects, teachers, stats: cat.stats };
+  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology","geology","mathematics","math","statistics","history","geography","philosophy","psychology"];
+  const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
+  const subjects = [...(cat.subjects || [])].sort((a, b) => {
+    const ra = rank.has(a.id) ? rank.get(a.id) : 100;
+    const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+    if (ra !== rb) return ra - rb;
+    return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+  });
+  const out = { subjects, teachers, stats: cat.stats };
   return maskTreeImages(out);
 }
 function subjectNameAr(sid) {
@@ -3494,7 +3502,14 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
             .filter((c) => c && c.title && !/رجوع|عرض المواد|اختر/i.test(String(c.title)))
             .map((c) => ({
             id: `taleb_course_${c.id}`,
-            name: c.title || `كورس ${c.id}`,
+            name: (function () {
+              let n = String(c.title || "").trim();
+              const tn = String(th?.name || "").trim();
+              if (!n || /^كورس\s*\d+$/i.test(n) || (tn && (n === tn || n.includes(tn) || tn.includes(n)))) {
+                n = `كورس ${c.id}`;
+              }
+              return n;
+            })(),
             image_url: c.image_url || null,
             teacher_name: th?.name || "",
             lectures_count: c.lecturesCount || (c.lectures || []).length,
@@ -3553,28 +3568,53 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
       } else {
         for (const th of cat.teachers) lectures.push(...(th.lectures || []));
       }
-      // كل عنصر = محاضرة؛ لو فيها أكتر من جزء نستخدم أول جزء كفيديو رئيسي
+      // كل عنصر = محاضرة بأقسام: الشرح / الحل / الامتحان / الملفات
+      const SECTION_ORDER = ["الشرح", "الحل", "الامتحان", "الملفات"];
       const data = lectures.map((lec, i) => {
         const parts = lec.parts || [];
-        const main = parts.find((p) => (p.kind || "video") === "video") || parts[0] || null;
-        // عنوان المحاضرة: فضّل عنوان واضح مش "جزء 1"
+        const main = parts.find((p) => (p.kind || "video") === "video") || parts.find((p) => p.kind !== "file") || null;
         let name = lec.title || `محاضرة ${lec.lectureNum || i + 1}`;
         if (/^محاضرة\s*\d+/i.test(name) && main && main.title) name = main.title;
+
+        const mapped = parts.map((p) => {
+          const kind = p.kind === "file" ? "file" : (p.kind === "exam" ? "exam" : (p.kind === "solution" ? "solution" : "video"));
+          let group = p.group || "الشرح";
+          if (kind === "file") group = "الملفات";
+          else if (kind === "exam") group = "الامتحان";
+          else if (kind === "solution") group = "الحل";
+          else if (!SECTION_ORDER.includes(group)) group = "الشرح";
+          return {
+            id: p.id,
+            title: p.title,
+            group,
+            kind,
+            type: kind === "file" ? "file" : "video",
+            // الملفات متتفتحش في البلير
+            video_id: kind === "file" ? null : (p.videoId || p.id),
+            file_id: kind === "file" ? (p.id || p.videoId) : null,
+            partNum: p.partNum,
+            is_file: kind === "file"
+          };
+        });
+
+        const bySection = new Map(SECTION_ORDER.map((s) => [s, []]));
+        for (const p of mapped) {
+          if (!bySection.has(p.group)) bySection.set(p.group, []);
+          bySection.get(p.group).push(p);
+        }
+        const sections = SECTION_ORDER
+          .filter((s) => (bySection.get(s) || []).length)
+          .map((s) => ({ title: s, items: bySection.get(s) }));
+
         return {
           id: lec.id || `taleb_lec_${i}`,
           name,
           title: name,
           image_url: lec.image_url || null,
-          video_id: main ? (main.videoId || main.id) : null,
-          parts_count: parts.length,
-          parts: parts.map((p) => ({
-            id: p.id,
-            title: p.title,
-            group: p.group || null,
-            kind: p.kind || "video",
-            video_id: p.videoId || p.id,
-            partNum: p.partNum
-          })),
+          video_id: main && main.kind !== "file" ? (main.videoId || main.id) : null,
+          parts_count: mapped.length,
+          parts: mapped,
+          sections,
           is_published: true,
           course_id: lec.courseId || null,
           lecture_num: lec.lectureNum || null
