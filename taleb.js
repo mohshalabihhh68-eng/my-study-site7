@@ -711,33 +711,16 @@ export async function crawlTalebFullCatalog() {
       const subjectCourses = (coursesByTeacher.get(String(tid)) || [])
         .filter((c) => !c.subjectId || c.subjectId === slug);
 
-      const courseDetails = await mapPool(subjectCourses, COURSE_CONCURRENCY, async (c) => {
-        try {
-          const parsed = await parseCourseParts(c.id);
-          let finalTitle = c.title || "";
-          const parsedTitle = parsed.courseTitle || "";
-          if (looksLikeTeacherName(finalTitle, meta.name)) {
-            if (parsedTitle && !looksLikeTeacherName(parsedTitle, meta.name)) finalTitle = parsedTitle;
-            else if (parsedTitle) finalTitle = parsedTitle;
-            else finalTitle = `كورس ${c.id}`;
-          } else if (!finalTitle || /^كورس\s*\d+$/i.test(finalTitle)) {
-            if (parsedTitle && !looksLikeTeacherName(parsedTitle, meta.name) && !/^كورس\s*\d+$/i.test(parsedTitle)) {
-              finalTitle = parsedTitle;
-            } else {
-              finalTitle = finalTitle || parsedTitle || `كورس ${c.id}`;
-            }
-          }
-          return {
-            ...c,
-            title: finalTitle,
-            image_url: c.image_url || parsed.courseImage || null,
-            parts: (parsed.items || []).filter((it) => String(it.courseId) === String(c.id)),
-            groups: parsed.groups || []
-          };
-        } catch {
-          return { ...c, parts: [], groups: [] };
-        }
-      });
+      // سريع: من غير زيارة كل صفحة كورس (المحتوى يتأجل عند فتح المحاضرة)
+      const courseDetails = subjectCourses.map((c) => ({
+        ...c,
+        title: cleanCourseTitle(c.title, meta.name, c.id),
+        image_url: c.image_url || null,
+        parts: [],
+        groups: [],
+        lecturesCount: 0,
+        partsCount: 0
+      }));
 
       const lectures = [];
       const coursesOut = [];
@@ -849,6 +832,81 @@ export async function crawlTalebFullCatalog() {
 }
 
 
+
+
+
+/** تحميل محتوى كورس عند الطلب (محاضرات + أجزاء) */
+const coursePartsCache = new Map();
+export async function ensureCourseLectures(courseId, teacherName = "") {
+  const cid = String(courseId);
+  if (coursePartsCache.has(cid)) return coursePartsCache.get(cid);
+  try {
+    const parsed = await parseCourseParts(cid);
+    const byLec = new Map();
+    for (const p of (parsed.items || [])) {
+      if (String(p.courseId) !== cid) continue;
+      const ln = String(p.lectureNum);
+      if (!byLec.has(ln)) byLec.set(ln, []);
+      byLec.get(ln).push(p);
+    }
+    const lectures = [];
+    for (const ln of [...byLec.keys()].sort((a, b) => Number(a) - Number(b))) {
+      const parts = (byLec.get(ln) || []).sort((a, b) => Number(a.partNum) - Number(b.partNum));
+      const lecTitle = cleanArName(
+        parts[0]?.lectureTitle || parts.find((x) => x.kind === "video")?.title || `محاضرة ${ln}`,
+        `محاضرة ${ln}`
+      );
+      lectures.push({
+        id: `taleb_lec_${cid}_${ln}`,
+        title: lecTitle.slice(0, 120),
+        courseId: cid,
+        lectureNum: String(ln),
+        courseTitle: cleanCourseTitle(parsed.courseTitle || "", teacherName, cid),
+        image_url: parsed.courseImage || null,
+        parts: parts.map((p) => ({
+          id: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`,
+          title: p.title,
+          group: p.group || null,
+          kind: p.kind || "video",
+          courseId: String(p.courseId),
+          lectureNum: String(p.lectureNum),
+          partNum: String(p.partNum),
+          watchPath: p.watchPath,
+          videoId: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
+        }))
+      });
+    }
+    const out = {
+      lectures,
+      title: cleanCourseTitle(parsed.courseTitle || "", teacherName, cid),
+      image_url: parsed.courseImage || null,
+      lecturesCount: lectures.length,
+      partsCount: lectures.reduce((a, l) => a + (l.parts || []).length, 0)
+    };
+    coursePartsCache.set(cid, out);
+    // حدّث الكاش العام لو موجود
+    if (catalogCache.data) {
+      for (const th of catalogCache.data.teachers || []) {
+        const c = (th.courses || []).find((x) => String(x.id) === cid);
+        if (c) {
+          c.lectures = lectures;
+          c.lecturesCount = out.lecturesCount;
+          c.partsCount = out.partsCount;
+          if (out.title && !looksLikeTeacherName(out.title, th.name)) c.title = out.title;
+          if (out.image_url) c.image_url = out.image_url;
+        }
+        // sync flat lectures list for this course
+        th.lectures = (th.lectures || []).filter((l) => String(l.courseId) !== cid).concat(lectures);
+      }
+    }
+    return out;
+  } catch (e) {
+    console.warn("[catalog] ensureCourseLectures", cid, e && e.message);
+    const empty = { lectures: [], title: `كورس ${cid}`, image_url: null, lecturesCount: 0, partsCount: 0 };
+    coursePartsCache.set(cid, empty);
+    return empty;
+  }
+}
 
 export async function resolveTalebPartId(courseId, lectureNum, partNum) {
   const key = `${courseId}/${lectureNum}/${partNum}`;
