@@ -28,8 +28,9 @@ const SUBJECT_NAME_AR = {
   biology: "أحياء",
   chemistry: "كيمياء",
   physics: "فيزياء",
-  math: "رياضة",
-  maths: "رياضة",
+  math: "رياضيات",
+  maths: "رياضيات",
+  mathematics: "رياضيات",
   arabic: "عربي",
   english: "إنجليزي",
   french: "فرنساوي",
@@ -160,16 +161,35 @@ function subjectNameAr(sid) {
   return SUBJECT_NAME_AR[String(sid || "").toLowerCase()] || String(sid || "مادة");
 }
 
-const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology"];
+const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology", "mathematics", "math", "pure_math", "applied_math", "statistics"];
 const SUBJECT_ALLOWED = new Set(SUBJECT_ORDER);
+
+/** توحيد slug الرياضيات */
+function normalizeSubjectSlug(id) {
+  const s = String(id || "").toLowerCase();
+  if (s === "math" || s === "maths" || s === "mathematics" || s === "pure_math" || s === "applied_math") {
+    // نفضّل mathematics كمعرّف موحّد لو موجود، وإلا نسيب الأصلي
+    return s === "maths" ? "mathematics" : s;
+  }
+  return s;
+}
 
 function sortSubjects(list) {
   const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
+  const rankOf = (id) => {
+    const s = String(id || "").toLowerCase();
+    if (rank.has(s)) return rank.get(s);
+    if (/math|رياض/i.test(s)) return rank.get("mathematics") ?? 50;
+    return 100;
+  };
   return [...(list || [])]
-    .filter((s) => SUBJECT_ALLOWED.has(String(s.id || "")))
+    .filter((s) => {
+      const id = String(s.id || "").toLowerCase();
+      return SUBJECT_ALLOWED.has(id) || /math|رياض/i.test(id) || /رياض/i.test(String(s.name || ""));
+    })
     .sort((a, b) => {
-      const ra = rank.has(a.id) ? rank.get(a.id) : 100;
-      const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+      const ra = rankOf(a.id);
+      const rb = rankOf(b.id);
       if (ra !== rb) return ra - rb;
       return String(a.name || "").localeCompare(String(b.name || ""), "ar");
     });
@@ -572,7 +592,7 @@ export async function crawlTalebFullCatalog() {
   // ——— Fallback: زحف HTML لو JSON فاضي ———
   if (!subjectRows.length || !teacherRows.length) {
     console.warn("[catalog] fallback HTML crawl");
-    const baseSlugs = ["arabic", "english", "chemistry", "physics", "biology"];
+    const baseSlugs = ["arabic", "english", "chemistry", "physics", "biology", "mathematics", "math", "pure_math", "applied_math"];
     const slugSet = new Set(baseSlugs);
     if (html) {
       for (const m of html.matchAll(/\/subjects\/([a-zA-Z0-9_-]+)/g)) {
@@ -710,7 +730,10 @@ export async function crawlTalebFullCatalog() {
   }
 
   // المواد الأساسية فقط
-  subjectRows = subjectRows.filter((sr) => SUBJECT_ALLOWED.has(String(sr.id || "")));
+  subjectRows = subjectRows.filter((sr) => {
+    const id = String(sr.id || "").toLowerCase();
+    return SUBJECT_ALLOWED.has(id) || /math|رياض/i.test(id) || /رياض/i.test(String(sr.name || ""));
+  });
   // لو JSON رجّع فاضي للمواد المسموحة، كمّل من القائمة
   if (!subjectRows.length) {
     subjectRows = SUBJECT_ORDER.map((id, i) => ({ id, name: subjectNameAr(id), image: null, position: i, teacherIds: [] }));
