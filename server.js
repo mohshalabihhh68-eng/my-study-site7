@@ -56,6 +56,7 @@ import {
   buildTalebSourceFromAnyId,
   getTalebTeachers,
   crawlTalebFullCatalog,
+  ensureCourseLectures,
   clearTalebCatalogCache,
   getTalebKey,
   getTalebPlaylist,
@@ -3557,6 +3558,17 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
             teacher_name: th?.name || "",
             lectures_count: (th?.lectures || []).length
           }];
+      // حدّث عدد المحاضرات فعليًا (كسلان)
+      for (const row of data) {
+        if (row._courseId && !(row.lectures_count > 0)) {
+          try {
+            const det = await ensureCourseLectures(row._courseId, th?.name || "");
+            row.lectures_count = det.lecturesCount || (det.lectures || []).length || 0;
+            row.lecture_count = row.lectures_count;
+            if (det.title) row.name = det.title;
+          } catch {}
+        }
+      }
       return res.json({ success: true, message: "Success", data, source: "taleb" });
     }
     if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
@@ -3589,12 +3601,20 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
       let lectures = [];
       if (cid.startsWith("taleb_course_")) {
         const courseId = cid.slice("taleb_course_".length);
+        let teacherName = "";
         for (const th of cat.teachers) {
           const course = (th.courses || []).find((c) => String(c.id) === String(courseId));
           if (course) {
+            teacherName = th.name || "";
             lectures = course.lectures || [];
             break;
           }
+        }
+        if (!lectures.length) {
+          try {
+            const det = await ensureCourseLectures(courseId, teacherName);
+            lectures = det.lectures || [];
+          } catch {}
         }
       } else if (cid.startsWith("taleb_ch_")) {
         const tid = cid.slice("taleb_ch_".length);
