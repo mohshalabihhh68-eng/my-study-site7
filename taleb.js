@@ -160,6 +160,67 @@ function subjectNameAr(sid) {
   return SUBJECT_NAME_AR[String(sid || "").toLowerCase()] || String(sid || "مادة");
 }
 
+const SUBJECT_ORDER = [
+  "arabic",
+  "english",
+  "chemistry",
+  "physics",
+  "biology",
+  "geology",
+  "mathematics",
+  "math",
+  "statistics",
+  "history",
+  "geography",
+  "philosophy",
+  "psychology"
+];
+
+function sortSubjects(list) {
+  const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
+  return [...(list || [])].sort((a, b) => {
+    const ra = rank.has(a.id) ? rank.get(a.id) : 100;
+    const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+    if (ra !== rb) return ra - rb;
+    return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+  });
+}
+
+/** تطبيع مجموعات المحتوى */
+function normalizeGroup(raw, kind, title) {
+  const s = String(raw || "").trim();
+  const t = String(title || "");
+  if (kind === "file" || /ملف|مذكر|pdf|سبورة|نموذج الإجابة|تحليل/i.test(s + " " + t)) {
+    return "الملفات";
+  }
+  if (/امتحان|اختبار|تقييم|ما ورد في امتحان/i.test(s) || /امتحان/i.test(t)) {
+    return "الامتحان";
+  }
+  if (/حل|واجب|تطبيق|تدريب|تسليم/i.test(s) || /حل\s|واجب|تدريب/i.test(t)) {
+    return "الحل";
+  }
+  if (/خلاصة|مراجعة/i.test(s)) {
+    return "الشرح";
+  }
+  if (/شرح/i.test(s) || !s) return "الشرح";
+  // أي مجموعة غير معروفة: لو فيديو → شرح وإلا ملفات
+  return kind === "file" ? "الملفات" : "الشرح";
+}
+
+function looksLikeTeacherName(title, teacherName) {
+  const a = String(title || "").replace(/\s+/g, " ").trim();
+  const b = String(teacherName || "").replace(/\s+/g, " ").trim();
+  if (!a || a.length < 3) return true;
+  if (/^كورس\s*\d+$/i.test(a)) return true;
+  if (b && (a === b || a.includes(b) || b.includes(a))) return true;
+  // اسم شخص بدون كلمة كورس/شهر/باب
+  if (/^(أ\.|د\.|مستر|مستر\.|أ |د )\s*/u.test(a) && !/كورس|شهر|باب|وحدة|الفصل|المحاضرة/i.test(a)) {
+    return true;
+  }
+  return false;
+}
+
+
 function cleanArName(s, fallback = "") {
   s = String(s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
   // شيل بقايا UI
@@ -352,9 +413,11 @@ async function parseCourseParts(courseId) {
         }
 
         let kind = "video";
-        if (/ملف|pdf|مذكر|سبورة|نموذج|تحليل/i.test(itemTitle) || /فتح الملف/i.test(ichunk)) kind = "file";
+        if (/ملف|pdf|مذكر|سبورة|نموذج|تحليل/i.test(itemTitle) || /فتح الملف/i.test(ichunk) || /ملف/i.test(groupTitle)) kind = "file";
         else if (/امتحان|اختبار/i.test(groupTitle) || /امتحان/i.test(itemTitle)) kind = "exam";
-        else if (/واجب|حل|تطبيق/i.test(groupTitle)) kind = "solution";
+        else if (/واجب|حل|تطبيق|تدريب|تسليم/i.test(groupTitle)) kind = "solution";
+        const normGroup = normalizeGroup(groupTitle, kind, itemTitle);
+        if (normGroup === "الملفات") kind = "file";
 
         items.push({
           courseId: String(courseId),
@@ -362,9 +425,9 @@ async function parseCourseParts(courseId) {
           partNum: String(partNum),
           lectureTitle: lecName,
           title: itemTitle,
-          group: groupTitle,
+          group: normGroup,
           kind,
-          watchPath
+          watchPath: kind === "file" ? null : watchPath
         });
       }
     }
@@ -383,15 +446,16 @@ async function parseCourseParts(courseId) {
           partNum = wm[3];
           watchPath = `/watch/${wm[1]}/${wm[2]}/${wm[3]}`;
         }
+        const k2 = /ملف|pdf/i.test(itemTitle) ? "file" : "video";
         items.push({
           courseId: String(courseId),
           lectureNum: String(lectureNum),
           partNum: String(partNum),
           lectureTitle: lecName,
           title: itemTitle,
-          group: "الشرح",
-          kind: /ملف|pdf/i.test(itemTitle) ? "file" : "video",
-          watchPath
+          group: normalizeGroup(null, k2, itemTitle),
+          kind: k2,
+          watchPath: k2 === "file" ? null : watchPath
         });
       }
     }
@@ -637,11 +701,19 @@ export async function crawlTalebFullCatalog() {
       const courseDetails = await mapPool(subjectCourses, COURSE_CONCURRENCY, async (c) => {
         try {
           const parsed = await parseCourseParts(c.id);
-          const finalTitle = (c.title && !/^كورس\s*\d+$/i.test(c.title))
-            ? c.title
-            : ((parsed.courseTitle && !/^كورس\s*\d+$/i.test(parsed.courseTitle))
-              ? parsed.courseTitle
-              : (c.title || `كورس ${c.id}`));
+          let finalTitle = c.title || "";
+          const parsedTitle = parsed.courseTitle || "";
+          if (looksLikeTeacherName(finalTitle, meta.name)) {
+            if (parsedTitle && !looksLikeTeacherName(parsedTitle, meta.name)) finalTitle = parsedTitle;
+            else if (parsedTitle) finalTitle = parsedTitle;
+            else finalTitle = `كورس ${c.id}`;
+          } else if (!finalTitle || /^كورس\s*\d+$/i.test(finalTitle)) {
+            if (parsedTitle && !looksLikeTeacherName(parsedTitle, meta.name) && !/^كورس\s*\d+$/i.test(parsedTitle)) {
+              finalTitle = parsedTitle;
+            } else {
+              finalTitle = finalTitle || parsedTitle || `كورس ${c.id}`;
+            }
+          }
           return {
             ...c,
             title: finalTitle,
@@ -737,7 +809,7 @@ export async function crawlTalebFullCatalog() {
   ensureTeacher(subjects, teachersFlat, "english", "شريف المصري");
 
   const data = {
-    subjects,
+    subjects: sortSubjects(subjects),
     teachers: teachersFlat,
     crawledAt: nowMs,
     stats: {
