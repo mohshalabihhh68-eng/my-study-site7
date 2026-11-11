@@ -3525,6 +3525,7 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
       const data = courses.length
         ? courses
             .filter((c) => c && c.title && !/رجوع|عرض المواد|اختر/i.test(String(c.title)))
+            .filter((c) => !/كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|^\s*كتب\b/i.test(String(c.title || "")))
             .map((c) => ({
             id: `taleb_course_${c.id}`,
             name: (function () {
