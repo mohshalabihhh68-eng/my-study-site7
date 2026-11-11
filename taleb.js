@@ -260,22 +260,28 @@ function parseSourceRefNumber(ref, prefix) {
 async function parseCourseParts(courseId) {
   const html = await talebText(`${TALEB_BASE}/courses/${courseId}`, 45_000);
   let courseTitle = "";
-  const h1 = html.match(/<h1[^>]*>\\s*([^<]{3,120})\\s*<\\/h1>/i);
+  const h1 = html.match(new RegExp("<h1[^>]*>\\s*([^<]{3,120})\\s*</h1>", "i"));
   if (h1) courseTitle = h1[1];
   if (!courseTitle) {
-    const og = html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
+    const og = html.match(new RegExp("property=[\"']og:title[\"'][^>]*content=[\"']([^\"']+)[\"']", "i"));
     if (og) courseTitle = og[1];
   }
   if (!courseTitle) {
-    const titleM = html.match(/<title>([^<]+)<\\/title>/i);
+    const titleM = html.match(new RegExp("<title>([^<]+)</title>", "i"));
     if (titleM) courseTitle = titleM[1];
   }
-  courseTitle = cleanArName(String(courseTitle || "").replace(/\\s*[|\\-]\\s*.*$/i, "").replace(/طالب\\s*برو/gi, "").trim(), `كورس ${courseId}`);
+  courseTitle = cleanArName(
+    String(courseTitle || "")
+      .replace(new RegExp("\\s*[|\\-]\\s*.*$"), "")
+      .replace(new RegExp("طالب\\s*برو", "gi"), "")
+      .trim(),
+    `كورس ${courseId}`
+  );
   const imgs = extractImagesFromHtml(html, 6);
   const courseImage = imgs[0] || null;
 
   const items = [];
-  const linkRe = /href="(\\/watch\\/(\\d+)\\/(\\d+)\\/(\\d+))"/g;
+  const linkRe = new RegExp('href="(/watch/(\\d+)/(\\d+)/(\\d+))"', "g");
   let m;
   const seen = new Set();
   while ((m = linkRe.exec(html))) {
@@ -286,20 +292,23 @@ async function parseCourseParts(courseId) {
     seen.add(key);
     const around = html.slice(Math.max(0, m.index - 800), Math.min(html.length, m.index + 600));
     let title =
-      (around.match(/cv-item-title[^>]*>([^<]+)</i) || [])[1] ||
-      (around.match(/<span[^>]*class="[^"]*title[^"]*"[^>]*>([^<]+)</i) || [])[1] ||
+      (around.match(new RegExp("cv-item-title[^>]*>([^<]+)<", "i")) || [])[1] ||
+      (around.match(new RegExp("<span[^>]*class=\"[^\"]*title[^\"]*\"[^>]*>([^<]+)<", "i")) || [])[1] ||
       null;
     if (!title) {
-      const ar = around.match(/[\\u0600-\\u06FF][\\u0600-\\u06FF\\s\\w.+\\-ـ]{3,70}/);
+      const ar = around.match(new RegExp("[\\u0600-\\u06FF][\\u0600-\\u06FF\\s\\w.+\\-\\u0640]{3,70}"));
       if (ar) title = ar[0];
     }
     title = cleanArName(title || `محاضرة ${lec} — جزء ${part}`, `محاضرة ${lec} — جزء ${part}`);
     let group = null;
     const before = html.slice(Math.max(0, m.index - 3000), m.index);
-    const allG = [...before.matchAll(/cv-group-title[^>]*>([^<]+)/gi)];
-    if (allG.length) group = cleanArName(allG[allG.length - 1][1], null);
+    const groupRe = new RegExp("cv-group-title[^>]*>([^<]+)", "gi");
+    let gm;
+    let lastG = null;
+    while ((gm = groupRe.exec(before))) lastG = gm[1];
+    if (lastG) group = cleanArName(lastG, null);
     if (!group) {
-      const sec = before.match(/(شرح\\s*المحاضرة|حل\\s*الأسئلة[^<]*|حل\\s*الكتب|الملفات[^<]*|المذكرات|امتحان|التقييم)/i);
+      const sec = before.match(new RegExp("(شرح\\s*المحاضرة|حل\\s*الأسئلة[^<]*|حل\\s*الكتب|الملفات[^<]*|المذكرات|امتحان|التقييم)", "i"));
       if (sec) group = cleanArName(sec[1], null);
     }
     let kind = "video";
@@ -317,7 +326,13 @@ async function parseCourseParts(courseId) {
     });
   }
   items.sort((a, b) => Number(a.lectureNum) - Number(b.lectureNum) || Number(a.partNum) - Number(b.partNum));
-  const groups = [...html.matchAll(/cv-group-title[^>]*>([^<]+)/g)].map((x) => cleanArName(x[1], x[1].trim())).filter(Boolean);
+  const groups = [];
+  const gRe = new RegExp("cv-group-title[^>]*>([^<]+)", "g");
+  let gx;
+  while ((gx = gRe.exec(html))) {
+    const g = cleanArName(gx[1], gx[1].trim());
+    if (g) groups.push(g);
+  }
   return { courseTitle, items, groups, courseImage };
 }
 
