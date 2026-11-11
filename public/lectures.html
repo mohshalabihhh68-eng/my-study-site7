@@ -432,8 +432,56 @@ const buildItem=(item,lid)=>{
   </button>`;
 };
 
-/* build groups */
+/* لون نقطة المجموعة */
+const groupDot=(name)=>{
+  const n=String(name||'');
+  if(/ملف/i.test(n)) return 'p';
+  if(/امتحان|اختبار/i.test(n)) return 'a';
+  if(/حل|واجب|تطبيق|تدريب/i.test(n)) return 'g';
+  return '';
+};
+
+/* بناء مجموعات بنفس أسماء المنصة */
+const buildGroupsFromNamed=(namedGroups,lid)=>{
+  let html='';
+  let i=0;
+  for(const g of namedGroups){
+    const list=g.items||[];
+    if(!list.length) continue;
+    const title=g.name||g.title||'قسم';
+    const gId=`gbd-${lid}-${i}`,tId=`gbt-${lid}-${i}`;
+    const dot=groupDot(title);
+    html+=`
+    <div class="group">
+      <button type="button" class="group-toggle" id="${tId}" aria-expanded="false" aria-controls="${gId}">
+        <span class="group-label"><span class="group-dot ${dot}"></span>${esc(title)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${list.length})</span></span>
+        <span class="group-action"><span class="g-txt">عرض</span>${IC_CHEV}</span>
+      </button>
+      <div id="${gId}" role="region" aria-labelledby="${tId}" hidden class="group-body">
+        ${list.map(it=>buildItem({...it,title:it.title||it.name||'',type:it.type||( /ملف/i.test(title)?'file':'video')},lid)).join('')}
+      </div>
+    </div>`;
+    i++;
+  }
+  return html||`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد محتوى.</p>`;
+};
+
+/* build groups (fallback بالكلمات المفتاحية) */
 const buildGroups=(items,lid)=>{
+  // لو العناصر جاية بـ group من السيرفر — استخدمها
+  const hasNamed=items.some(it=>it.group);
+  if(hasNamed){
+    const map=new Map();
+    for(const it of items){
+      const g=it.group||(/ملف|file/i.test(it.type||'')?'الملفات':'الشرح');
+      if(!map.has(g)) map.set(g,[]);
+      map.get(g).push({...it,title:it.title||it.name||''});
+    }
+    // الملفات في الآخر
+    const keys=[...map.keys()].filter(k=>k!=='الملفات');
+    if(map.has('الملفات')) keys.push('الملفات');
+    return buildGroupsFromNamed(keys.map(k=>({name:k,items:map.get(k)})), lid);
+  }
   const bk={lesson:[],practice:[],exam:[],file:[]};
   for(const it of items){
     const cat=classify(it.title||it.name||'',it.type||'video');
@@ -462,19 +510,29 @@ const buildGroups=(items,lid)=>{
 const flatten=d=>{
   const items=[];
   for(const g of d.groups||[]){
-    const tm={lesson:'video',practice:'video',exam:'exam',file:'file'};
-    for(const it of g.items||[]) items.push({...it,type:it.type||tm[g.key]||'video'});
+    for(const it of g.items||[]){
+      items.push({
+        ...it,
+        title:it.title||it.name||'',
+        type:it.type||(/ملف/i.test(g.name||g.title||'')?'file':'video'),
+        group:g.name||g.title||it.group||null
+      });
+    }
   }
   return items;
 };
 
 /* fetch */
 const fetchItems=async lid=>{
-  try{const d=await api('/api/lectures/'+lid+'/grouped-content');if(d&&d.groups) return flatten(d);}catch{}
+  try{
+    const d=await api('/api/lectures/'+lid+'/grouped-content');
+    if(d&&d.groups&&d.groups.length) return flatten(d);
+  }catch{}
   const d=await api('/api/lectures/'+lid+'/content');if(!d) return [];
-  const videos=(d.videos||[]).map(v=>({...v,title:v.name||v.title,type:'video'}));
-  const files=(d.pdfs||d.files||d.attachments||d.documents||[]).map(f=>({...f,title:f.name||f.title||f.file_name,type:'file',url:f.file_url||f.url}));
-  const exams=(d.exams||[]).map(e=>({...e,title:e.name||e.title,type:'exam'}));
+  if(d.groups&&d.groups.length) return flatten(d);
+  const videos=(d.videos||[]).map(v=>({...v,title:v.name||v.title,type:v.type||'video',group:v.group||null}));
+  const files=(d.pdfs||d.files||d.attachments||d.documents||[]).map(f=>({...f,title:f.name||f.title||f.file_name,type:'file',url:f.file_url||f.url,group:'الملفات'}));
+  const exams=(d.exams||[]).map(e=>({...e,title:e.name||e.title,type:'exam',group:e.group||'الامتحان'}));
   return [...videos,...files,...exams];
 };
 
