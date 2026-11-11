@@ -141,7 +141,7 @@ const subjectId = qs.get('subjectId');
 const subjectName = qs.get('subjectName') || '';
 
 // قائمة أسماء المدرسين المراد إخفاؤهم (بأي شكل من أشكال الكتابة)
-const HIDDEN_TEACHERS = ['عبدالله الحبشي', 'احمد رضوان', 'شريف المصري'];
+const HIDDEN_TEACHERS = ['عبدالله الحبشي'];
 
 // تحديث شريط التقدم (العلوي والجانبي)
 const progressBar = $('scroll-progress');
@@ -185,7 +185,7 @@ const normalizeName = (name) => String(name || '')
   .trim();
 
 // الكلمات المفتاحية المراد حجب أي اسم يحتوي عليها
-const HIDDEN_KEYWORDS = ['عبداللهالحبشي', 'احمدرضوان', 'شريفالمصري'];
+const HIDDEN_KEYWORDS = ['عبداللهالحبشي'];
 
 const isHiddenTeacher = (name) => {
   const n = normalizeName(name);
