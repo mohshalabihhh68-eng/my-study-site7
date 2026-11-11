@@ -3382,13 +3382,38 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
         const sub = cat.subjects.find((s) => String(s.id) === sid);
         teachers = sub ? sub.teachers : cat.teachers.filter((x) => String(x.subjectId || "") === sid);
       }
-      const list = (teachers || []).map((th) => ({
+      let list = (teachers || []).map((th) => ({
         id: th.id,
         name: th.name,
         image_url: th.image_url || null,
         chapter_count: (th.courses && th.courses.length) ? th.courses.length : (th.lectures || []).length,
         subject_id: th.subjectId || sid
       }));
+      // دمج د. حسام عيسى ضمن مدرسي الأحياء (Bunny) حتى لو مش ظاهر في زحف طالب برو
+      const isBio = sid === "biology" || /أحياء|احياء/i.test(String(sid));
+      if (isBio || sid === "all" || sid === "0") {
+        const hasHossam = list.some((t) => /حسام/.test(String(t.name || "")) || String(t.id) === String(HOSSAM_TEACHER_ID));
+        if (!hasHossam) {
+          list = list.concat([{
+            id: HOSSAM_TEACHER_ID,
+            name: "د. حسام عيسى",
+            image_url: null,
+            chapter_count: (HOSSAM_CATALOG.courses || []).length,
+            subject_id: isBio ? sid : "biology"
+          }]);
+        }
+      }
+      // تنظيف أسماء شاذة زي "الرجوع إلى المواد"
+      list = list
+        .filter((t) => t && t.name && !/رجوع|المواد|عرض|اختر/i.test(String(t.name)))
+        .map((t) => ({
+          ...t,
+          name: String(t.name)
+            .replace(/\s+/g, " ")
+            .replace(/^أ\s*\.?\s*/u, "أ. ")
+            .replace(/^د\s*\.?\s*/u, "د. ")
+            .trim()
+        }));
       const subMeta = (sid === "all" || sid === "0") ? null : cat.subjects.find((s) => String(s.id) === sid);
       return res.json({
         success: true,
@@ -3425,6 +3450,19 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    // حسام عيسى (Bunny) — فصوله من الكتالوج المحلي
+    if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
+      const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
+        id: HOSSAM_CHAPTER_BASE + i,
+        name: c.name,
+        image_url: null,
+        teacher_name: HOSSAM_CATALOG.teacher,
+        lectures_count: (c.lessons || []).length,
+        _source: "hossam",
+        _courseId: c.id
+      }));
+      return res.json({ success: true, message: "Success", data: chapters });
+    }
     if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_t_")) {
       const cat = await getTalebCatalog();
       const tid = String(req.params.id);
@@ -3432,7 +3470,9 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
       const courses = th?.courses || [];
       // كل كورس = فصل/مجموعة زي تقسيم طالب برو
       const data = courses.length
-        ? courses.map((c) => ({
+        ? courses
+            .filter((c) => c && c.title && !/رجوع|عرض المواد|اختر/i.test(String(c.title)))
+            .map((c) => ({
             id: `taleb_course_${c.id}`,
             name: c.title || `كورس ${c.id}`,
             image_url: c.image_url || null,
@@ -3496,17 +3536,22 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
       // كل عنصر = محاضرة؛ لو فيها أكتر من جزء نستخدم أول جزء كفيديو رئيسي
       const data = lectures.map((lec, i) => {
         const parts = lec.parts || [];
-        const main = parts[0] || null;
+        const main = parts.find((p) => (p.kind || "video") === "video") || parts[0] || null;
+        // عنوان المحاضرة: فضّل عنوان واضح مش "جزء 1"
+        let name = lec.title || `محاضرة ${lec.lectureNum || i + 1}`;
+        if (/^محاضرة\s*\d+/i.test(name) && main && main.title) name = main.title;
         return {
           id: lec.id || `taleb_lec_${i}`,
-          name: lec.title || `محاضرة ${i + 1}`,
-          title: lec.title,
+          name,
+          title: name,
           image_url: lec.image_url || null,
           video_id: main ? (main.videoId || main.id) : null,
           parts_count: parts.length,
           parts: parts.map((p) => ({
             id: p.id,
             title: p.title,
+            group: p.group || null,
+            kind: p.kind || "video",
             video_id: p.videoId || p.id,
             partNum: p.partNum
           })),
@@ -3655,162 +3700,6 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
-
-// ==================== Grouped Content — تقسيم محتوى المحاضرة لمجموعات (شرح / تطبيق / امتحان / ملفات) ====================
-// GET /api/lectures/:id/grouped-content
-// يرجع نفس بيانات /content بس مقسمة على groups حسب نوع المحتوى
-// مناسبة لصفحة الكورس اللي بتعرض accordion متداخل زي الـ HTML المرجع
-app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
-  try {
-    const rawId = String(req.params.id || "");
-
-    // ===== مصدر: Taleb =====
-    if (useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_")) {
-      const cat = await getTalebCatalog();
-      let key = rawId;
-      while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
-
-      let lecture = null;
-      for (const th of cat.teachers) {
-        for (const lec of th.lectures || []) {
-          if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
-        }
-        if (lecture) break;
-        // ابحث داخل كورسات المدرس كمان
-        for (const c of th.courses || []) {
-          for (const lec of c.lectures || []) {
-            if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
-          }
-          if (lecture) break;
-        }
-        if (lecture) break;
-      }
-
-      if (!lecture) return jsonError(res, 404, "المحاضرة غير موجودة");
-
-      const parts = lecture.parts || [];
-      // تقسيم الأجزاء حسب عنوانها — إذا مفيش تصنيف صريح نحاول نستنتج من العنوان
-      const classify = (title = "") => {
-        const t = title.trim();
-        if (/امتحان|اختبار|كويز|quiz|exam/i.test(t)) return "exam";
-        if (/تدريب|تطبيق|حصة|تمرين|تكليف|worksheet/i.test(t)) return "practice";
-        return "lesson"; // افتراضي: شرح
-      };
-
-      const groups = { lesson: [], practice: [], exam: [], file: [] };
-      for (let i = 0; i < parts.length; i++) {
-        const p = parts[i];
-        const cat_key = p.contentType || p.type || classify(p.title || "");
-        const target = groups[cat_key] || groups.lesson;
-        target.push({
-          id: p.videoId || p.id,
-          title: p.title || `جزء ${i + 1}`,
-          type: "video",
-          platform: "stream",
-          partNum: p.partNum || i + 1
-        });
-      }
-
-      const result = [];
-      if (groups.lesson.length)    result.push({ key: "lesson",   label: "الشرح",             items: groups.lesson });
-      if (groups.practice.length)  result.push({ key: "practice", label: "التطبيق التفاعلي",   items: groups.practice });
-      if (groups.exam.length)      result.push({ key: "exam",     label: "الامتحان",            items: groups.exam });
-      if (groups.file.length)      result.push({ key: "file",     label: "الملفات",             items: groups.file });
-
-      return res.json({
-        success: true,
-        message: "Success",
-        data: {
-          id: lecture.id,
-          name: lecture.title || "محاضرة",
-          image_url: lecture.image_url || null,
-          course_id: lecture.courseId || null,
-          total_items: parts.length,
-          groups: result
-        },
-        source: "taleb"
-      });
-    }
-
-    // ===== مصدر: Hossam (Bunny) =====
-    const lid = Number(rawId);
-    if (Number.isFinite(lid) && lid >= HOSSAM_LECTURE_BASE) {
-      const lessonId = lid - HOSSAM_LECTURE_BASE;
-      let found = null; let courseName = "";
-      for (const c of HOSSAM_CATALOG.courses || []) {
-        for (const l of c.lessons || []) {
-          if (Number(l.lessonId) === lessonId) { found = l; courseName = c.name; break; }
-        }
-        if (found) break;
-      }
-      if (!found) return jsonError(res, 404, "درس حسام غير موجود");
-      const videoItems = found.videoId
-        ? [{ id: found.videoId, title: found.title || found.videoId, type: "video", platform: "bunny" }]
-        : [];
-      return res.json({
-        success: true,
-        message: "Success",
-        data: {
-          id: lid,
-          name: found.title || `درس ${lessonId}`,
-          course_name: courseName,
-          total_items: videoItems.length,
-          groups: videoItems.length
-            ? [{ key: "lesson", label: "الشرح", items: videoItems }]
-            : []
-        }
-      });
-    }
-
-    // ===== مصدر: Upstream (Coursatk / Thanawica) =====
-    // اجلب المحتوى الخام من upstream ثم حوّله لـ groups
-    let raw;
-    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
-      raw = await thLectureContent(req.params.id);
-    } else {
-      raw = await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`);
-    }
-
-    const d = raw?.data || raw || {};
-    const videoItems = (d.videos || []).map((v) => ({
-      id: v.id || v.video_id,
-      title: v.name || v.title || "فيديو",
-      type: "video",
-      platform: v.platform || "stream",
-      duration: v.duration || null
-    }));
-    const pdfItems = (d.pdfs || []).map((f) => ({
-      id: f.id,
-      title: f.name || f.title || "ملف",
-      type: "pdf",
-      url: f.url || f.file_url || null
-    }));
-    const examItems = (d.exams || []).map((e) => ({
-      id: e.id,
-      title: e.name || e.title || "امتحان",
-      type: "exam"
-    }));
-
-    const groups = [];
-    if (videoItems.length)  groups.push({ key: "lesson",   label: "الشرح",           items: videoItems });
-    if (pdfItems.length)    groups.push({ key: "file",     label: "الملفات",          items: pdfItems });
-    if (examItems.length)   groups.push({ key: "exam",     label: "الامتحان",         items: examItems });
-
-    return res.json({
-      success: true,
-      message: "Success",
-      data: {
-        id: d.id || req.params.id,
-        name: d.name || d.lecture_name || "محاضرة",
-        image_url: d.image_url || null,
-        course_id: d.course_id || null,
-        total_items: videoItems.length + pdfItems.length + examItems.length,
-        groups
-      },
-      source: "upstream"
-    });
-  } catch (e) { jsonError(res, 502, e.message); }
-});
 
 // ==================== Bunny Stream (د. حسام عيسى) — فك حماية iframe/Referer + AES-128 ====================
 // كتالوج أولي — د. حسام عيسى (Bunny). أضف guids بعد resolve-lesson
