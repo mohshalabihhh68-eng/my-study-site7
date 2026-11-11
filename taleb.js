@@ -45,8 +45,9 @@ const SUBJECT_NAME_AR = {
 };
 
 function talebHeaders(extra = {}) {
-  const { device, session } = requireUpstreamCreds();
-  return {
+  const device = String(process.env.TALEB_DEVICE || "").trim();
+  const session = String(process.env.TALEB_SESSION || "").trim();
+  const headers = {
     "user-agent": TALEB_UA,
     accept: "*/*",
     "accept-language": "ar-AE,ar;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -55,9 +56,15 @@ function talebHeaders(extra = {}) {
     "sec-fetch-site": "same-origin",
     "sec-fetch-mode": "cors",
     "sec-fetch-dest": "empty",
-    cookie: `taleb-device=${device}; taleb-session=${session}`,
     ...extra
   };
+  // الكوكيز اختيارية لزحف الكتالوج العام — مطلوبة للبث فقط
+  if (device && session) {
+    headers.cookie = `taleb-device=${device}; taleb-session=${session}`;
+  } else if (device) {
+    headers.cookie = `taleb-device=${device}`;
+  }
+  return headers;
 }
 
 function talebVideoHeaders(extra = {}) {
@@ -215,29 +222,35 @@ function extractHomeCatalog(html) {
     return out;
   }
   function extractBetween(key, nextKey) {
-    const startTok = key + '\\":';
-    let a = html.indexOf(startTok);
+    const tokens = [key + '\\":', '"' + key + '":', key + '":'];
+    let a = -1;
+    for (const tok of tokens) {
+      a = html.indexOf(tok);
+      if (a >= 0) break;
+    }
     if (a < 0) return [];
     a = html.indexOf("[", a);
     if (a < 0) return [];
-    let b;
+    let b = -1;
     if (nextKey) {
-      const endTok = ',\\"' + nextKey + '\\":';
-      b = html.indexOf(endTok, a);
-      if (b < 0) return [];
-    } else {
-      b = Math.min(html.length, a + 400000);
+      for (const nk of [',\\"' + nextKey + '\\":', ',"' + nextKey + '":', ',"' + nextKey + '":']) {
+        b = html.indexOf(nk, a);
+        if (b >= 0) break;
+      }
     }
+    if (b < 0) b = Math.min(html.length, a + 400000);
     const raw = html.slice(a, b);
     const last = raw.lastIndexOf("]");
     if (last < 0) return [];
     const arrRaw = raw.slice(0, last + 1);
-    try {
-      return JSON.parse(pyUnescape(arrRaw));
-    } catch (e) {
-      console.warn("[catalog] parse", key, e && e.message);
-      return [];
+    // جرّب parse مباشر ثم unescape
+    for (const candidate of [arrRaw, pyUnescape(arrRaw)]) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
     }
+    return [];
   }
   return {
     subjects: extractBetween("subjects", "teachers"),
@@ -447,19 +460,130 @@ function ensureTeacher(subjects, teachersFlat, subjectSlug, name) {
 
 export async function crawlTalebFullCatalog() {
   const nowMs = Date.now();
-  if (catalogCache.data && nowMs < catalogCache.exp) return catalogCache.data;
+  if (catalogCache.data && nowMs < catalogCache.exp && (catalogCache.data.subjects || []).length) {
+    return catalogCache.data;
+  }
 
-  console.log("[catalog] refresh start (home-json)");
-  const html = await talebText(`${TALEB_BASE}/home`);
-  const home = extractHomeCatalog(html);
-  const subjectRows = Array.isArray(home.subjects) ? home.subjects : [];
-  const teacherRows = Array.isArray(home.teachers) ? home.teachers : [];
-  const courseRows = Array.isArray(home.courses) ? home.courses : [];
-  console.log("[catalog] home parsed", {
+  console.log("[catalog] refresh start");
+  let html = "";
+  for (const path of ["/home", "/", "/tracks/science"]) {
+    try {
+      html = await talebText(`${TALEB_BASE}${path}`);
+      if (html && html.length > 5000) break;
+    } catch (e) {
+      console.warn("[catalog] fetch", path, e && e.message);
+    }
+  }
+
+  let subjectRows = [];
+  let teacherRows = [];
+  let courseRows = [];
+  if (html) {
+    const home = extractHomeCatalog(html);
+    subjectRows = Array.isArray(home.subjects) ? home.subjects : [];
+    teacherRows = Array.isArray(home.teachers) ? home.teachers : [];
+    courseRows = Array.isArray(home.courses) ? home.courses : [];
+  }
+  console.log("[catalog] home-json", {
     subjects: subjectRows.length,
     teachers: teacherRows.length,
-    courses: courseRows.length
+    courses: courseRows.length,
+    htmlLen: html ? html.length : 0
   });
+
+  // ——— Fallback: زحف HTML لو JSON فاضي ———
+  if (!subjectRows.length || !teacherRows.length) {
+    console.warn("[catalog] fallback HTML crawl");
+    const baseSlugs = ["biology", "chemistry", "physics", "arabic", "english", "geology", "history", "geography", "mathematics", "math", "statistics"];
+    const slugSet = new Set(baseSlugs);
+    if (html) {
+      for (const m of html.matchAll(/\/subjects\/([a-zA-Z0-9_-]+)/g)) {
+        if (m[1] !== "teachers") slugSet.add(m[1]);
+      }
+    }
+    subjectRows = [...slugSet].map((id, i) => ({
+      id,
+      name: subjectNameAr(id),
+      image: null,
+      position: i,
+      teacherIds: []
+    }));
+    teacherRows = [];
+    courseRows = [];
+
+    for (const sr of subjectRows) {
+      try {
+        const sh = await talebText(`${TALEB_BASE}/subjects/${encodeURIComponent(sr.id)}`);
+        const ids = [...new Set([...sh.matchAll(new RegExp(`/subjects/${sr.id}/teachers/(\\d+)`, "g"))].map((x) => x[1]))];
+        for (const id of ids) {
+          const uuid = `html-${sr.id}-${id}`;
+          // اسم المدرس
+          let name = `مدرس ${id}`;
+          const idx = sh.indexOf(`/subjects/${sr.id}/teachers/${id}`);
+          if (idx >= 0) {
+            const slice = sh.slice(Math.max(0, idx - 800), idx + 800);
+            const alt = slice.match(/alt=["']([^"']*[\u0600-\u06FF][^"']{1,50})["']/i);
+            if (alt) name = alt[1];
+            else {
+              const ar = slice.match(/[\u0600-\u06FF][\u0600-\u06FF\s.·]{2,40}/);
+              if (ar && !/مادة|عرض|رجوع|فصل|متاح/i.test(ar[0])) name = ar[0];
+            }
+          }
+          name = cleanArName(name, `مدرس ${id}`);
+          if (/رجوع|المواد|عرض|اختر/i.test(name)) name = `مدرس ${id}`;
+          let image = null;
+          if (idx >= 0) {
+            const imgs = extractImagesFromHtml(sh.slice(Math.max(0, idx - 800), idx + 800), 3);
+            if (imgs[0]) image = imgs[0].replace(TALEB_BASE, "") || imgs[0];
+          }
+          teacherRows.push({
+            id: uuid,
+            sourceRef: `t:${id}`,
+            number: Number(id) || null,
+            name,
+            image,
+            position: teacherRows.length
+          });
+          sr.teacherIds.push(uuid);
+
+          // كورسات المدرس
+          try {
+            const th = await talebText(`${TALEB_BASE}/subjects/${encodeURIComponent(sr.id)}/teachers/${id}`);
+            const cids = [...new Set([...th.matchAll(/\/courses\/(\d+)/g)].map((x) => x[1]))];
+            for (const cid of cids) {
+              let title = "";
+              const cidx = th.indexOf(`/courses/${cid}`);
+              if (cidx >= 0) {
+                const slice = th.slice(Math.max(0, cidx - 200), cidx + 600);
+                const ar = slice.match(/[\u0600-\u06FF][\u0600-\u06FF\s\w.+ـ\-]{3,80}/);
+                if (ar && !/عرض|تفاصيل|رجوع/i.test(ar[0])) title = ar[0];
+              }
+              courseRows.push({
+                id: `html-c-${cid}`,
+                sourceRef: `c:${cid}`,
+                number: Number(cid) || null,
+                subjectId: sr.id,
+                teacherId: uuid,
+                title: cleanArName(title, ""),
+                image: null,
+                status: "published",
+                position: courseRows.length
+              });
+            }
+          } catch (e) {
+            console.warn("[catalog] teacher courses skip", sr.id, id);
+          }
+        }
+      } catch (e) {
+        console.warn("[catalog] subject skip", sr.id);
+      }
+    }
+    console.log("[catalog] fallback done", {
+      subjects: subjectRows.length,
+      teachers: teacherRows.length,
+      courses: courseRows.length
+    });
+  }
 
   const teacherByUuid = new Map();
   for (const tr of teacherRows) {
@@ -479,7 +603,7 @@ export async function crawlTalebFullCatalog() {
     if (cr.status && String(cr.status).toLowerCase() !== "published") continue;
     const tid = String(cr.teacherId || "");
     if (!tid) continue;
-    const num = parseSourceRefNumber(cr.sourceRef, "c");
+    const num = parseSourceRefNumber(cr.sourceRef, "c") || (cr.number != null ? String(cr.number) : null);
     if (!num) continue;
     const row = {
       id: String(num),
@@ -601,6 +725,13 @@ export async function crawlTalebFullCatalog() {
     });
   }
 
+  // لو لسه فاضي تمامًا — مواد أساسية على الأقل
+  if (!subjects.length) {
+    for (const slug of ["biology", "chemistry", "physics", "arabic", "english", "mathematics", "history", "geography", "statistics"]) {
+      subjects.push({ id: slug, name: subjectNameAr(slug), image_url: null, teachers: [] });
+    }
+  }
+
   ensureTeacher(subjects, teachersFlat, "biology", "أحمد رضوان");
   ensureTeacher(subjects, teachersFlat, "biology", "حسام عيسى");
   ensureTeacher(subjects, teachersFlat, "english", "شريف المصري");
@@ -621,10 +752,17 @@ export async function crawlTalebFullCatalog() {
     }
   };
   console.log("[catalog] ready", data.stats);
-  catalogCache.data = data;
-  catalogCache.exp = nowMs + 30 * 60_000;
+  // متكاشِفش نتيجة فاضية من المدرسين
+  if (teachersFlat.length > 0) {
+    catalogCache.data = data;
+    catalogCache.exp = nowMs + 30 * 60_000;
+  } else {
+    catalogCache.data = data;
+    catalogCache.exp = nowMs + 60_000; // إعادة محاولة سريعة
+  }
   return data;
 }
+
 
 
 export async function resolveTalebPartId(courseId, lectureNum, partNum) {
