@@ -179,6 +179,19 @@ const api = async (path, opts = {}) => {
   return data.data;
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const proxyImg = (u) => {
+  if (!u) return '';
+  u = String(u);
+  if (u.startsWith('/api/img')) return u;
+  if (/^https?:\/\//i.test(u)) {
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(u))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      return '/api/img?u=' + b64;
+    } catch { return u; }
+  }
+  return u;
+};
+
 
 window.goToLectures = function(url, cardEl) {
   const barFill = cardEl.querySelector('.side-progress-bar .fill');
