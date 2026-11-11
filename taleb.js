@@ -337,14 +337,14 @@ async function parseCourseParts(courseId) {
 }
 
 function ensureTeacher(subjects, teachersFlat, subjectSlug, name) {
-  const first = String(name).split(/\\s+/).filter(Boolean)[0] || name;
+  const first = String(name).split(/\s+/).filter(Boolean)[0] || name;
   const exists = teachersFlat.some((t) =>
     String(t.subjectSlug || t.subjectId) === subjectSlug &&
     String(t.name || "").includes(first)
   );
   if (exists) return;
   const teacherObj = {
-    id: `taleb_t_${subjectSlug}_manual_${String(name).replace(/\\s+/g, "_")}`,
+    id: `taleb_t_${subjectSlug}_manual_${String(name).replace(/\s+/g, "_")}`,
     name,
     image_url: null,
     subjectId: subjectSlug,
@@ -360,7 +360,8 @@ function ensureTeacher(subjects, teachersFlat, subjectSlug, name) {
     sub = { id: subjectSlug, name: subjectNameAr(subjectSlug), image_url: null, teachers: [] };
     subjects.push(sub);
   }
-  (sub.teachers = sub.teachers || []).push(teacherObj);
+  sub.teachers = sub.teachers || [];
+  sub.teachers.push(teacherObj);
 }
 
 export async function crawlTalebFullCatalog() {
@@ -424,9 +425,9 @@ export async function crawlTalebFullCatalog() {
       const courseDetails = await mapPool(subjectCourses, COURSE_CONCURRENCY, async (c) => {
         try {
           const parsed = await parseCourseParts(c.id);
-          const finalTitle = (c.title && !/^كورس\\s*\\d+$/i.test(c.title))
+          const finalTitle = (c.title && !/^كورس\s*\d+$/i.test(c.title))
             ? c.title
-            : ((parsed.courseTitle && !/^كورس\\s*\\d+$/i.test(parsed.courseTitle)) ? parsed.courseTitle : (c.title || `كورس ${c.id}`));
+            : ((parsed.courseTitle && !/^كورس\s*\d+$/i.test(parsed.courseTitle)) ? parsed.courseTitle : (c.title || `كورس ${c.id}`));
           return {
             ...c,
             title: finalTitle,
@@ -530,7 +531,6 @@ export async function crawlTalebFullCatalog() {
   return data;
 }
 
-
 /** تحويل مسار watch → UUID الجزء (part.id) */
 export async function resolveTalebPartId(courseId, lectureNum, partNum) {
   const key = `${courseId}/${lectureNum}/${partNum}`;
@@ -556,34 +556,6 @@ export async function resolveTalebPartId(courseId, lectureNum, partNum) {
   const uuid = m[1];
   partIdCache.set(key, uuid);
   return uuid;
-}
-
-function ensureTeacher(subjects, teachersFlat, subjectSlug, name) {
-  const first = String(name).split(/\s+/)[0];
-  const exists = teachersFlat.some((t) =>
-    String(t.subjectSlug || t.subjectId) === subjectSlug &&
-    String(t.name || "").includes(first)
-  );
-  if (exists) return;
-  const teacherObj = {
-    id: `taleb_t_${subjectSlug}_manual_${String(name).replace(/\s+/g, "_")}`,
-    name,
-    image_url: null,
-    subjectId: subjectSlug,
-    subjectSlug,
-    numericId: null,
-    courses: [],
-    lectures: [],
-    manual: true
-  };
-  teachersFlat.push(teacherObj);
-  let sub = subjects.find((s) => s.id === subjectSlug);
-  if (!sub) {
-    sub = { id: subjectSlug, name: subjectNameAr(subjectSlug), image_url: null, teachers: [] };
-    subjects.push(sub);
-  }
-  sub.teachers = sub.teachers || [];
-  sub.teachers.push(teacherObj);
 }
 
 /**
