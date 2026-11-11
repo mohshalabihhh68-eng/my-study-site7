@@ -3391,12 +3391,12 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
         subject_id: th.subjectId || sid,
         _numericId: th.numericId || null
       }));
-      // إزالة تكرار الاسم/الرقم
+      // إزالة تكرار الـ id فقط (متدمجش مدرسين مختلفين بنفس اللقب)
       {
         const out = [];
         const seen = new Set();
         for (const th of list) {
-          const key = (String(th.name || "").replace(/[^\u0600-\u06FFa-zA-Z]/g, "").toLowerCase()) || String(th.id);
+          const key = String(th.id);
           if (seen.has(key)) continue;
           seen.add(key);
           out.push(th);
@@ -3480,7 +3480,13 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
     if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_t_")) {
       const cat = await getTalebCatalog();
       const tid = String(req.params.id);
-      const th = cat.teachers.find((x) => x.id === tid || x.name === tid);
+      const th = cat.teachers.find((x) =>
+        x.id === tid ||
+        x.name === tid ||
+        String(x.uuid || "") === tid ||
+        String(x.numericId || "") === tid ||
+        tid.endsWith("_" + String(x.numericId || ""))
+      );
       const courses = th?.courses || [];
       // كل كورس = فصل/مجموعة زي تقسيم طالب برو
       const data = courses.length
