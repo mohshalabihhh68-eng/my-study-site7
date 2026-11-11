@@ -425,7 +425,7 @@ window.goTo=function(url,cardId){
 async function init(){
   // show cached name immediately
   const cached=localStorage.getItem('student_name');
-  if(cached)setGreeting(cached, '', (me && me.greeting) || null);
+  if(cached) setGreeting(cached, '', null);
 
   try{
     // fetch subjects + profile in parallel
