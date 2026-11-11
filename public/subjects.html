@@ -341,9 +341,10 @@ function resolveImg(s){
 }
 
 // greeting
-function setGreeting(name, section){
+function setGreeting(name, section, greetingFromApi){
   const h=new Date().getHours();
-  let g=h>=18||h<4?'مساء الخير':h>=12?'ظهر النور':'صباح الخير';
+  // صباح النور 5–11 | مساء النور باقي اليوم
+  let g = greetingFromApi || ((h>=5 && h<12) ? 'صباح النور' : 'مساء النور');
   $('greet-word').textContent=g;
   $('hero-name').textContent=name||'—';
   if(section) $('hero-chip').textContent=section;
@@ -424,7 +425,7 @@ window.goTo=function(url,cardId){
 async function init(){
   // show cached name immediately
   const cached=localStorage.getItem('student_name');
-  if(cached)setGreeting(cached,'');
+  if(cached)setGreeting(cached, '', (me && me.greeting) || null);
 
   try{
     // fetch subjects + profile in parallel
@@ -438,7 +439,7 @@ async function init(){
       $('nav-name').textContent=me.name;
       $('nav-av').textContent=me.name.charAt(0);
       localStorage.setItem('student_name',me.name);
-      setGreeting(me.name, me.section||'');
+      setGreeting(me.name, me.section||'', (me && me.greeting) || null);
     }
 
     // stats from /api/auth/me (durationMs, expiresAt)
@@ -478,10 +479,10 @@ async function init(){
 
     // try to get teacher/course count from subjects data or a separate call
     // subjects may carry teacher_count
-    const totalTeachers=(subjects||[]).reduce((s,x)=>s+(x.teacher_count||0),0);
-    const totalCourses=(subjects||[]).reduce((s,x)=>s+(x.course_count||0),0);
-    if(totalTeachers) countUp($('stat-teachers'), totalTeachers);
-    if(totalCourses)  countUp($('stat-courses'),  totalCourses);
+    const totalTeachers=(subjects||[]).reduce((sum,x)=>sum+Number(x.teachers_count||x.teacher_count||0),0);
+    const totalCourses=(subjects||[]).reduce((sum,x)=>sum+Number(x.courses_count||x.course_count||x.chapters_count||0),0);
+    countUp($('stat-teachers'), totalTeachers||0);
+    countUp($('stat-courses'), totalCourses||0);
 
   }catch(e){
     $('subjects-grid').innerHTML=`<div class="err">خطأ: ${esc(e.message)}</div>`;
