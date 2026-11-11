@@ -160,51 +160,57 @@ function subjectNameAr(sid) {
   return SUBJECT_NAME_AR[String(sid || "").toLowerCase()] || String(sid || "مادة");
 }
 
-const SUBJECT_ORDER = [
-  "arabic",
-  "english",
-  "chemistry",
-  "physics",
-  "biology",
-  "geology",
-  "mathematics",
-  "math",
-  "statistics",
-  "history",
-  "geography",
-  "philosophy",
-  "psychology"
-];
+const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology"];
+const SUBJECT_ALLOWED = new Set(SUBJECT_ORDER);
 
 function sortSubjects(list) {
   const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
-  return [...(list || [])].sort((a, b) => {
-    const ra = rank.has(a.id) ? rank.get(a.id) : 100;
-    const rb = rank.has(b.id) ? rank.get(b.id) : 100;
-    if (ra !== rb) return ra - rb;
-    return String(a.name || "").localeCompare(String(b.name || ""), "ar");
-  });
+  return [...(list || [])]
+    .filter((s) => SUBJECT_ALLOWED.has(String(s.id || "")))
+    .sort((a, b) => {
+      const ra = rank.has(a.id) ? rank.get(a.id) : 100;
+      const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+      if (ra !== rb) return ra - rb;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+    });
 }
 
-/** تطبيع مجموعات المحتوى */
+function cleanCourseTitle(title, teacherName, courseId) {
+  let n = String(title || "").replace(/\s+/g, " ").trim();
+  const tn = String(teacherName || "").replace(/\s+/g, " ").trim();
+  // شيل لاحقة اسم المدرس: " - أ. فلان" أو " و أ. فلان" أو "| فلان"
+  if (tn) {
+    const escaped = tn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    n = n.replace(new RegExp("\\s*[-–—|]?\\s*" + escaped + "\\s*$", "i"), "");
+    n = n.replace(new RegExp("\\s+و\\s+" + escaped + "\\s*$", "i"), "");
+    // جزء من الاسم
+    const first = tn.split(/\s+/).filter(Boolean)[0];
+    if (first && first.length >= 3) {
+      n = n.replace(new RegExp("\\s*[-–—|]?\\s*(?:أ\\.?|د\\.?|مستر)?\\s*" + first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ".*$", "i"), "");
+    }
+  }
+  n = n.replace(/\s*[-–—|]\s*(?:أ\.?|د\.?|مستر)\s*[؀-ۿ].*$/u, "");
+  n = n.replace(/\s+و\s+(?:أ\.?|د\.?|مستر)\s*[؀-ۿ].*$/u, "");
+  n = n.replace(/\s*\|\s*طالب\s*برو.*$/i, "").trim();
+  if (!n || looksLikeTeacherName(n, tn) || /^كورس\s*\d+$/i.test(n)) {
+    return courseId ? `كورس ${courseId}` : (n || "كورس");
+  }
+  return n;
+}
+
+/** تنظيم زي الموقع: نحتفظ باسم المجموعة الأصلي، والملفات لوحدها */
 function normalizeGroup(raw, kind, title) {
   const s = String(raw || "").trim();
   const t = String(title || "");
-  if (kind === "file" || /ملف|مذكر|pdf|سبورة|نموذج الإجابة|تحليل/i.test(s + " " + t)) {
+  if (kind === "file" || /ملف|مذكر|pdf|سبورة|نموذج الإجابة/i.test(s + " " + t) || /فتح الملف/i.test(t)) {
     return "الملفات";
   }
-  if (/امتحان|اختبار|تقييم|ما ورد في امتحان/i.test(s) || /امتحان/i.test(t)) {
-    return "الامتحان";
-  }
-  if (/حل|واجب|تطبيق|تدريب|تسليم/i.test(s) || /حل\s|واجب|تدريب/i.test(t)) {
-    return "الحل";
-  }
-  if (/خلاصة|مراجعة/i.test(s)) {
+  if (!s) {
+    if (/امتحان|اختبار/i.test(t)) return "الامتحان";
+    if (/حل\s|واجب|تدريب/i.test(t)) return "الحل";
     return "الشرح";
   }
-  if (/شرح/i.test(s) || !s) return "الشرح";
-  // أي مجموعة غير معروفة: لو فيديو → شرح وإلا ملفات
-  return kind === "file" ? "الملفات" : "الشرح";
+  return s; // نفس اسم المجموعة من الموقع (الشرح / التطبيق التفاعلي / تسليم الواجب / ...)
 }
 
 function looksLikeTeacherName(title, teacherName) {
@@ -558,7 +564,7 @@ export async function crawlTalebFullCatalog() {
   // ——— Fallback: زحف HTML لو JSON فاضي ———
   if (!subjectRows.length || !teacherRows.length) {
     console.warn("[catalog] fallback HTML crawl");
-    const baseSlugs = ["biology", "chemistry", "physics", "arabic", "english", "geology", "history", "geography", "mathematics", "math", "statistics"];
+    const baseSlugs = ["arabic", "english", "chemistry", "physics", "biology"];
     const slugSet = new Set(baseSlugs);
     if (html) {
       for (const m of html.matchAll(/\/subjects\/([a-zA-Z0-9_-]+)/g)) {
@@ -685,6 +691,13 @@ export async function crawlTalebFullCatalog() {
     arr.sort((a, b) => (a.position - b.position) || Number(a.id) - Number(b.id));
   }
 
+  // المواد الأساسية فقط
+  subjectRows = subjectRows.filter((sr) => SUBJECT_ALLOWED.has(String(sr.id || "")));
+  // لو JSON رجّع فاضي للمواد المسموحة، كمّل من القائمة
+  if (!subjectRows.length) {
+    subjectRows = SUBJECT_ORDER.map((id, i) => ({ id, name: subjectNameAr(id), image: null, position: i, teacherIds: [] }));
+  }
+
   const subjects = [];
   const teachersFlat = [];
 
@@ -766,7 +779,7 @@ export async function crawlTalebFullCatalog() {
         }
         coursesOut.push({
           id: String(c.id),
-          title: c.title,
+          title: cleanCourseTitle(c.title, meta.name, c.id),
           image_url: c.image_url || null,
           partsCount: (c.parts || []).length,
           lecturesCount: courseLectures.length,
@@ -799,7 +812,7 @@ export async function crawlTalebFullCatalog() {
 
   // لو لسه فاضي تمامًا — مواد أساسية على الأقل
   if (!subjects.length) {
-    for (const slug of ["biology", "chemistry", "physics", "arabic", "english", "mathematics", "history", "geography", "statistics"]) {
+    for (const slug of SUBJECT_ORDER) {
       subjects.push({ id: slug, name: subjectNameAr(slug), image_url: null, teachers: [] });
     }
   }
