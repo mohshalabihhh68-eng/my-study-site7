@@ -301,9 +301,24 @@ async function discoverSubjects() {
 /** مدرسو مادة */
 async function discoverTeachers(subjectSlug) {
   const html = await talebText(`${TALEB_BASE}/subjects/${encodeURIComponent(subjectSlug)}`);
-  // ids فريدة فقط
-  const ids = [...new Set([...html.matchAll(new RegExp(`/subjects/${subjectSlug}/teachers/(\\d+)`, "g"))].map((m) => m[1]))];
+  // 1. سحب كل الـ IDs من الكروت الأساسية
+  const cardIds = [...html.matchAll(new RegExp(`/subjects/${subjectSlug}/teachers/(\\d+)`, "g"))].map((m) => m[1]);
+  
+  // 2. سحب أي IDs إضافية (احتياطي)
+  const rawIds = [...html.matchAll(/\/teachers\/(\d+)/g)].map((m) => m[1]);
+  
+  // 3. سحب الـ IDs من الـ JSON إن وجد (أحياناً الموقع بيحمل الداتا كـ JSON)
+  const jsonMatches = html.match(/teachers\\":(\[.*?\])/);
+  if (jsonMatches) {
+     try {
+         const parsed = JSON.parse(jsonMatches[1].replace(/\\"/g, '"'));
+         for(const t of parsed) { if(t.id) rawIds.push(String(t.id)); }
+     } catch(e) {}
+  }
+
+  const ids = [...new Set([...cardIds, ...rawIds])];
   const byId = new Map();
+  
   for (const id of ids) {
     const card = extractTeacherCard(html, subjectSlug, id);
     let name = card.name || `مدرس ${id}`;
