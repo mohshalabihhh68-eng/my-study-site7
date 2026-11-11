@@ -3682,6 +3682,54 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
+
+app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
+  try {
+    const rawId = String(req.params.id || "");
+    if (useTalebAsPrimary() || rawId.startsWith("taleb_")) {
+      const cat = await getTalebCatalog();
+      let key = rawId;
+      while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
+      let lecture = null;
+      for (const th of cat.teachers) {
+        for (const lec of (th.lectures || [])) {
+          if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
+        }
+        if (lecture) break;
+        for (const c of (th.courses || [])) {
+          for (const lec of (c.lectures || [])) {
+            if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
+          }
+          if (lecture) break;
+        }
+        if (lecture) break;
+      }
+      if (!lecture) return jsonError(res, 404, "المحاضرة غير موجودة");
+      const groupMap = new Map();
+      for (const p of (lecture.parts || [])) {
+        const isFile = p.kind === "file" || /ملف/i.test(String(p.group || "")) || /ملف|pdf/i.test(String(p.title || ""));
+        const gName = isFile ? "الملفات" : (p.group || "الشرح");
+        if (!groupMap.has(gName)) groupMap.set(gName, []);
+        groupMap.get(gName).push({
+          id: p.videoId || p.id,
+          video_id: isFile ? null : (p.videoId || p.id),
+          file_id: isFile ? (p.id || p.videoId) : null,
+          name: p.title || "جزء",
+          title: p.title || "جزء",
+          type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
+          kind: isFile ? "file" : (p.kind || "video"),
+          platform: "stream"
+        });
+      }
+      const keys = [...groupMap.keys()].filter((k) => k !== "الملفات");
+      if (groupMap.has("الملفات")) keys.push("الملفات");
+      const groups = keys.map((name) => ({ name, title: name, key: name, items: groupMap.get(name) }));
+      return res.json({ success: true, message: "Success", data: { id: lecture.id, name: lecture.title, groups }, source: "taleb" });
+    }
+    return jsonError(res, 404, "غير متاح");
+  } catch (e) { jsonError(res, 502, e.message); }
+});
+
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
@@ -3706,16 +3754,44 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
           if (!groupMap.has(g)) groupMap.set(g, []);
           groupMap.get(g).push(p);
         }
-        const groups = [...groupMap.entries()].map(([gName, parts]) => ({
+        // الملفات في الآخر
+        const orderedNames = [...groupMap.keys()].filter((k) => k !== "الملفات");
+        if (groupMap.has("الملفات")) orderedNames.push("الملفات");
+        const groups = orderedNames.map((gName) => ({
           name: gName,
-          items: parts.map((p, i) => ({
-            id: p.videoId || p.id,
-            video_id: p.videoId || p.id,
-            name: p.title || `جزء ${i + 1}`,
-            type: (p.kind === "file" ? "file" : "video"),
-            platform: "stream"
-          }))
+          title: gName,
+          key: gName,
+          items: (groupMap.get(gName) || []).map((p, i) => {
+            const isFile = p.kind === "file" || gName === "الملفات";
+            return {
+              id: p.videoId || p.id,
+              video_id: isFile ? null : (p.videoId || p.id),
+              file_id: isFile ? (p.id || p.videoId) : null,
+              name: p.title || `جزء ${i + 1}`,
+              title: p.title || `جزء ${i + 1}`,
+              type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
+              kind: isFile ? "file" : (p.kind || "video"),
+              group: gName,
+              platform: "stream"
+            };
+          })
         }));
+        const videos = [];
+        const pdfs = [];
+        for (const p of lecture.parts) {
+          const isFile = p.kind === "file" || /ملف/i.test(String(p.group || ""));
+          const row = {
+            id: p.videoId || p.id,
+            video_id: isFile ? null : (p.videoId || p.id),
+            name: p.title || "جزء",
+            title: p.title || "جزء",
+            group: p.group || null,
+            type: isFile ? "file" : "video",
+            platform: "stream"
+          };
+          if (isFile) pdfs.push(row);
+          else videos.push(row);
+        }
         return res.json({
           success: true,
           message: "Success",
@@ -3725,14 +3801,9 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
             image_url: lecture.image_url || null,
             course_id: lecture.courseId || null,
             groups,
-            videos: lecture.parts.map((p, i) => ({
-              id: p.videoId || p.id,
-              video_id: p.videoId || p.id,
-              name: p.title || `جزء ${i + 1}`,
-              group: p.group || null,
-              type: (p.kind === "file" ? "file" : "video"),
-              platform: "stream"
-            }))
+            videos,
+            pdfs,
+            files: pdfs
           },
           source: "taleb"
         });
