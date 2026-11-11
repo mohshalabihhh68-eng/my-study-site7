@@ -246,12 +246,20 @@ function cleanArName(s, fallback = "") {
 
 function absUrl(u) {
   if (!u) return null;
-  u = String(u).trim();
+  if (typeof u === "object") {
+    u = u.url || u.src || u.href || u.path || "";
+  }
+  u = String(u || "").trim();
   if (!u || u.startsWith("data:")) return null;
   if (u.startsWith("//")) return "https:" + u;
   if (u.startsWith("/")) return TALEB_BASE + u;
   if (/^https?:\/\//i.test(u)) return u;
   return TALEB_BASE + "/" + u.replace(/^\.\//, "");
+}
+
+function isBookCourse(title) {
+  const s = String(title || "");
+  return /كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|ملزمة\s*المدرس|^\s*كتب\b|كتب\s*&|books?/i.test(s);
 }
 
 function extractImagesFromHtml(html, limit = 12) {
@@ -628,14 +636,22 @@ export async function crawlTalebFullCatalog() {
                 const ar = slice.match(/[\u0600-\u06FF][\u0600-\u06FF\s\w.+ـ\-]{3,80}/);
                 if (ar && !/عرض|تفاصيل|رجوع/i.test(ar[0])) title = ar[0];
               }
+              const fbTitle = cleanArName(title, "");
+              if (isBookCourse(fbTitle)) continue;
+              // صورة الكورس من نفس الصفحة لو موجودة
+              let cImg = null;
+              if (cidx >= 0) {
+                const imgs = extractImagesFromHtml(th.slice(Math.max(0, cidx - 400), cidx + 500), 2);
+                if (imgs[0]) cImg = imgs[0];
+              }
               courseRows.push({
                 id: `html-c-${cid}`,
                 sourceRef: `c:${cid}`,
                 number: Number(cid) || null,
                 subjectId: sr.id,
                 teacherId: uuid,
-                title: cleanArName(title, ""),
-                image: null,
+                title: fbTitle,
+                image: cImg,
                 status: "published",
                 position: courseRows.length
               });
@@ -664,7 +680,7 @@ export async function crawlTalebFullCatalog() {
       uuid,
       numericId: numericId ? String(numericId) : null,
       name: cleanArName(tr.name || "", tr.name || "مدرس"),
-      image_url: absUrl(tr.image || "") || null
+      image_url: absUrl(tr.image || tr.avatar || tr.photo || tr.imageUrl || "") || null
     });
   }
 
@@ -675,11 +691,13 @@ export async function crawlTalebFullCatalog() {
     if (!tid) continue;
     const num = parseSourceRefNumber(cr.sourceRef, "c") || (cr.number != null ? String(cr.number) : null);
     if (!num) continue;
+    const rawTitle = cleanArName(cr.title || "", `كورس ${num}`);
+    if (isBookCourse(rawTitle)) continue; // شيل كتب المدرس
     const row = {
       id: String(num),
       uuid: String(cr.id || ""),
-      title: cleanArName(cr.title || "", `كورس ${num}`),
-      image_url: absUrl(cr.image || "") || null,
+      title: rawTitle,
+      image_url: absUrl(cr.image || cr.cover || cr.thumbnail || "") || null,
       subjectId: cr.subjectId || null,
       teacherId: tid,
       position: cr.position ?? 0
@@ -788,7 +806,7 @@ export async function crawlTalebFullCatalog() {
     subjects.push({
       id: slug,
       name: sr.name || subjectNameAr(slug),
-      image_url: absUrl(sr.image || "") || null,
+      image_url: absUrl(sr.image || sr.cover || sr.imageUrl || "") || null,
       teachers: subjectTeachers
     });
   }
