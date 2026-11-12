@@ -573,6 +573,36 @@ function ensureTeacher(subjects, teachersFlat, subjectSlug, name) {
 }
 
 
+/** توحيد اسم مدرس رياضة (أحمد/احمد …) */
+function normalizeTeacherKey(name) {
+  return String(name || "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/بشمهندس|مستر|الاستاذ|الأستاذ|دكتور|د\./g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+/** كتالوج رياضة ثابت كمرجع من tracks/math (يُحدَّث من الصفحة ثم يُدمَج) */
+const MATH_TRACK_FALLBACK = [
+  { teacher: "بشمهندس أحمد عصام", courses: [
+    { id: "2", title: "كورس الهندسة الفراغية", image: "/media/93bdbcd7904f3090.jpg" },
+    { id: "14", title: "كورس التفاضل والتكامل", image: "/media/26e06b734eae866b.jpg" },
+    { id: "105", title: "كورس الإستاتيكا", image: "/media/fb61e136c9e1e40f.webp" }
+  ]},
+  { teacher: "مستر أسامة سعد الله", courses: [
+    { id: "26", title: "كورس الباب الأول تفاضل", image: "/media/e2016241c4ea4c34.jpg" },
+    { id: "45", title: "كورس الهندسة الفراغية كاملة", image: "/media/47b995466c8f807e.jpg" }
+  ]},
+  { teacher: "مستر لطفي زهران", courses: [
+    { id: "24", title: "كورس الشهر الأول هندسة فراغية", image: "/media/928d94f4391d8d0e.jpg" },
+    { id: "39", title: "كورس الشهر الثاني فرع الإستاتيكا", image: "/media/f4e902d8812db8b6.jpg" },
+    { id: "35", title: "كورس الشهر الثالث فرع الجبر", image: "/media/e2441b49cf2c50a2.jpg" }
+  ]}
+];
+const MATH_SUBJECT_IMAGE = absUrl("/media/fbf82092b1726d99.jpg");
+
 /** استخراج مدرسي وكورسات الرياضيات من /tracks/math */
 async function enrichMathematicsFromTrack(subjects, teachersFlat) {
   let html = "";
@@ -580,288 +610,187 @@ async function enrichMathematicsFromTrack(subjects, teachersFlat) {
     html = await talebText(`${TALEB_BASE}/tracks/math`, 45_000);
   } catch (e) {
     console.warn("[catalog] tracks/math fail", e && e.message);
-    return;
-  }
-  if (!html || html.length < 1000) return;
-
-  // قسم «الرياضيات» فقط — بين عنوان القسم والقسم التالي (لغة/كيمياء/فيزياء...)
-  let section = html;
-  const mStart = html.search(/>\s*الرياضيات\s*</);
-  if (mStart >= 0) {
-    const rest = html.slice(mStart);
-    // نهاية القسم: h2 تالي لموضوع غير رياضي أو نهاية كبيرة
-    const endMatch = rest.search(/<h2[^>]*>\s*(?:اللغة|الكيمياء|الفيزياء|الأحياء|التاريخ|الجغرافيا)/i);
-    section = endMatch > 0 ? rest.slice(0, endMatch) : rest.slice(0, 60000);
   }
 
-  // صورة المادة من قسم الرياضيات
-  let subjectImage = null;
-  {
-    const imgs = extractImagesFromHtml(section, 6);
-    if (imgs[0]) subjectImage = imgs[0];
-  }
+  // teacherKey -> { name, courses: Map(id -> {id,title,image_url}) }
+  const byTeacher = new Map();
 
-  // كل كورس: id + عنوان ظاهر + اسم المدرس
-  const byTeacher = new Map(); // name -> courses[]
-  const seenC = new Set();
-  const linkRe = /href="\/course\/(\d+)"/gi;
-  let m;
-  while ((m = linkRe.exec(section))) {
-    const cid = String(m[1]);
-    if (seenC.has(cid)) continue;
-    const around = section.slice(Math.max(0, m.index - 400), Math.min(section.length, m.index + 700));
-    if (/كتب\s*المدرس|كتاب\s*المدرس/i.test(around)) continue;
-
-    // عنوان الكورس (نص عربي قريب)
-    let title = "";
-    const titleMatches = [...around.matchAll(/>([^<]*[\u0600-\u06FF][^<]{3,90})</g)];
-    for (const tm of titleMatches) {
-      const cand = cleanArName(tm[1], "");
-      if (!cand || cand.length < 4) continue;
-      if (/^(عرض|المزيد|اشترك|التفاصيل)$/i.test(cand)) continue;
-      title = cand;
-      break;
+  function addCourse(teacherName, cid, title, image_url) {
+    if (!teacherName || !cid) return;
+    if (/كيرلس/i.test(teacherName)) return;
+    const key = normalizeTeacherKey(teacherName);
+    if (!key) return;
+    if (!byTeacher.has(key)) {
+      byTeacher.set(key, { name: teacherName, courses: new Map() });
     }
-
-    // اسم المدرس
-    let teacherName = "";
-    const tm = around.match(/لـ\s*([^<\n\\]{4,55})/);
-    if (tm) teacherName = cleanArName(tm[1], "");
-    if (!teacherName) {
-      const tm2 = around.match(/(?:بشمهندس|مستر|دكتور|د\.)\s+([\u0600-\u06FF\s]{3,45})/);
-      if (tm2) teacherName = cleanArName(tm2[0], "");
-    }
-    // استبعاد مدرسين مواد تانية لو اتلقطوا بالغلط
-    if (/كيرلس|فيزياء|كيمياء|أحياء|إنجليز|عربي|حبشي|صقر/i.test(teacherName) && !/رياض|تفاضل|جبر|هندسة|استاتيكا|ديناميكا/i.test(around + title)) {
-      // كيرلس فيزياء — متضيفوش للرياضة
-      if (/كيرلس/i.test(teacherName)) continue;
-    }
-    if (!teacherName) continue;
-    if (!title) title = `كورس ${cid}`;
-    // تنظيف عنوان من اسم المدرس
-    title = cleanCourseTitle(title, teacherName, cid);
-
-    // صورة من حوالي الكارد
-    let image_url = null;
-    const localImgs = extractImagesFromHtml(around, 2);
-    if (localImgs[0]) image_url = localImgs[0];
-
-    seenC.add(cid);
-    if (!byTeacher.has(teacherName)) byTeacher.set(teacherName, []);
-    byTeacher.get(teacherName).push({
-      id: cid,
-      title,
-      image_url,
-      parts: [],
-      groups: [],
-      lecturesCount: 0,
-      partsCount: 0,
-      lectures: []
-    });
-  }
-
-  // لو القسم فاضي — جرّب الصفحة كلها لكن بفلتر كلمات رياضية فقط
-  if (!byTeacher.size) {
-    const linkRe2 = /href="\/course\/(\d+)"/gi;
-    while ((m = linkRe2.exec(html))) {
-      const cid = String(m[1]);
-      if (seenC.has(cid)) continue;
-      const around = html.slice(Math.max(0, m.index - 350), Math.min(html.length, m.index + 600));
-      if (!/رياض|تفاضل|تكامل|جبر|هندسة\s*فراغ|استاتيكا|إستاتيكا|ديناميكا|تطبيقات/i.test(around)) continue;
-      if (/كتب\s*المدرس|كتاب\s*المدرس/i.test(around)) continue;
-      if (/كيرلس/i.test(around) && /فيزياء/i.test(around)) continue;
-      let title = "";
-      const t1 = around.match(/>([^<]*[\u0600-\u06FF][^<]{3,90})</);
-      if (t1) title = cleanArName(t1[1], "");
-      let teacherName = "";
-      const tm = around.match(/لـ\s*([^<\n\\]{4,55})/);
-      if (tm) teacherName = cleanArName(tm[1], "");
-      if (!teacherName) {
-        const tm2 = around.match(/(?:بشمهندس|مستر)\s+([\u0600-\u06FF\s]{3,45})/);
-        if (tm2) teacherName = cleanArName(tm2[0], "");
-      }
-      if (!teacherName || /كيرلس/i.test(teacherName)) continue;
-      if (!title) title = `كورس ${cid}`;
-      title = cleanCourseTitle(title, teacherName, cid);
-      const localImgs = extractImagesFromHtml(around, 2);
-      seenC.add(cid);
-      if (!byTeacher.has(teacherName)) byTeacher.set(teacherName, []);
-      byTeacher.get(teacherName).push({
-        id: cid,
-        title,
-        image_url: localImgs[0] || null,
+    const bucket = byTeacher.get(key);
+    // فضّل الاسم الأطول/الأوضح
+    if (String(teacherName).length > String(bucket.name).length) bucket.name = teacherName;
+    const id = String(cid);
+    const prev = bucket.courses.get(id);
+    const cleanTitle = cleanCourseTitle(title || "", teacherName, id);
+    const img = image_url ? absUrl(image_url) : null;
+    if (!prev) {
+      bucket.courses.set(id, {
+        id,
+        title: cleanTitle || `كورس ${id}`,
+        image_url: img,
         parts: [],
         groups: [],
+        lectures: [],
         lecturesCount: 0,
-        partsCount: 0,
-        lectures: []
+        partsCount: 0
       });
+    } else {
+      if (cleanTitle && !/^كورس\s*\d+$/i.test(cleanTitle)) prev.title = cleanTitle;
+      if (img) prev.image_url = img;
     }
   }
 
-  if (!byTeacher.size) {
-    console.warn("[catalog] tracks/math: no math teachers parsed");
-    // مدرسين معروفين يدويًا عشان الصفحة متبقاش فاضية
-    byTeacher.set("مستر أسامة سعد الله", []);
-    byTeacher.set("بشمهندس أحمد عصام", []);
-    byTeacher.set("مستر لطفي زهران", []);
-  }
-
-  // حدّث عناوين/صور الكورسات من صفحة كل كورس (بعدد محدود)
-  const allCourses = [];
-  for (const arr of byTeacher.values()) allCourses.push(...arr);
-  const toFetch = allCourses.filter((c) => !c.title || /^كورس\s*\d+$/i.test(c.title) || !c.image_url).slice(0, 24);
-  if (toFetch.length) {
-    await mapPool(toFetch, 3, async (c) => {
-      try {
-        const parsed = await parseCourseParts(c.id);
-        if (parsed.courseTitle && !looksLikeTeacherName(parsed.courseTitle, "")) {
-          c.title = cleanCourseTitle(parsed.courseTitle, "", c.id);
-        }
-        if (parsed.courseImage) c.image_url = parsed.courseImage;
-        // خزّن المحاضرات لو اتجابت
-        if ((parsed.items || []).length) {
-          const byLec = new Map();
-          for (const p of parsed.items) {
-            if (String(p.courseId) !== String(c.id)) continue;
-            const ln = String(p.lectureNum);
-            if (!byLec.has(ln)) byLec.set(ln, []);
-            byLec.get(ln).push(p);
-          }
-          const lectures = [];
-          for (const ln of [...byLec.keys()].sort((a, b) => Number(a) - Number(b))) {
-            const parts = (byLec.get(ln) || []).sort((a, b) => Number(a.partNum) - Number(b.partNum));
-            lectures.push({
-              id: `taleb_lec_${c.id}_${ln}`,
-              title: cleanArName(parts[0]?.lectureTitle || parts[0]?.title || `محاضرة ${ln}`, `محاضرة ${ln}`).slice(0, 120),
-              courseId: String(c.id),
-              lectureNum: String(ln),
-              courseTitle: c.title,
-              image_url: c.image_url || null,
-              parts: parts.map((p) => ({
-                id: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`,
-                title: p.title,
-                group: p.group || null,
-                kind: p.kind || "video",
-                courseId: String(p.courseId),
-                lectureNum: String(p.lectureNum),
-                partNum: String(p.partNum),
-                watchPath: p.watchPath,
-                videoId: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
-              }))
-            });
-          }
-          c.lectures = lectures;
-          c.lecturesCount = lectures.length;
-          c.partsCount = lectures.reduce((a, l) => a + (l.parts || []).length, 0);
-          // cache ensureCourseLectures
-          try {
-            coursePartsCache.set(String(c.id), {
-              lectures,
-              title: c.title,
-              image_url: c.image_url,
-              lecturesCount: c.lecturesCount,
-              partsCount: c.partsCount
-            });
-          } catch {}
-        }
-      } catch (e) {
-        console.warn("[catalog] math course", c.id, e && e.message);
+  // 1) من HTML قسم الرياضيات
+  if (html && html.length > 1000) {
+    let section = html;
+    const mStart = html.search(/>\s*الرياضيات\s*</);
+    if (mStart >= 0) {
+      const rest = html.slice(mStart);
+      const endMatch = rest.search(/<h2[^>]*>\s*(?:اللغة|الكيمياء|الفيزياء|الأحياء|التاريخ|الجغرافيا)/i);
+      section = endMatch > 0 ? rest.slice(0, endMatch) : rest.slice(0, 60000);
+    }
+    const linkRe = /href="\/course\/(\d+)"/gi;
+    let m;
+    const seen = new Set();
+    while ((m = linkRe.exec(section))) {
+      const cid = m[1];
+      if (seen.has(cid)) continue;
+      seen.add(cid);
+      const around = section.slice(Math.max(0, m.index - 450), Math.min(section.length, m.index + 750));
+      if (/كتب\s*المدرس|كتاب\s*المدرس/i.test(around)) continue;
+      let title = "";
+      for (const tm of around.matchAll(/>([^<]*[\u0600-\u06FF][^<]{3,100})</g)) {
+        const cand = cleanArName(tm[1], "");
+        if (cand && cand.length >= 4 && !/^(عرض|المزيد|اشترك)$/i.test(cand)) { title = cand; break; }
       }
-    });
+      let teacherName = "";
+      const t1 = around.match(/لـ\s*([^<\n\\]{3,55})/);
+      if (t1) teacherName = cleanArName(t1[1], "");
+      if (!teacherName) {
+        const t2 = around.match(/(?:بشمهندس|مستر)\s+([\u0600-\u06FF\s]{3,45})/);
+        if (t2) teacherName = cleanArName(t2[0], "");
+      }
+      const imgs = extractImagesFromHtml(around, 2);
+      if (teacherName) addCourse(teacherName, cid, title, imgs[0] || null);
+    }
   }
 
-  // مادة واحدة: رياضة
-  let mathSub = subjects.find((s) => s.id === "mathematics");
-  if (!mathSub) {
-    mathSub = { id: "mathematics", name: "رياضة", image_url: subjectImage, teachers: [] };
-    subjects.push(mathSub);
-  } else {
-    mathSub.name = "رياضة";
-    mathSub.id = "mathematics";
-    if (subjectImage) mathSub.image_url = subjectImage;
+  // 2) دمج المرجع الثابت (يضمن الأسماء/الصور حتى لو HTML اتغير)
+  for (const block of MATH_TRACK_FALLBACK) {
+    for (const c of block.courses) {
+      addCourse(block.teacher, c.id, c.title, c.image);
+    }
   }
 
-  // امسح مدرسين غلط على مادة الرياضة (فيزياء/كيمياء…)
-  mathSub.teachers = (mathSub.teachers || []).filter((th) => {
-    const n = String(th.name || "");
-    if (/كيرلس/i.test(n)) return false;
-    if (th.fromTrack) return true;
-    if (th.subjectSlug === "mathematics" || th.subjectId === "mathematics") return true;
-    return false;
+  // 3) حمّل محتوى كل كورس (عنوان أدق + محاضرات)
+  const all = [];
+  for (const b of byTeacher.values()) all.push(...b.courses.values());
+  await mapPool(all, 3, async (c) => {
+    try {
+      const parsed = await parseCourseParts(c.id);
+      if (parsed.courseTitle && !looksLikeTeacherName(parsed.courseTitle, "")) {
+        const ct = cleanCourseTitle(parsed.courseTitle, "", c.id);
+        if (ct && !/^كورس\s*\d+$/i.test(ct)) c.title = ct;
+      }
+      if (parsed.courseImage) c.image_url = absUrl(parsed.courseImage) || c.image_url;
+      const byLec = new Map();
+      for (const p of (parsed.items || [])) {
+        if (String(p.courseId) !== String(c.id)) continue;
+        const ln = String(p.lectureNum);
+        if (!byLec.has(ln)) byLec.set(ln, []);
+        byLec.get(ln).push(p);
+      }
+      const lectures = [];
+      for (const ln of [...byLec.keys()].sort((a, b) => Number(a) - Number(b))) {
+        const parts = (byLec.get(ln) || []).sort((a, b) => Number(a.partNum) - Number(b.partNum));
+        lectures.push({
+          id: `taleb_lec_${c.id}_${ln}`,
+          title: cleanArName(parts[0]?.lectureTitle || parts[0]?.title || `محاضرة ${ln}`, `محاضرة ${ln}`).slice(0, 120),
+          courseId: String(c.id),
+          lectureNum: String(ln),
+          courseTitle: c.title,
+          image_url: c.image_url || null,
+          parts: parts.map((p) => ({
+            id: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`,
+            title: p.title,
+            group: p.group || null,
+            kind: p.kind || "video",
+            courseId: String(p.courseId),
+            lectureNum: String(p.lectureNum),
+            partNum: String(p.partNum),
+            watchPath: p.watchPath,
+            videoId: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
+          }))
+        });
+      }
+      c.lectures = lectures;
+      c.lecturesCount = lectures.length;
+      c.partsCount = lectures.reduce((a, l) => a + (l.parts || []).length, 0);
+      coursePartsCache.set(String(c.id), {
+        lectures,
+        title: c.title,
+        image_url: c.image_url,
+        lecturesCount: c.lecturesCount,
+        partsCount: c.partsCount
+      });
+    } catch (e) {
+      console.warn("[catalog] math course fetch", c.id, e && e.message);
+    }
   });
 
-  // امسح من teachersFlat برضه أي كيرلس مربوط بـ mathematics
+  // 4) ابنِ مادة الرياضة من الصفر (مفيش خلط مع فيزياء)
+  let mathSub = subjects.find((s) => s.id === "mathematics");
+  if (!mathSub) {
+    mathSub = { id: "mathematics", name: "رياضة", image_url: MATH_SUBJECT_IMAGE, teachers: [] };
+    subjects.push(mathSub);
+  }
+  mathSub.id = "mathematics";
+  mathSub.name = "رياضة";
+  mathSub.image_url = MATH_SUBJECT_IMAGE || mathSub.image_url;
+
+  // احذف أي مدرس رياضة قديم (تكرار / غلط)
+  const oldMathIds = new Set(
+    (mathSub.teachers || []).map((th) => th.id).concat(
+      teachersFlat.filter((th) => th.subjectSlug === "mathematics" || th.subjectId === "mathematics").map((th) => th.id)
+    )
+  );
+  mathSub.teachers = [];
   for (let i = teachersFlat.length - 1; i >= 0; i--) {
     const th = teachersFlat[i];
-    if ((th.subjectSlug === "mathematics" || th.subjectId === "mathematics") && /كيرلس/i.test(String(th.name || ""))) {
+    if (th.subjectSlug === "mathematics" || th.subjectId === "mathematics" || oldMathIds.has(th.id)) {
       teachersFlat.splice(i, 1);
     }
   }
 
-  for (const [teacherName, courses] of byTeacher) {
-    if (/كيرلس/i.test(teacherName)) continue;
-    let th = (mathSub.teachers || []).find((x) => {
-      const a = String(x.name || "").replace(/\s+/g, "");
-      const b = teacherName.replace(/\s+/g, "");
-      return a === b || a.includes(b.slice(0, 8)) || b.includes(a.slice(0, 8));
-    });
-    if (!th) {
-      const tid = `taleb_t_mathematics_track_${teacherName.replace(/\s+/g, "_").slice(0, 40)}`;
-      th = {
-        id: tid,
-        uuid: tid,
-        name: teacherName,
-        image_url: null,
-        subjectId: "mathematics",
-        subjectSlug: "mathematics",
-        numericId: null,
-        courses: [],
-        lectures: [],
-        fromTrack: true
-      };
-      mathSub.teachers.push(th);
-      teachersFlat.push(th);
-    } else {
-      th.subjectId = "mathematics";
-      th.subjectSlug = "mathematics";
-      th.fromTrack = true;
-    }
-    const have = new Set((th.courses || []).map((c) => String(c.id)));
-    for (const c of courses) {
-      if (have.has(String(c.id))) {
-        // حدّث العنوان/الصورة لو أحسن
-        const old = th.courses.find((x) => String(x.id) === String(c.id));
-        if (old) {
-          if (c.title && !/^كورس\s*\d+$/i.test(c.title)) old.title = c.title;
-          if (c.image_url) old.image_url = c.image_url;
-          if ((c.lectures || []).length) {
-            old.lectures = c.lectures;
-            old.lecturesCount = c.lecturesCount;
-            old.partsCount = c.partsCount;
-          }
-        }
-        continue;
-      }
-      th.courses.push(c);
-      have.add(String(c.id));
-    }
-    // sync lectures flat
-    th.lectures = (th.courses || []).flatMap((c) => c.lectures || []);
-  }
-
-  // تأكيد وجود أسامة سعد الله / أحمد عصام / لطفي زهران
-  for (const name of ["مستر أسامة سعد الله", "بشمهندس أحمد عصام", "مستر لطفي زهران"]) {
-    ensureTeacher(subjects, teachersFlat, "mathematics", name);
+  for (const [, bucket] of byTeacher) {
+    const courses = [...bucket.courses.values()];
+    const tid = `taleb_t_mathematics_${normalizeTeacherKey(bucket.name).slice(0, 32)}`;
+    const th = {
+      id: tid,
+      uuid: tid,
+      name: bucket.name,
+      image_url: null,
+      subjectId: "mathematics",
+      subjectSlug: "mathematics",
+      numericId: null,
+      courses,
+      lectures: courses.flatMap((c) => c.lectures || []),
+      fromTrack: true
+    };
+    mathSub.teachers.push(th);
+    teachersFlat.push(th);
   }
 
   console.log(
-    "[catalog] math track teachers",
-    mathSub.teachers.length,
-    "courses",
-    mathSub.teachers.reduce((a, th) => a + (th.courses || []).length, 0),
-    "names",
-    mathSub.teachers.map((t) => t.name).join(" | ")
+    "[catalog] math final",
+    mathSub.teachers.map((t) => `${t.name}:{${(t.courses || []).map((c) => c.id + ":" + c.title).join(" | ")}}`).join(" || ")
   );
 }
 
