@@ -3642,6 +3642,8 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
             lectures = det.lectures || [];
           } catch {}
         }
+        // عزل صارم: محاضرات هذا الكورس فقط
+        lectures = (lectures || []).filter((l) => String(l.courseId || courseId) === String(courseId));
       } else if (cid.startsWith("taleb_ch_")) {
         const tid = cid.slice("taleb_ch_".length);
         const th = cat.teachers.find((x) => x.id === tid);
@@ -3820,7 +3822,7 @@ app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) =>
     if (useTalebAsPrimary() || rawId.startsWith("taleb_")) {
       const hit = await findTalebLectureById(rawId);
       if (!hit || !hit.lecture) return jsonError(res, 404, "المحاضرة غير موجودة");
-      const lecture = hit.lecture;
+      const lecture = { ...hit.lecture, parts: (hit.lecture.parts || []).filter((p) => !p.courseId || String(p.courseId) === String(hit.lecture.courseId || p.courseId)) };
       // لو مفيش أجزاء — حاول تحميل الكورس
       if (!(lecture.parts || []).length && lecture.courseId) {
         try { await ensureCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
