@@ -3280,12 +3280,37 @@ async function getTalebCatalog() {
     })),
     lectures: th.lectures || []
   }));
-  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology"];
+  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology","mathematics"];
   const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
   const allowed = new Set(SUBJECT_ORDER);
-  const subjects = [...(cat.subjects || [])]
-    .filter((s) => allowed.has(String(s.id || "")))
-    .sort((a, b) => {
+  const normId = (id) => {
+    const s = String(id || "").toLowerCase();
+    if (/math|رياض/i.test(s)) return "mathematics";
+    return s;
+  };
+  const merged = new Map();
+  for (const s of (cat.subjects || [])) {
+    const id = normId(s.id);
+    if (!allowed.has(id) && id !== "mathematics") continue;
+    if (!merged.has(id)) {
+      merged.set(id, {
+        ...s,
+        id,
+        name: id === "mathematics" ? "رياضة" : s.name,
+        teachers: [...(s.teachers || [])]
+      });
+    } else {
+      const cur = merged.get(id);
+      const seen = new Set((cur.teachers || []).map((th) => th.id || th.name));
+      for (const th of (s.teachers || [])) {
+        const k = th.id || th.name;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        cur.teachers.push(th);
+      }
+    }
+  }
+  const subjects = [...merged.values()].sort((a, b) => {
       const ra = rank.has(a.id) ? rank.get(a.id) : 100;
       const rb = rank.has(b.id) ? rank.get(b.id) : 100;
       if (ra !== rb) return ra - rb;
@@ -3525,7 +3550,7 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
       const data = courses.length
         ? courses
             .filter((c) => c && c.title && !/رجوع|عرض المواد|اختر/i.test(String(c.title)))
-            .filter((c) => !/كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|^\s*كتب\b/i.test(String(c.title || "")))
+            .filter((c) => !/كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|حل\s*الكتب|الكتب\s*الخارج|ملزمة\s*المدرس|^\s*كتب\b|\bbooks?\b|(كتاب.*(حل|خارج|مدرس|سنتر))/i.test(String(c.title || "")))
             .map((c) => ({
             id: `taleb_course_${c.id}`,
             name: (function () {
@@ -3704,48 +3729,102 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
 });
 
 
+
+async function findTalebLectureById(rawId) {
+  const cat = await getTalebCatalog();
+  let key = String(rawId || "");
+  while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
+
+  function search(catalog) {
+    for (const th of catalog.teachers || []) {
+      for (const lec of (th.lectures || [])) {
+        if (lec.id === key || lec.id === rawId) return { lecture: lec, teacher: th };
+      }
+      for (const c of (th.courses || [])) {
+        for (const lec of (c.lectures || [])) {
+          if (lec.id === key || lec.id === rawId) return { lecture: lec, teacher: th, course: c };
+        }
+      }
+    }
+    return null;
+  }
+
+  let hit = search(cat);
+  if (hit && hit.lecture && (hit.lecture.parts || []).length) return hit;
+
+  // taleb_lec_{courseId}_{lectureNum}
+  const m = String(key).match(/^taleb_lec_(\d+)_(\d+)$/i) || String(rawId).match(/^taleb_lec_(\d+)_(\d+)$/i);
+  if (m) {
+    const courseId = m[1];
+    let teacherName = "";
+    for (const th of cat.teachers || []) {
+      if ((th.courses || []).some((c) => String(c.id) === courseId)) {
+        teacherName = th.name || "";
+        break;
+      }
+    }
+    try {
+      await ensureCourseLectures(courseId, teacherName);
+    } catch {}
+    hit = search(await getTalebCatalog());
+    if (hit) return hit;
+    // لو لسه مش لاقي المحاضرة برقمها — رجّع أول محاضرة مطابقة للرقم من الكورس
+    const cat2 = await getTalebCatalog();
+    for (const th of cat2.teachers || []) {
+      for (const c of (th.courses || [])) {
+        if (String(c.id) !== courseId) continue;
+        const lec = (c.lectures || []).find((l) => String(l.lectureNum) === String(m[2]));
+        if (lec) return { lecture: lec, teacher: th, course: c };
+      }
+    }
+  }
+  return hit;
+}
+
+function lectureGroupsPayload(lecture) {
+  const groupMap = new Map();
+  for (const p of (lecture.parts || [])) {
+    const isFile = p.kind === "file" || /ملف/i.test(String(p.group || "")) || /ملف|pdf/i.test(String(p.title || ""));
+    const gName = isFile ? "الملفات" : (p.group || "الشرح");
+    if (!groupMap.has(gName)) groupMap.set(gName, []);
+    groupMap.get(gName).push({
+      id: p.videoId || p.id,
+      video_id: isFile ? null : (p.videoId || p.id),
+      file_id: isFile ? (p.id || p.videoId) : null,
+      name: p.title || "جزء",
+      title: p.title || "جزء",
+      type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
+      kind: isFile ? "file" : (p.kind || "video"),
+      group: gName,
+      platform: "stream"
+    });
+  }
+  const keys = [...groupMap.keys()].filter((k) => k !== "الملفات");
+  if (groupMap.has("الملفات")) keys.push("الملفات");
+  return keys.map((name) => ({ name, title: name, key: name, items: groupMap.get(name) }));
+}
+
+
 app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
     if (useTalebAsPrimary() || rawId.startsWith("taleb_")) {
-      const cat = await getTalebCatalog();
-      let key = rawId;
-      while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
-      let lecture = null;
-      for (const th of cat.teachers) {
-        for (const lec of (th.lectures || [])) {
-          if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
-        }
-        if (lecture) break;
-        for (const c of (th.courses || [])) {
-          for (const lec of (c.lectures || [])) {
-            if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
-          }
-          if (lecture) break;
-        }
-        if (lecture) break;
+      const hit = await findTalebLectureById(rawId);
+      if (!hit || !hit.lecture) return jsonError(res, 404, "المحاضرة غير موجودة");
+      const lecture = hit.lecture;
+      // لو مفيش أجزاء — حاول تحميل الكورس
+      if (!(lecture.parts || []).length && lecture.courseId) {
+        try { await ensureCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
+        const again = await findTalebLectureById(rawId);
+        if (again && again.lecture) Object.assign(lecture, again.lecture);
       }
-      if (!lecture) return jsonError(res, 404, "المحاضرة غير موجودة");
-      const groupMap = new Map();
-      for (const p of (lecture.parts || [])) {
-        const isFile = p.kind === "file" || /ملف/i.test(String(p.group || "")) || /ملف|pdf/i.test(String(p.title || ""));
-        const gName = isFile ? "الملفات" : (p.group || "الشرح");
-        if (!groupMap.has(gName)) groupMap.set(gName, []);
-        groupMap.get(gName).push({
-          id: p.videoId || p.id,
-          video_id: isFile ? null : (p.videoId || p.id),
-          file_id: isFile ? (p.id || p.videoId) : null,
-          name: p.title || "جزء",
-          title: p.title || "جزء",
-          type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
-          kind: isFile ? "file" : (p.kind || "video"),
-          platform: "stream"
-        });
-      }
-      const keys = [...groupMap.keys()].filter((k) => k !== "الملفات");
-      if (groupMap.has("الملفات")) keys.push("الملفات");
-      const groups = keys.map((name) => ({ name, title: name, key: name, items: groupMap.get(name) }));
-      return res.json({ success: true, message: "Success", data: { id: lecture.id, name: lecture.title, groups }, source: "taleb" });
+      const groups = lectureGroupsPayload(lecture);
+      return res.json({
+        success: true,
+        message: "Success",
+        data: { id: lecture.id, name: lecture.title || "محاضرة", groups },
+        source: "taleb"
+      });
     }
     return jsonError(res, 404, "غير متاح");
   } catch (e) { jsonError(res, 502, e.message); }
@@ -3755,11 +3834,54 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
     if (useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_")) {
+      // 1) محاضرة كاملة متعددة الأجزاء
+      {
+        const hit = await findTalebLectureById(rawId);
+        let lecture = hit && hit.lecture;
+        if (lecture && !(lecture.parts || []).length && lecture.courseId) {
+          try { await ensureCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
+          const again = await findTalebLectureById(rawId);
+          if (again) lecture = again.lecture;
+        }
+        if (lecture && Array.isArray(lecture.parts) && lecture.parts.length) {
+          const groups = lectureGroupsPayload(lecture);
+          const videos = [];
+          const pdfs = [];
+          for (const p of lecture.parts) {
+            const isFile = p.kind === "file" || /ملف/i.test(String(p.group || ""));
+            const row = {
+              id: p.videoId || p.id,
+              video_id: isFile ? null : (p.videoId || p.id),
+              name: p.title || "جزء",
+              title: p.title || "جزء",
+              group: p.group || null,
+              type: isFile ? "file" : "video",
+              platform: "stream"
+            };
+            if (isFile) pdfs.push(row); else videos.push(row);
+          }
+          return res.json({
+            success: true,
+            message: "Success",
+            data: {
+              id: lecture.id,
+              name: lecture.title || "محاضرة",
+              image_url: lecture.image_url || null,
+              course_id: lecture.courseId || null,
+              groups,
+              videos,
+              pdfs,
+              files: pdfs
+            },
+            source: "taleb"
+          });
+        }
+      }
       const cat = await getTalebCatalog();
       let key = rawId;
       while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
 
-      // 1) محاضرة كاملة متعددة الأجزاء
+      // fallback قديم
       let lecture = null;
       for (const th of cat.teachers) {
         for (const lec of th.lectures || []) {
