@@ -321,11 +321,27 @@ const SUBJECT_IMAGES={
   chemistry:'https://talep.pro/media/8396d25fac27ec73.jpg',
   physics:  'https://talep.pro/media/994c7308cd9668bd.jpg',
   biology:  'https://talep.pro/media/97fa47a98fe1fbea.jpg',
-  math:     'https://talep.pro/media/3f7a6e9c1b2d4f5a.jpg',
+  math: 'https://talep.pro/media/fbf82092b1726d99.jpg',
+  mathematics: 'https://talep.pro/media/fbf82092b1726d99.jpg',
+  pure_math: 'https://talep.pro/media/fbf82092b1726d99.jpg',
+  applied_math: 'https://talep.pro/media/fbf82092b1726d99.jpg',
   history:  'https://talep.pro/media/a1b2c3d4e5f6a7b8.jpg',
 };
 
 // resolve image for a subject — match by id string or name
+function proxyImg(u){
+  if(!u) return '';
+  u=String(u);
+  if(u.startsWith('/api/img')) return u;
+  if(/^https?:\/\//i.test(u)){
+    try{
+      // base64url
+      const b64=btoa(unescape(encodeURIComponent(u))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      return '/api/img?u='+b64;
+    }catch{return u;}
+  }
+  return u;
+}
 function resolveImg(s){
   const id=String(s.id||'').toLowerCase();
   const name=String(s.name||'').toLowerCase();
@@ -334,10 +350,10 @@ function resolveImg(s){
     if(id.includes(k)||name.includes({
       arabic:'عربي',english:'انجليزي إنجليزي إنگليزي',
       chemistry:'كيمياء',physics:'فيزياء',biology:'أحياء احياء',
-      math:'رياضيات',history:'تاريخ'
-    }[k]||k)) return SUBJECT_IMAGES[k];
+      math:'رياضيات رياضة',mathematics:'رياضيات رياضة',pure_math:'بحتة',applied_math:'تطبيقية',history:'تاريخ'
+    }[k]||k)) return proxyImg(SUBJECT_IMAGES[k]);
   }
-  return s.image_url||'';
+  return proxyImg(s.image_url||'');
 }
 
 // greeting
