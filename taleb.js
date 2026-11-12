@@ -293,13 +293,8 @@ function absUrl(u) {
 
 function isBookCourse(title) {
   const s = String(title || "");
-  // أي فصل/كورس خاص بالكتب الخارجية أو كتاب المدرس
-  return (
-    /كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|ملزمة\s*المدرس|حل\s*الكتب|الكتب\s*الخارج/i.test(s) ||
-    /كيان\s*-\s*الإمتحان|الأضواء|كتاب\s*كيان|كتاب\s*الأضواء/i.test(s) ||
-    /^\s*كتب\b|\bbooks?\b/i.test(s) ||
-    (/كتاب/i.test(s) && /حل|خارج|مدرس|سنتر/i.test(s))
-  );
+  // فقط فصل/كورس «كتب المدرس» — متشملش «حل الكتب» كمحتوى جوه المحاضرة
+  return /كتب\s*المدرس|كتاب\s*المدرس/i.test(s);
 }
 
 function extractImagesFromHtml(html, limit = 12) {
@@ -614,7 +609,7 @@ async function enrichMathematicsFromTrack(subjects, teachersFlat) {
     const mathWords = /رياض|تفاضل|تكامل|جبر|هندسة|فراغ|استاتيكا|إستاتيكا|ديناميكا|تطبيق/i.test(around);
     if (!inMathSection && !mathWords) continue;
     // تجاهل كتب
-    if (/كتب\s*المدرس|حل\s*الكتب/i.test(around)) continue;
+    if (/كتب\s*المدرس|كتاب\s*المدرس/i.test(around)) continue;
     seenC.add(cid);
 
     let title = "";
