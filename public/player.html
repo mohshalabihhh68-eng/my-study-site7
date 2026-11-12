@@ -1955,7 +1955,20 @@ async function init(){
     await playIndex(idx,false);
   }catch(e){
     if(e.kind==='auth')showError(e.message,'انتهت الجلسة','leave');
-    else showError(e.message||'فشل تحميل المحاضرة','تعذّر تحميل المحاضرة');
+    else {
+      // لو فيه videoId من الرابط جرّب تشغيله مباشرة بدل ما توقف كله
+      if (initialVideoId) {
+        videos = [{ id: initialVideoId, name: 'فيديو', title: 'فيديو', type: 'video' }];
+        lectureTitle = 'المحاضرة';
+        try { $('crumb').textContent = 'المحتوى / المحاضرة'; } catch {}
+        try { $('lectureName').textContent = 'المحاضرة'; } catch {}
+        renderStats();
+        renderList();
+        await playIndex(0, false);
+        return;
+      }
+      showError(e.message||'فشل تحميل المحاضرة','تعذّر تحميل المحاضرة');
+    }
   }
 }
 
