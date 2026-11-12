@@ -206,7 +206,9 @@ window.goToLectures = function(url, cardEl) {
 async function load() {
   if (!teacherId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المدرس غير موجود.</div>'; return; }
   try {
-    const chapters = await api('/api/teachers/' + teacherId + '/chapters');
+    let chapters = await api('/api/teachers/' + teacherId + '/chapters');
+    // شيل فصل «كتب المدرس» فقط — سيب حل الكتب وأي كورس تاني
+    chapters = (chapters || []).filter(c => !/كتب\s*المدرس|كتاب\s*المدرس/i.test(String(c.name || c.title || '')));
     if (!chapters || !chapters.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد فصول متاحة.</div>'; return; }
     
     let html = `
@@ -215,7 +217,7 @@ async function load() {
     <div class="grid">`;
     
     chapters.forEach((c, index) => {
-      const imgUrl = c.image_url || '';
+      const imgUrl = proxyImg(c.image_url || '');
       const imgHtml = imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(c.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">` : '';
       const phHtml = `<div class="image-placeholder" style="display:${imgUrl?'none':'grid'};"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`;
       
@@ -229,7 +231,7 @@ async function load() {
         </div>
         <div class="lectures-bar">
           <div class="lectures-bar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>عدد المحاضرات</div>
-          <div class="lectures-badge">${c.lecture_count || c.count || 0}</div>
+          <div class="lectures-badge">${c.lectures_count || c.lecture_count || c.count || 0}</div>
         </div>
         <button class="view-btn" onclick="goToLectures('lectures.html?chapterId=${c.id}&chapterName=${encodeURIComponent(c.name)}&teacherName=${encodeURIComponent(teacherName)}&subjectName=${encodeURIComponent(subjectName)}', document.getElementById('card-${c.id}'))">عرض المحاضرات<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
       </div>`;
