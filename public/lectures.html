@@ -524,16 +524,46 @@ const flatten=d=>{
 
 /* fetch */
 const fetchItems=async lid=>{
+  // 1) من بيانات القائمة لو فيها parts/sections جاهزة
+  try{
+    const cached=(allLectures||[]).find(l=>String(l.id)===String(lid));
+    if(cached){
+      if(Array.isArray(cached.sections)&&cached.sections.length){
+        const items=[];
+        for(const g of cached.sections){
+          for(const it of (g.items||[])){
+            items.push({...it,title:it.title||it.name||'',type:it.type||(it.is_file||it.kind==='file'?'file':'video'),group:g.title||g.name||it.group||null});
+          }
+        }
+        if(items.length) return items;
+      }
+      if(Array.isArray(cached.parts)&&cached.parts.length){
+        return cached.parts.map(p=>({
+          ...p,
+          title:p.title||p.name||'',
+          type:p.type||(p.is_file||p.kind==='file'?'file':'video'),
+          group:p.group||null
+        }));
+      }
+    }
+  }catch{}
+  // 2) grouped-content
   try{
     const d=await api('/api/lectures/'+lid+'/grouped-content');
     if(d&&d.groups&&d.groups.length) return flatten(d);
   }catch{}
-  const d=await api('/api/lectures/'+lid+'/content');if(!d) return [];
-  if(d.groups&&d.groups.length) return flatten(d);
-  const videos=(d.videos||[]).map(v=>({...v,title:v.name||v.title,type:v.type||'video',group:v.group||null}));
-  const files=(d.pdfs||d.files||d.attachments||d.documents||[]).map(f=>({...f,title:f.name||f.title||f.file_name,type:'file',url:f.file_url||f.url,group:'الملفات'}));
-  const exams=(d.exams||[]).map(e=>({...e,title:e.name||e.title,type:'exam',group:e.group||'الامتحان'}));
-  return [...videos,...files,...exams];
+  // 3) content
+  try{
+    const d=await api('/api/lectures/'+lid+'/content');
+    if(!d) return [];
+    if(d.groups&&d.groups.length) return flatten(d);
+    const videos=(d.videos||[]).map(v=>({...v,title:v.name||v.title,type:v.type||'video',group:v.group||null}));
+    const files=(d.pdfs||d.files||d.attachments||d.documents||[]).map(f=>({...f,title:f.name||f.title||f.file_name,type:'file',url:f.file_url||f.url,group:'الملفات'}));
+    const exams=(d.exams||[]).map(e=>({...e,title:e.name||e.title,type:'exam',group:e.group||'الامتحان'}));
+    return [...videos,...files,...exams];
+  }catch{
+    return [];
+  }
 };
 
 /* search filter */
@@ -672,17 +702,24 @@ const load=async()=>{
       const ge=$('lg-'+lid);
       if(ge) ge.innerHTML=`<div class="state-box" style="padding:20px 0"><div class="spinner spinner-sm"></div></div>`;
       try{
-        const items=await fetchItems(lid);
-        const ge2=$('lg-'+lid);if(ge2) ge2.innerHTML=buildGroups(items,lid);
+        let items=await fetchItems(lid);
+        if(!Array.isArray(items)) items=[];
+        const ge2=$('lg-'+lid);
+        if(ge2){
+          if(items.length) ge2.innerHTML=buildGroups(items,lid);
+          else ge2.innerHTML=`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد محتوى ظاهر لهذه المحاضرة حاليًا.</p>`;
+        }
         const bdg=$('lbdg-'+lid);if(bdg) bdg.textContent='0 / '+items.length;
-        const sub=$('lsub-'+lid);if(sub) sub.textContent=items.length+' جزء';
-        /* update progress bar based on watched */
+        const sub=$('lsub-'+lid);if(sub) sub.textContent=(items.length?items.length+' جزء':'—');
         const watched=items.filter(it=>it.type==='video'&&isWatched(it.id)).length;
         const pct=items.length?Math.round(watched/items.length*100):0;
         const pb=$('lpb-'+lid);if(pb) pb.style.width=pct+'%';
       }catch(err){
+        // مفيش رسالة خطأ حمراء — رسالة هادية فقط
         const ge2=$('lg-'+lid);
-        if(ge2) ge2.innerHTML=`<p style="padding:14px;color:var(--red);font-size:13px">خطأ: ${esc(err.message)}</p>`;
+        if(ge2) ge2.innerHTML=`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">تعذر تحميل المحتوى. جرّب مرة أخرى.</p>`;
+        // اسمح بإعادة المحاولة
+        lt.dataset.loaded='0';
       }
     });
 
