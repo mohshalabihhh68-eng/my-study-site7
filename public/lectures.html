@@ -398,8 +398,25 @@ const IC_CHEV=`<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke
 const IC_SEARCH=`<svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>`;
 
 /* build item */
+const resolvePlayId=(item,lid)=>{
+  // فضّل video_id الكامل
+  let id = item.video_id || item.videoId || item.id || '';
+  id = String(id || '').trim();
+  // لو ناقص زي taleb_w_90_ كمّل من course/lecture/part
+  if(/^taleb_w_\d+_$/.test(id) || /^taleb_w_\d+_\d+_?$/.test(id) || !id){
+    const course = item.courseId || (String(lid).match(/^taleb_lec_(\d+)/)||[])[1] || '';
+    const lec = item.lectureNum || (String(lid).match(/^taleb_lec_\d+_(\d+)/)||[])[1] || '1';
+    const part = item.partNum || item.part_num || '1';
+    if(course) id = `taleb_w_${course}_${lec}_${part}`;
+  }
+  return id;
+};
 const buildItem=(item,lid)=>{
-  const {id,title,type,url,duration}=item;
+  const id=resolvePlayId(item,lid);
+  const title=item.title||item.name||'';
+  const type=item.type||item.kind||'video';
+  const url=item.url||item.file_url||'';
+  const duration=item.duration;
   const cat=classify(title,type);
   const cfg=GRP[cat]||GRP.lesson;
   const watched=type==='video'?isWatched(id):false;
@@ -407,7 +424,7 @@ const buildItem=(item,lid)=>{
   const sub=duration?`<span class="item-sub">${esc(duration)}</span>`:'';
 
   let onclick='';
-  if(type==='pdf'||type==='file'){
+  if(type==='pdf'||type==='file'||item.is_file){
     const pu=url?'/api/file-proxy/document.pdf?url='+encodeURIComponent(url):'#';
     onclick=`window.open('${esc(pu)}','_blank')`;
   } else if(type==='exam'){
