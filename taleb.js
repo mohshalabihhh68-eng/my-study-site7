@@ -383,10 +383,20 @@ function parseSourceRefNumber(ref, prefix) {
 
 async function parseCourseParts(courseId) {
   let html = "";
-  try {
-    html = await talebText(`${TALEB_BASE}/courses/${courseId}`, 45_000);
-  } catch {
-    html = await talebText(`${TALEB_BASE}/course/${courseId}`, 45_000);
+  // مهم: /course/ID فيها cv-lecture — /courses/ID غالباً بدون محتوى
+  for (const url of [`${TALEB_BASE}/course/${courseId}`, `${TALEB_BASE}/courses/${courseId}`]) {
+    try {
+      const page = await talebText(url, 45_000);
+      if (!page || page.length < 2000) continue;
+      if (/cv-lecture/i.test(page) || /cv-item/i.test(page) || /\/watch\//i.test(page)) {
+        html = page;
+        break;
+      }
+      if (!html || page.length > html.length) html = page;
+    } catch {}
+  }
+  if (!html) {
+    try { html = await talebText(`${TALEB_BASE}/course/${courseId}`, 45_000); } catch { html = ""; }
   }
 
   let courseTitle = "";
@@ -601,7 +611,7 @@ const MATH_TRACK_FALLBACK = [
     { id: "35", title: "كورس الشهر الثالث فرع الجبر", image: "/media/e2441b49cf2c50a2.jpg" }
   ]}
 ];
-const MATH_SUBJECT_IMAGE = absUrl("/media/fbf82092b1726d99.jpg");
+const MATH_SUBJECT_IMAGE = absUrl("/media/7e3d510a1ddc4031.jpg");
 
 /** استخراج مدرسي وكورسات الرياضيات من /tracks/math */
 async function enrichMathematicsFromTrack(subjects, teachersFlat) {
@@ -772,11 +782,12 @@ async function enrichMathematicsFromTrack(subjects, teachersFlat) {
   for (const [, bucket] of byTeacher) {
     const courses = [...bucket.courses.values()];
     const tid = `taleb_t_mathematics_${normalizeTeacherKey(bucket.name).slice(0, 32)}`;
+    const teacherImg = (courses.find((c) => c.image_url) || {}).image_url || null;
     const th = {
       id: tid,
       uuid: tid,
       name: bucket.name,
-      image_url: null,
+      image_url: teacherImg,
       subjectId: "mathematics",
       subjectSlug: "mathematics",
       numericId: null,
