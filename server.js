@@ -3752,28 +3752,37 @@ async function findTalebLectureById(rawId) {
   let hit = search(cat);
   if (hit && hit.lecture && (hit.lecture.parts || []).length) return hit;
 
-  // taleb_lec_{courseId}_{lectureNum}
-  const m = String(key).match(/^taleb_lec_(\d+)_(\d+)$/i) || String(rawId).match(/^taleb_lec_(\d+)_(\d+)$/i);
-  if (m) {
-    const courseId = m[1];
+  // taleb_lec_{courseId}_{lectureNum} أو taleb_w_{c}_{l}_{p}
+  let courseId = null;
+  let lectureNum = null;
+  const mLec = String(key).match(/^taleb_lec_(\d+)_(\d+)$/i) || String(rawId).match(/^taleb_lec_(\d+)_(\d+)$/i);
+  const mW = String(key).match(/^taleb_w_(\d+)_(\d+)(?:_(\d+))?$/i) || String(rawId).match(/^taleb_w_(\d+)_(\d+)(?:_(\d+))?$/i);
+  if (mLec) { courseId = mLec[1]; lectureNum = mLec[2]; }
+  else if (mW) { courseId = mW[1]; lectureNum = mW[2]; }
+
+  if (courseId) {
     let teacherName = "";
     for (const th of cat.teachers || []) {
-      if ((th.courses || []).some((c) => String(c.id) === courseId)) {
+      if ((th.courses || []).some((c) => String(c.id) === String(courseId))) {
         teacherName = th.name || "";
         break;
       }
     }
     try {
       await ensureCourseLectures(courseId, teacherName);
-    } catch {}
-    hit = search(await getTalebCatalog());
-    if (hit) return hit;
-    // لو لسه مش لاقي المحاضرة برقمها — رجّع أول محاضرة مطابقة للرقم من الكورس
+    } catch (e) {
+      console.warn("[findTalebLecture] ensure", courseId, e && e.message);
+    }
     const cat2 = await getTalebCatalog();
+    hit = search(cat2);
+    if (hit && hit.lecture) return hit;
+    // بالرقم
     for (const th of cat2.teachers || []) {
       for (const c of (th.courses || [])) {
-        if (String(c.id) !== courseId) continue;
-        const lec = (c.lectures || []).find((l) => String(l.lectureNum) === String(m[2]));
+        if (String(c.id) !== String(courseId)) continue;
+        let lec = null;
+        if (lectureNum != null) lec = (c.lectures || []).find((l) => String(l.lectureNum) === String(lectureNum));
+        if (!lec && (c.lectures || []).length) lec = c.lectures[0];
         if (lec) return { lecture: lec, teacher: th, course: c };
       }
     }
@@ -3957,6 +3966,14 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
       let title = null;
       if (/^taleb_w_\d+_\d+_\d+$/i.test(key)) playId = key;
       if (!playId && /^taleb_w_\d+_\d+_\d+$/i.test(rawId)) playId = rawId.replace(/^(taleb_)+/i, "taleb_");
+      // معرّف ناقص: taleb_w_90_ أو taleb_w_90_1_
+      if (!playId) {
+        const inc = String(key || rawId).match(/^taleb_w_(\d+)_?(\d+)?_?(\d+)?$/i);
+        if (inc) {
+          const c = inc[1], l = inc[2] || "1", p = inc[3] || "1";
+          playId = `taleb_w_${c}_${l}_${p}`;
+        }
+      }
 
       if (!playId) {
         for (const th of cat.teachers) {
