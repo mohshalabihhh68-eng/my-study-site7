@@ -1,12 +1,11 @@
 {
   "name": "thanawya-club",
-  "version": "1.7.2",
+  "version": "1.8.4",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node fix-weave.mjs && node server.js",
-    "dev": "node server.js",
-    "vercel-dev": "vercel dev"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
     "compression": "^1.7.5",
