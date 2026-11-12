@@ -140,7 +140,7 @@ export async function getTalebKey(partId) {
 // ---------- زحف الكتالوج الكامل ----------
 const coursePartsCache = new Map();
 const catalogCache = { exp: 0, data: null };
-export function clearTalebCatalogCache() { catalogCache.exp = 0; catalogCache.data = null; }
+export function clearTalebCatalogCache() { catalogCache.exp = 0; catalogCache.data = null; partIdCache.clear(); coursePartsCache.clear(); }
 
 const partIdCache = new Map(); // watchKey -> uuid
 const COURSE_CONCURRENCY = 4;
@@ -381,6 +381,27 @@ function parseSourceRefNumber(ref, prefix) {
   return m2 ? m2[1] : null;
 }
 
+
+/** من JSON المضمّن في صفحة الكورس: order المحاضرة → قائمة part UUIDs */
+function extractPartIdsByLectureOrder(html) {
+  const map = new Map(); // order(1-based) -> [uuid,...]
+  // في HTML العادي أو RSC: \"order\":1,\"partIds\":[\"uuid\",...]
+  const patterns = [
+    /"order"\s*:\s*(\d+)\s*,\s*"partIds"\s*:\s*\[([^\]]*)\]/g,
+    /\\"order\\":(\d+),\\"partIds\\":\[([^\]]*)\]/g
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(html))) {
+      const order = Number(m[1]);
+      const ids = [...String(m[2]).matchAll(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((x) => x[1]);
+      if (order && ids.length) map.set(order, ids);
+    }
+    if (map.size) break;
+  }
+  return map;
+}
+
 async function parseCourseParts(courseId) {
   let html = "";
   // مهم: /course/ID فيها cv-lecture — /courses/ID غالباً بدون محتوى
@@ -398,6 +419,8 @@ async function parseCourseParts(courseId) {
   if (!html) {
     try { html = await talebText(`${TALEB_BASE}/course/${courseId}`, 45_000); } catch { html = ""; }
   }
+
+  const partIdsByOrder = extractPartIdsByLectureOrder(html);
 
   let courseTitle = "";
   const h1 = html.match(new RegExp("<h1[^>]*id=[\"']course-title[\"'][^>]*>([^<]+)</h1>", "i"))
@@ -436,6 +459,9 @@ async function parseCourseParts(courseId) {
     let lectureNum = String(lectureOrdinal);
     const watchInLec = block.match(new RegExp("/watch/" + String(courseId) + "/(\\d+)/(\\d+)"));
     if (watchInLec) lectureNum = watchInLec[1];
+
+    const orderKey = lectureOrdinal;
+    const uuidList = partIdsByOrder.get(orderKey) || partIdsByOrder.get(Number(lectureNum)) || [];
 
     const groupChunks = block.split(/class="cv-group"/i).slice(1);
     let partOrdinal = 0;
@@ -479,6 +505,11 @@ async function parseCourseParts(courseId) {
         const normGroup = normalizeGroup(groupTitle, kind, itemTitle);
         if (normGroup === "الملفات") kind = "file";
 
+        const partUuid = uuidList[partOrdinal - 1] || null;
+        if (partUuid) {
+          partIdCache.set(`${courseId}/${lectureNum}/${partNum}`, partUuid);
+          partIdCache.set(`${courseId}/${orderKey}/${partOrdinal}`, partUuid);
+        }
         items.push({
           courseId: String(courseId),
           lectureNum: String(lectureNum),
@@ -487,7 +518,8 @@ async function parseCourseParts(courseId) {
           title: itemTitle,
           group: normGroup,
           kind,
-          watchPath: kind === "file" ? null : watchPath
+          watchPath: kind === "file" ? null : watchPath,
+          partUuid: partUuid || null
         });
       }
     }
@@ -611,7 +643,7 @@ const MATH_TRACK_FALLBACK = [
     { id: "35", title: "كورس الشهر الثالث فرع الجبر", image: "/media/e2441b49cf2c50a2.jpg" }
   ]}
 ];
-const MATH_SUBJECT_IMAGE = absUrl("/media/7e3d510a1ddc4031.jpg");
+const MATH_SUBJECT_IMAGE = absUrl("/media/26e06b734eae866b.jpg");
 
 /** استخراج مدرسي وكورسات الرياضيات من /tracks/math */
 async function enrichMathematicsFromTrack(subjects, teachersFlat) {
@@ -736,7 +768,8 @@ async function enrichMathematicsFromTrack(subjects, teachersFlat) {
             lectureNum: String(p.lectureNum),
             partNum: String(p.partNum),
             watchPath: p.watchPath,
-            videoId: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
+            partUuid: p.partUuid || null,
+            videoId: p.partUuid ? `taleb_${p.partUuid}` : `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
           }))
         });
       }
@@ -1180,7 +1213,7 @@ export async function ensureCourseLectures(courseId, teacherName = "") {
         courseTitle: cleanCourseTitle(parsed.courseTitle || "", teacherName, cid),
         image_url: parsed.courseImage || null,
         parts: parts.map((p) => ({
-          id: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`,
+          id: p.partUuid ? `taleb_${p.partUuid}` : `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`,
           title: p.title,
           group: p.group || null,
           kind: p.kind || "video",
@@ -1188,7 +1221,8 @@ export async function ensureCourseLectures(courseId, teacherName = "") {
           lectureNum: String(p.lectureNum),
           partNum: String(p.partNum),
           watchPath: p.watchPath,
-          videoId: `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
+          partUuid: p.partUuid || null,
+          videoId: p.partUuid ? `taleb_${p.partUuid}` : `taleb_w_${p.courseId}_${p.lectureNum}_${p.partNum}`
         }))
       });
     }
@@ -1227,30 +1261,57 @@ export async function ensureCourseLectures(courseId, teacherName = "") {
 export async function resolveTalebPartId(courseId, lectureNum, partNum) {
   const key = `${courseId}/${lectureNum}/${partNum}`;
   if (partIdCache.has(key)) return partIdCache.get(key);
+  // مفاتيح بديلة
+  for (const k of [`${courseId}/${lectureNum}/${partNum}`, `${courseId}/${Number(lectureNum)}/${Number(partNum)}`]) {
+    if (partIdCache.has(k)) return partIdCache.get(k);
+  }
 
-  const html = await talebText(`${TALEB_BASE}/watch/${courseId}/${lectureNum}/${partNum}`, 40_000);
-  let m = html.match(/\\"part\\":\{\\"id\\":\\"([0-9a-f-]{36})\\"/);
-  if (!m) m = html.match(/"part":\{"id":"([0-9a-f-]{36})"/);
-  if (!m) m = html.match(/data-subject="[^"]*"[\s\S]{0,200}?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
-  if (!m) {
-    const idx = html.search(/part\\":\{/);
-    if (idx >= 0) {
-      const slice = html.slice(idx, idx + 500);
-      const m2 = slice.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
-      if (m2) m = m2;
+  // 1) من صفحة الكورس JSON (partIds) — لا يحتاج تسجيل دخول لنفس الصفحة العامة
+  try {
+    const courseHtml = await talebText(`${TALEB_BASE}/course/${courseId}`, 45_000);
+    const byOrder = extractPartIdsByLectureOrder(courseHtml);
+    // lectureNum غالباً = order
+    let list = byOrder.get(Number(lectureNum)) || byOrder.get(String(lectureNum));
+    if (!list) {
+      // جرّب بالترتيب التسلسلي
+      list = byOrder.get(Number(lectureNum));
     }
+    if (list && list.length) {
+      const idx = Math.max(0, Number(partNum) - 1);
+      const uuid = list[idx] || list[0];
+      if (uuid) {
+        partIdCache.set(key, uuid);
+        return uuid;
+      }
+    }
+    // لو partNum أكبر من القائمة — آخر عنصر
+  } catch (e) {
+    console.warn("[resolvePart] course page", courseId, e && e.message);
   }
-  if (!m) {
-    const err = new Error("تعذر تحديد مصدر الفيديو");
-    err.status = 502;
-    throw err;
+
+  // 2) صفحة المشاهدة (محتاجة كوكيز غالباً)
+  try {
+    const html = await talebText(`${TALEB_BASE}/watch/${courseId}/${lectureNum}/${partNum}`, 40_000);
+    let m = html.match(/\\"part\\":\{\\"id\\":\\"([0-9a-f-]{36})\\"/);
+    if (!m) m = html.match(/"part":\{"id":"([0-9a-f-]{36})"/);
+    if (!m) m = html.match(/"id"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/);
+    if (!m) {
+      const all = [...html.matchAll(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)];
+      if (all.length === 1) m = all[0];
+    }
+    if (m) {
+      const uuid = m[1];
+      partIdCache.set(key, uuid);
+      return uuid;
+    }
+  } catch (e) {
+    console.warn("[resolvePart] watch page", key, e && e.message);
   }
-  const uuid = m[1];
-  partIdCache.set(key, uuid);
-  return uuid;
+
+  const err = new Error("تعذر تحديد مصدر الفيديو");
+  err.status = 502;
+  throw err;
 }
-
-
 
 export async function getTalebTeachers() {
   try {
