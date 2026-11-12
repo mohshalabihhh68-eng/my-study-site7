@@ -3550,7 +3550,7 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
       const data = courses.length
         ? courses
             .filter((c) => c && c.title && !/رجوع|عرض المواد|اختر/i.test(String(c.title)))
-            .filter((c) => !/كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|حل\s*الكتب|الكتب\s*الخارج|ملزمة\s*المدرس|^\s*كتب\b|\bbooks?\b|(كتاب.*(حل|خارج|مدرس|سنتر))/i.test(String(c.title || "")))
+            .filter((c) => !/كتب\s*المدرس|كتاب\s*المدرس/i.test(String(c.title || "")))
             .map((c) => ({
             id: `taleb_course_${c.id}`,
             name: (function () {
