@@ -28,8 +28,9 @@ const SUBJECT_NAME_AR = {
   biology: "أحياء",
   chemistry: "كيمياء",
   physics: "فيزياء",
-  math: "رياضة",
-  maths: "رياضة",
+  math: "رياضيات",
+  maths: "رياضيات",
+  mathematics: "رياضيات",
   arabic: "عربي",
   english: "إنجليزي",
   french: "فرنساوي",
@@ -160,19 +161,52 @@ function subjectNameAr(sid) {
   return SUBJECT_NAME_AR[String(sid || "").toLowerCase()] || String(sid || "مادة");
 }
 
-const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology"];
+const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology", "mathematics"];
 const SUBJECT_ALLOWED = new Set(SUBJECT_ORDER);
+const MATH_SLUGS = new Set(["mathematics", "math", "maths", "pure_math", "applied_math", "statistics", "رياضة", "رياضيات"]);
+
+/** كل فروع الرياضيات → مادة واحدة: mathematics / رياضة */
+function normalizeSubjectSlug(id) {
+  const s = String(id || "").toLowerCase().trim();
+  if (MATH_SLUGS.has(s) || /math|رياض/i.test(s)) return "mathematics";
+  return s;
+}
+
+function isMathSubject(id, name = "") {
+  return normalizeSubjectSlug(id) === "mathematics" || /رياض/i.test(String(name || ""));
+}
 
 function sortSubjects(list) {
   const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
-  return [...(list || [])]
-    .filter((s) => SUBJECT_ALLOWED.has(String(s.id || "")))
-    .sort((a, b) => {
-      const ra = rank.has(a.id) ? rank.get(a.id) : 100;
-      const rb = rank.has(b.id) ? rank.get(b.id) : 100;
-      if (ra !== rb) return ra - rb;
-      return String(a.name || "").localeCompare(String(b.name || ""), "ar");
-    });
+  // دمج أي فروع رياضة في مادة واحدة
+  const byId = new Map();
+  for (const s of (list || [])) {
+    const id = normalizeSubjectSlug(s.id);
+    if (!SUBJECT_ALLOWED.has(id) && id !== "mathematics") continue;
+    if (!byId.has(id)) {
+      byId.set(id, {
+        ...s,
+        id,
+        name: id === "mathematics" ? "رياضة" : (s.name || subjectNameAr(id)),
+        teachers: [...(s.teachers || [])]
+      });
+    } else {
+      const cur = byId.get(id);
+      const seen = new Set((cur.teachers || []).map((th) => th.id || th.name));
+      for (const th of (s.teachers || [])) {
+        const key = th.id || th.name;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cur.teachers.push(th);
+      }
+    }
+  }
+  return [...byId.values()].sort((a, b) => {
+    const ra = rank.has(a.id) ? rank.get(a.id) : 100;
+    const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+    if (ra !== rb) return ra - rb;
+    return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+  });
 }
 
 function cleanCourseTitle(title, teacherName, courseId) {
@@ -259,7 +293,13 @@ function absUrl(u) {
 
 function isBookCourse(title) {
   const s = String(title || "");
-  return /كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|ملزمة\s*المدرس|^\s*كتب\b|كتب\s*&|books?/i.test(s);
+  // أي فصل/كورس خاص بالكتب الخارجية أو كتاب المدرس
+  return (
+    /كتب\s*المدرس|كتاب\s*المدرس|كتب\s*السنتر|ملزمة\s*المدرس|حل\s*الكتب|الكتب\s*الخارج/i.test(s) ||
+    /كيان\s*-\s*الإمتحان|الأضواء|كتاب\s*كيان|كتاب\s*الأضواء/i.test(s) ||
+    /^\s*كتب\b|\bbooks?\b/i.test(s) ||
+    (/كتاب/i.test(s) && /حل|خارج|مدرس|سنتر/i.test(s))
+  );
 }
 
 function extractImagesFromHtml(html, limit = 12) {
@@ -536,6 +576,129 @@ function ensureTeacher(subjects, teachersFlat, subjectSlug, name) {
   (sub.teachers = sub.teachers || []).push(teacherObj);
 }
 
+
+/** استخراج مدرسي وكورسات الرياضيات من /tracks/math */
+async function enrichMathematicsFromTrack(subjects, teachersFlat) {
+  let html = "";
+  try {
+    html = await talebText(`${TALEB_BASE}/tracks/math`, 45_000);
+  } catch (e) {
+    console.warn("[catalog] tracks/math fail", e && e.message);
+    return;
+  }
+  if (!html || html.length < 1000) return;
+
+  // قسم الرياضيات فقط من الصفحة
+  let section = html;
+  const mStart = html.search(/>\s*الرياضيات\s*</);
+  if (mStart >= 0) {
+    const rest = html.slice(mStart);
+    const nextH = rest.search(/<h2[\s>]/i);
+    section = nextH > 0 ? rest.slice(0, nextH) : rest.slice(0, 50000);
+  }
+
+  // كورسات: /course/ID + عنوان + لـ مدرس
+  const courseRe = /href="\/course\/(\d+)"[\s\S]{0,400}?>([^<]{4,120})</gi;
+  const byTeacher = new Map(); // name -> {courses: Map id->title, images}
+  let m;
+  const seenC = new Set();
+  // أمثل: دوران على روابط الكورس وجمع النص حولها
+  const linkRe = /href="\/course\/(\d+)"/gi;
+  while ((m = linkRe.exec(html))) {
+    const cid = m[1];
+    if (seenC.has(cid)) continue;
+    // هل الرابط داخل قسم الرياضيات؟ لو قسمنا section ضيق ممكن نضيع — خذ حول الرابط
+    const around = html.slice(Math.max(0, m.index - 300), Math.min(html.length, m.index + 500));
+    // اعتبره رياضة لو النص فيه كلمات رياضة أو جوه section بعد عنوان الرياضيات
+    const inMathSection = mStart >= 0 && m.index >= mStart && m.index < mStart + 80000;
+    const mathWords = /رياض|تفاضل|تكامل|جبر|هندسة|فراغ|استاتيكا|إستاتيكا|ديناميكا|تطبيق/i.test(around);
+    if (!inMathSection && !mathWords) continue;
+    // تجاهل كتب
+    if (/كتب\s*المدرس|حل\s*الكتب/i.test(around)) continue;
+    seenC.add(cid);
+
+    let title = "";
+    const t1 = around.match(new RegExp(">([^<]*[\\u0600-\\u06FF][^<]{3,80})<"));
+    if (t1) title = cleanArName(t1[1], "");
+    // مدرس من لـ
+    let teacherName = "";
+    const tm = around.match(/لـ\s*([^<\n]{4,50})/);
+    if (tm) teacherName = cleanArName(tm[1].replace(/\\+$/, ""), "");
+    if (!teacherName) {
+      const tm2 = around.match(/(?:مستر|بشمهندس|دكتور|د\.)\s+([\u0600-\u06FF\s]{3,40})/);
+      if (tm2) teacherName = cleanArName(tm2[0], "");
+    }
+    if (!teacherName) teacherName = "مدرس رياضة";
+    if (isBookCourse(title)) continue;
+    if (!title) title = `كورس ${cid}`;
+
+    if (!byTeacher.has(teacherName)) byTeacher.set(teacherName, []);
+    byTeacher.get(teacherName).push({
+      id: String(cid),
+      title: cleanCourseTitle(title, teacherName, cid),
+      image_url: null,
+      parts: [],
+      groups: [],
+      lecturesCount: 0,
+      partsCount: 0,
+      lectures: []
+    });
+  }
+
+  if (!byTeacher.size) {
+    console.warn("[catalog] tracks/math: no math teachers parsed");
+    return;
+  }
+
+  // تأكد وجود مادة mathematics
+  let mathSub = subjects.find((s) => s.id === "mathematics");
+  if (!mathSub) {
+    mathSub = { id: "mathematics", name: "رياضة", image_url: null, teachers: [] };
+    subjects.push(mathSub);
+  } else {
+    mathSub.name = "رياضة";
+    mathSub.id = "mathematics";
+  }
+
+  const existingNames = new Set(
+    (mathSub.teachers || []).map((th) => String(th.name || "").replace(/\s+/g, ""))
+  );
+
+  for (const [teacherName, courses] of byTeacher) {
+    const key = teacherName.replace(/\s+/g, "");
+    // لو موجود مسبقاً — ادمج كورسات
+    let th = (mathSub.teachers || []).find(
+      (x) => String(x.name || "").replace(/\s+/g, "") === key || String(x.name || "").includes(teacherName.split(/\s+/)[0] || "")
+    );
+    if (!th) {
+      const tid = `taleb_t_mathematics_track_${key.slice(0, 24)}`;
+      th = {
+        id: tid,
+        uuid: tid,
+        name: teacherName,
+        image_url: null,
+        subjectId: "mathematics",
+        subjectSlug: "mathematics",
+        numericId: null,
+        courses: [],
+        lectures: [],
+        fromTrack: true
+      };
+      mathSub.teachers.push(th);
+      teachersFlat.push(th);
+    }
+    const have = new Set((th.courses || []).map((c) => String(c.id)));
+    for (const c of courses) {
+      if (have.has(String(c.id))) continue;
+      th.courses.push(c);
+      have.add(String(c.id));
+    }
+  }
+
+  console.log("[catalog] math track teachers", mathSub.teachers.length, "courses",
+    mathSub.teachers.reduce((a, th) => a + (th.courses || []).length, 0));
+}
+
 export async function crawlTalebFullCatalog() {
   const nowMs = Date.now();
   if (catalogCache.data && nowMs < catalogCache.exp && (catalogCache.data.subjects || []).length) {
@@ -572,7 +735,7 @@ export async function crawlTalebFullCatalog() {
   // ——— Fallback: زحف HTML لو JSON فاضي ———
   if (!subjectRows.length || !teacherRows.length) {
     console.warn("[catalog] fallback HTML crawl");
-    const baseSlugs = ["arabic", "english", "chemistry", "physics", "biology"];
+    const baseSlugs = ["arabic", "english", "chemistry", "physics", "biology", "mathematics", "math", "pure_math", "applied_math"];
     const slugSet = new Set(baseSlugs);
     if (html) {
       for (const m of html.matchAll(/\/subjects\/([a-zA-Z0-9_-]+)/g)) {
@@ -710,7 +873,30 @@ export async function crawlTalebFullCatalog() {
   }
 
   // المواد الأساسية فقط
-  subjectRows = subjectRows.filter((sr) => SUBJECT_ALLOWED.has(String(sr.id || "")));
+  // طبّع slugs وادمج فروع الرياضة
+  {
+    const merged = new Map();
+    for (const sr of subjectRows) {
+      const id = normalizeSubjectSlug(sr.id || "");
+      if (!SUBJECT_ALLOWED.has(id) && id !== "mathematics") {
+        if (!(/math|رياض/i.test(String(sr.id || "")) || /رياض/i.test(String(sr.name || "")))) continue;
+      }
+      const nid = normalizeSubjectSlug(id);
+      if (!merged.has(nid)) {
+        merged.set(nid, {
+          ...sr,
+          id: nid,
+          name: nid === "mathematics" ? "رياضة" : (sr.name || subjectNameAr(nid)),
+          teacherIds: [...(sr.teacherIds || [])]
+        });
+      } else {
+        const cur = merged.get(nid);
+        const set = new Set(cur.teacherIds || []);
+        for (const tid of (sr.teacherIds || [])) if (!set.has(tid)) { set.add(tid); cur.teacherIds.push(tid); }
+      }
+    }
+    subjectRows = [...merged.values()];
+  }
   // لو JSON رجّع فاضي للمواد المسموحة، كمّل من القائمة
   if (!subjectRows.length) {
     subjectRows = SUBJECT_ORDER.map((id, i) => ({ id, name: subjectNameAr(id), image: null, position: i, teacherIds: [] }));
@@ -720,8 +906,9 @@ export async function crawlTalebFullCatalog() {
   const teachersFlat = [];
 
   for (const sr of subjectRows) {
-    const slug = String(sr.id || "");
+    let slug = normalizeSubjectSlug(sr.id || "");
     if (!slug) continue;
+    if (!SUBJECT_ALLOWED.has(slug) && slug !== "mathematics") continue;
     const subjectTeachers = [];
     for (const tid of (sr.teacherIds || [])) {
       const meta = teacherByUuid.get(String(tid));
@@ -805,7 +992,7 @@ export async function crawlTalebFullCatalog() {
 
     subjects.push({
       id: slug,
-      name: sr.name || subjectNameAr(slug),
+      name: slug === "mathematics" ? "رياضة" : (sr.name || subjectNameAr(slug)),
       image_url: absUrl(sr.image || sr.cover || sr.imageUrl || "") || null,
       teachers: subjectTeachers
     });
@@ -818,7 +1005,13 @@ export async function crawlTalebFullCatalog() {
     }
   }
 
-  ensureTeacher(subjects, teachersFlat, "biology", "أحمد رضوان");
+  // توحيد فروع الرياضة + جلب من tracks/math
+  try { await enrichMathematicsFromTrack(subjects, teachersFlat); } catch (e) { console.warn("[catalog] math enrich", e && e.message); }
+  // أعد تسمية/دمج أي مادة رياضة متبقية
+  for (const s of subjects) {
+    if (isMathSubject(s.id, s.name)) { s.id = "mathematics"; s.name = "رياضة"; }
+  }
+    ensureTeacher(subjects, teachersFlat, "biology", "أحمد رضوان");
   ensureTeacher(subjects, teachersFlat, "biology", "حسام عيسى");
   ensureTeacher(subjects, teachersFlat, "english", "شريف المصري");
 
