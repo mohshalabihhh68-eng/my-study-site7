@@ -177,7 +177,7 @@ function subjectNameAr(sid) {
   return SUBJECT_NAME_AR[String(sid || "").toLowerCase()] || String(sid || "مادة");
 }
 
-const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology", "mathematics"];
+const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology"];
 const SUBJECT_ALLOWED = new Set(SUBJECT_ORDER);
 const MATH_SLUGS = new Set(["mathematics", "math", "maths", "pure_math", "applied_math", "statistics", "رياضة", "رياضيات"]);
 
@@ -1137,7 +1137,8 @@ export async function crawlTalebFullCatalog() {
   }
 
   // توحيد فروع الرياضة + جلب من tracks/math
-  try { await enrichMathematicsFromTrack(subjects, teachersFlat); } catch (e) { console.warn("[catalog] math enrich", e && e.message); }
+  // الرياضة ملغية مؤقتاً بناءً على طلب المستخدم
+  // try { await enrichMathematicsFromTrack(subjects, teachersFlat); } catch (e) { console.warn("[catalog] math enrich", e && e.message); }
   try { await refreshTeacherImages(teachersFlat); } catch (e) { console.warn("[catalog] teacher images", e && e.message); }
   // أعد تسمية/دمج أي مادة رياضة متبقية
   for (const s of subjects) {
@@ -1146,6 +1147,82 @@ export async function crawlTalebFullCatalog() {
     ensureTeacher(subjects, teachersFlat, "biology", "أحمد رضوان");
   ensureTeacher(subjects, teachersFlat, "biology", "حسام عيسى");
   ensureTeacher(subjects, teachersFlat, "english", "شريف المصري");
+
+
+  // شيل أي مادة رياضة لو اتسربت
+  for (let i = subjects.length - 1; i >= 0; i--) {
+    if (isMathSubject(subjects[i].id, subjects[i].name)) subjects.splice(i, 1);
+  }
+  for (let i = teachersFlat.length - 1; i >= 0; i--) {
+    if (isMathSubject(teachersFlat[i].subjectSlug || teachersFlat[i].subjectId, "")) {
+      teachersFlat.splice(i, 1);
+    }
+  }
+
+  // فارس عامر (فيزياء) — كورسات جديدة
+  try {
+    let fares = teachersFlat.find((th) => /فارس/.test(String(th.name || "")) && /عامر/.test(String(th.name || "")));
+    if (!fares) {
+      fares = {
+        id: "taleb_t_physics_fares_amer",
+        uuid: "5a889424-a21b-4103-bc47-626bad0e349f",
+        name: "فارس عامر",
+        image_url: absUrl("/media/d1129125eb8460a9.jpg"),
+        subjectId: "physics",
+        subjectSlug: "physics",
+        numericId: 55,
+        courses: [],
+        lectures: [],
+        fromHome: true
+      };
+      teachersFlat.push(fares);
+      const phys = subjects.find((s) => s.id === "physics");
+      if (phys) (phys.teachers = phys.teachers || []).push(fares);
+    } else {
+      fares.subjectId = "physics";
+      fares.subjectSlug = "physics";
+      if (!fares.image_url) fares.image_url = absUrl("/media/d1129125eb8460a9.jpg");
+    }
+    const faresCourses = [
+      { id: "137", title: "الكورس التأسيسي" },
+      { id: "138", title: "الفصل الأول: التيار الكهربي وقانون أوم وقانونا كيرشوف" },
+      { id: "139", title: "الفصل الثاني: التأثير المغناطيسي للتيار الكهربي وأجهزة القياس الكهربي" }
+    ];
+    const have = new Set((fares.courses || []).map((c) => String(c.id)));
+    for (const c of faresCourses) {
+      if (have.has(String(c.id))) {
+        const old = fares.courses.find((x) => String(x.id) === String(c.id));
+        if (old && (!old.title || /^كورس\s*\d+$/i.test(old.title))) old.title = c.title;
+        continue;
+      }
+      fares.courses.push({
+        id: String(c.id),
+        title: c.title,
+        image_url: null,
+        parts: [],
+        groups: [],
+        lectures: [],
+        lecturesCount: 0,
+        partsCount: 0
+      });
+      have.add(String(c.id));
+    }
+    await mapPool(fares.courses.filter((c) => ["137", "138", "139"].includes(String(c.id))), 2, async (c) => {
+      try {
+        const det = await ensureCourseLectures(c.id, fares.name);
+        c.lectures = det.lectures || [];
+        c.lecturesCount = det.lecturesCount || (c.lectures || []).length;
+        c.partsCount = det.partsCount || 0;
+        if (det.title && !/^كورس\s*\d+$/i.test(det.title)) c.title = det.title;
+        if (det.image_url) c.image_url = det.image_url;
+      } catch (e) {
+        console.warn("[catalog] fares course", c.id, e && e.message);
+      }
+    });
+    fares.lectures = (fares.courses || []).flatMap((c) => c.lectures || []);
+  } catch (e) {
+    console.warn("[catalog] fares amer", e && e.message);
+  }
 
   const data = {
     subjects: sortSubjects(subjects),
