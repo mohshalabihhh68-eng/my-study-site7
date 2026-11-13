@@ -139,7 +139,7 @@ export async function getTalebKey(partId) {
 
 // ---------- زحف الكتالوج الكامل ----------
 const catalogCache = { exp: 0, data: null };
-export function clearTalebCatalogCache() { catalogCache.exp = 0; catalogCache.data = null; }
+export function clearTalebCatalogCache() { catalogCache.exp = 0; catalogCache.data = null; try { partIdCache.clear(); } catch {} try { youtubeIdCache.clear(); } catch {} }
 
 const partIdCache = new Map(); // watchKey -> uuid
 const COURSE_CONCURRENCY = 4;
@@ -1230,6 +1230,29 @@ export async function resolveTalebPartId(courseId, lectureNum, partNum) {
   throw err;
 }
 
+const youtubeIdCache = new Map(); // course/lec/part -> ytId
+
+/** فيديوهات يوتيوب (مثل فارس عامر) من صفحة watch */
+export async function resolveTalebYoutubeId(courseId, lectureNum, partNum) {
+  const key = `${courseId}/${lectureNum}/${partNum}`;
+  if (youtubeIdCache.has(key)) return youtubeIdCache.get(key);
+  try {
+    const html = await talebText(`${TALEB_BASE}/watch/${courseId}/${lectureNum}/${partNum}`, 40_000);
+    let m = html.match(/"youtubeId"\s*:\s*"([a-zA-Z0-9_-]{11})"/);
+    if (!m) m = html.match(/\\"youtubeId\\"\s*:\s*\\"([a-zA-Z0-9_-]{11})\\"/);
+    if (!m) m = html.match(/youtubeId\\?":\\?"([a-zA-Z0-9_-]{11})/);
+    if (!m) m = html.match(/(?:youtube-nocookie\.com\/embed\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    if (m) {
+      youtubeIdCache.set(key, m[1]);
+      return m[1];
+    }
+  } catch (e) {
+    console.warn("[resolveYT]", key, e && e.message);
+  }
+  return null;
+}
+
+
 
 
 export async function getTalebTeachers() {
@@ -1394,6 +1417,31 @@ export async function buildTalebSourceFromAnyId(rawId) {
   if (!wm) wm = id.match(/^w_(\d+)_(\d+)_(\d+)$/i);
   if (wm) {
     const courseId = wm[1], lectureNum = wm[2], partNum = wm[3];
+    // يوتيوب أولاً (فارس عامر وغيره)
+    try {
+      const ytId = await resolveTalebYoutubeId(courseId, lectureNum, partNum);
+      if (ytId) {
+        const ytUrl = `https://www.youtube.com/watch?v=${ytId}`;
+        return {
+          reqVideoId: `taleb_w_${courseId}_${lectureNum}_${partNum}`,
+          videoId: ytId,
+          mode: "taleb-youtube",
+          youtubeUrl: ytUrl,
+          streamUrl: ytUrl,
+          token: "taleb",
+          allowedHosts: new Set(["www.youtube.com", "youtube.com", "www.youtube-nocookie.com"]),
+          plainKey: Buffer.from("youtube"),
+          defaultIv: null,
+          mediaSeq: 0,
+          segs: [],
+          playlist: "",
+          createdAt: Date.now(),
+          directSegments: false
+        };
+      }
+    } catch (e) {
+      console.warn("[taleb-yt]", e && e.message);
+    }
     const uuid = await resolveTalebPartId(courseId, lectureNum, partNum);
     const src = await buildTalebSource(uuid);
     src.reqVideoId = `taleb_w_${courseId}_${lectureNum}_${partNum}`;
