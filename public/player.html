@@ -1272,7 +1272,7 @@ async function api(path,opts={}){
   if(!r.ok){
     const er=new Error(d.message||`السيرفر رجّع خطأ (${r.status})`);
     er.status=r.status;
-    if(r.status===401||r.status===403){er.kind='auth';er.message='جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.'}
+    if(r.status===401){er.kind='auth';er.message='جلسة الدخول انتهت. سجّل دخول تاني.';} else if(r.status===403){er.kind='play';er.message='مفيش صلاحية لمشاهدة الفيديو من المصدر أو الفيديو غير متاح.';}
     throw er;
   }
   return (d && d.data !== undefined) ? d.data : d;
@@ -1905,7 +1905,8 @@ function attachHlsSource(srcUrl, my, autoplay, resumeAt){
     hls.on(Hls.Events.ERROR, function(_e, d){
       if(my!==playToken || !d || !d.fatal) return;
       const code = d.response && d.response.code;
-      if(code === 401){ showError('جلسة الدخول انتهت أو مفيش صلاحية لمشاهدة الفيديو ده.','انتهت الجلسة','leave'); return; }
+      if(code === 401){ showError('جلسة الدخول انتهت. سجّل دخول تاني.','انتهت الجلسة','leave'); return; }
+      if(code === 403){ showError('الفيديو غير متاح من المصدر حالياً (صلاحية/اشتراك طالب برو).','تعذّر التشغيل'); return; }
       if(code === 403){ showError('السيرفر أو الـ CDN رفض تحميل مقطع الفيديو (403). جرّب من شبكة تانية أو حدّث الصفحة.','فشل تحميل المقطع'); return; }
       if(d.type === Hls.ErrorTypes.NETWORK_ERROR){
         if(hlsRetry.net++ < 3){
