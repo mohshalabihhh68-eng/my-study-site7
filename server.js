@@ -3280,7 +3280,7 @@ async function getTalebCatalog() {
     })),
     lectures: th.lectures || []
   }));
-  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology","mathematics"];
+  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology"];
   const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
   const allowed = new Set(SUBJECT_ORDER);
   const normId = (id) => {
