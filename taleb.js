@@ -161,7 +161,7 @@ function subjectNameAr(sid) {
   return SUBJECT_NAME_AR[String(sid || "").toLowerCase()] || String(sid || "مادة");
 }
 
-const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology", "mathematics"];
+const SUBJECT_ORDER = ["arabic", "english", "chemistry", "physics", "biology"];
 const SUBJECT_ALLOWED = new Set(SUBJECT_ORDER);
 const MATH_SLUGS = new Set(["mathematics", "math", "maths", "pure_math", "applied_math", "statistics", "رياضة", "رياضيات"]);
 
@@ -382,10 +382,20 @@ function parseSourceRefNumber(ref, prefix) {
 
 async function parseCourseParts(courseId) {
   let html = "";
-  try {
-    html = await talebText(`${TALEB_BASE}/courses/${courseId}`, 45_000);
-  } catch {
-    html = await talebText(`${TALEB_BASE}/course/${courseId}`, 45_000);
+  // /course أولاً (فيها المحتوى) — /courses غالباً خفيف
+  for (const url of [`${TALEB_BASE}/course/${courseId}`, `${TALEB_BASE}/courses/${courseId}`]) {
+    try {
+      const page = await talebText(url, 45_000);
+      if (!page || page.length < 2000) continue;
+      if (/cv-lecture/i.test(page) || /cv-item/i.test(page) || /partIds/i.test(page)) {
+        html = page;
+        break;
+      }
+      if (!html || page.length > html.length) html = page;
+    } catch {}
+  }
+  if (!html) {
+    try { html = await talebText(`${TALEB_BASE}/course/${courseId}`, 45_000); } catch { html = ""; }
   }
 
   let courseTitle = "";
@@ -838,7 +848,7 @@ export async function crawlTalebFullCatalog() {
       uuid,
       numericId: numericId ? String(numericId) : null,
       name: cleanArName(tr.name || "", tr.name || "مدرس"),
-      image_url: absUrl(tr.image || tr.avatar || tr.photo || tr.imageUrl || "") || null
+      image_url: absUrl(tr.image || tr.avatar || tr.photo || tr.imageUrl || tr.profileImage || tr.cover || "") || null
     });
   }
 
@@ -1000,15 +1010,67 @@ export async function crawlTalebFullCatalog() {
     }
   }
 
-  // توحيد فروع الرياضة + جلب من tracks/math
-  try { await enrichMathematicsFromTrack(subjects, teachersFlat); } catch (e) { console.warn("[catalog] math enrich", e && e.message); }
-  // أعد تسمية/دمج أي مادة رياضة متبقية
-  for (const s of subjects) {
-    if (isMathSubject(s.id, s.name)) { s.id = "mathematics"; s.name = "رياضة"; }
+  // الرياضة ملغية
+  // try { await enrichMathematicsFromTrack(subjects, teachersFlat); } catch (e) { console.warn("[catalog] math enrich", e && e.message); }
+  for (let i = subjects.length - 1; i >= 0; i--) {
+    if (isMathSubject(subjects[i].id, subjects[i].name)) subjects.splice(i, 1);
   }
-    ensureTeacher(subjects, teachersFlat, "biology", "أحمد رضوان");
+  for (let i = teachersFlat.length - 1; i >= 0; i--) {
+    if (isMathSubject(teachersFlat[i].subjectSlug || teachersFlat[i].subjectId, "")) teachersFlat.splice(i, 1);
+  }
+
+  ensureTeacher(subjects, teachersFlat, "biology", "أحمد رضوان");
   ensureTeacher(subjects, teachersFlat, "biology", "حسام عيسى");
   ensureTeacher(subjects, teachersFlat, "english", "شريف المصري");
+
+  // فارس عامر — فيزياء (كورسات جديدة)
+  try {
+    let fares = teachersFlat.find((th) => /فارس/.test(String(th.name || "")) && /عامر/.test(String(th.name || "")));
+    if (!fares) {
+      fares = {
+        id: "taleb_t_physics_fares_amer",
+        uuid: "5a889424-a21b-4103-bc47-626bad0e349f",
+        name: "فارس عامر",
+        image_url: absUrl("/media/d1129125eb8460a9.jpg"),
+        subjectId: "physics",
+        subjectSlug: "physics",
+        numericId: 55,
+        courses: [],
+        lectures: [],
+        fromHome: true
+      };
+      teachersFlat.push(fares);
+      const phys = subjects.find((s) => s.id === "physics");
+      if (phys) (phys.teachers = phys.teachers || []).push(fares);
+    } else {
+      fares.subjectId = "physics";
+      fares.subjectSlug = "physics";
+      if (!fares.image_url) fares.image_url = absUrl("/media/d1129125eb8460a9.jpg");
+    }
+    const faresCourses = [
+      { id: "137", title: "الكورس التأسيسي" },
+      { id: "138", title: "الفصل الأول: التيار الكهربي وقانون أوم وقانونا كيرشوف" },
+      { id: "139", title: "الفصل الثاني: التأثير المغناطيسي للتيار الكهربي وأجهزة القياس الكهربي" }
+    ];
+    const have = new Set((fares.courses || []).map((c) => String(c.id)));
+    for (const c of faresCourses) {
+      if (have.has(String(c.id))) continue;
+      fares.courses.push({
+        id: String(c.id),
+        title: c.title,
+        image_url: null,
+        parts: [],
+        groups: [],
+        lectures: [],
+        lecturesCount: 0,
+        partsCount: 0
+      });
+      have.add(String(c.id));
+    }
+    // محتوى عند الطلب عبر ensureCourseLectures — هنا عناوين فقط عشان الزحف ما يبطأش
+  } catch (e) {
+    console.warn("[catalog] fares", e && e.message);
+  }
 
   const data = {
     subjects: sortSubjects(subjects),
@@ -1118,26 +1180,54 @@ export async function resolveTalebPartId(courseId, lectureNum, partNum) {
   const key = `${courseId}/${lectureNum}/${partNum}`;
   if (partIdCache.has(key)) return partIdCache.get(key);
 
-  const html = await talebText(`${TALEB_BASE}/watch/${courseId}/${lectureNum}/${partNum}`, 40_000);
-  let m = html.match(/\\"part\\":\{\\"id\\":\\"([0-9a-f-]{36})\\"/);
-  if (!m) m = html.match(/"part":\{"id":"([0-9a-f-]{36})"/);
-  if (!m) m = html.match(/data-subject="[^"]*"[\s\S]{0,200}?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
-  if (!m) {
-    const idx = html.search(/part\\":\{/);
-    if (idx >= 0) {
-      const slice = html.slice(idx, idx + 500);
-      const m2 = slice.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
-      if (m2) m = m2;
+  // 1) JSON partIds من صفحة الكورس (شغال حتى من غير صفحة watch)
+  try {
+    const courseHtml = await talebText(`${TALEB_BASE}/course/${courseId}`, 45_000);
+    const patterns = [
+      /"order"\s*:\s*(\d+)\s*,\s*"partIds"\s*:\s*\[([^\]]*)\]/g,
+      /\\"order\\":(\d+),\\"partIds\\":\[([^\]]*)\]/g
+    ];
+    for (const re of patterns) {
+      let m;
+      while ((m = re.exec(courseHtml))) {
+        if (Number(m[1]) !== Number(lectureNum)) continue;
+        const ids = [...String(m[2]).matchAll(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((x) => x[1]);
+        const uuid = ids[Math.max(0, Number(partNum) - 1)];
+        if (uuid) {
+          partIdCache.set(key, uuid);
+          return uuid;
+        }
+      }
     }
+  } catch (e) {
+    console.warn("[resolvePart] course", courseId, e && e.message);
   }
-  if (!m) {
-    const err = new Error("تعذر تحديد مصدر الفيديو");
-    err.status = 502;
-    throw err;
+
+  // 2) صفحة المشاهدة
+  try {
+    const html = await talebText(`${TALEB_BASE}/watch/${courseId}/${lectureNum}/${partNum}`, 40_000);
+    let m = html.match(/\\"part\\":\{\\"id\\":\\"([0-9a-f-]{36})\\"/);
+    if (!m) m = html.match(/"part":\{"id":"([0-9a-f-]{36})"/);
+    if (!m) m = html.match(/data-subject="[^"]*"[\s\S]{0,200}?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
+    if (!m) {
+      const idx = html.search(/part\\":\{/);
+      if (idx >= 0) {
+        const slice = html.slice(idx, idx + 500);
+        const m2 = slice.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/);
+        if (m2) m = m2;
+      }
+    }
+    if (m) {
+      partIdCache.set(key, m[1]);
+      return m[1];
+    }
+  } catch (e) {
+    console.warn("[resolvePart] watch", key, e && e.message);
   }
-  const uuid = m[1];
-  partIdCache.set(key, uuid);
-  return uuid;
+
+  const err = new Error("تعذر تحديد مصدر الفيديو");
+  err.status = 502;
+  throw err;
 }
 
 
