@@ -17,100 +17,174 @@
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--nav-bg:rgba(7,11,20,.88);--back-btn-bg:#111a2b;--back-btn-bg-hover:#1a253a;--placeholder-bg:linear-gradient(135deg,#1e293b,#0f172a)}
-[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--nav-bg:rgba(255,255,255,.88);--back-btn-bg:#ffffff;--back-btn-bg-hover:#f1f5f9;--placeholder-bg:linear-gradient(135deg,#e2e8f0,#f1f5f9)}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s}
-button{font:inherit;cursor:pointer;outline:none}
+:root,[data-theme="dark"]{
+  --bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;
+  --ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);
+  --blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;
+  --nav-bg:rgba(7,11,20,.88);
+  --back-btn-bg:#111a2b;--back-btn-bg-hover:#1a253a;
+  --placeholder-bg:linear-gradient(135deg,#1e293b,#0f172a);
+}
+[data-theme="light"]{
+  --bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
+  --ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);
+  --blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;
+  --nav-bg:rgba(255,255,255,.88);
+  --back-btn-bg:#ffffff;--back-btn-bg-hover:#f1f5f9;
+  --placeholder-bg:linear-gradient(135deg,#e2e8f0,#f1f5f9);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s;min-height:100vh}
+button{font:inherit;cursor:pointer;outline:none;border:none}
 
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear;box-shadow:none}
-#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .05s linear;box-shadow:none;border-radius:0 0 0 4px}
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear}
+#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .05s linear;border-radius:0 0 0 4px}
 
-@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes spin{to{transform:rotate(360deg)}}
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
+@keyframes fillBar{from{height:0%}to{height:100%}}
+
+/* ===== nav ===== */
+.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
 .brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
 .brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
-
-.profile-wrap{position:relative}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
 .profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
 .profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
-
-.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0;flex-shrink:0}
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s,border-color .25s;padding:0}
 .theme-toggle:hover{background:var(--card-hover);border-color:var(--blue);transform:rotate(15deg)}
-.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;display:block}
-.theme-toggle .icon-sun{display:none}
-.theme-toggle .icon-moon{display:block}
-[data-theme="dark"] .theme-toggle .icon-sun{display:block}
-[data-theme="dark"] .theme-toggle .icon-moon{display:none}
-.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
-.header-action{display:flex;justify-content:flex-start;margin-bottom:20px}
-.back-btn{display:inline-flex;align-items:center;gap:10px;background:var(--back-btn-bg);border:1px solid var(--line-soft);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700;font-size:14px;cursor:pointer;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s}
+.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
+[data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
+
+/* ===== wrap ===== */
+.wrap{max-width:1120px;margin:0 auto;padding:32px 16px 90px}
+
+/* ===== back ===== */
+.back-btn{display:inline-flex;align-items:center;gap:8px;background:var(--back-btn-bg);border:1px solid var(--line-soft);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700;font-size:14px;transition:background .2s,border-color .2s;margin-bottom:28px}
 .back-btn:hover{background:var(--back-btn-bg-hover)}
 .back-btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.page-head{margin-bottom:28px;animation:fadeUp .4s ease}
+
+/* ===== page head ===== */
+.page-head{margin-bottom:32px;animation:fadeUp .4s ease}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
-.page-head h1{margin:0;font-size:28px;font-weight:900;color:var(--ink)}
-.page-head p{margin:8px 0 0;color:var(--muted);font-size:14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px}
+.page-head h1{margin:0 0 6px;font-size:28px;font-weight:900;color:var(--ink)}
+.page-head p{margin:0;color:var(--muted);font-size:14px}
 
-.card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:transform .3s,background .3s,border-color .3s,box-shadow .3s,color .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 2px 8px rgba(108,99,255,.04)}
-.card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 10px 28px rgba(108,99,255,.12)}
+/* ===== grid ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0;row-gap:0}
 
-.side-progress-bar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 6px;
-  background: rgba(0, 0, 0, 0.05);
-  z-index: 10;
-  border-radius: 0 0 0 24px;
+/* ===== card ===== */
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:0;
+  overflow:hidden;
+  display:flex;flex-direction:column;
+  position:relative;
+  cursor:pointer;
+  transition:z-index 0s;
+  margin:-1px -1px 0 0; /* overlap borders */
 }
-.side-progress-bar .fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 0%;
-  background: linear-gradient(180deg, #10b981, #34d399, #6ee7b7);
-  box-shadow: 0 0 15px #34d399;
-  transition: height 0.5s ease-in-out;
-  border-radius: 0 0 0 24px;
+/* rounded corners only on grid edges — handled via nth-child */
+.grid .card:first-child{border-radius:24px 0 0 0}
+.grid .card:nth-child(4n+1){border-radius:24px 0 0 0}
+/* JS adds .last-row and .last-col classes */
+.card.last-row{border-radius:0 0 24px 24px}
+.card.last-row.last-col{border-radius:0 0 24px 0}
+/* simpler: wrap in a clip container */
+
+/* ===== card inner ===== */
+.card-inner-wrap{
+  position:relative;overflow:hidden;display:flex;flex-direction:column;flex:1;
+  transition:transform .32s cubic-bezier(.2,.8,.2,1),box-shadow .32s;
+  z-index:1;
+}
+.card:hover .card-inner-wrap{
+  transform:translateY(-6px) scale(1.015);
+  box-shadow:0 20px 44px rgba(108,99,255,.18);
+  z-index:10;
 }
 
-.card-img{width:100%;aspect-ratio:4/3;background:var(--placeholder-bg);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;pointer-events:none}
-.card-img img{width:100%;height:100%;object-fit:cover;transition:transform .4s ease}
-.card:hover .card-img img{transform:scale(1.05)}
+/* side progress bar */
+.side-progress-bar{position:absolute;top:0;bottom:0;left:0;width:5px;background:rgba(0,0,0,.04);z-index:5}
+.side-progress-bar .fill{position:absolute;top:0;left:0;width:100%;height:0%;background:linear-gradient(180deg,#10b981,#34d399,#6ee7b7);box-shadow:0 0 10px #34d399;transition:height .6s cubic-bezier(.2,.8,.2,1)}
+
+/* image */
+.card-img{width:100%;aspect-ratio:4/3;background:var(--placeholder-bg);overflow:hidden;position:relative}
+.card-img img{width:100%;height:100%;object-fit:cover;object-position:top center;transition:transform .5s cubic-bezier(.2,.8,.2,1);display:block}
+.card:hover .card-img img{transform:scale(1.07)}
 .card-img .ph{width:100%;height:100%;display:grid;place-items:center;color:var(--muted);background:var(--card-inner)}
-.card-body{padding:20px;display:flex;flex-direction:column;flex:1;background:var(--card)}
-.card-body h3{margin:0;font-size:18px;font-weight:900;margin-bottom:4px;color:var(--ink)}
-.card-body .sub{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:16px}
 
-.action-btn{width:100%;padding:12px;border:0;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .2s,background .2s,border-color .2s,box-shadow .2s,color .2s ease;margin-top:auto;box-shadow:0 4px 12px rgba(108,99,255,.2)}
-.action-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(108,99,255,.35)}
-.action-btn svg{width:16px;height:16px;fill:currentColor}
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
-.spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
-@media(max-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}.card-body{padding:16px}.card-body h3{font-size:16px}.brand small{display:none}#scroll-progress-side{width:3px}}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+/* gradient overlay on image bottom */
+.card-img::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(to bottom,transparent 50%,rgba(7,11,20,.55) 100%);
+  pointer-events:none;
+  opacity:0;transition:opacity .3s;
 }
-.grid > *, .video-grid > * {
-  content-visibility: auto;
-  contain-intrinsic-size: 280px;
-}
+[data-theme="light"] .card-img::after{background:linear-gradient(to bottom,transparent 50%,rgba(30,41,59,.35) 100%)}
+.card:hover .card-img::after{opacity:1}
 
+/* body */
+.card-body{padding:20px;display:flex;flex-direction:column;flex:1;background:var(--card);gap:14px}
+.card-body h3{margin:0;font-size:17px;font-weight:900;color:var(--ink);line-height:1.3}
+.card-meta{display:flex;align-items:center;gap:8px}
+.meta-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.14);
+  color:var(--blue);border-radius:999px;padding:4px 10px;
+  font-size:11px;font-weight:800;
+}
+.meta-chip svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+
+/* CTA */
+.action-btn{
+  width:100%;padding:12px;border-radius:14px;font-weight:800;font-size:14px;
+  background:linear-gradient(135deg,var(--blue),var(--blue2));
+  color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:0 4px 12px rgba(108,99,255,.2);
+  transition:transform .2s,box-shadow .2s,filter .2s;
+  margin-top:auto;
+}
+.action-btn:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(108,99,255,.35);filter:brightness(1.06)}
+.action-btn svg{width:16px;height:16px;fill:currentColor;transition:transform .25s}
+.action-btn:hover svg{transform:translateX(-4px)}
+
+/* ===== skeleton ===== */
+.sk-card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;animation:fadeUp .4s ease both}
+.sk-img{width:100%;aspect-ratio:4/3;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:600px 100%;animation:shimmer 1.4s infinite linear}
+.sk-body{padding:20px;display:flex;flex-direction:column;gap:10px}
+.sk-line{height:13px;border-radius:6px;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:600px 100%;animation:shimmer 1.4s infinite linear}
+.sk-line.h{width:65%;height:17px}.sk-line.sm{width:40%}.sk-line.btn{width:100%;height:40px;margin-top:4px;border-radius:12px}
+
+/* ===== grid rounded wrapper ===== */
+.grid-wrap{border:1px solid var(--line);border-radius:24px;overflow:hidden}
+.grid-wrap .card{border-radius:0;border-color:var(--line)}
+.grid-wrap .card:first-child .card-inner-wrap{border-radius:0}
+
+/* ===== loading ===== */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;color:var(--muted)}
+.spinner{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px}
+
+/* ===== responsive ===== */
+@media(max-width:600px){
+  .grid-wrap{border-radius:16px}
+  .card-body{padding:14px;gap:10px}
+  .card-body h3{font-size:15px}
+  .brand small{display:none}
+  #scroll-progress-side{width:3px}
+  .wrap{padding:20px 12px 80px}
+  .back-btn{margin-bottom:20px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
 </style>
 </head>
 <body>
@@ -130,7 +204,11 @@ button{font:inherit;cursor:pointer;outline:none}
     </button>
   </div>
 </div></header>
-<main class="wrap" id="main"><div class="loading"><div class="spinner"></div><p>جاري تحميل المدرسين...</p></div></main>
+
+<main class="wrap" id="main">
+  <div class="loading"><div class="spinner"></div><p>جاري تحميل المدرسين...</p></div>
+</main>
+
 <script>
 (function(){
 'use strict';
@@ -140,10 +218,8 @@ const qs = new URLSearchParams(location.search);
 const subjectId = qs.get('subjectId');
 const subjectName = qs.get('subjectName') || '';
 
-// قائمة أسماء المدرسين المراد إخفاؤهم (بأي شكل من أشكال الكتابة)
 const HIDDEN_TEACHERS = ['عبدالله الحبشي'];
 
-// تحديث شريط التقدم (العلوي والجانبي)
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
 let scrollTicking = false;
@@ -171,20 +247,18 @@ const api = async (path, opts = {}) => {
 };
 const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// دالة تطبيع قوية: توحّد الهمزات، التاء المربوطة، الياء، المسافات، التشكيل، والرموز
 const normalizeName = (name) => String(name || '')
-  .replace(/[\u064B-\u0652\u0640]/g, '')   // إزالة التشكيل والتطويل
-  .replace(/[أإآٱ]/g, 'ا')                  // توحيد الهمزات
-  .replace(/ى/g, 'ي')                        // الألف المقصورة
-  .replace(/ة/g, 'ه')                        // التاء المربوطة
+  .replace(/[\u064B-\u0652\u0640]/g, '')
+  .replace(/[أإآٱ]/g, 'ا')
+  .replace(/ى/g, 'ي')
+  .replace(/ة/g, 'ه')
   .replace(/ؤ/g, 'و')
   .replace(/ئ/g, 'ي')
-  .replace(/[^\p{L}\p{N}\s]/gu, '')          // إزالة أي رموز
-  .replace(/\s+/g, '')                        // إزالة كل المسافات (عشان "عبد الله" = "عبدالله")
+  .replace(/[^\p{L}\p{N}\s]/gu, '')
+  .replace(/\s+/g, '')
   .toLowerCase()
   .trim();
 
-// الكلمات المفتاحية المراد حجب أي اسم يحتوي عليها
 const HIDDEN_KEYWORDS = ['عبداللهالحبشي'];
 
 const isHiddenTeacher = (name) => {
@@ -194,52 +268,89 @@ const isHiddenTeacher = (name) => {
 
 window.goToChapters = function(url, cardEl) {
   const barFill = cardEl.querySelector('.side-progress-bar .fill');
-  if(barFill) {
-    barFill.style.height = '100%';
-  }
-  setTimeout(() => {
-    window.location.href = url;
-  }, 650);
+  if (barFill) barFill.style.height = '100%';
+  setTimeout(() => { window.location.href = url; }, 650);
 };
 
 async function load() {
-  if (!subjectId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المادة غير موجود.</div>'; return; }
+  if (!subjectId) {
+    $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المادة غير موجود.</div>';
+    return;
+  }
   try {
     const data = await api('/api/subjects/' + subjectId + '/teachers');
     let teachers = data.teachers || data || [];
-
-    // فلترة المدرسين المخفيين
     const before = teachers.length;
     teachers = teachers.filter(t => !isHiddenTeacher(t.name));
     console.log('[filter] before:', before, 'after:', teachers.length, teachers.map(t=>t.name));
 
-    if (!teachers.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>'; return; }
+    if (!teachers.length) {
+      $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>';
+      return;
+    }
 
+    // skeleton while images load
     let html = `
-    <div class="header-action"><button class="back-btn" onclick="window.location.href='subjects.html'"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمواد</button></div>
-    <div class="page-head"><div class="badge">المدرسين</div><h1>اختر المدرس</h1><p>دول المدرسين المتاحين لمادة ${esc(subjectName)}</p></div>
-    <div class="grid">`;
+    <button class="back-btn" onclick="window.location.href='subjects.html'">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمواد
+    </button>
+    <div class="page-head">
+      <div class="badge">المدرسين</div>
+      <h1>اختر مدرسك</h1>
+      <p>دول المدرسين المتاحين لمادة ${esc(subjectName)}</p>
+    </div>
+    <div class="grid-wrap"><div class="grid" id="teachers-grid">`;
 
-    teachers.forEach(t => {
-      html += `<div class="card" id="card-${t.id}">
-        <div class="side-progress-bar">
-          <div class="fill"></div>
-        </div>
-        <div class="card-img">
-          ${t.image_url ? `<img src="${esc(t.image_url)}" alt="${esc(t.name)}" onerror="this.style.display='none'">` : ''}
-          <div class="ph" style="display:${t.image_url?'none':'grid'}"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></div>
-        </div>
-        <div class="card-body">
-          <h3>${esc(t.name)}</h3>
-          <div class="sub">${t.chapter_count || 0} فصل متاح</div>
-          <button class="action-btn" onclick="goToChapters('chapters.html?teacherId=${t.id}&teacherName=${encodeURIComponent(t.name)}&subjectName=${encodeURIComponent(subjectName)}', document.getElementById('card-${t.id}'))">عرض الفصول<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+    teachers.forEach((t, i) => {
+      const chapCount = t.chapter_count || 0;
+      html += `
+      <div class="card" id="card-${t.id}" style="animation-delay:${i*60}ms">
+        <div class="card-inner-wrap">
+          <div class="side-progress-bar"><div class="fill"></div></div>
+          <div class="card-img">
+            ${t.image_url
+              ? `<img src="${esc(t.image_url)}" alt="${esc(t.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">`
+              : ''}
+            <div class="ph" style="display:${t.image_url?'none':'grid'}">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
+            </div>
+          </div>
+          <div class="card-body">
+            <h3>${esc(t.name)}</h3>
+            <div class="card-meta">
+              <span class="meta-chip">
+                <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                ${chapCount} فصل
+              </span>
+            </div>
+            <button class="action-btn"
+              onclick="goToChapters('chapters.html?teacherId=${t.id}&teacherName=${encodeURIComponent(t.name)}&subjectName=${encodeURIComponent(subjectName)}', document.getElementById('card-${t.id}'))">
+              عرض الفصول
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </div>
         </div>
       </div>`;
     });
-    html += '</div>'; $('main').innerHTML = html;
-  } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
+
+    html += '</div></div>';
+    $('main').innerHTML = html;
+
+  } catch (e) {
+    $('main').innerHTML = `<div style="text-align:center;color:#ef4444;padding:50px;font-weight:700">خطأ: ${esc(e.message)}</div>`;
+  }
 }
-async function loadProfile(){try{const me=await api('/api/auth/me');if(me){$('nav-name').textContent=me.name||'طالب';$('nav-av').textContent=(me.name||'ط').charAt(0);}}catch(e){}}
+
+async function loadProfile(){
+  try{
+    const me = await api('/api/auth/me');
+    if(me){
+      $('nav-name').textContent = me.name || 'طالب';
+      $('nav-av').textContent = (me.name || 'ط').charAt(0);
+    }
+  }catch(e){}
+}
+
 load(); loadProfile();
 })();
 </script>
