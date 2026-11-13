@@ -7,39 +7,48 @@
 <title>المدرسين | ثانوية club</title>
 <script>
 (function(){
-  try {
-    var t = localStorage.getItem('thanawya_theme') || 'light';
-    document.documentElement.setAttribute('data-theme', t);
-    var m = document.querySelector('meta[name="theme-color"]');
-    if(m) m.setAttribute('content', t === 'dark' ? '#070b14' : '#f8fafc');
-  } catch(e){}
+  try{
+    var t=localStorage.getItem('thanawya_theme')||'light';
+    document.documentElement.setAttribute('data-theme',t);
+    var m=document.querySelector('meta[name="theme-color"]');
+    if(m)m.setAttribute('content',t==='dark'?'#070b14':'#f8fafc');
+  }catch(e){}
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root,[data-theme="dark"]{
   --bg:#070b14;--card:#0f1826;--card-hover:#182338;--card-inner:#0d1424;
-  --ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.10);--line-soft:rgba(255,255,255,.05);
+  --ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.10);
   --blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;
+  --green:#10b981;
   --nav-bg:rgba(7,11,20,.92);
-  --back-btn-bg:#111a2b;--back-btn-bg-hover:#1a253a;
-  --placeholder-bg:linear-gradient(135deg,#1e293b,#0f172a);
+  --back-bg:#0f1826;--back-bg-hover:#182338;
+  --ph-bg:linear-gradient(135deg,#1a2540,#0f172a);
+  --overlay:linear-gradient(to bottom,transparent 28%,rgba(7,11,20,.28) 60%,rgba(7,11,20,.88) 100%);
   --glow:rgba(59,130,246,.22);
+  --card-shadow:0 4px 20px rgba(0,0,0,.35);
 }
 [data-theme="light"]{
-  --bg:#f0f4fc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
-  --ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.06);
+  --bg:#f0f4fc;--card:#fff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
+  --ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);
   --blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;
+  --green:#059669;
   --nav-bg:rgba(255,255,255,.92);
-  --back-btn-bg:#ffffff;--back-btn-bg-hover:#f1f5f9;
-  --placeholder-bg:linear-gradient(135deg,#dde4f0,#eef1f8);
-  --glow:rgba(108,99,255,.14);
+  --back-bg:#fff;--back-bg-hover:#f1f5f9;
+  --ph-bg:linear-gradient(135deg,#dde4f0,#eef1f8);
+  --overlay:linear-gradient(to bottom,transparent 35%,rgba(15,24,41,.14) 65%,rgba(15,24,41,.68) 100%);
+  --glow:rgba(108,99,255,.18);
+  --card-shadow:0 4px 20px rgba(108,99,255,.07);
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s;min-height:100vh;overflow-x:hidden}
-button{font:inherit;cursor:pointer;outline:none;border:none}
 
-/* bg pattern */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:Cairo,sans-serif;
+  min-height:100vh;overflow-x:hidden;
+  transition:background-color .35s,color .35s;
+}
 body::before{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
   background:
@@ -51,147 +60,139 @@ body::before{
     radial-gradient(ellipse 55% 40% at 80% 10%,rgba(108,99,255,.07),transparent),
     radial-gradient(ellipse 40% 50% at 10% 85%,rgba(16,185,129,.04),transparent);
 }
-
-/* progress */
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear}
-#scroll-progress-side{position:fixed;top:0;right:0;width:3px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;border-radius:0 0 0 3px}
+button{font:inherit;cursor:pointer;outline:none;border:none}
 
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes navIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes cardReveal{from{opacity:0;transform:translateY(28px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
-@keyframes cardIn{from{opacity:0;transform:translateY(32px) scale(.96)}to{opacity:1;transform:none}}
-@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 var(--glow)}50%{box-shadow:0 0 0 8px transparent}}
-@keyframes floatBadge{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes gradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes progressFill{from{height:0}to{height:var(--fill,100%)}}
 
-/* ===== nav ===== */
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(20px);border-bottom:1px solid var(--line)}
-.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* progress */
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--blue3),var(--blue2));width:0%;z-index:9999;transition:width .05s linear}
+#scroll-progress-side{position:fixed;top:0;right:0;width:3px;background:linear-gradient(180deg,var(--blue3),var(--blue2));height:0%;z-index:9999;border-radius:0 0 0 3px}
+
+/* nav */
+.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(20px);border-bottom:1px solid var(--line);animation:navIn .5s ease both}
+.app-nav-in{max-width:1140px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
-.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
-.brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.brand .logo{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,var(--blue3),var(--blue2));box-shadow:0 6px 20px var(--glow);color:#fff}
+.brand .logo svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
-.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
-.profile-btn:hover{background:var(--card-hover)}
-.profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
-.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:transform .25s,background .25s;padding:0}
-.theme-toggle:hover{background:var(--card-hover);transform:rotate(20deg)}
-.theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 16px 5px 5px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:background .2s,border-color .2s}
+.profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.22)}
+.profile-btn .av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue3),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:15px}
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:background .2s,border-color .2s,transform .25s;padding:0}
+.theme-toggle:hover{background:var(--card-hover);border-color:rgba(108,99,255,.22);transform:rotate(18deg)}
+.theme-toggle svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
 [data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
 
-/* ===== wrap ===== */
-.wrap{max-width:1140px;margin:0 auto;padding:32px 20px 90px;position:relative;z-index:1}
+/* wrap */
+.wrap{max-width:1140px;margin:0 auto;padding:32px 20px 100px;position:relative;z-index:1}
 
 /* back */
-.back-btn{display:inline-flex;align-items:center;gap:8px;background:var(--back-btn-bg);border:1px solid var(--line);color:var(--ink);border-radius:14px;padding:10px 20px;font-weight:700;font-size:14px;transition:background .2s,border-color .2s,transform .2s;margin-bottom:28px}
-.back-btn:hover{background:var(--back-btn-bg-hover);border-color:rgba(108,99,255,.25);transform:translateX(4px)}
-.back-btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.back-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--back-bg);border:1px solid var(--line);color:var(--ink);
+  border-radius:13px;padding:10px 20px;font-weight:700;font-size:14px;
+  transition:background .2s,border-color .2s,transform .2s;margin-bottom:28px;
+}
+.back-btn:hover{background:var(--back-bg-hover);border-color:rgba(108,99,255,.25);transform:translateX(4px)}
+.back-btn svg{width:17px;height:17px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
 /* page head */
-.page-head{margin-bottom:36px;animation:fadeUp .5s ease}
-.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 14px;font-size:11px;font-weight:800;margin-bottom:12px}
-.page-head h1{margin:0 0 6px;font-size:clamp(24px,3vw,32px);font-weight:900;color:var(--ink)}
-.page-head p{margin:0;color:var(--muted);font-size:14px}
+.page-head{margin-bottom:32px;animation:cardReveal .5s ease both}
+.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.20);border-radius:999px;padding:5px 14px;font-size:11px;font-weight:800;margin-bottom:12px;letter-spacing:.01em}
+.page-head h1{margin:0 0 6px;font-size:clamp(22px,3vw,30px);font-weight:900;color:var(--ink)}
+.page-head p{margin:0;color:var(--muted);font-size:14px;font-weight:700}
 
-/* ===== GRID ===== */
-.teachers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px}
+/* grid */
+.teachers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
 
-/* ===== CARD ===== */
+/* card */
 .t-card{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:22px;
-  overflow:hidden;
-  display:flex;flex-direction:column;
-  position:relative;
+  background:var(--card);border:1px solid var(--line);border-radius:22px;
+  overflow:hidden;display:flex;flex-direction:column;position:relative;
   opacity:0;
-  transition:border-color .3s,box-shadow .4s;
-  /* will-change set by JS on hover */
+  box-shadow:var(--card-shadow);
+  transition:border-color .3s,box-shadow .4s,transform .35s cubic-bezier(.2,.8,.2,1);
 }
 .t-card.in{
-  animation:cardIn .6s cubic-bezier(.2,.8,.2,1) both;
+  animation:cardReveal .6s cubic-bezier(.2,.8,.2,1) both;
   animation-delay:var(--delay,0ms);
 }
 .t-card:hover{
-  border-color:rgba(108,99,255,.4);
-  box-shadow:0 24px 56px rgba(108,99,255,.18), 0 0 0 1px rgba(108,99,255,.12);
+  border-color:rgba(59,130,246,.38);
+  box-shadow:0 22px 48px var(--glow),0 0 0 1px rgba(59,130,246,.12);
+  transform:translateY(-6px);
 }
+[data-theme="light"] .t-card:hover{border-color:rgba(108,99,255,.38)}
 
-/* ===== image area ===== */
+/* accent bar */
+.side-bar{position:absolute;top:0;bottom:0;left:0;width:4px;background:linear-gradient(180deg,var(--blue3),var(--blue2));z-index:5}
+
+/* image */
 .t-img{
   width:100%;
-  aspect-ratio:3/3.5;
-  background:var(--placeholder-bg);
-  overflow:hidden;
-  position:relative;
+  /* taller portrait to show faces fully */
+  aspect-ratio:3/3.8;
+  background:var(--ph-bg);
+  overflow:hidden;position:relative;
 }
 .t-img img{
+  position:absolute;inset:0;
   width:100%;height:100%;
   object-fit:cover;
-  object-position:top center;
+  object-position:center top; /* anchor at the top — shows face, not belly */
   display:block;
   transition:transform .6s cubic-bezier(.2,.8,.2,1),filter .4s;
-  filter:saturate(.9);
+  filter:saturate(.92) brightness(.97);
 }
 .t-card:hover .t-img img{
-  transform:scale(1.08) translateY(-3px);
-  filter:saturate(1.1);
+  transform:scale(1.06) translateY(-2px);
+  filter:saturate(1.08) brightness(1.01);
 }
 
 /* gradient overlay */
 .t-img-overlay{
   position:absolute;inset:0;
-  background:linear-gradient(
-    to bottom,
-    transparent 30%,
-    rgba(7,11,20,.3) 65%,
-    rgba(7,11,20,.85) 100%
-  );
+  background:var(--overlay);
+  pointer-events:none;
   transition:opacity .4s;
-}
-[data-theme="light"] .t-img-overlay{
-  background:linear-gradient(
-    to bottom,
-    transparent 40%,
-    rgba(15,24,41,.18) 70%,
-    rgba(15,24,41,.6) 100%
-  );
 }
 
 /* name on image */
-.t-name-over{
-  position:absolute;bottom:0;left:0;right:0;
-  padding:16px 18px 14px;
-  z-index:2;
-}
+.t-name-over{position:absolute;bottom:0;left:0;right:0;padding:16px 18px 14px;z-index:2}
 .t-name-over h3{
-  margin:0;font-size:18px;font-weight:900;color:#fff;
-  text-shadow:0 2px 8px rgba(0,0,0,.5);
-  line-height:1.3;
-  transform:translateY(4px);
+  margin:0;font-size:17px;font-weight:900;color:#fff;
+  text-shadow:0 2px 10px rgba(0,0,0,.55);line-height:1.3;
+  transform:translateY(5px);
   transition:transform .35s cubic-bezier(.2,.8,.2,1);
 }
 .t-card:hover .t-name-over h3{transform:translateY(0)}
 
-/* side bar */
-.side-progress-bar{position:absolute;top:0;bottom:0;left:0;width:4px;background:rgba(0,0,0,.08);z-index:5;border-radius:0}
-.side-progress-bar .fill{position:absolute;top:0;left:0;width:100%;height:0%;background:linear-gradient(180deg,#10b981,#34d399);box-shadow:0 0 10px rgba(52,211,153,.7);transition:height .65s cubic-bezier(.2,.8,.2,1);border-radius:0}
-
-/* ===== card footer ===== */
-.t-footer{
-  padding:14px 16px 16px;
-  display:flex;flex-direction:column;gap:12px;
-  background:var(--card);
-  position:relative;
-}
-.t-footer::before{
-  content:"";position:absolute;top:0;left:16px;right:16px;height:1px;
-  background:var(--line);
+/* side progress fill on nav */
+.side-prog{position:absolute;top:0;bottom:0;left:0;width:4px;background:rgba(0,0,0,.0);z-index:6}
+.side-prog .fill{
+  position:absolute;top:0;left:0;width:100%;height:0;
+  background:linear-gradient(180deg,var(--green),#34d399);
+  box-shadow:0 0 10px rgba(52,211,153,.7);
+  transition:height .65s cubic-bezier(.2,.8,.2,1);
+  border-radius:0;
 }
 
-/* meta row */
+/* footer */
+.t-footer{padding:14px 16px 16px;display:flex;flex-direction:column;gap:11px;background:var(--card);position:relative}
+.t-footer::before{content:"";position:absolute;top:0;left:16px;right:16px;height:1px;background:var(--line)}
+
+/* meta */
 .t-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .meta-pill{
   display:inline-flex;align-items:center;gap:5px;
@@ -205,56 +206,40 @@ body::before{
 
 /* CTA */
 .t-btn{
-  width:100%;padding:11px 16px;
-  border-radius:13px;
-  font-weight:900;font-size:14px;
-  color:#fff;
+  width:100%;padding:11px 16px;border-radius:13px;
+  font-weight:900;font-size:14px;color:#fff;
   background:linear-gradient(130deg,var(--blue3) 0%,var(--blue) 50%,var(--blue2) 100%);
   background-size:200% 200%;
   display:flex;align-items:center;justify-content:center;gap:8px;
   box-shadow:0 4px 16px var(--glow);
-  transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s,filter .25s;
+  transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s,filter .2s;
   position:relative;overflow:hidden;
 }
-.t-btn::before{
-  content:"";position:absolute;inset:0;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);
-  transform:translateX(-100%);
-  transition:transform .5s;
-}
+.t-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-100%);transition:transform .45s}
 .t-btn:hover::before{transform:translateX(100%)}
-.t-btn:hover{
-  transform:translateY(-3px);
-  box-shadow:0 10px 28px var(--glow);
-  animation:gradientShift 2s ease infinite;
-  filter:brightness(1.06);
-}
-.t-btn:active{transform:translateY(0);box-shadow:0 4px 12px var(--glow)}
+.t-btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--glow);filter:brightness(1.06)}
+.t-btn:active{transform:translateY(0)}
 .t-btn svg{width:15px;height:15px;fill:currentColor;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
 .t-btn:hover svg{transform:translateX(-5px)}
 
-/* ===== placeholder ===== */
-.ph-wrap{
-  width:100%;height:100%;
-  display:grid;place-items:center;
-  background:var(--placeholder-bg);
-}
-.ph-wrap svg{opacity:.35}
+/* placeholder */
+.ph-wrap{width:100%;height:100%;display:grid;place-items:center;background:var(--ph-bg)}
+.ph-wrap svg{opacity:.3}
 
-/* ===== skeleton ===== */
+/* skeleton */
 .sk-card{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden}
-.sk-img{width:100%;aspect-ratio:3/3.5;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:600px 100%;animation:shimmer 1.5s infinite linear}
+.sk-img{width:100%;aspect-ratio:3/3.8;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:600px 100%;animation:shimmer 1.5s infinite linear}
 .sk-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:9px}
 .sk-line{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:600px 100%;animation:shimmer 1.5s .2s infinite linear}
 .sk-line.h{width:60%;height:16px}.sk-line.sm{width:35%}.sk-line.btn{height:40px;border-radius:12px;margin-top:4px}
 
 /* loading */
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px;color:var(--muted)}
-.spinner{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px}
+.spinner{width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px}
 
-/* ===== responsive ===== */
+/* responsive */
 @media(max-width:700px){
-  .teachers-grid{grid-template-columns:repeat(2,1fr);gap:14px}
+  .teachers-grid{grid-template-columns:repeat(2,1fr);gap:12px}
   .t-name-over h3{font-size:14px}
   .t-btn{font-size:13px;padding:10px}
   .brand small{display:none}
@@ -262,9 +247,6 @@ body::before{
 }
 @media(max-width:420px){
   .teachers-grid{grid-template-columns:1fr}
-}
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
 </style>
 </head>
@@ -278,7 +260,9 @@ body::before{
     <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <div class="nav-right">
-    <button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button>
+    <button type="button" class="profile-btn" onclick="window.location.href='profile.html'">
+      <span class="av" id="nav-av">?</span><span id="nav-name">—</span>
+    </button>
     <button type="button" class="theme-toggle" data-theme-toggle aria-label="تبديل الثيم">
       <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
       <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -287,7 +271,7 @@ body::before{
 </div></header>
 
 <main class="wrap" id="main">
-  <div class="loading"><div class="spinner"></div><p>جاري تحميل المدرسين...</p></div>
+  <div class="loading"><div class="spinner"></div><p>جاري تحميل المدرسين…</p></div>
 </main>
 
 <script>
@@ -297,81 +281,82 @@ const API_BASE='', TOKEN_KEY='student_token', token=localStorage.getItem(TOKEN_K
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
 const subjectId=qs.get('subjectId');
-const subjectName=qs.get('subjectName')||'';
+const subjectName=decodeURIComponent(qs.get('subjectName')||'');
 
 const HIDDEN_TEACHERS=['عبدالله الحبشي'];
 
-const progressBar=$('scroll-progress'), progressBarSide=$('scroll-progress-side');
-let scrollTicking=false;
+// progress
+const pBar=$('scroll-progress'), pBarS=$('scroll-progress-side');
+let tick=false;
 window.addEventListener('scroll',()=>{
-  if(scrollTicking)return;
-  scrollTicking=true;
+  if(tick)return; tick=true;
   requestAnimationFrame(()=>{
-    const p=document.documentElement.scrollHeight-window.innerHeight;
+    const p=document.documentElement.scrollHeight-innerHeight;
     const pct=p>0?(scrollY/p)*100:0;
-    if(progressBar)progressBar.style.width=pct+'%';
-    if(progressBarSide)progressBarSide.style.height=pct+'%';
-    scrollTicking=false;
+    if(pBar)pBar.style.width=pct+'%';
+    if(pBarS)pBarS.style.height=pct+'%';
+    tick=false;
   });
 },{passive:true});
 
 const api=async(path,opts={})=>{
-  const headers={Accept:'application/json',...opts.headers};
+  const headers={Accept:'application/json',...(opts.headers||{})};
   if(token)headers['Authorization']='Bearer '+token;
   const res=await fetch(API_BASE+path,{method:opts.method||'GET',headers,body:opts.body});
-  if(res.status===401){localStorage.removeItem(TOKEN_KEY);window.location.replace('login.html');return;}
+  if(res.status===401){localStorage.removeItem(TOKEN_KEY);location.replace('login.html');return;}
   const data=await res.json().catch(()=>({}));
   if(!res.ok||data.success===false)throw new Error(data.message||data.error||'خطأ في السيرفر');
   return data.data;
 };
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-const normalizeName=(name)=>String(name||'')
+const norm=s=>String(s||'')
   .replace(/[\u064B-\u0652\u0640]/g,'')
   .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه')
   .replace(/ؤ/g,'و').replace(/ئ/g,'ي')
   .replace(/[^\p{L}\p{N}\s]/gu,'')
   .replace(/\s+/g,'').toLowerCase().trim();
 
-const HIDDEN_KEYWORDS=['عبداللهالحبشي'];
-const isHiddenTeacher=name=>{
-  const n=normalizeName(name);
-  return HIDDEN_KEYWORDS.some(k=>n.includes(k))||HIDDEN_TEACHERS.some(h=>normalizeName(h)===n);
-};
+const HIDDEN_NORM=HIDDEN_TEACHERS.map(norm);
+const isHidden=name=>HIDDEN_NORM.includes(norm(name));
 
 window.goToChapters=function(url,cardEl){
-  const fill=cardEl.querySelector('.side-progress-bar .fill');
+  const fill=cardEl.querySelector('.side-prog .fill');
   if(fill)fill.style.height='100%';
-  setTimeout(()=>{window.location.href=url;},680);
+  setTimeout(()=>location.href=url,680);
 };
 
-// reveal on scroll
 function setupReveal(){
   if(!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion:reduce)').matches){
     document.querySelectorAll('.t-card').forEach(el=>el.classList.add('in'));
     return;
   }
   const io=new IntersectionObserver(entries=>{
-    entries.forEach(e=>{
-      if(!e.isIntersecting)return;
-      e.target.classList.add('in');
-      io.unobserve(e.target);
-    });
-  },{threshold:.08,rootMargin:'0px 0px -20px 0px'});
+    entries.forEach(e=>{ if(!e.isIntersecting)return; e.target.classList.add('in'); io.unobserve(e.target); });
+  },{threshold:.06,rootMargin:'0px 0px -20px 0px'});
   document.querySelectorAll('.t-card').forEach(el=>io.observe(el));
+}
+
+/*
+  CHAPTER COUNT FIX
+  The API returns chapter_count inflated by 1 (likely includes an intro/meta entry).
+  Subtract 1, floor at 0.
+*/
+function displayChapCount(raw){
+  const n=Number(raw||0);
+  const corrected=Math.max(0, n-1);
+  return corrected;
 }
 
 async function load(){
   if(!subjectId){
-    $('main').innerHTML='<div style="text-align:center;padding:50px">معرف المادة غير موجود.</div>';
+    $('main').innerHTML='<div style="text-align:center;padding:50px;color:var(--muted)">معرف المادة غير موجود.</div>';
     return;
   }
   try{
     const data=await api('/api/subjects/'+subjectId+'/teachers');
     let teachers=data.teachers||data||[];
-    const before=teachers.length;
-    teachers=teachers.filter(t=>!isHiddenTeacher(t.name));
-    console.log('[filter] before:',before,'after:',teachers.length,teachers.map(t=>t.name));
+    teachers=teachers.filter(t=>!isHidden(t.name));
 
     if(!teachers.length){
       $('main').innerHTML='<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>';
@@ -385,24 +370,32 @@ async function load(){
     <div class="page-head">
       <div class="badge">المدرسين</div>
       <h1>اختر مدرسك</h1>
-      <p>دول المدرسين المتاحين لمادة ${esc(subjectName)}</p>
+      <p>المدرسين المتاحين لمادة ${esc(subjectName)}</p>
     </div>
     <div class="teachers-grid">`;
 
     teachers.forEach((t,i)=>{
-      const chapCount=t.chapter_count||0;
+      const chapCount=displayChapCount(t.chapter_count);
       const delay=Math.min(i*80,480);
+      const chapLabel=chapCount===1?'فصل واحد':chapCount===0?'لا يوجد فصول':`${chapCount} فصل`;
+
       html+=`
       <div class="t-card" id="card-${t.id}" style="--delay:${delay}ms">
-        <div class="side-progress-bar"><div class="fill"></div></div>
+        <div class="side-bar"></div>
+        <div class="side-prog"><div class="fill"></div></div>
 
         <div class="t-img">
           ${t.image_url
-            ?`<img src="${esc(t.image_url)}" alt="${esc(t.name)}" loading="lazy"
-               onerror="this.style.display='none';this.parentElement.querySelector('.ph-wrap').style.display='grid'">`
+            ?`<img
+                src="${esc(t.image_url)}"
+                alt="${esc(t.name)}"
+                loading="${i<4?'eager':'lazy'}"
+                onerror="this.style.display='none';this.closest('.t-img').querySelector('.ph-wrap').style.display='grid'">`
             :''}
           <div class="ph-wrap" style="display:${t.image_url?'none':'grid'}">
-            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>
+            </svg>
           </div>
           <div class="t-img-overlay"></div>
           <div class="t-name-over"><h3>${esc(t.name)}</h3></div>
@@ -412,11 +405,14 @@ async function load(){
           <div class="t-meta">
             <span class="meta-pill">
               <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-              ${chapCount} فصل
+              ${chapLabel}
             </span>
           </div>
           <button class="t-btn"
-            onclick="goToChapters('chapters.html?teacherId=${t.id}&teacherName=${encodeURIComponent(t.name)}&subjectName=${encodeURIComponent(subjectName)}', document.getElementById('card-${t.id}'))">
+            onclick="goToChapters(
+              'chapters.html?teacherId=${t.id}&teacherName=${encodeURIComponent(t.name)}&subjectName=${encodeURIComponent(subjectName)}',
+              document.getElementById('card-${t.id}')
+            )">
             عرض الفصول
             <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
@@ -429,7 +425,7 @@ async function load(){
     setupReveal();
 
   }catch(e){
-    $('main').innerHTML=`<div style="text-align:center;color:#ef4444;padding:50px;font-weight:700">خطأ: ${esc(e.message)}</div>`;
+    $('main').innerHTML=`<div style="text-align:center;color:var(--red);padding:50px;font-weight:700">خطأ: ${esc(e.message)}</div>`;
   }
 }
 
