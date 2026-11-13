@@ -21,25 +21,27 @@
   --bg:#070b14;--card:#0f1826;--card-hover:#182338;--card-inner:#0d1424;
   --ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.10);
   --blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;
-  --green:#10b981;
+  --green:#10b981;--red:#ef4444;
   --nav-bg:rgba(7,11,20,.92);
   --back-bg:#0f1826;--back-bg-hover:#182338;
   --ph-bg:linear-gradient(135deg,#1a2540,#0f172a);
   --overlay:linear-gradient(to bottom,transparent 28%,rgba(7,11,20,.28) 60%,rgba(7,11,20,.88) 100%);
   --glow:rgba(59,130,246,.22);
   --card-shadow:0 4px 20px rgba(0,0,0,.35);
+  --pill-bg:rgba(59,130,246,.10);--pill-bd:rgba(59,130,246,.20);
 }
 [data-theme="light"]{
   --bg:#f0f4fc;--card:#fff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
   --ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);
   --blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;
-  --green:#059669;
+  --green:#059669;--red:#ef4444;
   --nav-bg:rgba(255,255,255,.92);
   --back-bg:#fff;--back-bg-hover:#f1f5f9;
   --ph-bg:linear-gradient(135deg,#dde4f0,#eef1f8);
   --overlay:linear-gradient(to bottom,transparent 35%,rgba(15,24,41,.14) 65%,rgba(15,24,41,.68) 100%);
   --glow:rgba(108,99,255,.18);
   --card-shadow:0 4px 20px rgba(108,99,255,.07);
+  --pill-bg:rgba(108,99,255,.08);--pill-bd:rgba(108,99,255,.16);
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
@@ -60,14 +62,15 @@ body::before{
     radial-gradient(ellipse 55% 40% at 80% 10%,rgba(108,99,255,.07),transparent),
     radial-gradient(ellipse 40% 50% at 10% 85%,rgba(16,185,129,.04),transparent);
 }
-button{font:inherit;cursor:pointer;outline:none;border:none}
+button,input{font:inherit;outline:none;border:none}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
 
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes navIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 @keyframes cardReveal{from{opacity:0;transform:translateY(28px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
-@keyframes gradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-@keyframes progressFill{from{height:0}to{height:var(--fill,100%)}}
+@keyframes pillIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
 
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
@@ -85,33 +88,47 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .brand .logo svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
-.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 16px 5px 5px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:background .2s,border-color .2s}
+.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 16px 5px 5px;font-weight:800;font-size:14px;color:var(--ink);transition:background .2s,border-color .2s}
 .profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.22)}
 .profile-btn .av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue3),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:15px}
-.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:background .2s,border-color .2s,transform .25s;padding:0}
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;transition:background .2s,border-color .2s,transform .25s;padding:0}
 .theme-toggle:hover{background:var(--card-hover);border-color:rgba(108,99,255,.22);transform:rotate(18deg)}
 .theme-toggle svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
 [data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
 
 /* wrap */
-.wrap{max-width:1140px;margin:0 auto;padding:32px 20px 100px;position:relative;z-index:1}
+.wrap{max-width:1140px;margin:0 auto;padding:28px 20px 100px;position:relative;z-index:1}
 
-/* back */
+/* top row: back + search */
+.top-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:26px}
 .back-btn{
   display:inline-flex;align-items:center;gap:8px;
   background:var(--back-bg);border:1px solid var(--line);color:var(--ink);
   border-radius:13px;padding:10px 20px;font-weight:700;font-size:14px;
-  transition:background .2s,border-color .2s,transform .2s;margin-bottom:28px;
+  transition:background .2s,border-color .2s,transform .2s;
 }
 .back-btn:hover{background:var(--back-bg-hover);border-color:rgba(108,99,255,.25);transform:translateX(4px)}
 .back-btn svg{width:17px;height:17px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
+.search-box{
+  position:relative;flex:1;min-width:200px;max-width:340px;margin-right:auto;
+}
+.search-box svg{position:absolute;top:50%;right:14px;transform:translateY(-50%);width:17px;height:17px;stroke:var(--muted);fill:none;stroke-width:2.2;stroke-linecap:round;pointer-events:none}
+.search-box input{
+  width:100%;background:var(--card);border:1px solid var(--line);color:var(--ink);
+  border-radius:13px;padding:11px 42px 11px 14px;font-size:14px;font-weight:700;
+  transition:border-color .2s,box-shadow .2s;
+}
+.search-box input::placeholder{color:var(--muted);font-weight:600}
+.search-box input:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--glow)}
+
 /* page head */
-.page-head{margin-bottom:32px;animation:cardReveal .5s ease both}
-.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.20);border-radius:999px;padding:5px 14px;font-size:11px;font-weight:800;margin-bottom:12px;letter-spacing:.01em}
+.page-head{margin-bottom:28px;animation:cardReveal .5s ease both}
+.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:var(--pill-bg);color:var(--blue);border:1px solid var(--pill-bd);border-radius:999px;padding:5px 14px;font-size:11px;font-weight:800;margin-bottom:12px;letter-spacing:.01em}
 .page-head h1{margin:0 0 6px;font-size:clamp(22px,3vw,30px);font-weight:900;color:var(--ink)}
 .page-head p{margin:0;color:var(--muted);font-size:14px;font-weight:700}
+.page-head p b{color:var(--ink)}
 
 /* grid */
 .teachers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
@@ -120,91 +137,70 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 .t-card{
   background:var(--card);border:1px solid var(--line);border-radius:22px;
   overflow:hidden;display:flex;flex-direction:column;position:relative;
-  opacity:0;
+  opacity:0;cursor:pointer;
   box-shadow:var(--card-shadow);
   transition:border-color .3s,box-shadow .4s,transform .35s cubic-bezier(.2,.8,.2,1);
 }
-.t-card.in{
-  animation:cardReveal .6s cubic-bezier(.2,.8,.2,1) both;
-  animation-delay:var(--delay,0ms);
-}
+.t-card.in{animation:cardReveal .6s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--delay,0ms)}
 .t-card:hover{
   border-color:rgba(59,130,246,.38);
   box-shadow:0 22px 48px var(--glow),0 0 0 1px rgba(59,130,246,.12);
   transform:translateY(-6px);
 }
 [data-theme="light"] .t-card:hover{border-color:rgba(108,99,255,.38)}
+.t-card:active{transform:translateY(-2px) scale(.99)}
+.t-card.leaving{opacity:.7;transform:scale(.97)}
 
-/* accent bar */
 .side-bar{position:absolute;top:0;bottom:0;left:0;width:4px;background:linear-gradient(180deg,var(--blue3),var(--blue2));z-index:5}
-
-/* image */
-.t-img{
-  width:100%;
-  /* taller portrait to show faces fully */
-  aspect-ratio:3/3.8;
-  background:var(--ph-bg);
-  overflow:hidden;position:relative;
-}
-.t-img img{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  object-fit:cover;
-  object-position:center top; /* anchor at the top — shows face, not belly */
-  display:block;
-  transition:transform .6s cubic-bezier(.2,.8,.2,1),filter .4s;
-  filter:saturate(.92) brightness(.97);
-}
-.t-card:hover .t-img img{
-  transform:scale(1.06) translateY(-2px);
-  filter:saturate(1.08) brightness(1.01);
-}
-
-/* gradient overlay */
-.t-img-overlay{
-  position:absolute;inset:0;
-  background:var(--overlay);
-  pointer-events:none;
-  transition:opacity .4s;
-}
-
-/* name on image */
-.t-name-over{position:absolute;bottom:0;left:0;right:0;padding:16px 18px 14px;z-index:2}
-.t-name-over h3{
-  margin:0;font-size:17px;font-weight:900;color:#fff;
-  text-shadow:0 2px 10px rgba(0,0,0,.55);line-height:1.3;
-  transform:translateY(5px);
-  transition:transform .35s cubic-bezier(.2,.8,.2,1);
-}
-.t-card:hover .t-name-over h3{transform:translateY(0)}
-
-/* side progress fill on nav */
-.side-prog{position:absolute;top:0;bottom:0;left:0;width:4px;background:rgba(0,0,0,.0);z-index:6}
+.side-prog{position:absolute;top:0;bottom:0;left:0;width:4px;z-index:6}
 .side-prog .fill{
   position:absolute;top:0;left:0;width:100%;height:0;
   background:linear-gradient(180deg,var(--green),#34d399);
   box-shadow:0 0 10px rgba(52,211,153,.7);
-  transition:height .65s cubic-bezier(.2,.8,.2,1);
-  border-radius:0;
+  transition:height .35s cubic-bezier(.2,.8,.2,1);
 }
+
+/* image */
+.t-img{width:100%;aspect-ratio:3/3.8;background:var(--ph-bg);overflow:hidden;position:relative}
+.t-img img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;object-position:center top;display:block;
+  opacity:0;
+  transition:transform .6s cubic-bezier(.2,.8,.2,1),filter .4s,opacity .45s;
+  filter:saturate(.92) brightness(.97);
+}
+.t-img img.ready{opacity:1}
+.t-card:hover .t-img img{transform:scale(1.06) translateY(-2px);filter:saturate(1.08) brightness(1.01)}
+.t-img-overlay{position:absolute;inset:0;background:var(--overlay);pointer-events:none}
+.t-name-over{position:absolute;bottom:0;left:0;right:0;padding:16px 18px 14px;z-index:2}
+.t-name-over h3{
+  margin:0;font-size:17px;font-weight:900;color:#fff;
+  text-shadow:0 2px 10px rgba(0,0,0,.55);line-height:1.3;
+  transform:translateY(5px);transition:transform .35s cubic-bezier(.2,.8,.2,1);
+}
+.t-card:hover .t-name-over h3{transform:translateY(0)}
 
 /* footer */
 .t-footer{padding:14px 16px 16px;display:flex;flex-direction:column;gap:11px;background:var(--card);position:relative}
 .t-footer::before{content:"";position:absolute;top:0;left:16px;right:16px;height:1px;background:var(--line)}
-
-/* meta */
-.t-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.t-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:26px}
 .meta-pill{
   display:inline-flex;align-items:center;gap:5px;
-  background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.14);
+  background:var(--pill-bg);border:1px solid var(--pill-bd);
   color:var(--blue);border-radius:999px;padding:4px 11px;
   font-size:11px;font-weight:800;
   transition:background .2s,border-color .2s;
 }
-.t-card:hover .meta-pill{background:rgba(108,99,255,.14);border-color:rgba(108,99,255,.28)}
+.meta-pill.pop{animation:pillIn .35s cubic-bezier(.2,.8,.2,1) both}
+.meta-pill.empty{color:var(--muted);background:transparent;border-color:var(--line)}
 .meta-pill svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.meta-pill.loading{
+  width:84px;height:26px;padding:0;border-color:transparent;
+  background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);
+  background-size:600px 100%;animation:shimmer 1.4s infinite linear;
+}
+.meta-pill.loading *{display:none}
 
-/* CTA */
 .t-btn{
   width:100%;padding:11px 16px;border-radius:13px;
   font-weight:900;font-size:14px;color:#fff;
@@ -216,34 +212,38 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
   position:relative;overflow:hidden;
 }
 .t-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-100%);transition:transform .45s}
-.t-btn:hover::before{transform:translateX(100%)}
-.t-btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--glow);filter:brightness(1.06)}
-.t-btn:active{transform:translateY(0)}
-.t-btn svg{width:15px;height:15px;fill:currentColor;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
-.t-btn:hover svg{transform:translateX(-5px)}
+.t-card:hover .t-btn::before{transform:translateX(100%)}
+.t-card:hover .t-btn{box-shadow:0 10px 26px var(--glow);filter:brightness(1.06)}
+.t-btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.t-card:hover .t-btn svg{transform:translateX(-5px)}
 
-/* placeholder */
-.ph-wrap{width:100%;height:100%;display:grid;place-items:center;background:var(--ph-bg)}
-.ph-wrap svg{opacity:.3}
+.ph-wrap{width:100%;height:100%;display:grid;place-items:center;background:var(--ph-bg);color:var(--muted)}
+.ph-wrap svg{opacity:.35}
 
 /* skeleton */
 .sk-card{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden}
 .sk-img{width:100%;aspect-ratio:3/3.8;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:600px 100%;animation:shimmer 1.5s infinite linear}
 .sk-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:9px}
 .sk-line{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:600px 100%;animation:shimmer 1.5s .2s infinite linear}
-.sk-line.h{width:60%;height:16px}.sk-line.sm{width:35%}.sk-line.btn{height:40px;border-radius:12px;margin-top:4px}
+.sk-line.sm{width:35%}.sk-line.btn{height:40px;border-radius:12px;margin-top:4px}
 
-/* loading */
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px;color:var(--muted)}
-.spinner{width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:12px}
+/* states */
+.state{text-align:center;padding:60px 20px;color:var(--muted);font-weight:700;display:flex;flex-direction:column;align-items:center;gap:14px}
+.state.err{color:var(--red)}
+.state svg{width:46px;height:46px;stroke:currentColor;fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;opacity:.5}
+.state-btn{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 22px;font-weight:800;font-size:14px;transition:background .2s,border-color .2s}
+.state-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.25)}
 
 /* responsive */
 @media(max-width:700px){
   .teachers-grid{grid-template-columns:repeat(2,1fr);gap:12px}
   .t-name-over h3{font-size:14px}
+  .t-name-over{padding:12px 12px 10px}
   .t-btn{font-size:13px;padding:10px}
+  .t-footer{padding:12px 12px 14px}
   .brand small{display:none}
   .wrap{padding:20px 12px 80px}
+  .search-box{max-width:none;flex-basis:100%;order:3;margin-right:0}
 }
 @media(max-width:420px){
   .teachers-grid{grid-template-columns:1fr}
@@ -271,7 +271,22 @@ button{font:inherit;cursor:pointer;outline:none;border:none}
 </div></header>
 
 <main class="wrap" id="main">
-  <div class="loading"><div class="spinner"></div><p>جاري تحميل المدرسين…</p></div>
+  <div class="top-row">
+    <button class="back-btn" type="button" onclick="goBack()">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمواد
+    </button>
+  </div>
+  <div class="page-head">
+    <div class="badge">المدرسين</div>
+    <h1>اختر مدرسك</h1>
+    <p id="head-sub">جاري التحميل…</p>
+  </div>
+  <div class="teachers-grid" id="grid">
+    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sm"></div><div class="sk-line btn"></div></div></div>
+    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sm"></div><div class="sk-line btn"></div></div></div>
+    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sm"></div><div class="sk-line btn"></div></div></div>
+    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sm"></div><div class="sk-line btn"></div></div></div>
+  </div>
 </main>
 
 <script>
@@ -281,11 +296,41 @@ const API_BASE='', TOKEN_KEY='student_token', token=localStorage.getItem(TOKEN_K
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
 const subjectId=qs.get('subjectId');
-const subjectName=decodeURIComponent(qs.get('subjectName')||'');
+// URLSearchParams بيفك الترميز لوحده — مفيش decodeURIComponent تاني (كان بيبوظ الأسماء اللي فيها %)
+const subjectName=qs.get('subjectName')||'';
 
 const HIDDEN_TEACHERS=['عبدالله الحبشي'];
 
-// progress
+/* ---------- helpers ---------- */
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const norm=s=>String(s||'')
+  .replace(/[\u064B-\u0652\u0640]/g,'')
+  .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه')
+  .replace(/ؤ/g,'و').replace(/ئ/g,'ي')
+  .replace(/[^\p{L}\p{N}\s]/gu,'')
+  .replace(/\s+/g,'').toLowerCase().trim();
+
+const HIDDEN_NORM=HIDDEN_TEACHERS.map(norm);
+const isHidden=name=>HIDDEN_NORM.includes(norm(name));
+
+const api=async(path,opts={})=>{
+  const headers={Accept:'application/json',...(opts.headers||{})};
+  if(token)headers['Authorization']='Bearer '+token;
+  const res=await fetch(API_BASE+path,{method:opts.method||'GET',headers,body:opts.body});
+  if(res.status===401){localStorage.removeItem(TOKEN_KEY);location.replace('login.html');return null;}
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok||data.success===false)throw new Error(data.message||data.error||'خطأ في السيرفر');
+  return data.data;
+};
+
+window.goBack=function(){
+  // لو جاي من صفحة المواد ارجع بنفس الحالة، وإلا روح للمواد
+  if(document.referrer&&document.referrer.indexOf('subjects.html')!==-1&&history.length>1)history.back();
+  else location.href='subjects.html';
+};
+
+/* ---------- scroll progress ---------- */
 const pBar=$('scroll-progress'), pBarS=$('scroll-progress-side');
 let tick=false;
 window.addEventListener('scroll',()=>{
@@ -299,135 +344,242 @@ window.addEventListener('scroll',()=>{
   });
 },{passive:true});
 
-const api=async(path,opts={})=>{
-  const headers={Accept:'application/json',...(opts.headers||{})};
-  if(token)headers['Authorization']='Bearer '+token;
-  const res=await fetch(API_BASE+path,{method:opts.method||'GET',headers,body:opts.body});
-  if(res.status===401){localStorage.removeItem(TOKEN_KEY);location.replace('login.html');return;}
-  const data=await res.json().catch(()=>({}));
-  if(!res.ok||data.success===false)throw new Error(data.message||data.error||'خطأ في السيرفر');
-  return data.data;
+/* ---------- chapter count (the real fix) ----------
+   السبب: قائمة المدرسين بتعد كل الكورسات، لكن endpoint الفصول بيشيل
+   كورسات زي "كتب المدرس" — فالعدد بيزيد عند بعض المدرسين بس.
+   الحل: نجيب عدد الفصول الفعلي من نفس endpoint اللي صفحة الفصول بتستخدمه. */
+const CC_TTL=10*60*1000;
+const ccGet=id=>{
+  try{
+    const o=JSON.parse(sessionStorage.getItem('chc_'+id)||'null');
+    if(o&&Date.now()-o.t<CC_TTL)return o.n;
+  }catch(e){}
+  return null;
 };
-const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const ccSet=(id,n)=>{try{sessionStorage.setItem('chc_'+id,JSON.stringify({n,t:Date.now()}))}catch(e){}};
 
-const norm=s=>String(s||'')
-  .replace(/[\u064B-\u0652\u0640]/g,'')
-  .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه')
-  .replace(/ؤ/g,'و').replace(/ئ/g,'ي')
-  .replace(/[^\p{L}\p{N}\s]/gu,'')
-  .replace(/\s+/g,'').toLowerCase().trim();
-
-const HIDDEN_NORM=HIDDEN_TEACHERS.map(norm);
-const isHidden=name=>HIDDEN_NORM.includes(norm(name));
-
-window.goToChapters=function(url,cardEl){
-  const fill=cardEl.querySelector('.side-prog .fill');
-  if(fill)fill.style.height='100%';
-  setTimeout(()=>location.href=url,680);
-};
-
-function setupReveal(){
-  if(!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion:reduce)').matches){
-    document.querySelectorAll('.t-card').forEach(el=>el.classList.add('in'));
-    return;
-  }
-  const io=new IntersectionObserver(entries=>{
-    entries.forEach(e=>{ if(!e.isIntersecting)return; e.target.classList.add('in'); io.unobserve(e.target); });
-  },{threshold:.06,rootMargin:'0px 0px -20px 0px'});
-  document.querySelectorAll('.t-card').forEach(el=>io.observe(el));
+async function fetchChapterCount(t){
+  const cached=ccGet(t.id);
+  if(cached!=null)return cached;
+  const data=await api('/api/teachers/'+encodeURIComponent(t.id)+'/chapters');
+  const list=Array.isArray(data)?data:(data&&Array.isArray(data.chapters)?data.chapters:null);
+  if(!list)throw new Error('bad shape');
+  ccSet(t.id,list.length);
+  return list.length;
 }
 
-/*
-  CHAPTER COUNT FIX
-  The API returns chapter_count inflated by 1 (likely includes an intro/meta entry).
-  Subtract 1, floor at 0.
-*/
-function displayChapCount(raw){
-  const n=Number(raw||0);
-  const corrected=Math.max(0, n-1);
-  return corrected;
+function chapLabel(n){
+  if(n===0)return 'لا يوجد فصول';
+  if(n===1)return 'فصل واحد';
+  if(n===2)return 'فصلين';
+  if(n<=10)return n+' فصول';
+  return n+' فصل';
+}
+const BOOK_SVG='<svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+
+function paintCount(id,n){
+  const el=document.querySelector('#card-'+CSS.escape(String(id))+' .meta-pill');
+  if(!el)return;
+  el.classList.remove('loading');
+  el.classList.add('pop');
+  el.classList.toggle('empty',n===0);
+  el.innerHTML=BOOK_SVG+chapLabel(n);
+}
+
+// تحميل بالتوازي بحد أقصى 4 طلبات في نفس الوقت
+async function loadCounts(teachers){
+  const queue=teachers.slice();
+  async function worker(){
+    while(queue.length){
+      const t=queue.shift();
+      try{
+        paintCount(t.id,await fetchChapterCount(t));
+      }catch(e){
+        // لو فشل الطلب نعرض الرقم اللي جاي من القائمة (من غير أي طرح)
+        paintCount(t.id,Number(t.chapter_count||0));
+      }
+    }
+  }
+  await Promise.all([worker(),worker(),worker(),worker()]);
+}
+
+/* ---------- reveal ---------- */
+let io=null;
+function setupReveal(){
+  const cards=document.querySelectorAll('.t-card:not(.in)');
+  if(!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion:reduce)').matches){
+    cards.forEach(el=>el.classList.add('in'));
+    return;
+  }
+  if(!io){
+    io=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{ if(!e.isIntersecting)return; e.target.classList.add('in'); io.unobserve(e.target); });
+    },{threshold:.06,rootMargin:'0px 0px -20px 0px'});
+  }
+  cards.forEach(el=>io.observe(el));
+}
+
+/* ---------- navigation ---------- */
+function openCard(card){
+  if(!card||card.classList.contains('leaving'))return;
+  const url=card.dataset.url;
+  card.classList.add('leaving');
+  const fill=card.querySelector('.side-prog .fill');
+  if(fill)fill.style.height='100%';
+  setTimeout(()=>location.href=url,320);
+}
+
+/* ---------- render ---------- */
+let ALL=[];
+
+function cardHTML(t,i){
+  const delay=Math.min(i*70,420);
+  const url='chapters.html?teacherId='+encodeURIComponent(t.id)
+    +'&teacherName='+encodeURIComponent(t.name)
+    +'&subjectName='+encodeURIComponent(subjectName);
+  const hasImg=!!t.image_url;
+  return `
+  <div class="t-card" id="card-${esc(t.id)}" data-url="${esc(url)}" role="link" tabindex="0"
+       aria-label="${esc(t.name)} — عرض الفصول" style="--delay:${delay}ms">
+    <div class="side-bar"></div>
+    <div class="side-prog"><div class="fill"></div></div>
+    <div class="t-img">
+      ${hasImg?`<img src="${esc(t.image_url)}" alt="${esc(t.name)}" loading="${i<4?'eager':'lazy'}" data-teacher-img>`:''}
+      <div class="ph-wrap" style="display:${hasImg?'none':'grid'}">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
+      </div>
+      <div class="t-img-overlay"></div>
+      <div class="t-name-over"><h3>${esc(t.name)}</h3></div>
+    </div>
+    <div class="t-footer">
+      <div class="t-meta"><span class="meta-pill loading"></span></div>
+      <button class="t-btn" type="button" tabindex="-1">
+        عرض الفصول
+        <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function bindImages(root){
+  root.querySelectorAll('img[data-teacher-img]').forEach(img=>{
+    const ok=()=>img.classList.add('ready');
+    const bad=()=>{
+      img.style.display='none';
+      const ph=img.closest('.t-img').querySelector('.ph-wrap');
+      if(ph)ph.style.display='grid';
+    };
+    img.addEventListener('load',ok,{once:true});
+    img.addEventListener('error',bad,{once:true});
+    if(img.complete){ img.naturalWidth?ok():bad(); }
+  });
+}
+
+function renderGrid(list,{animate=true}={}){
+  const grid=$('grid');
+  if(!list.length){
+    grid.innerHTML=`<div class="state" style="grid-column:1/-1">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <div>مفيش مدرس بالاسم ده.</div></div>`;
+    return;
+  }
+  grid.innerHTML=list.map(cardHTML).join('');
+  bindImages(grid);
+  if(!animate)grid.querySelectorAll('.t-card').forEach(c=>{c.style.setProperty('--delay','0ms')});
+  setupReveal();
+  // الأعداد المحفوظة تظهر فورًا، والباقي بيتحمل
+  const pending=[];
+  list.forEach(t=>{
+    const c=ccGet(t.id);
+    if(c!=null)paintCount(t.id,c); else pending.push(t);
+  });
+  if(pending.length)loadCounts(pending);
+}
+
+function updateSub(shown){
+  const name=subjectName?` لمادة <b>${esc(subjectName)}</b>`:'';
+  $('head-sub').innerHTML=shown===ALL.length
+    ? `${ALL.length} ${ALL.length===1?'مدرس متاح':'مدرسين متاحين'}${name}`
+    : `${shown} من ${ALL.length} مدرس${name}`;
+}
+
+function addSearch(){
+  const row=document.querySelector('.top-row');
+  if(!row||ALL.length<5)return;
+  const box=document.createElement('div');
+  box.className='search-box';
+  box.innerHTML=`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="t-search" type="search" inputmode="search" autocomplete="off" placeholder="ابحث عن مدرس…" aria-label="بحث عن مدرس">`;
+  row.appendChild(box);
+  let timer=null;
+  $('t-search').addEventListener('input',e=>{
+    clearTimeout(timer);
+    timer=setTimeout(()=>{
+      const q=norm(e.target.value);
+      const list=q?ALL.filter(t=>norm(t.name).includes(q)):ALL;
+      updateSub(list.length);
+      renderGrid(list,{animate:false});
+    },120);
+  });
+}
+
+function showError(msg){
+  $('head-sub').textContent='';
+  $('grid').innerHTML=`<div class="state err" style="grid-column:1/-1">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+    <div>تعذّر تحميل المدرسين: ${esc(msg)}</div>
+    <button class="state-btn" type="button" id="retry-btn">إعادة المحاولة</button></div>`;
+  $('retry-btn').addEventListener('click',()=>{ location.reload(); });
 }
 
 async function load(){
   if(!subjectId){
-    $('main').innerHTML='<div style="text-align:center;padding:50px;color:var(--muted)">معرف المادة غير موجود.</div>';
+    $('head-sub').textContent='';
+    $('grid').innerHTML=`<div class="state" style="grid-column:1/-1">
+      <div>معرف المادة غير موجود.</div>
+      <button class="state-btn" type="button" onclick="location.href='subjects.html'">الرجوع للمواد</button></div>`;
     return;
   }
   try{
-    const data=await api('/api/subjects/'+subjectId+'/teachers');
-    let teachers=data.teachers||data||[];
-    teachers=teachers.filter(t=>!isHidden(t.name));
+    const data=await api('/api/subjects/'+encodeURIComponent(subjectId)+'/teachers');
+    if(data===null)return;
+    let teachers=(data&&data.teachers)||data||[];
+    if(!Array.isArray(teachers))teachers=[];
+    ALL=teachers.filter(t=>t&&!isHidden(t.name));
 
-    if(!teachers.length){
-      $('main').innerHTML='<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد مدرسين مضافين.</div>';
+    if(!ALL.length){
+      $('head-sub').textContent='';
+      $('grid').innerHTML=`<div class="state" style="grid-column:1/-1">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
+        <div>لا يوجد مدرسين مضافين لهذه المادة.</div>
+        <button class="state-btn" type="button" onclick="location.href='subjects.html'">الرجوع للمواد</button></div>`;
       return;
     }
-
-    let html=`
-    <button class="back-btn" onclick="window.location.href='subjects.html'">
-      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمواد
-    </button>
-    <div class="page-head">
-      <div class="badge">المدرسين</div>
-      <h1>اختر مدرسك</h1>
-      <p>المدرسين المتاحين لمادة ${esc(subjectName)}</p>
-    </div>
-    <div class="teachers-grid">`;
-
-    teachers.forEach((t,i)=>{
-      const chapCount=displayChapCount(t.chapter_count);
-      const delay=Math.min(i*80,480);
-      const chapLabel=chapCount===1?'فصل واحد':chapCount===0?'لا يوجد فصول':`${chapCount} فصل`;
-
-      html+=`
-      <div class="t-card" id="card-${t.id}" style="--delay:${delay}ms">
-        <div class="side-bar"></div>
-        <div class="side-prog"><div class="fill"></div></div>
-
-        <div class="t-img">
-          ${t.image_url
-            ?`<img
-                src="${esc(t.image_url)}"
-                alt="${esc(t.name)}"
-                loading="${i<4?'eager':'lazy'}"
-                onerror="this.style.display='none';this.closest('.t-img').querySelector('.ph-wrap').style.display='grid'">`
-            :''}
-          <div class="ph-wrap" style="display:${t.image_url?'none':'grid'}">
-            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>
-            </svg>
-          </div>
-          <div class="t-img-overlay"></div>
-          <div class="t-name-over"><h3>${esc(t.name)}</h3></div>
-        </div>
-
-        <div class="t-footer">
-          <div class="t-meta">
-            <span class="meta-pill">
-              <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-              ${chapLabel}
-            </span>
-          </div>
-          <button class="t-btn"
-            onclick="goToChapters(
-              'chapters.html?teacherId=${t.id}&teacherName=${encodeURIComponent(t.name)}&subjectName=${encodeURIComponent(subjectName)}',
-              document.getElementById('card-${t.id}')
-            )">
-            عرض الفصول
-            <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
-        </div>
-      </div>`;
-    });
-
-    html+='</div>';
-    $('main').innerHTML=html;
-    setupReveal();
-
+    updateSub(ALL.length);
+    addSearch();
+    renderGrid(ALL);
   }catch(e){
-    $('main').innerHTML=`<div style="text-align:center;color:var(--red);padding:50px;font-weight:700">خطأ: ${esc(e.message)}</div>`;
+    showError(e.message);
   }
 }
+
+// فتح الكارت بالضغط أو بالكيبورد
+document.addEventListener('click',e=>{
+  const card=e.target.closest('.t-card');
+  if(card)openCard(card);
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  const card=e.target.closest&&e.target.closest('.t-card');
+  if(card&&e.target===card){e.preventDefault();openCard(card);}
+});
+// لو رجع بزرار الرجوع من الكاش
+window.addEventListener('pageshow',e=>{
+  if(e.persisted)document.querySelectorAll('.t-card.leaving').forEach(c=>{
+    c.classList.remove('leaving');
+    const f=c.querySelector('.side-prog .fill'); if(f)f.style.height='0';
+  });
+});
 
 async function loadProfile(){
   try{
