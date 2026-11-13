@@ -3285,13 +3285,14 @@ async function getTalebCatalog() {
   const allowed = new Set(SUBJECT_ORDER);
   const normId = (id) => {
     const s = String(id || "").toLowerCase();
-    if (/math|رياض/i.test(s)) return "mathematics";
+    // رياضة ملغية — تجاهل
+    if (/math|رياض/i.test(s)) return "__skip_math__";
     return s;
   };
   const merged = new Map();
   for (const s of (cat.subjects || [])) {
     const id = normId(s.id);
-    if (!allowed.has(id) && id !== "mathematics") continue;
+    if (!allowed.has(id)) continue;
     if (!merged.has(id)) {
       merged.set(id, {
         ...s,
@@ -5720,7 +5721,7 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
       res.setHeader("Set-Cookie", `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`);
     } catch {}
 
-    if ((src.mode === "thanawica-youtube" || src.mode === "coursatk-youtube") && src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
+    if ((src.mode === "thanawica-youtube" || src.mode === "coursatk-youtube" || src.mode === "taleb-youtube") && src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
     if (src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
     if (src.mode === "thanawica-mp4" && src.mp4Url) return res.json({ success: true, data: { type: "mp4", play_url: src.mp4Url, mp4_url: src.mp4Url } });
 
