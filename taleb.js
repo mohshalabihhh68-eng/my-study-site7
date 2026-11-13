@@ -398,59 +398,36 @@ function parseSourceRefNumber(ref, prefix) {
 
 
 /** من JSON المضمّن في صفحة الكورس: order المحاضرة → قائمة part UUIDs */
-function extractLecturesJson(html) {
-  // يستخرج محاضرات JSON من RSC: order + title + partIds
-  const lectures = []; // {order, title, partIds[]}
-  // أشكال الهروب المختلفة
-  const reList = [
+function extractPartIdsByLectureOrder(html) {
+  const map = new Map();
+  const patterns = [
     /"order"\s*:\s*(\d+)\s*,\s*"partIds"\s*:\s*\[([^\]]*)\]/g,
     /\\"order\\":(\d+),\\"partIds\\":\[([^\]]*)\]/g
   ];
-  // title قبل order في نفس الكائن غالباً
-  const titleBefore = [
-    /"title"\s*:\s*"([^"]+)"\s*,\s*"image"\s*:\s*"[^"]*"\s*,\s*"order"\s*:\s*(\d+)\s*,\s*"partIds"\s*:\s*\[([^\]]*)\]/g,
-    /\\"title\\":\\"([^\\"]+)\\",\\"image\\":\\"[^\\"]*\\",\\"order\\":(\d+),\\"partIds\\":\[([^\]]*)\]/g
-  ];
-  const byOrder = new Map();
-  for (const re of titleBefore) {
+  for (const re of patterns) {
     let m;
     while ((m = re.exec(html))) {
-      const title = cleanArName(m[1], "");
-      const order = Number(m[2]);
-      const ids = [...String(m[3]).matchAll(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((x) => x[1]);
-      if (order && ids.length) byOrder.set(order, { order, title: title || `محاضرة ${order}`, partIds: ids });
+      const order = Number(m[1]);
+      const ids = [...String(m[2]).matchAll(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((x) => x[1]);
+      if (order && ids.length) map.set(order, ids);
     }
-  }
-  if (!byOrder.size) {
-    for (const re of reList) {
-      let m;
-      while ((m = re.exec(html))) {
-        const order = Number(m[1]);
-        const ids = [...String(m[2]).matchAll(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi)].map((x) => x[1]);
-        if (order && ids.length) byOrder.set(order, { order, title: `محاضرة ${order}`, partIds: ids });
-      }
-      if (byOrder.size) break;
-    }
-  }
-  return [...byOrder.values()].sort((a, b) => a.order - b.order);
-}
-
-function extractPartIdsByLectureOrder(html) {
-  const map = new Map();
-  for (const lec of extractLecturesJson(html)) {
-    map.set(lec.order, lec.partIds);
+    if (map.size) break;
   }
   return map;
 }
 
+/**
+ * زي النسخة اللي كانت شغّالة: تقسيم من HTML (cv-lecture / cv-group / cv-item)
+ * + /course/ أولاً
+ * + UUID من JSON لنفس الكورس فقط في الكاش (للتشغيل)
+ */
 async function parseCourseParts(courseId) {
   let html = "";
-  // مهم: /course/ID فيها المحتوى — /courses/ID غالباً خفيف
   for (const url of [`${TALEB_BASE}/course/${courseId}`, `${TALEB_BASE}/courses/${courseId}`]) {
     try {
       const page = await talebText(url, 45_000);
       if (!page || page.length < 2000) continue;
-      if (/cv-lecture/i.test(page) || /partIds/i.test(page) || /\/watch\//i.test(page)) {
+      if (/cv-lecture/i.test(page) || /partIds/i.test(page) || /cv-item/i.test(page)) {
         html = page;
         break;
       }
@@ -483,97 +460,75 @@ async function parseCourseParts(courseId) {
   const imgs = extractImagesFromHtml(html, 6);
   const courseImage = imgs[0] || null;
 
-  // عناوين الأجزاء من HTML (بالترتيب داخل كل محاضرة)
-  const htmlTitlesByLec = new Map(); // order -> [title,...]
-  const lectureBlocks = html.split(/class="cv-lecture"/i).slice(1);
-  let ord = 0;
-  for (const block of lectureBlocks) {
-    ord += 1;
-    const titles = [];
-    const itemChunks = block.split(/class="cv-item"/i).slice(1);
-    for (const ichunk of itemChunks) {
-      const it = ichunk.match(new RegExp("cv-item-title[^>]*>([^<]+)", "i"));
-      let itemTitle = it ? cleanArName(it[1], "") : "";
-      if (itemTitle) titles.push(itemTitle);
-    }
-    if (titles.length) htmlTitlesByLec.set(ord, titles);
-  }
+  // UUID لكل جزء داخل نفس الكورس فقط
+  const byOrder = extractPartIdsByLectureOrder(html);
 
-  // المصدر الأساسي: JSON partIds (يمنع خلط فيديوهات مدرس بآخر)
-  const jsonLecs = extractLecturesJson(html);
   const items = [];
+  const lectureBlocks = html.split(/class="cv-lecture"/i).slice(1);
+  let lectureOrdinal = 0;
 
-  if (jsonLecs.length) {
-    for (const lec of jsonLecs) {
-      const lectureNum = String(lec.order);
-      const titles = htmlTitlesByLec.get(lec.order) || [];
-      lec.partIds.forEach((uuid, idx) => {
-        const partNum = String(idx + 1);
-        const itemTitle = titles[idx] || `جزء ${partNum}`;
-        // خمن المجموعة من العنوان
-        let kind = "video";
-        let group = "الشرح";
-        if (/ملف|pdf|مذكر|سبورة/i.test(itemTitle)) { kind = "file"; group = "الملفات"; }
-        else if (/امتحان|اختبار/i.test(itemTitle)) { kind = "exam"; group = "الامتحانات"; }
-        else if (/واجب|حل/i.test(itemTitle)) { kind = "solution"; group = "حل الواجب"; }
-        const watchPath = `/watch/${courseId}/${lectureNum}/${partNum}`;
-        // كاش صارم مربوط برقم الكورس
-        partIdCache.set(`${courseId}/${lectureNum}/${partNum}`, uuid);
-        items.push({
-          courseId: String(courseId),
-          lectureNum,
-          partNum,
-          lectureTitle: lec.title || `محاضرة ${lectureNum}`,
-          title: itemTitle,
-          group,
-          kind,
-          watchPath,
-          partUuid: uuid
-        });
-      });
-    }
-  } else {
-    // fallback: HTML فقط (من غير UUID)
-    let lectureOrdinal = 0;
-    for (const block of lectureBlocks) {
-      lectureOrdinal += 1;
-      let lecName = "";
-      const ln = block.match(new RegExp("cv-lecture-name[^>]*>\\s*<strong>([^<]+)</strong>", "i"))
-        || block.match(new RegExp("<strong>([^<]*محاضرة[^<]*)</strong>", "i"));
-      if (ln) lecName = cleanArName(ln[1], `محاضرة ${lectureOrdinal}`);
-      else lecName = `محاضرة ${lectureOrdinal}`;
-      let lectureNum = String(lectureOrdinal);
-      const groupChunks = block.split(/class="cv-group"/i).slice(1);
-      let partOrdinal = 0;
-      const chunks = groupChunks.length ? groupChunks : [block];
+  for (const block of lectureBlocks) {
+    lectureOrdinal += 1;
+    let lecName = "";
+    const ln = block.match(new RegExp("cv-lecture-name[^>]*>\\s*<strong>([^<]+)</strong>", "i"))
+      || block.match(new RegExp("<strong>([^<]*محاضرة[^<]*)</strong>", "i"));
+    if (ln) lecName = cleanArName(ln[1], `محاضرة ${lectureOrdinal}`);
+    else lecName = `محاضرة ${lectureOrdinal}`;
+
+    // رقم المحاضرة = ترتيب البلوك (ثابت) — يمنع خلط مع كورس تاني
+    let lectureNum = String(lectureOrdinal);
+    const uuidList = byOrder.get(lectureOrdinal) || byOrder.get(Number(lectureNum)) || [];
+
+    const groupChunks = block.split(/class="cv-group"/i).slice(1);
+    let partOrdinal = 0;
+
+    const walkItems = (chunks, defaultGroup) => {
       for (const gchunk of chunks) {
-        let groupTitle = "الشرح";
+        let groupTitle = defaultGroup;
         const gt = gchunk.match(new RegExp("cv-group-title[^>]*>([^<]+)<", "i"));
         if (gt) groupTitle = cleanArName(gt[1], groupTitle);
         const itemChunks = gchunk.split(/class="cv-item"/i).slice(1);
         for (const ichunk of itemChunks) {
           partOrdinal += 1;
+          let itemTitle = "";
           const it = ichunk.match(new RegExp("cv-item-title[^>]*>([^<]+)", "i"));
-          const itemTitle = cleanArName(it ? it[1] : `${groupTitle} ${partOrdinal}`, `جزء ${partOrdinal}`);
+          if (it) itemTitle = it[1];
+          itemTitle = String(itemTitle || "").split("<")[0];
+          itemTitle = cleanArName(itemTitle, `${groupTitle} ${partOrdinal}`);
+
+          // partNum تسلسلي داخل المحاضرة فقط
+          const partNum = String(partOrdinal);
+          const watchPath = `/watch/${courseId}/${lectureNum}/${partNum}`;
+
           let kind = "video";
-          if (/ملف|pdf/i.test(itemTitle) || /ملف/i.test(groupTitle)) kind = "file";
-          else if (/امتحان/i.test(groupTitle) || /امتحان/i.test(itemTitle)) kind = "exam";
-          else if (/واجب|حل/i.test(groupTitle)) kind = "solution";
+          if (/ملف|pdf|مذكر|سبورة|نموذج|تحليل/i.test(itemTitle) || /فتح الملف/i.test(ichunk) || /ملف/i.test(groupTitle)) kind = "file";
+          else if (/امتحان|اختبار/i.test(groupTitle) || /امتحان/i.test(itemTitle)) kind = "exam";
+          else if (/واجب|حل|تطبيق|تدريب|تسليم/i.test(groupTitle)) kind = "solution";
           const normGroup = normalizeGroup(groupTitle, kind, itemTitle);
+          if (normGroup === "الملفات") kind = "file";
+
+          const partUuid = uuidList[partOrdinal - 1] || null;
+          if (partUuid) {
+            partIdCache.set(`${courseId}/${lectureNum}/${partNum}`, partUuid);
+          }
+
           items.push({
             courseId: String(courseId),
-            lectureNum,
-            partNum: String(partOrdinal),
+            lectureNum: String(lectureNum),
+            partNum: String(partNum),
             lectureTitle: lecName,
             title: itemTitle,
             group: normGroup,
-            kind: normGroup === "الملفات" ? "file" : kind,
-            watchPath: `/watch/${courseId}/${lectureNum}/${partOrdinal}`,
-            partUuid: null
+            kind,
+            watchPath: kind === "file" ? null : watchPath,
+            partUuid
           });
         }
       }
-    }
+    };
+
+    if (groupChunks.length) walkItems(groupChunks, "الشرح");
+    else walkItems([block], "الشرح");
   }
 
   items.sort((a, b) => Number(a.lectureNum) - Number(b.lectureNum) || Number(a.partNum) - Number(b.partNum));
