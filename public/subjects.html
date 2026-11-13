@@ -31,6 +31,7 @@
     radial-gradient(ellipse 40% 55% at 10% 85%,rgba(16,185,129,.05),transparent);
   --glow:rgba(59,130,246,.22);
   --card-shadow:0 4px 20px rgba(0,0,0,.35);
+  --pill-bg:rgba(59,130,246,.10);--pill-bd:rgba(59,130,246,.20);
 }
 [data-theme="light"]{
   --bg:#f0f4fc;--card:#fff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
@@ -45,6 +46,7 @@
     radial-gradient(ellipse 40% 55% at 10% 85%,rgba(16,185,129,.04),transparent);
   --glow:rgba(108,99,255,.18);
   --card-shadow:0 4px 20px rgba(108,99,255,.07);
+  --pill-bg:rgba(108,99,255,.08);--pill-bd:rgba(108,99,255,.16);
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
@@ -58,20 +60,17 @@ body{
 }
 button{font:inherit;cursor:pointer;outline:none;border:none}
 a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
 
 /* progress */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--blue3),var(--blue2));width:0%;z-index:9999;transition:width .05s linear}
 #scroll-progress-side{position:fixed;top:0;right:0;width:3px;background:linear-gradient(180deg,var(--blue3),var(--blue2));height:0%;z-index:9999;border-radius:0 0 0 3px}
 
-/* animations — restrained: one reveal pass, response-only hovers */
 @keyframes navIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 @keyframes heroIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @keyframes statPop{from{opacity:0;transform:scale(.92) translateY(8px)}to{opacity:1;transform:none}}
-@keyframes cardReveal{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
-@keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
-@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{0%{background-position:-800px 0}100%{background-position:800px 0}}
 @keyframes countUpFade{from{opacity:.2}to{opacity:1}}
-@keyframes underlineGrow{from{width:0}to{width:100%}}
 
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
@@ -97,7 +96,7 @@ a{color:inherit;text-decoration:none}
 .profile-btn{
   display:flex;align-items:center;gap:10px;
   border:1px solid var(--line);background:var(--card);border-radius:999px;
-  padding:5px 16px 5px 5px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);
+  padding:5px 16px 5px 5px;font-weight:800;font-size:14px;color:var(--ink);
   transition:background .2s,border-color .2s;
 }
 .profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.25)}
@@ -108,7 +107,7 @@ a{color:inherit;text-decoration:none}
 }
 .theme-toggle{
   width:40px;height:40px;border-radius:12px;border:1px solid var(--line);
-  background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;
+  background:var(--card);color:var(--ink);display:grid;place-items:center;
   transition:background .2s,border-color .2s,transform .25s;padding:0;
 }
 .theme-toggle:hover{background:var(--card-hover);border-color:rgba(108,99,255,.22);transform:rotate(18deg)}
@@ -137,7 +136,6 @@ a{color:inherit;text-decoration:none}
     radial-gradient(ellipse 35% 50% at 5% 80%,rgba(16,185,129,.06),transparent);
 }
 .home-hero-main{position:relative;z-index:1;margin-bottom:28px}
-
 .hero-chip{
   display:inline-flex;align-items:center;gap:6px;
   background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.22);
@@ -145,11 +143,7 @@ a{color:inherit;text-decoration:none}
   font-size:12px;font-weight:800;margin-bottom:14px;letter-spacing:.01em;
 }
 [data-theme="light"] .hero-chip{background:rgba(108,99,255,.10);border-color:rgba(108,99,255,.20);color:var(--blue3)}
-
-h1.hero-title{
-  font-size:clamp(21px,3.2vw,32px);font-weight:900;line-height:1.45;
-  color:var(--ink);margin:0 0 8px;
-}
+h1.hero-title{font-size:clamp(21px,3.2vw,32px);font-weight:900;line-height:1.45;color:var(--ink);margin:0 0 8px}
 .greet-word{font-weight:700;color:var(--muted)}
 .name-span{
   background:linear-gradient(100deg,var(--blue2),var(--blue),var(--blue3));
@@ -169,6 +163,7 @@ h1.hero-title{
   animation-delay:calc(.4s + var(--k,0)*.08s);
   transition:transform .25s,box-shadow .25s,border-color .25s;
 }
+.home-stat[hidden]{display:none}
 .home-stat:hover{transform:translateY(-4px);box-shadow:0 12px 32px var(--glow);border-color:rgba(59,130,246,.35)}
 [data-theme="light"] .home-stat:hover{border-color:rgba(108,99,255,.35)}
 .home-stat dt{font-size:11px;font-weight:800;color:var(--muted);margin:0;white-space:nowrap}
@@ -189,7 +184,7 @@ h1.hero-title{
 .alert-body p{font-size:13px;color:var(--muted);font-weight:700;margin:0}
 
 /* section head */
-.section-head{margin-bottom:22px}
+.section-head{margin-bottom:24px}
 .section-head h2{font-size:20px;font-weight:900;color:var(--ink);position:relative;display:inline-block}
 .section-head h2::after{
   content:"";position:absolute;inset-inline-start:0;bottom:-5px;height:3px;width:0;
@@ -197,10 +192,10 @@ h1.hero-title{
   transition:width .7s .2s ease;
 }
 .section-head.in h2::after{width:100%}
-.section-note{display:block;font-size:13px;color:var(--muted);font-weight:700;margin-top:5px}
+.section-note{display:block;font-size:13px;color:var(--muted);font-weight:700;margin-top:7px}
 
 /* subjects grid */
-.subjects-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:22px}
+.subjects-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:22px;align-items:start}
 
 /* subject card */
 .subject-card{
@@ -218,74 +213,75 @@ h1.hero-title{
     box-shadow .35s,border-color .35s;
   transition-delay:calc(var(--i,0)*90ms),calc(var(--i,0)*90ms),0ms,0ms;
 }
-.subject-card:hover{
+.subject-card.in:hover{
   transform:translateY(-7px);
   border-color:rgba(59,130,246,.38);
   box-shadow:0 20px 44px var(--glow);
+  transition-delay:0ms;
 }
-[data-theme="light"] .subject-card:hover{border-color:rgba(108,99,255,.35)}
+[data-theme="light"] .subject-card.in:hover{border-color:rgba(108,99,255,.35)}
+.subject-card.in:active{transform:translateY(-2px) scale(.985);transition-delay:0ms}
+.subject-card.leaving{opacity:.7!important;transform:scale(.97)!important}
 
-/* accent bar */
 .side-bar{position:absolute;top:0;bottom:0;left:0;width:4px;background:linear-gradient(180deg,var(--blue3),var(--blue2));z-index:2}
 
-/* IMAGE — square, full cover, no proxy */
+/* IMAGE — الصورة كاملة بنسبتها الأصلية من غير أي قص
+   (الخلفية بيضاء فبتندمج مع صور الأساتذة) */
 .card-img{
   width:100%;
-  aspect-ratio:1/1;
+  aspect-ratio:4/3;                 /* مكان محجوز لحد ما الصورة تحمل */
   overflow:hidden;
-  background:var(--card-inner);
-  display:block;
   position:relative;
+  background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);
+  background-size:800px 100%;
+  animation:shimmer 1.5s infinite linear;
+}
+.card-img.loaded{
+  aspect-ratio:auto;                /* بعد التحميل: الارتفاع حسب الصورة نفسها */
+  background:#fff;
+  animation:none;
 }
 .card-img img{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  object-fit:cover;
-  object-position:center top;
-  display:block;
-  transition:transform .55s cubic-bezier(.2,.8,.2,1),filter .4s;
-  filter:saturate(.92) brightness(.97);
+  display:block;width:100%;height:auto;
+  opacity:0;
+  transition:opacity .5s ease,transform .55s cubic-bezier(.2,.8,.2,1),filter .4s;
+  filter:saturate(.95);
 }
-.subject-card:hover .card-img img{
-  transform:scale(1.07);
-  filter:saturate(1.08) brightness(1.01);
-}
-/* gradient overlay so name is readable if we ever overlay it */
-.card-img::after{
-  content:"";position:absolute;inset:0;
-  background:linear-gradient(to bottom,transparent 50%,rgba(7,11,20,.18) 100%);
-  pointer-events:none;
-}
-[data-theme="light"] .card-img::after{
-  background:linear-gradient(to bottom,transparent 55%,rgba(15,24,41,.10) 100%);
-}
+.card-img.loaded img{opacity:1}
+.subject-card:hover .card-img img{transform:scale(1.04);filter:saturate(1.08)}
 .card-img-ph{
-  width:100%;aspect-ratio:1/1;background:var(--card-inner);
+  width:100%;aspect-ratio:4/3;background:var(--card-inner);
   display:grid;place-items:center;color:var(--muted);
 }
 .card-img-ph svg{width:52px;height:52px;opacity:.35}
 
 /* card body */
-.card-body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;flex:1}
-.card-body h3{font-size:18px;font-weight:900;color:var(--ink);margin:0;line-height:1.3}
+.card-body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:12px}
+.card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.card-body h3{font-size:19px;font-weight:900;color:var(--ink);margin:0;line-height:1.3}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;
+  background:var(--pill-bg);border:1px solid var(--pill-bd);color:var(--blue);
+  border-radius:999px;padding:4px 11px;font-size:11px;font-weight:800;white-space:nowrap;
+}
+[data-theme="dark"] .pill{color:var(--blue2)}
 
 .card-go{
-  width:100%;padding:11px 16px;border-radius:13px;font-weight:800;font-size:14px;
+  width:100%;padding:12px 16px;border-radius:13px;font-weight:800;font-size:14px;
   background:linear-gradient(130deg,var(--blue3) 0%,var(--blue) 50%,var(--blue2) 100%);
   background-size:200% 200%;
   color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;
   box-shadow:0 4px 16px var(--glow);
   transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s,filter .2s;
-  position:relative;overflow:hidden;margin-top:auto;
+  position:relative;overflow:hidden;
 }
 .card-go::before{
   content:"";position:absolute;inset:0;
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);
   transform:translateX(-100%);transition:transform .45s;
 }
-.card-go:hover::before{transform:translateX(100%)}
-.card-go:hover{transform:translateY(-2px);box-shadow:0 10px 26px var(--glow);filter:brightness(1.06)}
-.card-go:active{transform:translateY(0)}
+.subject-card:hover .card-go::before{transform:translateX(100%)}
+.subject-card:hover .card-go{box-shadow:0 10px 26px var(--glow);filter:brightness(1.06)}
 .card-go svg{
   width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;
   stroke-linecap:round;stroke-linejoin:round;
@@ -295,16 +291,16 @@ h1.hero-title{
 
 /* skeleton */
 .sk-card{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden}
-.sk-img{width:100%;aspect-ratio:1/1;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:800px 100%;animation:shimmer 1.5s infinite linear}
+.sk-img{width:100%;aspect-ratio:4/3;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:800px 100%;animation:shimmer 1.5s infinite linear}
 .sk-body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:9px}
 .sk-line{height:13px;border-radius:6px;background:linear-gradient(90deg,var(--card-inner) 25%,var(--card-hover) 50%,var(--card-inner) 75%);background-size:800px 100%;animation:shimmer 1.5s .2s infinite linear}
-.sk-line.h{width:60%;height:18px}.sk-line.btn{height:42px;border-radius:13px;margin-top:8px;width:100%}
+.sk-line.h{width:60%;height:18px}.sk-line.btn{height:44px;border-radius:13px;margin-top:8px;width:100%}
 
-/* error */
-.err{text-align:center;padding:60px;color:var(--red);font-weight:700}
-
-/* empty */
-.empty{text-align:center;padding:60px;color:var(--muted);font-weight:700}
+/* states */
+.state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);font-weight:700;display:flex;flex-direction:column;align-items:center;gap:14px}
+.state.err{color:var(--red)}
+.state-btn{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 22px;font-weight:800;font-size:14px;transition:background .2s,border-color .2s}
+.state-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.25)}
 
 /* responsive */
 @media(max-width:900px){
@@ -316,6 +312,9 @@ h1.hero-title{
   .home-stat{min-width:calc(50% - 4px);padding:11px 14px}
   .home-stat dd{font-size:22px}
   .subjects-grid{grid-template-columns:repeat(2,1fr);gap:12px}
+  .card-body{padding:12px 12px 14px;gap:10px}
+  .card-body h3{font-size:16px}
+  .card-go{padding:10px;font-size:13px}
   .brand small{display:none}
   .wrap{padding:0 12px 80px}
 }
@@ -352,16 +351,16 @@ h1.hero-title{
     <div class="home-hero-main">
       <span class="hero-chip" id="hero-chip">المواد الدراسية</span>
       <h1 class="hero-title" id="hero-title">
-        <span class="greet-word" id="greet-word">أهلاً</span>،
+        <span class="greet-word" id="greet-word">صباح الخير</span>،
         <span class="name-span" id="hero-name">—</span>
       </h1>
       <p class="hero-sub" id="hero-sub">يوم جديد، وخطوة أقرب لهدفك.</p>
     </div>
     <dl class="home-stats" id="stats-row">
-      <div class="home-stat days-stat" style="--k:0"><dt>يوم باقي في اشتراكك</dt><dd id="stat-days">—</dd></div>
+      <div class="home-stat days-stat" id="stat-days-wrap" style="--k:0"><dt>يوم باقي في اشتراكك</dt><dd id="stat-days">—</dd></div>
       <div class="home-stat" style="--k:1"><dt>المواد</dt><dd id="stat-subjects">—</dd></div>
-      <div class="home-stat" style="--k:2"><dt>المدرسين</dt><dd id="stat-teachers">—</dd></div>
-      <div class="home-stat" style="--k:3"><dt>الكورسات</dt><dd id="stat-courses">—</dd></div>
+      <div class="home-stat" id="stat-teachers-wrap" style="--k:2"><dt>المدرسين</dt><dd id="stat-teachers">—</dd></div>
+      <div class="home-stat" id="stat-courses-wrap" style="--k:3"><dt>الكورسات</dt><dd id="stat-courses">—</dd></div>
     </dl>
   </section>
 
@@ -381,6 +380,7 @@ h1.hero-title{
       <span class="section-note">اختار المادة وابدأ مع مدرسك</span>
     </div>
     <div class="subjects-grid" id="subjects-grid">
+      <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line h"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line h"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line h"></div><div class="sk-line btn"></div></div></div>
       <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line h"></div><div class="sk-line btn"></div></div></div>
@@ -412,7 +412,7 @@ window.addEventListener('scroll',()=>{
   });
 },{passive:true});
 
-const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 // direct image map — no proxy, full URLs
 const SUBJECT_IMAGES={
@@ -434,29 +434,35 @@ const ARABIC_KEYS={
 function resolveImg(s){
   const id=String(s.id||'').toLowerCase();
   const name=String(s.name||'').toLowerCase();
-  // 1. exact key match by id
   if(SUBJECT_IMAGES[id]) return SUBJECT_IMAGES[id];
-  // 2. check id or name contains key or arabic variant
   for(const [key,variants] of Object.entries(ARABIC_KEYS)){
     if(id.includes(key)) return SUBJECT_IMAGES[key];
     for(const v of variants){ if(name.includes(v)) return SUBJECT_IMAGES[key]; }
     if(name.includes(key)) return SUBJECT_IMAGES[key];
   }
-  // 3. fall back to whatever the API gave us (direct, no proxy)
   return s.image_url||'';
 }
 
-function setGreeting(name, section, greetingFromApi){
-  const h=new Date().getHours();
-  const g=greetingFromApi||((h>=5&&h<12)?'صباح النور':'مساء النور');
-  $('greet-word').textContent=g;
+/* ---------- التحية ----------
+   مساء الخير: من ٦ مساءً (18:00) لحد قبل ٥ الفجر (04:59)
+   صباح الخير: من ٥ الفجر (05:00) لحد ٥:٥٩ مساءً */
+function greetingByTime(d=new Date()){
+  const h=d.getHours();
+  return (h>=18||h<5)?'مساء الخير':'صباح الخير';
+}
+
+function setGreeting(name, section){
+  $('greet-word').textContent=greetingByTime();
   $('hero-name').textContent=name||'—';
   $('hero-chip').textContent=section||'المواد الدراسية';
 }
+// تحديث التحية لو الصفحة فضلت مفتوحة وعدّى وقت التغيير
+setInterval(()=>{ $('greet-word').textContent=greetingByTime(); },60*1000);
 
 function countUp(el,target){
   if(!el)return;
   if(isNaN(target)||target<2){el.textContent=target;return;}
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches){el.textContent=target;return;}
   let t0=null;
   el.textContent='0';
   function f(t){
@@ -479,26 +485,39 @@ const api=async(path,opts={})=>{
   return data.data;
 };
 
+const PH_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+const USER_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>';
+
+function teachersLabel(n){
+  if(n===1)return 'مدرس واحد';
+  if(n===2)return 'مدرسين';
+  if(n<=10)return n+' مدرسين';
+  return n+' مدرس';
+}
+
 function renderSubjects(subjects){
+  const grid=$('subjects-grid');
   if(!subjects||!subjects.length){
-    $('subjects-grid').innerHTML='<div class="empty">لا يوجد مواد متاحة.</div>';
+    grid.innerHTML='<div class="state">لا يوجد مواد متاحة حاليًا.</div>';
     return;
   }
-  $('subjects-grid').innerHTML=subjects.map((s,i)=>{
+  grid.innerHTML=subjects.map((s,i)=>{
     const img=resolveImg(s);
+    const tc=Number(s.teachers_count||s.teacher_count||0);
+    const url='teachers.html?subjectId='+encodeURIComponent(s.id)+'&subjectName='+encodeURIComponent(s.name);
     return `
-    <div class="subject-card" id="sc-${s.id}" style="--i:${i}"
-         onclick="goTo('teachers.html?subjectId=${s.id}&subjectName=${encodeURIComponent(s.name)}','sc-${s.id}')">
+    <div class="subject-card" role="link" tabindex="0" data-url="${esc(url)}"
+         aria-label="${esc(s.name)} — تصفح المدرسين" style="--i:${i}">
       <div class="side-bar"></div>
       ${img
-        ?`<div class="card-img">
-            <img src="${esc(img)}" alt="${esc(s.name)}" loading="${i<4?'eager':'lazy'}"
-                 onerror="this.closest('.card-img').outerHTML='<div class=\\'card-img-ph\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'1.3\\'><path d=\\'M4 19.5A2.5 2.5 0 0 1 6.5 17H20\\'/><path d=\\'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\\'/></svg></div>'">
-          </div>`
-        :`<div class="card-img-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`}
+        ?`<div class="card-img"><img src="${esc(img)}" alt="${esc(s.name)}" loading="${i<4?'eager':'lazy'}" decoding="async" data-subject-img></div>`
+        :`<div class="card-img-ph">${PH_SVG}</div>`}
       <div class="card-body">
-        <h3>${esc(s.name)}</h3>
-        <button class="card-go">
+        <div class="card-top">
+          <h3>${esc(s.name)}</h3>
+          ${tc>0?`<span class="pill">${USER_SVG}${teachersLabel(tc)}</span>`:''}
+        </div>
+        <button class="card-go" type="button" tabindex="-1">
           تصفح المدرسين
           <svg viewBox="0 0 24 24"><path d="m14 5-7 7 7 7M7 12h14"/></svg>
         </button>
@@ -506,69 +525,108 @@ function renderSubjects(subjects){
     </div>`;
   }).join('');
 
+  // الصور: تظهر كاملة بعد التحميل، ولو فشلت بنحط أيقونة بدل المكسورة
+  grid.querySelectorAll('img[data-subject-img]').forEach(img=>{
+    const box=img.closest('.card-img');
+    const ok=()=>box.classList.add('loaded');
+    const bad=()=>{ box.outerHTML='<div class="card-img-ph">'+PH_SVG+'</div>'; };
+    img.addEventListener('load',ok,{once:true});
+    img.addEventListener('error',bad,{once:true});
+    if(img.complete){ img.naturalWidth?ok():bad(); }
+  });
+
   // scroll-reveal
+  const cards=grid.querySelectorAll('.subject-card');
   if('IntersectionObserver' in window&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
     const io=new IntersectionObserver(entries=>{
       entries.forEach(x=>{ if(!x.isIntersecting)return; x.target.classList.add('in'); io.unobserve(x.target); });
     },{threshold:.08,rootMargin:'0px 0px -20px 0px'});
-    document.querySelectorAll('.subject-card').forEach(el=>io.observe(el));
+    cards.forEach(el=>io.observe(el));
   } else {
-    document.querySelectorAll('.subject-card').forEach(el=>el.classList.add('in'));
+    cards.forEach(el=>el.classList.add('in'));
   }
   setTimeout(()=>$('section-head')?.classList.add('in'),250);
 }
 
-window.goTo=function(url,cardId){
-  const card=document.getElementById(cardId);
-  if(card){card.style.transform='scale(.97)';card.style.opacity='.7';}
-  setTimeout(()=>location.href=url,300);
-};
+function openCard(card){
+  if(!card||card.classList.contains('leaving'))return;
+  card.classList.add('leaving');
+  setTimeout(()=>location.href=card.dataset.url,260);
+}
+document.addEventListener('click',e=>{
+  const c=e.target.closest('.subject-card');
+  if(c)openCard(c);
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  const c=e.target.closest&&e.target.closest('.subject-card');
+  if(c&&e.target===c){e.preventDefault();openCard(c);}
+});
+// الرجوع بزرار المتصفح من الكاش
+window.addEventListener('pageshow',e=>{
+  if(e.persisted)document.querySelectorAll('.subject-card.leaving').forEach(c=>c.classList.remove('leaving'));
+});
+
+function showError(msg){
+  $('subjects-grid').innerHTML=`<div class="state err">
+    <div>تعذّر تحميل المواد: ${esc(msg)}</div>
+    <button class="state-btn" type="button" id="retry-btn">إعادة المحاولة</button></div>`;
+  $('retry-btn').addEventListener('click',()=>location.reload());
+}
 
 async function init(){
   const cached=localStorage.getItem('student_name');
-  if(cached) setGreeting(cached,'',null);
+  setGreeting(cached||'','');
 
   try{
     const [subjects,me]=await Promise.all([
-      api('/api/subjects/'+subjectId),
+      api('/api/subjects/'+encodeURIComponent(subjectId)),
       api('/api/auth/me').catch(()=>null)
     ]);
+    if(subjects===null&&me===null&&!localStorage.getItem(TOKEN_KEY))return;
 
     if(me&&me.name){
       $('nav-name').textContent=me.name;
       $('nav-av').textContent=me.name.charAt(0);
       localStorage.setItem('student_name',me.name);
-      setGreeting(me.name, me.section||'', me.greeting||null);
+      setGreeting(me.name, me.section||'');
     }
 
     if(me){
       let daysLeft=null;
       if(me.expiresAt){ const ms=Number(me.expiresAt)-Date.now(); daysLeft=Math.max(0,Math.ceil(ms/(864e5))); }
       else if(me.daysLeft!=null){ daysLeft=Number(me.daysLeft); }
-      if(daysLeft!=null){
+      if(daysLeft!=null&&!isNaN(daysLeft)){
         const statDaysEl=$('stat-days');
-        const statWrap=statDaysEl?.closest('.home-stat');
+        const statWrap=$('stat-days-wrap');
         countUp(statDaysEl,daysLeft);
         if(daysLeft<=3&&statWrap){ statWrap.classList.add('urgent-stat'); statWrap.classList.remove('days-stat'); }
         if(daysLeft<=7){
           $('alert-title').textContent=
             daysLeft===0?'اشتراكك انتهى اليوم':
             daysLeft===1?'اشتراكك ينتهي خلال يوم واحد':
+            daysLeft===2?'اشتراكك ينتهي خلال يومين':
             `اشتراكك ينتهي خلال ${daysLeft} أيام`;
           $('sub-alert').removeAttribute('hidden');
         }
+      } else {
+        $('stat-days-wrap').hidden=true;   // مفيش بيانات اشتراك → منعرضش "—"
       }
+    } else {
+      $('stat-days-wrap').hidden=true;
     }
 
     renderSubjects(subjects);
     if(subjects?.length) countUp($('stat-subjects'),subjects.length);
+
+    // الإحصائيات اللي مفيش لها بيانات بتتخبى بدل ما تعرض صفر
     const totalTeachers=(subjects||[]).reduce((s,x)=>s+Number(x.teachers_count||x.teacher_count||0),0);
     const totalCourses=(subjects||[]).reduce((s,x)=>s+Number(x.courses_count||x.course_count||x.chapters_count||0),0);
-    countUp($('stat-teachers'),totalTeachers||0);
-    countUp($('stat-courses'),totalCourses||0);
+    if(totalTeachers>0)countUp($('stat-teachers'),totalTeachers); else $('stat-teachers-wrap').hidden=true;
+    if(totalCourses>0)countUp($('stat-courses'),totalCourses); else $('stat-courses-wrap').hidden=true;
 
   }catch(e){
-    $('subjects-grid').innerHTML=`<div class="err">خطأ: ${esc(e.message)}</div>`;
+    showError(e.message);
   }
 }
 
