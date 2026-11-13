@@ -316,16 +316,15 @@ const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 
 // subjects with taleb images + display order
 const SUBJECT_IMAGES={
-  arabic:   'https://talep.pro/media/04905fea783d9d52.jpg',
-  english:  'https://talep.pro/media/d5de020f8d177162.jpg',
-  chemistry:'https://talep.pro/media/8396d25fac27ec73.jpg',
-  physics:  'https://talep.pro/media/994c7308cd9668bd.jpg',
-  biology:  'https://talep.pro/media/97fa47a98fe1fbea.jpg',
-  math: 'https://talep.pro/media/26e06b734eae866b.jpg',
+  arabic: 'https://talep.pro/media/b2b8b361bdd4f090.jpg',
+  english: 'https://talep.pro/media/71dc95a485b772c0.jpg',
+  chemistry: 'https://talep.pro/media/5a3a152392b6706f.jpg',
+  physics: 'https://talep.pro/media/9b22445d16929ae7.jpg',
+  biology: 'https://talep.pro/media/d2cb805d7fea39d2.jpg',
   mathematics: 'https://talep.pro/media/26e06b734eae866b.jpg',
+  math: 'https://talep.pro/media/26e06b734eae866b.jpg',
   pure_math: 'https://talep.pro/media/26e06b734eae866b.jpg',
-  applied_math: 'https://talep.pro/media/26e06b734eae866b.jpg',
-  history:  'https://talep.pro/media/a1b2c3d4e5f6a7b8.jpg',
+  applied_math: 'https://talep.pro/media/26e06b734eae866b.jpg'
 };
 
 // resolve image for a subject — match by id string or name
@@ -343,6 +342,9 @@ function proxyImg(u){
   return u;
 }
 function resolveImg(s){
+  const sid=String(s&&s.id||'').toLowerCase();
+  if(sid && SUBJECT_IMAGES[sid]) return proxyImg(SUBJECT_IMAGES[sid]);
+
   const id=String(s.id||'').toLowerCase();
   const name=String(s.name||'').toLowerCase();
   const keys=Object.keys(SUBJECT_IMAGES);
