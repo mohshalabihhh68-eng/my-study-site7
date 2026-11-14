@@ -227,6 +227,8 @@ const ALLOWED_ORIGINS = new Set([
   "https://durosakplus.com",
   "https://thanawya-club.up.railway.app",
   "https://thanawya-club.vercel.app",
+  "https://thanaweya-club.up.railway.app",   // spelling used in production
+  "https://thanaweya-club.vercel.app",
   ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
 // Railway/Vercel public domain من البيئة
