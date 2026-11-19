@@ -628,12 +628,12 @@ const filterLectures=q=>{
 const load=async()=>{
   if(!chapterId){$('main').innerHTML=`<div class="state-box"><p>معرف الفصل غير موجود.</p></div>`;return;}
   try{
-    const lectures=await api('/api/chapters/'+chapterId+'/lectures');
+    let lectures=await api('/api/chapters/'+chapterId+'/lectures');
     if(!lectures||!lectures.length){
       $('main').innerHTML=`<div class="state-box"><p>لا يوجد محاضرات في هذا الفصل.</p></div>`;return;
     }
     // ترتيب المحاضرات زي مساري: lecture_num ثم الترتيب الأصلي
-    lectures=lectures.slice().sort((a,b)=>{
+    lectures=(Array.isArray(lectures)?lectures:[]).slice().sort((a,b)=>{
       const an=Number(a.lecture_num??a.lectureNum??a.order);
       const bn=Number(b.lecture_num??b.lectureNum??b.order);
       if(Number.isFinite(an)&&Number.isFinite(bn)&&an!==bn) return an-bn;
