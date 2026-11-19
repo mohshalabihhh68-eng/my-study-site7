@@ -484,13 +484,14 @@ export async function crawlMesariFullCatalog() {
   const subjectsRaw = unwrapList(await mesariJson("/subjects", 40_000));
   const teachersRaw = unwrapList(await mesariJson("/teachers", 40_000));
 
+  // global teacher registry (real names + icons from /teachers)
   const teacherById = new Map();
   for (const t of teachersRaw) {
     if (!t?.id) continue;
     teacherById.set(String(t.id), {
       id: `mesari_t_${t.id}`,
       uuid: String(t.id),
-      name: t.displayName || t.title || "مدرس",
+      name: String(t.displayName || t.title || "مدرس").trim(),
       image_url: absUrl(t.icon),
       subjectId: null,
       subjectSlug: null,
@@ -501,9 +502,107 @@ export async function crawlMesariFullCatalog() {
     });
   }
 
-  // Enrich subjects with nested teachers + chapters
   const subjects = [];
   const teachersFlat = [];
+
+  // build one teacher-subject instance per subject
+  function cloneTeacherForSubject(base, slug) {
+    return {
+      id: `mesari_t_${base.uuid}_${slug}`,
+      uuid: base.uuid,
+      name: base.name,
+      image_url: base.image_url,
+      subjectId: slug,
+      subjectSlug: slug,
+      numericId: null,
+      courses: [],
+      lectures: [],
+      mesariTeacherId: base.uuid
+    };
+  }
+
+  function buildPartsFromLesson(lec, ch, lectureNum) {
+    const parts = [];
+    const videos = Array.isArray(lec.videos) ? lec.videos : [];
+    // nested catalog often returns video stubs without originalName — don't spam duplicate titles
+    const namedVideos = videos.filter((v) => v && v.id && (v.originalName || v.title || v.url));
+    const list = namedVideos.length ? namedVideos : [];
+    list.forEach((v, idx) => {
+      if (!v || !v.id) return;
+      const title = String(v.originalName || v.title || lec.title || `فيديو ${idx + 1}`)
+        .replace(/\s+/g, " ")
+        .trim();
+      parts.push({
+        id: `mesari_v_${v.id}`,
+        title,
+        group: "الشرح",
+        kind: "video",
+        courseId: String(ch.id),
+        lectureNum: String(lectureNum),
+        partNum: String(idx + 1),
+        watchPath: null,
+        videoId: `mesari_${v.id}`,
+        mesariVideoId: v.id,
+        mesariLessonId: lec.id,
+        quality: v.quality || null,
+        type: v.type || "UPLOAD",
+        image_url: absUrl(v.thumbnailUrl) || absUrl(ch.thumbnail) || null
+      });
+    });
+    // files (PDF etc.)
+    const files = Array.isArray(lec.files) ? lec.files : [];
+    files.forEach((f, idx) => {
+      const title = String(f.title || f.name || f.originalName || `ملف ${idx + 1}`).trim();
+      parts.push({
+        id: `mesari_file_${f.id || idx}`,
+        title,
+        group: "الملفات",
+        kind: "file",
+        courseId: String(ch.id),
+        lectureNum: String(lectureNum),
+        partNum: String(1000 + idx),
+        watchPath: null,
+        videoId: null,
+        fileUrl: absUrl(f.url || f.fileUrl || f.path),
+        mesariLessonId: lec.id
+      });
+    });
+    // exams
+    const exams = Array.isArray(lec.exams) ? lec.exams : [];
+    exams.forEach((ex, idx) => {
+      const title = String(ex.title || ex.name || `امتحان ${idx + 1}`).trim();
+      parts.push({
+        id: `mesari_exam_${ex.id || idx}`,
+        title,
+        group: "الامتحان",
+        kind: "exam",
+        courseId: String(ch.id),
+        lectureNum: String(lectureNum),
+        partNum: String(2000 + idx),
+        watchPath: null,
+        videoId: null,
+        mesariLessonId: lec.id
+      });
+    });
+    // lesson with no nested media yet — keep a resolvable stub named like the site lesson
+    if (!parts.length) {
+      parts.push({
+        id: `mesari_lesson_${lec.id}`,
+        title: String(lec.title || "محاضرة").trim(),
+        group: "الشرح",
+        kind: "video",
+        courseId: String(ch.id),
+        lectureNum: String(lectureNum),
+        partNum: "1",
+        watchPath: null,
+        videoId: `mesari_lesson_${lec.id}`,
+        mesariLessonId: lec.id,
+        mesariVideoId: null,
+        needsExpand: true
+      });
+    }
+    return parts;
+  }
 
   await mapPool(subjectsRaw, 3, async (sr) => {
     if (!sr?.id || sr.isPublished === false) return;
@@ -514,108 +613,69 @@ export async function crawlMesariFullCatalog() {
       console.warn("[mesari-catalog] subject detail", sr.id, e && e.message);
     }
 
-    const slug = subjectSlugFromName(detail.name || sr.name);
-    const subjectTeachers = [];
+    const subjectName = String(detail.name || sr.name || "").trim() || "مادة";
+    const slug = subjectSlugFromName(subjectName);
+    const subjectImage = absUrl(detail.thumbnail || detail.coverImage || detail.bannerUrl || detail.icon || sr.thumbnail);
 
-    // teachers on subject
     const stList = Array.isArray(detail.teachers) ? detail.teachers : [];
     const chapters = Array.isArray(detail.chapters) ? detail.chapters : [];
 
-    // group chapters by teacherId
     const chaptersByTeacher = new Map();
     for (const ch of chapters) {
       if (!ch || ch.isPublished === false) continue;
       const tid = String(ch.teacherId || "");
+      if (!tid) continue;
       if (!chaptersByTeacher.has(tid)) chaptersByTeacher.set(tid, []);
       chaptersByTeacher.get(tid).push(ch);
     }
 
-    // ensure teachers referenced by chapters exist
     const teacherIds = new Set();
     for (const row of stList) {
       const tid = String(row.teacher?.id || row.teacherId || row.id || "");
       if (tid) teacherIds.add(tid);
     }
-    for (const tid of chaptersByTeacher.keys()) if (tid) teacherIds.add(tid);
+    for (const tid of chaptersByTeacher.keys()) teacherIds.add(tid);
+
+    const subjectTeachers = [];
 
     for (const tid of teacherIds) {
-      let th = teacherById.get(tid);
-      if (!th) {
-        th = {
-          id: `mesari_t_${tid}`,
-          uuid: tid,
-          name: `مدرس`,
-          image_url: null,
-          subjectId: slug,
-          subjectSlug: slug,
-          numericId: null,
-          courses: [],
-          lectures: [],
-          mesariTeacherId: tid
-        };
-        teacherById.set(tid, th);
-      }
-
-      // pull display name from subject nested teacher if available
+      const base = teacherById.get(tid) || {
+        uuid: tid,
+        name: "مدرس",
+        image_url: null
+      };
+      // prefer nested subject teacher name/icon
       const nested = stList.find((x) => String(x.teacher?.id || x.teacherId || "") === tid);
-      if (nested?.teacher?.displayName) {
-        th.name = nested.teacher.displayName;
-        th.image_url = absUrl(nested.teacher.icon) || th.image_url;
-      }
+      const name = String(nested?.teacher?.displayName || base.name || "مدرس").trim();
+      const icon = absUrl(nested?.teacher?.icon) || base.image_url || null;
 
-      th.subjectId = slug;
-      th.subjectSlug = slug;
+      const th = cloneTeacherForSubject({ uuid: tid, name, image_url: icon }, slug);
+      th.name = name;
+      th.image_url = icon;
 
-      const tChapters = chaptersByTeacher.get(tid) || [];
+      const tChapters = (chaptersByTeacher.get(tid) || []).sort((a, b) => (a.order || 0) - (b.order || 0));
       const coursesOut = [];
       const lecturesOut = [];
 
-      for (const ch of tChapters.sort((a, b) => (a.order || 0) - (b.order || 0))) {
-        const lessons = Array.isArray(ch.lessons) ? ch.lessons : [];
-        // course ≈ chapter
+      for (const ch of tChapters) {
+        const chapterTitle = String(ch.title || "فصل").replace(/\s+/g, " ").trim();
+        const chapterImage = absUrl(ch.thumbnail) || subjectImage;
+        const lessons = Array.isArray(ch.lessons) ? [...ch.lessons] : [];
+        lessons.sort((a, b) => (a.order || 0) - (b.order || 0));
+
         const courseLectures = [];
-        for (const lec of lessons.sort((a, b) => (a.order || 0) - (b.order || 0))) {
-          if (lec.isPublished === false) continue;
-          const parts = (lec.videos || []).map((v, idx) => ({
-            id: `mesari_v_${v.id}`,
-            title: v.originalName || lec.title || `جزء ${idx + 1}`,
-            group: "الشرح",
-            kind: "video",
-            courseId: String(ch.id),
-            lectureNum: String(lec.order || lec.id),
-            partNum: String(idx + 1),
-            watchPath: null,
-            videoId: `mesari_${v.id}`,
-            mesariVideoId: v.id,
-            mesariLessonId: lec.id,
-            quality: v.quality || null,
-            type: v.type || "UPLOAD"
-          }));
-
-          // if lesson has no videos in nested payload, still expose lesson as one part resolvable later
-          if (!parts.length) {
-            parts.push({
-              id: `mesari_lesson_${lec.id}`,
-              title: lec.title || "محاضرة",
-              group: "الشرح",
-              kind: "video",
-              courseId: String(ch.id),
-              lectureNum: String(lec.order || 1),
-              partNum: "1",
-              watchPath: null,
-              videoId: `mesari_lesson_${lec.id}`,
-              mesariLessonId: lec.id,
-              mesariVideoId: null
-            });
-          }
-
+        for (const lec of lessons) {
+          if (!lec || lec.isPublished === false) continue;
+          const lectureNum = lec.order != null ? lec.order : courseLectures.length + 1;
+          const lecTitle = String(lec.title || `محاضرة ${lectureNum}`).replace(/\s+/g, " ").trim();
+          const parts = buildPartsFromLesson(lec, ch, lectureNum);
           const lecObj = {
             id: `mesari_lec_${lec.id}`,
-            title: String(lec.title || "محاضرة").slice(0, 120),
+            title: lecTitle.slice(0, 160),
             courseId: String(ch.id),
-            lectureNum: String(lec.order || 1),
-            courseTitle: ch.title,
-            image_url: absUrl(ch.thumbnail),
+            lectureNum: String(lectureNum),
+            courseTitle: chapterTitle,
+            image_url: chapterImage,
             parts,
             mesariLessonId: lec.id
           };
@@ -625,61 +685,43 @@ export async function crawlMesariFullCatalog() {
 
         coursesOut.push({
           id: String(ch.id),
-          title: ch.title || "فصل",
-          image_url: absUrl(ch.thumbnail),
+          title: chapterTitle,
+          image_url: chapterImage,
           partsCount: courseLectures.reduce((a, l) => a + (l.parts || []).length, 0),
           lecturesCount: courseLectures.length,
           lectures: courseLectures,
-          mesariChapterId: ch.id
+          mesariChapterId: ch.id,
+          subjectId: slug,
+          mesariSubjectId: sr.id
         });
       }
 
-      // merge courses if teacher already partially filled from another subject pass
-      const haveCourse = new Set((th.courses || []).map((c) => String(c.id)));
-      for (const c of coursesOut) {
-        if (haveCourse.has(String(c.id))) continue;
-        th.courses.push(c);
-        haveCourse.add(String(c.id));
-      }
-      th.lectures = (th.lectures || []).filter((l) => String(l.courseId) && !coursesOut.some((c) => String(c.id) === String(l.courseId)));
-      th.lectures.push(...lecturesOut);
-
+      th.courses = coursesOut;
+      th.lectures = lecturesOut;
       subjectTeachers.push(th);
-      if (!teachersFlat.find((x) => x.uuid === th.uuid && x.subjectSlug === slug)) {
-        teachersFlat.push(th);
-      }
+      teachersFlat.push(th);
     }
 
     subjects.push({
       id: slug,
       mesariId: sr.id,
-      name: detail.name || sr.name || slug,
-      image_url: absUrl(detail.thumbnail || detail.icon || sr.thumbnail),
+      name: subjectName,
+      image_url: subjectImage,
       teachers: subjectTeachers
     });
   });
 
-  // de-dupe teachersFlat by uuid+subject
-  const seenT = new Set();
-  const teachersDedup = [];
-  for (const th of teachersFlat) {
-    const key = `${th.uuid}|${th.subjectSlug}`;
-    if (seenT.has(key)) continue;
-    seenT.add(key);
-    teachersDedup.push(th);
-  }
-
   const data = {
     subjects: sortSubjects(subjects),
-    teachers: teachersDedup,
+    teachers: teachersFlat,
     crawledAt: nowMs,
     source: "mesari",
     stats: {
       subjects: subjects.length,
-      teachers: teachersDedup.length,
-      courses: teachersDedup.reduce((a, t) => a + (t.courses || []).length, 0),
-      lectures: teachersDedup.reduce((a, t) => a + (t.lectures || []).length, 0),
-      parts: teachersDedup.reduce(
+      teachers: teachersFlat.length,
+      courses: teachersFlat.reduce((a, t) => a + (t.courses || []).length, 0),
+      lectures: teachersFlat.reduce((a, t) => a + (t.lectures || []).length, 0),
+      parts: teachersFlat.reduce(
         (a, t) => a + (t.lectures || []).reduce((b, l) => b + (l.parts || []).length, 0),
         0
       )
@@ -688,7 +730,7 @@ export async function crawlMesariFullCatalog() {
 
   console.log("[mesari-catalog] ready", data.stats);
   catalogCache.data = data;
-  catalogCache.exp = nowMs + (teachersDedup.length ? 30 * 60_000 : 60_000);
+  catalogCache.exp = nowMs + (teachersFlat.length ? 20 * 60_000 : 60_000);
   return data;
 }
 
@@ -700,7 +742,14 @@ export async function getMesariTeachers() {
     image_url: t.image_url || null,
     subjectId: t.subjectId,
     subjectIcon: null,
-    courses: t.courses || [],
+    courses: (t.courses || []).map((c) => ({
+      id: c.id,
+      title: c.title,
+      image_url: c.image_url || null,
+      lecturesCount: c.lecturesCount || (c.lectures || []).length,
+      partsCount: c.partsCount || 0,
+      lectures: c.lectures || []
+    })),
     lectures: (t.lectures || []).flatMap((lec) =>
       (lec.parts || []).map((p) => ({
         courseId: p.courseId,
@@ -710,7 +759,7 @@ export async function getMesariTeachers() {
         createdAt: null,
         videoId: p.videoId,
         courseTitle: lec.courseTitle || null,
-        image_url: lec.image_url || null,
+        image_url: p.image_url || lec.image_url || null,
         mesariVideoId: p.mesariVideoId || null,
         mesariLessonId: p.mesariLessonId || lec.mesariLessonId || null
       }))
@@ -718,47 +767,152 @@ export async function getMesariTeachers() {
   }));
 }
 
-/** Lazy-load lessons for a chapter if catalog was shallow */
-export async function ensureMesariChapterLectures(chapterId) {
+/**
+ * Expand a chapter like the website: fetch lessons list, then each lesson detail
+ * so video originalName / files / exams match Mesari classroom.
+ */
+export async function ensureMesariChapterLectures(chapterId, opts = {}) {
   const cid = String(chapterId);
-  if (chapterCache.has(cid)) return chapterCache.get(cid);
+  const force = Boolean(opts.force);
+  if (!force && chapterCache.has(cid)) return chapterCache.get(cid);
   requireMesariAuth();
-  const lessons = unwrapList(await mesariJson(`/lessons?chapterId=${encodeURIComponent(cid)}`, 40_000));
+
+  // chapter meta (title + thumbnail)
+  let chapterMeta = { title: null, thumbnail: null };
+  try {
+    const ch = await mesariJson(`/chapters/${encodeURIComponent(cid)}`, 30_000);
+    chapterMeta.title = ch.title || null;
+    chapterMeta.thumbnail = absUrl(ch.thumbnail);
+  } catch (e) {
+    console.warn("[mesari] chapter meta", cid, e && e.message);
+  }
+
+  let lessons = unwrapList(await mesariJson(`/lessons?chapterId=${encodeURIComponent(cid)}`, 40_000));
+  if (!lessons.length) {
+    try {
+      const ch = await mesariJson(`/chapters/${encodeURIComponent(cid)}`, 30_000);
+      lessons = Array.isArray(ch.lessons) ? ch.lessons : [];
+    } catch {}
+  }
+  lessons = lessons
+    .filter((l) => l && l.isPublished !== false)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  // expand each lesson for real video names (parallel limited)
+  const expanded = await mapPool(lessons, 4, async (lec) => {
+    let full = lec;
+    const hasNamedVideos = (lec.videos || []).some((v) => v && (v.originalName || v.url));
+    if (!hasNamedVideos || !(lec.videos || []).length) {
+      try {
+        full = await mesariJson(`/lessons/${encodeURIComponent(lec.id)}`, 30_000);
+      } catch (e) {
+        console.warn("[mesari] lesson expand", lec.id, e && e.message);
+        full = lec;
+      }
+    }
+    return full;
+  });
+
   const lectures = [];
-  for (const lec of lessons.sort((a, b) => (a.order || 0) - (b.order || 0))) {
-    if (lec.isPublished === false) continue;
-    let videos = lec.videos || [];
-    // if only stubs, optionally expand first video later at play time
-    lectures.push({
-      id: `mesari_lec_${lec.id}`,
-      title: String(lec.title || "محاضرة").slice(0, 120),
-      courseId: cid,
-      lectureNum: String(lec.order || 1),
-      courseTitle: null,
-      image_url: null,
-      mesariLessonId: lec.id,
-      parts: (videos.length ? videos : [{ id: null }]).map((v, idx) => ({
-        id: v.id ? `mesari_v_${v.id}` : `mesari_lesson_${lec.id}`,
-        title: v.originalName || lec.title || `جزء ${idx + 1}`,
+  for (const lec of expanded) {
+    if (!lec) continue;
+    const lectureNum = lec.order != null ? lec.order : lectures.length + 1;
+    const lecTitle = String(lec.title || `محاضرة ${lectureNum}`).replace(/\s+/g, " ").trim();
+    const parts = [];
+    const videos = Array.isArray(lec.videos) ? lec.videos : [];
+    videos.forEach((v, idx) => {
+      if (!v?.id) return;
+      parts.push({
+        id: `mesari_v_${v.id}`,
+        title: String(v.originalName || v.title || lecTitle || `فيديو ${idx + 1}`).replace(/\s+/g, " ").trim(),
         group: "الشرح",
         kind: "video",
         courseId: cid,
-        lectureNum: String(lec.order || 1),
+        lectureNum: String(lectureNum),
         partNum: String(idx + 1),
         watchPath: null,
-        videoId: v.id ? `mesari_${v.id}` : `mesari_lesson_${lec.id}`,
-        mesariVideoId: v.id || null,
+        videoId: `mesari_${v.id}`,
+        mesariVideoId: v.id,
         mesariLessonId: lec.id,
-        type: v.type || null
-      }))
+        quality: v.quality || null,
+        type: v.type || "UPLOAD",
+        image_url: absUrl(v.thumbnailUrl) || chapterMeta.thumbnail
+      });
+    });
+    (lec.files || []).forEach((f, idx) => {
+      parts.push({
+        id: `mesari_file_${f.id || idx}`,
+        title: String(f.title || f.name || f.originalName || `ملف ${idx + 1}`).trim(),
+        group: "الملفات",
+        kind: "file",
+        courseId: cid,
+        lectureNum: String(lectureNum),
+        partNum: String(1000 + idx),
+        fileUrl: absUrl(f.url || f.fileUrl || f.path),
+        mesariLessonId: lec.id
+      });
+    });
+    (lec.exams || []).forEach((ex, idx) => {
+      parts.push({
+        id: `mesari_exam_${ex.id || idx}`,
+        title: String(ex.title || ex.name || `امتحان ${idx + 1}`).trim(),
+        group: "الامتحان",
+        kind: "exam",
+        courseId: cid,
+        lectureNum: String(lectureNum),
+        partNum: String(2000 + idx),
+        mesariLessonId: lec.id
+      });
+    });
+    if (!parts.length) {
+      parts.push({
+        id: `mesari_lesson_${lec.id}`,
+        title: lecTitle,
+        group: "الشرح",
+        kind: "video",
+        courseId: cid,
+        lectureNum: String(lectureNum),
+        partNum: "1",
+        videoId: `mesari_lesson_${lec.id}`,
+        mesariLessonId: lec.id,
+        needsExpand: true
+      });
+    }
+    lectures.push({
+      id: `mesari_lec_${lec.id}`,
+      title: lecTitle.slice(0, 160),
+      courseId: cid,
+      lectureNum: String(lectureNum),
+      courseTitle: chapterMeta.title,
+      image_url: chapterMeta.thumbnail,
+      mesariLessonId: lec.id,
+      parts
     });
   }
+
   const out = {
     lectures,
+    title: chapterMeta.title,
+    image_url: chapterMeta.thumbnail,
     lecturesCount: lectures.length,
     partsCount: lectures.reduce((a, l) => a + (l.parts || []).length, 0)
   };
   chapterCache.set(cid, out);
+
+  // patch live catalog cache
+  if (catalogCache.data) {
+    for (const th of catalogCache.data.teachers || []) {
+      const c = (th.courses || []).find((x) => String(x.id) === cid);
+      if (c) {
+        c.lectures = lectures;
+        c.lecturesCount = out.lecturesCount;
+        c.partsCount = out.partsCount;
+        if (out.title) c.title = out.title;
+        if (out.image_url) c.image_url = out.image_url;
+      }
+      th.lectures = (th.lectures || []).filter((l) => String(l.courseId) !== cid).concat(lectures);
+    }
+  }
   return out;
 }
 
