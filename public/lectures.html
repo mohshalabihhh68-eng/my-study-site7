@@ -452,116 +452,94 @@ const buildItem=(item,lid)=>{
 /* لون نقطة المجموعة */
 const groupDot=(name)=>{
   const n=String(name||'');
+  if(/ملف/i.test(n)) return 'p';
   if(/امتحان|اختبار/i.test(n)) return 'a';
   if(/حل|واجب|تطبيق|تدريب/i.test(n)) return 'g';
   return '';
 };
 
-/* ترتيب المجموعات زي مساري: الشرح ثم الحل ثم التدريبات ثم الامتحان — بدون ملفات */
-const GROUP_ORDER=['الشرح','حل الواجب','الحل','التدريبات','التطبيق التفاعلي','الامتحان'];
-const groupRank=(name)=>{
-  const n=String(name||'').trim();
-  const i=GROUP_ORDER.findIndex(g=>g===n || n.includes(g) || g.includes(n));
-  return i>=0?i:50;
-};
-
-/* بناء مجموعات بنفس أسماء وترتيب المنصة */
+/* بناء مجموعات بنفس أسماء المنصة */
 const buildGroupsFromNamed=(namedGroups,lid)=>{
   let html='';
   let i=0;
   for(const g of namedGroups){
-    const title=g.name||g.title||'قسم';
-    if(/ملف/i.test(title)) continue; // بدون ملفات
-    const list=(g.items||[]).filter(it=>!isFileItem(it));
+    const list=g.items||[];
     if(!list.length) continue;
+    const title=g.name||g.title||'قسم';
     const gId=`gbd-${lid}-${i}`,tId=`gbt-${lid}-${i}`;
     const dot=groupDot(title);
-    // أول مجموعة مفتوحة تلقائيًا زي تجربة مساري
-    const openFirst=i===0;
     html+=`
     <div class="group">
-      <button type="button" class="group-toggle" id="${tId}" aria-expanded="${openFirst?'true':'false'}" aria-controls="${gId}">
+      <button type="button" class="group-toggle" id="${tId}" aria-expanded="false" aria-controls="${gId}">
         <span class="group-label"><span class="group-dot ${dot}"></span>${esc(title)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${list.length})</span></span>
-        <span class="group-action"><span class="g-txt">${openFirst?'إخفاء':'عرض'}</span>${IC_CHEV}</span>
+        <span class="group-action"><span class="g-txt">عرض</span>${IC_CHEV}</span>
       </button>
-      <div id="${gId}" role="region" aria-labelledby="${tId}" ${openFirst?'':'hidden'} class="group-body">
-        ${list.map(it=>buildItem({...it,title:it.title||it.name||'',type:it.type||'video'},lid)).join('')}
+      <div id="${gId}" role="region" aria-labelledby="${tId}" hidden class="group-body">
+        ${list.map(it=>buildItem({...it,title:it.title||it.name||'',type:it.type||( /ملف/i.test(title)?'file':'video')},lid)).join('')}
       </div>
     </div>`;
     i++;
   }
-  return html||`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
+  return html||`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد محتوى.</p>`;
 };
 
-/* بناء المحتوى: نحافظ على ترتيب السيرفر/مساري — بدون ملفات */
+/* build groups (fallback بالكلمات المفتاحية) */
 const buildGroups=(items,lid)=>{
-  const clean=(items||[]).filter(it=>!isFileItem(it));
-  if(!clean.length){
-    return `<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
-  }
-
-  // لو السيرفر بعت groups/sections بأسماء — استخدمها بنفس الترتيب (مع استبعاد الملفات)
-  // وإلا لو العناصر ليها group — رتّب المجموعات بترتيب الظهور ثم GROUP_ORDER
-  const hasNamed=clean.some(it=>it.group);
+  // لو العناصر جاية بـ group من السيرفر — استخدمها
+  const hasNamed=items.some(it=>it.group);
   if(hasNamed){
     const map=new Map();
-    for(const it of clean){
-      const g=String(it.group||'الشرح').trim()||'الشرح';
-      if(/ملف/i.test(g)) continue;
+    for(const it of items){
+      const g=it.group||(/ملف|file/i.test(it.type||'')?'الملفات':'الشرح');
       if(!map.has(g)) map.set(g,[]);
       map.get(g).push({...it,title:it.title||it.name||''});
     }
-    const keys=[...map.keys()].sort((a,b)=>{
-      const ra=groupRank(a), rb=groupRank(b);
-      if(ra!==rb) return ra-rb;
-      return 0; // حافظ ترتيب الظهور داخل نفس الرتبة
-    });
+    // الملفات في الآخر
+    const keys=[...map.keys()].filter(k=>k!=='الملفات');
+    if(map.has('الملفات')) keys.push('الملفات');
     return buildGroupsFromNamed(keys.map(k=>({name:k,items:map.get(k)})), lid);
   }
-
-  // بدون group: قائمة واحدة بنفس ترتيب مساري (الـ API)
-  return buildGroupsFromNamed([{name:'الشرح',items:clean}], lid);
+  const bk={lesson:[],practice:[],exam:[],file:[]};
+  for(const it of items){
+    const cat=classify(it.title||it.name||'',it.type||'video');
+    (bk[cat]||bk.lesson).push({...it,title:it.title||it.name||''});
+  }
+  let html='';
+  for(const key of ['lesson','practice','exam','file']){
+    const list=bk[key];if(!list.length) continue;
+    const cfg=GRP[key];
+    const gId=`gbd-${lid}-${key}`,tId=`gbt-${lid}-${key}`;
+    html+=`
+    <div class="group">
+      <button type="button" class="group-toggle" id="${tId}" aria-expanded="false" aria-controls="${gId}">
+        <span class="group-label"><span class="group-dot ${cfg.dot}"></span>${cfg.label} <span style="color:var(--muted);font-weight:700;font-size:12px">(${list.length})</span></span>
+        <span class="group-action"><span class="g-txt">عرض</span>${IC_CHEV}</span>
+      </button>
+      <div id="${gId}" role="region" aria-labelledby="${tId}" hidden class="group-body">
+        ${list.map(it=>buildItem(it,lid)).join('')}
+      </div>
+    </div>`;
+  }
+  return html||`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد محتوى.</p>`;
 };
 
-/* flatten — فيديوهات فقط بنفس ترتيب الاستجابة */
+/* flatten */
 const flatten=d=>{
-  const out=[];
-  if(d&&Array.isArray(d.groups)){
-    for(const g of d.groups){
-      const gName=g.name||g.title||'';
-      if(/ملف/i.test(gName)) continue;
-      for(const it of (g.items||[])){
-        if(isFileItem(it)) continue;
-        out.push({...it,title:it.title||it.name||'',type:it.type||'video',group:gName||it.group||null});
-      }
+  const items=[];
+  for(const g of d.groups||[]){
+    for(const it of g.items||[]){
+      items.push({
+        ...it,
+        title:it.title||it.name||'',
+        type:it.type||(/ملف/i.test(g.name||g.title||'')?'file':'video'),
+        group:g.name||g.title||it.group||null
+      });
     }
-    if(out.length) return out;
   }
-  if(d&&Array.isArray(d.sections)){
-    for(const g of d.sections){
-      const gName=g.title||g.name||'';
-      if(/ملف/i.test(gName)) continue;
-      for(const it of (g.items||[])){
-        if(isFileItem(it)) continue;
-        out.push({...it,title:it.title||it.name||'',type:it.type||'video',group:gName||it.group||null});
-      }
-    }
-    if(out.length) return out;
-  }
-  const videos=(d&&d.videos)||[];
-  for(const v of videos){
-    if(isFileItem(v)) continue;
-    out.push({...v,title:v.name||v.title||'',type:v.type||'video',group:v.group||'الشرح'});
-  }
-  // تجاهل pdfs / files عمدًا
-  const exams=(d&&d.exams)||[];
-  for(const e of exams){
-    out.push({...e,title:e.name||e.title||'',type:'exam',group:e.group||'الامتحان'});
-  }
-  return out;
+  return items;
 };
 
-/* fetch — محتوى المحاضرة زي مساري */
+/* fetch */
 const fetchItems=async lid=>{
   // 1) من بيانات القائمة لو فيها parts/sections جاهزة
   try{
@@ -570,39 +548,36 @@ const fetchItems=async lid=>{
       if(Array.isArray(cached.sections)&&cached.sections.length){
         const items=[];
         for(const g of cached.sections){
-          if(/ملف/i.test(String(g.title||g.name||''))) continue;
           for(const it of (g.items||[])){
-            if(isFileItem(it)) continue;
-            items.push({...it,title:it.title||it.name||'',type:it.type||'video',group:g.title||g.name||it.group||null});
+            items.push({...it,title:it.title||it.name||'',type:it.type||(it.is_file||it.kind==='file'?'file':'video'),group:g.title||g.name||it.group||null});
           }
         }
         if(items.length) return items;
       }
       if(Array.isArray(cached.parts)&&cached.parts.length){
-        return cached.parts
-          .filter(p=>!isFileItem(p))
-          .map(p=>({
-            ...p,
-            title:p.title||p.name||'',
-            type:p.type||(p.kind==='exam'?'exam':'video'),
-            group:p.group||null
-          }));
+        return cached.parts.map(p=>({
+          ...p,
+          title:p.title||p.name||'',
+          type:p.type||(p.is_file||p.kind==='file'?'file':'video'),
+          group:p.group||null
+        }));
       }
     }
   }catch{}
   // 2) grouped-content
   try{
-    const d=await api('/api/lectures/'+encodeURIComponent(lid)+'/grouped-content');
-    if(d&&d.groups&&d.groups.length){
-      const items=flatten(d);
-      if(items.length) return items;
-    }
+    const d=await api('/api/lectures/'+lid+'/grouped-content');
+    if(d&&d.groups&&d.groups.length) return flatten(d);
   }catch{}
   // 3) content
   try{
-    const d=await api('/api/lectures/'+encodeURIComponent(lid)+'/content');
+    const d=await api('/api/lectures/'+lid+'/content');
     if(!d) return [];
-    return flatten(d);
+    if(d.groups&&d.groups.length) return flatten(d);
+    const videos=(d.videos||[]).map(v=>({...v,title:v.name||v.title,type:v.type||'video',group:v.group||null}));
+    const files=(d.pdfs||d.files||d.attachments||d.documents||[]).map(f=>({...f,title:f.name||f.title||f.file_name,type:'file',url:f.file_url||f.url,group:'الملفات'}));
+    const exams=(d.exams||[]).map(e=>({...e,title:e.name||e.title,type:'exam',group:e.group||'الامتحان'}));
+    return [...videos,...files,...exams];
   }catch{
     return [];
   }
@@ -632,24 +607,10 @@ const load=async()=>{
     if(!lectures||!lectures.length){
       $('main').innerHTML=`<div class="state-box"><p>لا يوجد محاضرات في هذا الفصل.</p></div>`;return;
     }
-    // ترتيب المحاضرات زي مساري: lecture_num ثم الترتيب الأصلي
-    lectures=lectures.slice().sort((a,b)=>{
-      const an=Number(a.lecture_num??a.lectureNum??a.order);
-      const bn=Number(b.lecture_num??b.lectureNum??b.order);
-      if(Number.isFinite(an)&&Number.isFinite(bn)&&an!==bn) return an-bn;
-      return 0;
-    });
     allLectures=lectures;
     const cover=lectures[0]?.image_url||'';
     const title=chapterName||subjectName||'المحاضرات';
-    // عدّ فقط الفيديوهات (بدون ملفات)
-    const totalParts=lectures.reduce((s,l)=>{
-      if(Array.isArray(l.parts)) return s+l.parts.filter(p=>!isFileItem(p)).length;
-      if(Array.isArray(l.sections)){
-        return s+l.sections.reduce((ss,g)=>/ملف/i.test(String(g.title||g.name||''))?ss:ss+(g.items||[]).filter(it=>!isFileItem(it)).length,0);
-      }
-      return s+Number(l.video_count||0)||Number(l.parts_count||l.count||0);
-    },0);
+    const totalParts=lectures.reduce((s,l)=>s+(l.parts_count||l.video_count||l.count||0),0);
 
     $('main').innerHTML=`
     <div class="page-anim">
@@ -681,11 +642,7 @@ const load=async()=>{
             </div>
             <ul class="lectures-list" id="lec-list">
               ${lectures.map((l,i)=>{
-                let cnt=0;
-                if(Array.isArray(l.parts)) cnt=l.parts.filter(p=>!isFileItem(p)).length;
-                else if(Array.isArray(l.sections)){
-                  cnt=l.sections.reduce((s,g)=>/ملف/i.test(String(g.title||g.name||''))?s:s+(g.items||[]).filter(it=>!isFileItem(it)).length,0);
-                } else cnt=Number(l.video_count||0)||Number(l.parts_count||l.count||0);
+                const cnt=l.parts_count||l.video_count||l.count||0;
                 const lid=l.id;
                 return `
                 <li class="lec-wrap" id="lw-${lid}">
@@ -767,14 +724,13 @@ const load=async()=>{
         const ge2=$('lg-'+lid);
         if(ge2){
           if(items.length) ge2.innerHTML=buildGroups(items,lid);
-          else ge2.innerHTML=`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
+          else ge2.innerHTML=`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد محتوى ظاهر لهذه المحاضرة حاليًا.</p>`;
         }
-        const vids=items.filter(it=>!isFileItem(it)&&!isExamItem(it));
-        const watched=vids.filter(it=>isWatched(resolvePlayId(it,lid))).length;
-        const pct=vids.length?Math.round(watched/vids.length*100):0;
+        const bdg=$('lbdg-'+lid);if(bdg) bdg.textContent='0 / '+items.length;
+        const sub=$('lsub-'+lid);if(sub) sub.textContent=(items.length?items.length+' جزء':'—');
+        const watched=items.filter(it=>it.type==='video'&&isWatched(it.id)).length;
+        const pct=items.length?Math.round(watched/items.length*100):0;
         const pb=$('lpb-'+lid);if(pb) pb.style.width=pct+'%';
-        const bdg2=$('lbdg-'+lid);if(bdg2) bdg2.textContent=watched+' / '+vids.length;
-        const sub2=$('lsub-'+lid);if(sub2) sub2.textContent=(vids.length?vids.length+' فيديو':'—');
       }catch(err){
         // مفيش رسالة خطأ حمراء — رسالة هادية فقط
         const ge2=$('lg-'+lid);
