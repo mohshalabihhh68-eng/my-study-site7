@@ -3445,6 +3445,23 @@ function useMesariAsPrimary() {
   return contentSource() === "mesari";
 }
 
+async function ensurePrimaryCourseLectures(courseId, teacherName = "") {
+  const cid = String(courseId || "");
+  if (useMesariAsPrimary() || /^[0-9a-f-]{36}$/i.test(cid)) {
+    try {
+      return await ensureMesariChapterLectures(cid);
+    } catch (e) {
+      console.warn("[ensure] mesari chapter", cid, e && e.message);
+    }
+  }
+  try {
+    return await ensurePrimaryCourseLectures(cid, teacherName);
+  } catch (e) {
+    return { lectures: [], lecturesCount: 0, partsCount: 0, title: null, image_url: null };
+  }
+}
+
+
 async function getPrimaryCatalog() {
   if (useMesariAsPrimary()) return getMesariCatalog();
   if (useTalebAsPrimary()) return getTalebCatalog();
@@ -3738,7 +3755,7 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
       for (const row of data) {
         if (row._courseId && !(row.lectures_count > 0)) {
           try {
-            const det = await ensureCourseLectures(row._courseId, th?.name || "");
+            const det = await ensurePrimaryCourseLectures(row._courseId, th?.name || "");
             row.lectures_count = det.lecturesCount || (det.lectures || []).length || 0;
             row.lecture_count = row.lectures_count;
             if (det.title) row.name = det.title;
@@ -3788,7 +3805,7 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
         }
         if (!lectures.length) {
           try {
-            const det = await ensureCourseLectures(courseId, teacherName);
+            const det = await ensurePrimaryCourseLectures(courseId, teacherName);
             lectures = det.lectures || [];
           } catch {}
         }
@@ -3921,7 +3938,7 @@ async function findTalebLectureById(rawId) {
       }
     }
     try {
-      await ensureCourseLectures(courseId, teacherName);
+      await ensurePrimaryCourseLectures(courseId, teacherName);
     } catch (e) {
       console.warn("[findTalebLecture] ensure", courseId, e && e.message);
     }
@@ -3975,7 +3992,7 @@ app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) =>
       const lecture = { ...hit.lecture, parts: (hit.lecture.parts || []).filter((p) => !p.courseId || String(p.courseId) === String(hit.lecture.courseId || p.courseId)) };
       // لو مفيش أجزاء — حاول تحميل الكورس
       if (!(lecture.parts || []).length && lecture.courseId) {
-        try { await ensureCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
+        try { await ensurePrimaryCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
         const again = await findTalebLectureById(rawId);
         if (again && again.lecture) Object.assign(lecture, again.lecture);
       }
@@ -4000,7 +4017,7 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
         const hit = await findTalebLectureById(rawId);
         let lecture = hit && hit.lecture;
         if (lecture && !(lecture.parts || []).length && lecture.courseId) {
-          try { await ensureCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
+          try { await ensurePrimaryCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
           const again = await findTalebLectureById(rawId);
           if (again) lecture = again.lecture;
         }
@@ -7508,24 +7525,29 @@ app.get("/api/img", rateLimit({ max: 240, windowMs: 60_000, scope: "img-proxy" }
       return res.status(400).end();
     }
     const host = parsed.hostname.toLowerCase();
-    // allowlist hosts محتملة للصور
+    // allowlist hosts محتملة للصور (مساري + coursatk + talep + CDNs)
     const ok =
       host.endsWith("talep.pro") ||
       host.endsWith("taleb.pro") ||
+      host.endsWith("mesari.online") ||
+      host.endsWith("coursatk.online") ||
+      host.includes("files.coursatk") ||
       host.includes("cdn") ||
       host.includes("cloudinary") ||
       host.includes("googleusercontent") ||
       host.includes("b-cdn") ||
       host.includes("amazonaws") ||
       host.includes("supabase") ||
-      host.includes("storage");
+      host.includes("storage") ||
+      host.includes("vmeas") ||
+      host.includes("staticmoly");
     if (!ok) return res.status(403).end();
 
     const headers = {
       "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
       Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-      Referer: "https://talep.pro/",
-      Origin: "https://talep.pro"
+      Referer: host.includes("coursatk") || host.includes("mesari") ? "https://mesari.online/" : "https://talep.pro/",
+      Origin: host.includes("coursatk") || host.includes("mesari") ? "https://mesari.online" : "https://talep.pro"
     };
     const upstream = await fetchT(raw, { headers }, { timeout: 20_000, retries: 1 });
     if (!upstream.ok) return res.status(502).end();
