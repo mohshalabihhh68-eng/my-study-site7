@@ -3902,6 +3902,13 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
           lecture_num: lec.lectureNum || null
         };
       });
+      // ترتيب المحاضرات زي مساري
+      data.sort((a, b) => {
+        const an = Number(a.lecture_num);
+        const bn = Number(b.lecture_num);
+        if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
+        return 0;
+      });
       return res.json({ success: true, message: "Success", data, source: contentSource() });
     }
     const cid = Number(req.params.id);
