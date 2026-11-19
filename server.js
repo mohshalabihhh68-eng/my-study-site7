@@ -66,12 +66,30 @@ import {
   subjectNameAr as talebSubjectNameAr
 } from "./taleb.js";
 
+// ===== mesari.online upstream (primary when CONTENT_SOURCE=mesari) =====
+import {
+  buildMesariSource,
+  buildMesariSourceFromAnyId,
+  getMesariTeachers,
+  crawlMesariFullCatalog,
+  ensureMesariChapterLectures,
+  clearMesariCatalogCache,
+  updateMesariAuth,
+  mesariAuthStatus,
+  MESARI_STREAM_HOSTS
+} from "./mesari.js";
+
+// if stored creds are mesari token
+function applyLoadedCreds(device, session) {
+  if (String(device) === "mesari" && session) updateMesariAuth(session);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.8.4";
+const APP_VERSION = "v1.9.0-mesari";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -521,7 +539,18 @@ const CONFIG = {
     "vz-878412bf-692.b-cdn.net",
     // taleb.pro
     "video.talep.pro",
-    "talep.pro"
+    "talep.pro",
+    // mesari.online
+    "api.mesari.online",
+    "mesari.online",
+    "vidmoly.me",
+    "vidmoly.to",
+    "www.vidmoly.me",
+    "files.coursatk.online",
+    "vmpx.online",
+    "vmeas.cloud",
+    "staticmoly.me",
+    "vidmoly.biz"
   ],
   // Bunny Stream (د. حسام عيسى / drhossamissa.com)
   BUNNY_CDN_HOST: (process.env.BUNNY_CDN_HOST || "vz-878412bf-692.b-cdn.net").replace(/^https?:\/\//, "").replace(/\/$/, ""),
@@ -1041,10 +1070,21 @@ function decryptCredPayload(row) {
 }
 
 async function loadStreamCredentials() {
+  // 0) mesari JWT from env
+  const envMesari = String(process.env.MESARI_AUTH_TOKEN || "").trim();
+  if (envMesari) {
+    updateMesariAuth(envMesari);
+  }
   // 1) env wins if both set
   const envD = String(process.env.TALEB_DEVICE || "").trim();
   const envS = String(process.env.TALEB_SESSION || "").trim();
-  if (envD && envS) return { device: envD, session: envS, source: "env" };
+  if (envD && envS) {
+    if (envD === "mesari" && envS.length > 20) {
+      updateMesariAuth(envS);
+      return { device: envD, session: envS, source: "env-mesari" };
+    }
+    return { device: envD, session: envS, source: "env" };
+  }
   // 2) encrypted (or legacy) firebase
   try {
     const row = await fbGet("config/stream_auth");
@@ -3323,10 +3363,56 @@ async function getTalebCatalog() {
 function subjectNameAr(sid) {
   try { return talebSubjectNameAr(sid); } catch { return String(sid || "مادة"); }
 }
-function useTalebAsPrimary() {
-  // لو مفيش توكن كورساتك → taleb هو المصدر
+function contentSource() {
+  const raw = String(process.env.CONTENT_SOURCE || "").trim().toLowerCase();
+  if (raw === "mesari" || process.env.MESARI_PRIMARY === "1") return "mesari";
+  if (raw === "taleb" || process.env.TALEB_PRIMARY === "1") return "taleb";
+  if (raw === "coursatk") return "coursatk";
+  // default: mesari if token present, else taleb if configured, else coursatk
+  if (String(process.env.MESARI_AUTH_TOKEN || "").trim()) return "mesari";
+  if (String(process.env.TALEB_DEVICE || "").trim() && String(process.env.TALEB_SESSION || "").trim()) return "taleb";
   const tok = String(getCoursatkTokenSync() || "").trim();
-  return !tok || process.env.CONTENT_SOURCE === "taleb" || process.env.TALEB_PRIMARY === "1";
+  if (!tok) return "mesari";
+  return "coursatk";
+}
+function useTalebAsPrimary() {
+  return contentSource() === "taleb";
+}
+function useMesariAsPrimary() {
+  return contentSource() === "mesari";
+}
+
+async function getPrimaryCatalog() {
+  if (useMesariAsPrimary()) return getMesariCatalog();
+  if (useTalebAsPrimary()) return getTalebCatalog();
+  // still prefer mesari catalog for UI if available
+  try {
+    if (String(process.env.MESARI_AUTH_TOKEN || "").trim()) return getMesariCatalog();
+  } catch {}
+  return getTalebCatalog();
+}
+
+
+async function getMesariCatalog() {
+  const cat = await crawlMesariFullCatalog();
+  const teachers = (cat.teachers || []).map((th) => ({
+    ...th,
+    image_url: th.image_url || null,
+    courses: (th.courses || []).map((c) => ({
+      id: String(c.id),
+      title: c.title,
+      image_url: c.image_url || null,
+      lecturesCount: c.lecturesCount || (c.lectures || []).length,
+      partsCount: c.partsCount || 0,
+      lectures: c.lectures || []
+    })),
+    lectures: th.lectures || []
+  }));
+  const subjects = (cat.subjects || []).map((s) => ({
+    ...s,
+    teachers: (s.teachers || []).map((th) => teachers.find((t) => t.uuid === th.uuid && t.subjectSlug === s.id) || th)
+  }));
+  return maskTreeImages({ subjects, teachers, stats: cat.stats, source: "mesari" });
 }
 
 
@@ -3344,8 +3430,8 @@ function studentAllowsThanawica(student) { const sec = normalizeSection(student 
 
 app.get("/api/subjects/:id", requireStudent, async (req, res) => {
   try {
-    if (useTalebAsPrimary()) {
-      const cat = await getTalebCatalog();
+    if (useMesariAsPrimary() || useTalebAsPrimary()) {
+      const cat = await getPrimaryCatalog();
       const data = cat.subjects.map((s, i) => {
         const teachers = s.teachers || [];
         const coursesCount = teachers.reduce((a, th) => a + ((th.courses && th.courses.length) || 0), 0);
@@ -3433,8 +3519,8 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
-    if (useTalebAsPrimary()) {
-      const cat = await getTalebCatalog();
+    if (useMesariAsPrimary() || useTalebAsPrimary()) {
+      const cat = await getPrimaryCatalog();
       const sid = String(req.params.id);
       let teachers = [];
       if (sid === "all" || sid === "0") teachers = cat.teachers;
@@ -3536,8 +3622,8 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
       }));
       return res.json({ success: true, message: "Success", data: chapters });
     }
-    if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_t_")) {
-      const cat = await getTalebCatalog();
+    if (useMesariAsPrimary() || useTalebAsPrimary() || String(req.params.id).startsWith("taleb_t_") || String(req.params.id).startsWith("mesari_t_")) {
+      const cat = await getPrimaryCatalog();
       const tid = String(req.params.id);
       const th = cat.teachers.find((x) =>
         x.id === tid ||
@@ -3622,8 +3708,8 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
-    if (useTalebAsPrimary() || String(req.params.id).startsWith("taleb_ch_") || String(req.params.id).startsWith("taleb_course_")) {
-      const cat = await getTalebCatalog();
+    if (useMesariAsPrimary() || useTalebAsPrimary() || String(req.params.id).startsWith("taleb_ch_") || String(req.params.id).startsWith("taleb_course_") || String(req.params.id).startsWith("mesari_")) {
+      const cat = await getPrimaryCatalog();
       const cid = String(req.params.id);
       let lectures = [];
       if (cid.startsWith("taleb_course_")) {
@@ -3845,7 +3931,7 @@ app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) =>
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
-    if (useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_")) {
+    if (useMesariAsPrimary() || useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_") || rawId.startsWith("mesari_")) {
       // 1) محاضرة كاملة متعددة الأجزاء
       {
         const hit = await findTalebLectureById(rawId);
@@ -5122,6 +5208,30 @@ function getVideoSource(videoId, clientHeaders) {
   const hit = sourceCache.get(videoId);
   if (hit && now() < hit.exp) return Promise.resolve(hit.src);
   return coalesce("src:" + videoId, async () => {
+    // ===== mesari.online =====
+    if (/mesari_/i.test(String(videoId)) || (useMesariAsPrimary() && /^[0-9a-f-]{36}$/i.test(String(videoId)))) {
+      try {
+        let vid = String(videoId);
+        while (/^mesari_mesari_/i.test(vid)) vid = vid.replace(/^mesari_/i, "");
+        const src = await buildMesariSourceFromAnyId(vid, {
+          deviceId: (clientHeaders && (clientHeaders["x-device-id"] || clientHeaders["X-Device-Id"])) || null
+        });
+        src.reqVideoId = src.reqVideoId || vid;
+        sourceCache.set(String(videoId), { src, exp: now() + SOURCE_TTL_MS });
+        sourceCache.set(String(src.reqVideoId || vid), { src, exp: now() + SOURCE_TTL_MS });
+        return src;
+      } catch (e) {
+        console.warn("[mesari-source]", e && e.message);
+        if (!useMesariAsPrimary()) {
+          /* fall through to other sources */
+        } else {
+          const err = new Error(e.expose ? e.message : "تعذر تجهيز مصدر الفيديو");
+          err.status = e.status || 502;
+          err.expose = true;
+          throw err;
+        }
+      }
+    }
     // —— Bunny / د. حسام عيسى (drhossamissa.com iframe protect bypass)
     // ===== taleb.pro: taleb_{partId} =====
     // taleb: أي معرّف فيه taleb_ أو taleb_w_ (مع تكرار البادئة)
@@ -5721,8 +5831,57 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
       res.setHeader("Set-Cookie", `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`);
     } catch {}
 
-    if ((src.mode === "thanawica-youtube" || src.mode === "coursatk-youtube" || src.mode === "taleb-youtube") && src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
+    if ((src.mode === "thanawica-youtube" || src.mode === "coursatk-youtube" || src.mode === "taleb-youtube" || src.mode === "mesari-youtube") && src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
     if (src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
+    if (src.mode === "mesari-hls" && (src.masterUrl || src.streamUrl)) {
+      assertPlayerOrigin(req);
+      const id = crypto.randomUUID().replace(/-/g, "");
+      const streamKey = crypto.randomBytes(16).toString("hex");
+      const deviceId = (req.session && req.session.deviceId) || (req.student && req.student.deviceId) || null;
+      revokeOtherSessions(req.session.code, src.videoId, id);
+      streamSessions.set(id, {
+        id, src,
+        videoId: src.videoId,
+        shared: false,
+        ownerCode: req.session.code,
+        ownerToken: req.sessionToken,
+        ownerDeviceId: deviceId,
+        streamKey,
+        createdAt: now(),
+        lastUsed: now()
+      });
+      const master = src.masterUrl || src.streamUrl;
+      const hlsPath = `/api/cdn?u=${b64urlEncode(master)}&rewrite=1`;
+      return res.json({
+        success: true,
+        data: {
+          type: "hls",
+          play_url: hlsPath,
+          manifest_url: hlsPath,
+          mode: "mesari-hls",
+          embed_url: src.embedUrl || null,
+          mesariVideoId: src.mesariVideoId || null,
+          title: src.originalName || null,
+          thumbnail: src.thumbnailUrl || null,
+          session_id: id
+        }
+      });
+    }
+    if (src.mode === "mesari-embed" && (src.embedUrl || src.streamUrl)) {
+      return res.json({
+        success: true,
+        data: {
+          type: "embed",
+          play_url: src.embedUrl || src.streamUrl,
+          embed_url: src.embedUrl || src.streamUrl,
+          url: src.embedUrl || src.streamUrl,
+          servers: src.servers || [],
+          mesariVideoId: src.mesariVideoId || null,
+          title: src.originalName || null,
+          thumbnail: src.thumbnailUrl || null
+        }
+      });
+    }
     if (src.mode === "thanawica-mp4" && src.mp4Url) return res.json({ success: true, data: { type: "mp4", play_url: src.mp4Url, mp4_url: src.mp4Url } });
 
     // مصدر كورساتك مشترك في الذاكرة (sourceCache) — لكن جلسة HLS خاصة بكل طالب
@@ -6865,14 +7024,81 @@ app.get("/api/cdn", async function (req, res) {
     var target = req.query.url || "";
     if (req.query.u) target = b64urlDecode(String(req.query.u));
     if (!target) return res.status(400).send("missing url");
+    // security: only allow known streaming hosts
+    try {
+      var th = new URL(target).hostname.toLowerCase();
+      var hostOk =
+        CONFIG.STREAM_HOSTS.some(function (h) { return th === h || th.endsWith("." + h); }) ||
+        /vidmoly\.|vmpx\.online|vmeas\.cloud|staticmoly\.me|bunny|b-cdn|mediadelivery|mesari|coursatk|stream-weave|floravon|talep|youtube|googlevideo/i.test(th);
+      if (!hostOk) return res.status(403).send("host not allowed");
+    } catch (e) { return res.status(400).send("bad url"); }
+
     var hdrs = {
-      Origin: "https://coursatk.online",
-      Referer: "https://coursatk.online/",
+      Origin: "https://vidmoly.biz",
+      Referer: "https://vidmoly.biz/",
       Accept: "*/*",
-      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     };
+    // better referer for mesari/vidmoly
+    if (/mesari|coursatk/i.test(target)) {
+      hdrs.Origin = "https://mesari.online";
+      hdrs.Referer = "https://mesari.online/";
+    } else if (/vidmoly|vmpx|vmeas|staticmoly/i.test(target)) {
+      hdrs.Origin = "https://vidmoly.biz";
+      hdrs.Referer = "https://vidmoly.biz/";
+    } else {
+      hdrs.Origin = "https://coursatk.online";
+      hdrs.Referer = "https://coursatk.online/";
+    }
     if (req.headers.range) hdrs.Range = req.headers.range;
     var upstream = await fetchFollow(target, hdrs);
+    var ct = (upstream.headers.get("content-type") || "").toLowerCase();
+    var isM3u =
+      ct.indexOf("mpegurl") !== -1 ||
+      ct.indexOf("m3u8") !== -1 ||
+      /\.m3u8(\?|$)/i.test(target) ||
+      String(req.query.rewrite || "") === "1";
+
+    if (isM3u) {
+      var text = await upstream.text();
+      // if body is not playlist, fall through as binary
+      if (text.indexOf("#EXTM3U") !== -1) {
+        var base = target;
+        try {
+          var u0 = new URL(target);
+          base = u0.href.substring(0, u0.href.lastIndexOf("/") + 1);
+        } catch (e) {}
+        text = text.split("\n").map(function (line) {
+          var t = line.trim();
+          if (!t) return line;
+          if (t.charAt(0) === "#") {
+            return t.replace(/URI="([^"]+)"/g, function (_m, uri) {
+              var abs = uri;
+              if (uri.indexOf("http") !== 0) {
+                try { abs = new URL(uri, base).href; } catch (e) { abs = uri; }
+              }
+              return 'URI="/api/cdn?u=' + b64urlEncode(abs) + '"';
+            });
+          }
+          var abs2 = t;
+          if (t.indexOf("http") !== 0) {
+            try { abs2 = new URL(t, base).href; } catch (e) { abs2 = t; }
+          } else {
+            abs2 = t;
+          }
+          return "/api/cdn?u=" + b64urlEncode(abs2);
+        }).join("\n");
+        res.set("Content-Type", "application/vnd.apple.mpegurl");
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Cache-Control", "no-store");
+        return res.status(200).send(text);
+      }
+      // not actually m3u — send as buffer
+      var buf0 = Buffer.from(text);
+      res.set("Cache-Control", "public, max-age=30");
+      return pipeUpstream(res, upstream, buf0);
+    }
+
     var buf = Buffer.from(await upstream.arrayBuffer());
     res.set("Cache-Control", "public, max-age=30");
     pipeUpstream(res, upstream, buf);
@@ -6955,7 +7181,9 @@ app.post("/api/video/:id/play", async function (req, res) {
 /** كتالوج المدرسين — مسار عام جديد + alias قديم للتوافق */
 async function handleCatalogTeachers(req, res) {
   try {
-    const teachers = await getTalebTeachers();
+    let teachers;
+    if (useMesariAsPrimary()) teachers = await getMesariTeachers();
+    else teachers = await getTalebTeachers();
     res.json({ success: true, data: teachers });
   } catch (e) {
     console.error("[catalog] teachers failed");
@@ -6986,7 +7214,7 @@ async function handleCatalogPlay(req, res) {
     const partId = String(req.params.partId || "").trim();
     if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "معرّف غير صالح");
 
-    const videoId = `taleb_${partId}`;
+    const videoId = useMesariAsPrimary() ? `mesari_${partId}` : `taleb_${partId}`;
     checkPlayBurst(req.session && req.session.code, videoId);
     logPlayEvent(req, videoId).catch(() => {});
 
@@ -7047,6 +7275,18 @@ app.put(
   streamAuthLimiter,
   async (req, res) => {
     try {
+      // mesari JWT (auth_token) OR talep device/session
+      const mesariToken = String(req.body?.mesariToken || req.body?.auth_token || req.body?.token || "").trim();
+      if (mesariToken && mesariToken.length > 20) {
+        updateMesariAuth(mesariToken);
+        try {
+          // store under encrypted stream creds as session field for convenience
+          await persistStreamCredentials("mesari", mesariToken, req.admin && req.admin.username);
+        } catch {
+          console.warn("[stream-auth] mesari persist failed");
+        }
+        return res.json({ success: true, message: "تم تحديث مصادقة مساري", source: "mesari" });
+      }
       const device = String(req.body?.device || "").trim();
       const session = String(req.body?.session || "").trim();
       if (!device || !session) return jsonError(res, 400, "البيانات المطلوبة ناقصة");
@@ -7086,11 +7326,12 @@ app.put("/api/admin/taleb/cookies", requireAdmin("admins_manage"), streamAuthLim
 /** حالة المصادقة فقط — configured/alive بدون أي قيم */
 app.get("/api/admin/stream-auth/status", requireAdmin("admins_manage"), streamAuthLimiter, async (_req, res) => {
   try {
+    const mesari = await mesariAuthStatus().catch(() => ({ configured: false, alive: false }));
     const device = String(process.env.TALEB_DEVICE || "").trim();
     const session = String(process.env.TALEB_SESSION || "").trim();
-    const configured = Boolean(device && session);
-    let alive = false;
-    if (configured) {
+    const talebConfigured = Boolean(device && session);
+    let talebAlive = false;
+    if (talebConfigured) {
       try {
         const r = await fetch("https://talep.pro/api/notifications", {
           headers: {
@@ -7100,12 +7341,21 @@ app.get("/api/admin/stream-auth/status", requireAdmin("admins_manage"), streamAu
           },
           signal: AbortSignal.timeout(8000)
         });
-        alive = r.ok;
+        talebAlive = r.ok;
       } catch {
-        alive = false;
+        talebAlive = false;
       }
     }
-    res.json({ success: true, data: { configured, alive } });
+    res.json({
+      success: true,
+      data: {
+        source: contentSource(),
+        mesari,
+        taleb: { configured: talebConfigured, alive: talebAlive },
+        configured: mesari.configured || talebConfigured,
+        alive: mesari.alive || talebAlive
+      }
+    });
   } catch {
     jsonError(res, 500, "تعذر فحص الحالة");
   }
@@ -7471,11 +7721,20 @@ if (!isVercel) {
   const server = app.listen(PORT, HOST, () => {
     console.log(`[API ${APP_VERSION}] ${HOST}:${PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
-    // تسخين كتالوج taleb في الخلفية
-    try { clearTalebCatalogCache(); } catch {}
-    crawlTalebFullCatalog()
-      .then((c) => console.log("[catalog] warm ok", c.stats))
-      .catch(() => console.warn("[catalog] warm skipped"));
+    // تسخين الكتالوج في الخلفية (مساري أولاً لو متاح)
+    try {
+      if (useMesariAsPrimary()) {
+        clearMesariCatalogCache();
+        crawlMesariFullCatalog()
+          .then((c) => console.log("[mesari-catalog] warm ok", c.stats))
+          .catch(() => console.warn("[mesari-catalog] warm skipped"));
+      } else {
+        clearTalebCatalogCache();
+        crawlTalebFullCatalog()
+          .then((c) => console.log("[catalog] warm ok", c.stats))
+          .catch(() => console.warn("[catalog] warm skipped"));
+      }
+    } catch {}
   });
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
