@@ -51,14 +51,44 @@ async function mesariFetch(pathOrUrl, opts = {}, timeout = 25_000) {
   return fetch(url, { ...opts, signal, headers: { ...mesariHeaders(opts.headers || {}), ...(opts.headers || {}) } });
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function mesariJson(pathOrUrl, timeout = 30_000) {
-  const r = await mesariFetch(pathOrUrl, {}, timeout);
-  if (!r.ok) {
-    const err = new Error("تعذر جلب البيانات من المصدر");
-    err.status = r.status >= 400 && r.status < 600 ? r.status : 502;
-    throw err;
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const r = await mesariFetch(pathOrUrl, {}, timeout);
+      if (r.status === 429 || r.status === 503) {
+        const wait = 400 * attempt * attempt;
+        console.warn("[mesari] rate-limit", r.status, pathOrUrl, "retry", attempt, "wait", wait);
+        await sleep(wait);
+        continue;
+      }
+      if (!r.ok) {
+        const err = new Error("تعذر جلب البيانات من المصدر");
+        err.status = r.status >= 400 && r.status < 600 ? r.status : 502;
+        throw err;
+      }
+      return r.json();
+    } catch (e) {
+      lastErr = e;
+      if (e && (e.name === "TimeoutError" || e.name === "AbortError")) {
+        await sleep(250 * attempt);
+        continue;
+      }
+      if (e && e.status === 429) {
+        await sleep(500 * attempt * attempt);
+        continue;
+      }
+      throw e;
+    }
   }
-  return r.json();
+  if (lastErr) throw lastErr;
+  const err = new Error("تعذر جلب البيانات من المصدر");
+  err.status = 502;
+  throw err;
 }
 
 function unwrapList(payload) {
@@ -471,6 +501,16 @@ async function mapPool(items, limit, fn) {
   return out;
 }
 
+
+function guessVideoGroup(title) {
+  const t = String(title || "").replace(/[\u0640\u200c\u200d\u200e\u200f]/g, "");
+  if (/واجب|حل\s*واجب|إجابة|اجابة|نموذج\s*ال?إ?جابة/i.test(t)) return "حل الواجب";
+  if (/تدريب|تدريبات|امتحان|اختبار|quiz/i.test(t)) return "التدريبات";
+  if (/حل/i.test(t) && !/شرح/i.test(t)) return "الحل";
+  if (/ملف|pdf/i.test(t)) return "الملفات";
+  return "الشرح";
+}
+
 /** Full catalog crawl — structure matches previous taleb teachers/courses/lectures shape */
 export async function crawlMesariFullCatalog() {
   const nowMs = Date.now();
@@ -524,18 +564,18 @@ export async function crawlMesariFullCatalog() {
   function buildPartsFromLesson(lec, ch, lectureNum) {
     const parts = [];
     const videos = Array.isArray(lec.videos) ? lec.videos : [];
-    // nested catalog often returns video stubs without originalName — don't spam duplicate titles
-    const namedVideos = videos.filter((v) => v && v.id && (v.originalName || v.title || v.url));
-    const list = namedVideos.length ? namedVideos : [];
+    // احتفظ بكل فيديو له id — حتى لو stub بدون originalName (هيتوسّع لاحقًا)
+    const list = videos.filter((v) => v && v.id);
     list.forEach((v, idx) => {
       if (!v || !v.id) return;
       const title = String(v.originalName || v.title || lec.title || `فيديو ${idx + 1}`)
         .replace(/\s+/g, " ")
         .trim();
+      const group = guessVideoGroup(title);
       parts.push({
         id: `mesari_v_${v.id}`,
         title,
-        group: "الشرح",
+        group,
         kind: "video",
         courseId: String(ch.id),
         lectureNum: String(lectureNum),
@@ -604,7 +644,7 @@ export async function crawlMesariFullCatalog() {
     return parts;
   }
 
-  await mapPool(subjectsRaw, 3, async (sr) => {
+  await mapPool(subjectsRaw, 2, async (sr) => {
     if (!sr?.id || sr.isPublished === false) return;
     let detail = sr;
     try {
@@ -663,8 +703,21 @@ export async function crawlMesariFullCatalog() {
         const lessons = Array.isArray(ch.lessons) ? [...ch.lessons] : [];
         lessons.sort((a, b) => (a.order || 0) - (b.order || 0));
 
+        // وسّع دروس الفصل (أسماء الفيديوهات) — متوازي محدود
+        const publishedLessons = lessons.filter((lec) => lec && lec.isPublished !== false);
+        const expandedLessons = await mapPool(publishedLessons, 2, async (lec) => {
+          const hasNames = (lec.videos || []).some((v) => v && (v.originalName || v.title || v.url));
+          if (hasNames) return lec;
+          try {
+            return await mesariJson(`/lessons/${encodeURIComponent(lec.id)}`, 25_000);
+          } catch (e) {
+            console.warn("[mesari-catalog] lesson expand", lec.id, e && e.message);
+            return lec;
+          }
+        });
+
         const courseLectures = [];
-        for (const lec of lessons) {
+        for (const lec of expandedLessons) {
           if (!lec || lec.isPublished === false) continue;
           const lectureNum = lec.order != null ? lec.order : courseLectures.length + 1;
           const lecTitle = String(lec.title || `محاضرة ${lectureNum}`).replace(/\s+/g, " ").trim();
@@ -771,6 +824,84 @@ export async function getMesariTeachers() {
  * Expand a chapter like the website: fetch lessons list, then each lesson detail
  * so video originalName / files / exams match Mesari classroom.
  */
+
+/** Fetch one lesson with full videos/files (names + ids). */
+export async function getMesariLesson(lessonId) {
+  const id = String(lessonId || "").replace(/^mesari_lec_/i, "").trim();
+  if (!id) {
+    const err = new Error("معرّف المحاضرة غير صالح");
+    err.status = 400;
+    throw err;
+  }
+  requireMesariAuth();
+  const full = await mesariJson(`/lessons/${encodeURIComponent(id)}`, 30_000);
+  if (!full || !full.id) {
+    const err = new Error("المحاضرة غير موجودة");
+    err.status = 404;
+    throw err;
+  }
+  const lectureNum = full.order != null ? full.order : 1;
+  const lecTitle = String(full.title || `محاضرة`).replace(/\s+/g, " ").trim();
+  const courseId = String(full.chapterId || "");
+  const parts = [];
+  for (const [idx, v] of (full.videos || []).entries()) {
+    if (!v?.id) continue;
+    const vTitle = String(v.originalName || v.title || lecTitle || `فيديو ${idx + 1}`).replace(/\s+/g, " ").trim();
+    parts.push({
+      id: `mesari_v_${v.id}`,
+      title: vTitle,
+      group: guessVideoGroup(vTitle),
+      kind: "video",
+      courseId,
+      lectureNum: String(lectureNum),
+      partNum: String(idx + 1),
+      watchPath: null,
+      videoId: `mesari_${v.id}`,
+      mesariVideoId: v.id,
+      mesariLessonId: full.id,
+      quality: v.quality || null,
+      type: v.type || "UPLOAD",
+      image_url: absUrl(v.thumbnailUrl)
+    });
+  }
+  for (const [idx, f] of (full.files || []).entries()) {
+    parts.push({
+      id: `mesari_file_${f.id || idx}`,
+      title: String(f.title || f.name || f.originalName || `ملف ${idx + 1}`).trim(),
+      group: "الملفات",
+      kind: "file",
+      courseId,
+      lectureNum: String(lectureNum),
+      partNum: String(1000 + idx),
+      fileUrl: absUrl(f.url || f.fileUrl || f.path),
+      mesariLessonId: full.id
+    });
+  }
+  for (const [idx, ex] of (full.exams || []).entries()) {
+    parts.push({
+      id: `mesari_exam_${ex.id || idx}`,
+      title: String(ex.title || ex.name || `امتحان ${idx + 1}`).trim(),
+      group: "الامتحان",
+      kind: "exam",
+      courseId,
+      lectureNum: String(lectureNum),
+      partNum: String(2000 + idx),
+      mesariLessonId: full.id
+    });
+  }
+  return {
+    id: `mesari_lec_${full.id}`,
+    title: lecTitle.slice(0, 160),
+    courseId,
+    lectureNum: String(lectureNum),
+    courseTitle: null,
+    image_url: null,
+    mesariLessonId: full.id,
+    parts,
+    raw: full
+  };
+}
+
 export async function ensureMesariChapterLectures(chapterId, opts = {}) {
   const cid = String(chapterId);
   const force = Boolean(opts.force);
@@ -799,7 +930,7 @@ export async function ensureMesariChapterLectures(chapterId, opts = {}) {
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   // expand each lesson for real video names (parallel limited)
-  const expanded = await mapPool(lessons, 4, async (lec) => {
+  const expanded = await mapPool(lessons, 2, async (lec) => {
     let full = lec;
     const hasNamedVideos = (lec.videos || []).some((v) => v && (v.originalName || v.url));
     if (!hasNamedVideos || !(lec.videos || []).length) {
@@ -822,10 +953,11 @@ export async function ensureMesariChapterLectures(chapterId, opts = {}) {
     const videos = Array.isArray(lec.videos) ? lec.videos : [];
     videos.forEach((v, idx) => {
       if (!v?.id) return;
+      const vTitle = String(v.originalName || v.title || lecTitle || `فيديو ${idx + 1}`).replace(/\s+/g, " ").trim();
       parts.push({
         id: `mesari_v_${v.id}`,
-        title: String(v.originalName || v.title || lecTitle || `فيديو ${idx + 1}`).replace(/\s+/g, " ").trim(),
-        group: "الشرح",
+        title: vTitle,
+        group: guessVideoGroup(vTitle),
         kind: "video",
         courseId: cid,
         lectureNum: String(lectureNum),
