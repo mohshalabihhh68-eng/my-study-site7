@@ -385,16 +385,42 @@ const isFileItem=(it)=>{
   return false;
 };
 const isExamItem=(it)=>{
+  if(!it) return true;
   const t=String(it.type||it.kind||'').toLowerCase();
-  return t==='exam';
+  if(t==='exam'||t==='quiz'||t==='test') return true;
+  const g=String(it.group||'');
+  if(/امتحان|اختبار/i.test(g)) return true;
+  const title=String(it.title||it.name||'');
+  // امتحان إلكتروني صريح — مش فيديو "حل امتحان"
+  if(/امتحان\s*إلكتروني|اختبار\s*إلكتروني|كويز\s*إلكتروني|electronic\s*exam/i.test(title)) return true;
+  return false;
 };
 
-/* classify */
+/* فيديو قابل للتشغيل فقط — من غير ملفات/امتحانات/عناصر فاضية */
+const isPlayableVideo=(it,lid)=>{
+  if(!it) return false;
+  if(isFileItem(it)) return false;
+  if(isExamItem(it)) return false;
+  if(it.needsExpand && !it.videoId && !it.video_id && !it.mesariVideoId) return false;
+  const id=String(it.video_id||it.videoId||it.mesariVideoId||it.id||'').trim();
+  if(!id) return false;
+  // معرفات مش فيديو
+  if(/^mesari_(?:file|exam)_/i.test(id)) return false;
+  if(/^mesari_lesson_/i.test(id) && !it.mesariVideoId) return false;
+  // UUID أو mesari_ أو taleb_ أو bn_ — صيغ تشغيل معروفة
+  if(/^(mesari_|taleb_|bn_|hos_)/i.test(id)) return true;
+  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return true;
+  // id رقمي طويل أحيانًا من مصادر تانية
+  if(/^\d{6,}$/.test(id)) return true;
+  // لو فيه video_id منفصل صالح
+  const vid=String(it.video_id||it.videoId||it.mesariVideoId||'').trim();
+  if(vid && vid!==id) return isPlayableVideo({...it,id:vid,video_id:vid}, lid);
+  return false;
+};
+
+/* classify — للفيديوهات فقط */
 const classify=(title,type)=>{
-  if(type==='pdf'||type==='file') return 'file';
-  if(type==='exam') return 'exam';
   const t=String(title||'');
-  if(/امتحان|اختبار|كويز|quiz|exam/i.test(t)) return 'exam';
   if(/واجب|حل\s*واجب/i.test(t)) return 'homework';
   if(/تدريب|تدريبات|تطبيق|تمرين/i.test(t)) return 'practice';
   return 'lesson';
@@ -404,7 +430,6 @@ const GRP={
   lesson:   {label:'الشرح',     dot:'',  iconCls:'',  tagCls:'',  tagTxt:'مشاهدة'},
   homework: {label:'حل الواجب', dot:'g', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
   practice: {label:'التدريبات',  dot:'g', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
-  exam:     {label:'الامتحان',  dot:'a', iconCls:'a', tagCls:'a', tagTxt:'حل الامتحان'},
 };
 
 const IC_PLAY=`<svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>`;
@@ -428,23 +453,16 @@ const resolvePlayId=(item,lid)=>{
   return id;
 };
 const buildItem=(item,lid)=>{
-  if(isFileItem(item)) return '';
+  if(!isPlayableVideo(item,lid)) return '';
   const id=resolvePlayId(item,lid);
   const title=item.title||item.name||'';
-  const type=isExamItem(item)?'exam':'video';
   const duration=item.duration;
-  const cat=classify(title,type);
+  const cat=classify(title,'video');
   const cfg=GRP[cat]||GRP.lesson;
-  const watched=type==='video'?isWatched(id):false;
-  const icon=type==='exam'?IC_EXAM:IC_PLAY;
+  const watched=isWatched(id);
+  const icon=IC_PLAY;
   const sub=duration?`<span class="item-sub">${esc(duration)}</span>`:'';
-
-  let onclick='';
-  if(type==='exam'){
-    onclick=`window.location.href='exam.html?examId=${esc(id)}&lectureId=${esc(lid)}'`;
-  } else {
-    onclick=`window.location.href='player.html?lectureId=${esc(lid)}&videoId=${esc(id)}'`;
-  }
+  const onclick=`window.location.href='player.html?lectureId=${esc(lid)}&videoId=${esc(id)}'`;
 
   return `
   <button type="button" class="item${watched?' watched':''}" onclick="${onclick}">
@@ -484,8 +502,9 @@ const buildGroupsFromNamed=(namedGroups,lid)=>{
   let i=0;
   for(const g of namedGroups){
     const title=g.name||g.title||'قسم';
-    if(/ملف/i.test(title)) continue; // بدون ملفات
-    const list=(g.items||[]).filter(it=>!isFileItem(it));
+    if(/ملف/i.test(title)) continue;
+    if(/^الامتحان$/i.test(String(title).trim()) && !(g.items||[]).some(it=>isPlayableVideo(it,lid))) continue;
+    const list=(g.items||[]).filter(it=>isPlayableVideo(it,lid));
     if(!list.length) continue;
     const gId=`gbd-${lid}-${i}`,tId=`gbt-${lid}-${i}`;
     const dot=groupDot(title);
@@ -508,7 +527,7 @@ const buildGroupsFromNamed=(namedGroups,lid)=>{
 
 /* بناء المحتوى: نحافظ على ترتيب السيرفر/مساري — بدون ملفات */
 const buildGroups=(items,lid)=>{
-  const clean=(items||[]).filter(it=>!isFileItem(it));
+  const clean=(items||[]).filter(it=>isPlayableVideo(it,lid));
   if(!clean.length){
     return `<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
   }
@@ -536,17 +555,18 @@ const buildGroups=(items,lid)=>{
   return buildGroupsFromNamed([{name:'الشرح',items:clean}], lid);
 };
 
-/* flatten — فيديوهات فقط بنفس ترتيب الاستجابة */
+/* flatten — فيديوهات شغالة فقط (بدون ملفات/امتحانات) */
 const flatten=d=>{
   const out=[];
+  const pushIt=(it,gName)=>{
+    const row={...it,title:it.title||it.name||'',type:'video',group:gName||it.group||'الشرح'};
+    if(isPlayableVideo(row)) out.push(row);
+  };
   if(d&&Array.isArray(d.groups)){
     for(const g of d.groups){
       const gName=g.name||g.title||'';
-      if(/ملف/i.test(gName)) continue;
-      for(const it of (g.items||[])){
-        if(isFileItem(it)) continue;
-        out.push({...it,title:it.title||it.name||'',type:it.type||'video',group:gName||it.group||null});
-      }
+      if(/ملف|امتحان/i.test(gName) && !/حل|شرح|فيديو/i.test(gName)) continue;
+      for(const it of (g.items||[])) pushIt(it,gName);
     }
     if(out.length) return out;
   }
@@ -554,23 +574,12 @@ const flatten=d=>{
     for(const g of d.sections){
       const gName=g.title||g.name||'';
       if(/ملف/i.test(gName)) continue;
-      for(const it of (g.items||[])){
-        if(isFileItem(it)) continue;
-        out.push({...it,title:it.title||it.name||'',type:it.type||'video',group:gName||it.group||null});
-      }
+      for(const it of (g.items||[])) pushIt(it,gName);
     }
     if(out.length) return out;
   }
-  const videos=(d&&d.videos)||[];
-  for(const v of videos){
-    if(isFileItem(v)) continue;
-    out.push({...v,title:v.name||v.title||'',type:v.type||'video',group:v.group||'الشرح'});
-  }
-  // تجاهل pdfs / files عمدًا
-  const exams=(d&&d.exams)||[];
-  for(const e of exams){
-    out.push({...e,title:e.name||e.title||'',type:'exam',group:e.group||'الامتحان'});
-  }
+  for(const v of ((d&&d.videos)||[])) pushIt(v,v.group||'الشرح');
+  // لا exams ولا files
   return out;
 };
 
@@ -585,21 +594,22 @@ const fetchItems=async lid=>{
         for(const g of cached.sections){
           if(/ملف/i.test(String(g.title||g.name||''))) continue;
           for(const it of (g.items||[])){
-            if(isFileItem(it)) continue;
-            items.push({...it,title:it.title||it.name||'',type:it.type||'video',group:g.title||g.name||it.group||null});
+            const row={...it,title:it.title||it.name||'',type:it.type||'video',group:g.title||g.name||it.group||null};
+            if(!isPlayableVideo(row,lid)) continue;
+            items.push(row);
           }
         }
         if(items.length) return items;
       }
       if(Array.isArray(cached.parts)&&cached.parts.length){
         return cached.parts
-          .filter(p=>!isFileItem(p))
           .map(p=>({
             ...p,
             title:p.title||p.name||'',
-            type:p.type||(p.kind==='exam'?'exam':'video'),
+            type:'video',
             group:p.group||null
-          }));
+          }))
+          .filter(p=>isPlayableVideo(p,lid));
       }
     }
   }catch{}
@@ -657,9 +667,9 @@ const load=async()=>{
     const title=chapterName||subjectName||'المحاضرات';
     // عدّ فقط الفيديوهات (بدون ملفات)
     const totalParts=lectures.reduce((s,l)=>{
-      if(Array.isArray(l.parts)) return s+l.parts.filter(p=>!isFileItem(p)).length;
+      if(Array.isArray(l.parts)) return s+l.parts.filter(p=>isPlayableVideo(p,l.id)).length;
       if(Array.isArray(l.sections)){
-        return s+l.sections.reduce((ss,g)=>/ملف/i.test(String(g.title||g.name||''))?ss:ss+(g.items||[]).filter(it=>!isFileItem(it)).length,0);
+        return s+l.sections.reduce((ss,g)=>/ملف/i.test(String(g.title||g.name||''))?ss:ss+(g.items||[]).filter(it=>isPlayableVideo(it,l.id)).length,0);
       }
       return s+Number(l.video_count||0)||Number(l.parts_count||l.count||0);
     },0);
@@ -695,9 +705,9 @@ const load=async()=>{
             <ul class="lectures-list" id="lec-list">
               ${lectures.map((l,i)=>{
                 let cnt=0;
-                if(Array.isArray(l.parts)) cnt=l.parts.filter(p=>!isFileItem(p)).length;
+                if(Array.isArray(l.parts)) cnt=l.parts.filter(p=>isPlayableVideo(p,l.id)).length;
                 else if(Array.isArray(l.sections)){
-                  cnt=l.sections.reduce((s,g)=>/ملف/i.test(String(g.title||g.name||''))?s:s+(g.items||[]).filter(it=>!isFileItem(it)).length,0);
+                  cnt=l.sections.reduce((s,g)=>/ملف/i.test(String(g.title||g.name||''))?s:s+(g.items||[]).filter(it=>isPlayableVideo(it,l.id)).length,0);
                 } else cnt=Number(l.video_count||0)||Number(l.parts_count||l.count||0);
                 const lid=l.id;
                 return `
@@ -782,7 +792,7 @@ const load=async()=>{
           if(items.length) ge2.innerHTML=buildGroups(items,lid);
           else ge2.innerHTML=`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
         }
-        const vids=items.filter(it=>!isFileItem(it)&&!isExamItem(it));
+        const vids=items.filter(it=>isPlayableVideo(it,lid));
         const watched=vids.filter(it=>isWatched(resolvePlayId(it,lid))).length;
         const pct=vids.length?Math.round(watched/vids.length*100):0;
         const pb=$('lpb-'+lid);if(pb) pb.style.width=pct+'%';
