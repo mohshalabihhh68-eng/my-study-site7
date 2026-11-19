@@ -3447,16 +3447,23 @@ function useMesariAsPrimary() {
 
 async function ensurePrimaryCourseLectures(courseId, teacherName = "") {
   const cid = String(courseId || "");
-  if (useMesariAsPrimary() || /^[0-9a-f-]{36}$/i.test(cid)) {
+  if (!cid) return { lectures: [], lecturesCount: 0, partsCount: 0, title: null, image_url: null };
+
+  // mesari: UUID أو prefix mesari_
+  if (useMesariAsPrimary() || /^[0-9a-f-]{36}$/i.test(cid) || /^mesari_/i.test(cid)) {
     try {
-      return await ensureMesariChapterLectures(cid);
+      const pure = cid.replace(/^mesari_(?:course_|ch_|c_)?/i, "");
+      return await ensureMesariChapterLectures(pure);
     } catch (e) {
       console.warn("[ensure] mesari chapter", cid, e && e.message);
     }
   }
+
+  // taleb فقط (لو الملف موجود)
   try {
-    return await ensurePrimaryCourseLectures(cid, teacherName);
+    return await ensureCourseLectures(cid, teacherName);
   } catch (e) {
+    console.warn("[ensure] taleb course", cid, e && e.message);
     return { lectures: [], lecturesCount: 0, partsCount: 0, title: null, image_url: null };
   }
 }
@@ -3719,7 +3726,9 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
             .filter((c) => c && c.title && !/رجوع|عرض المواد|اختر/i.test(String(c.title)))
             .filter((c) => !/كتب\s*المدرس|كتاب\s*المدرس/i.test(String(c.title || "")))
             .map((c) => ({
-            id: `taleb_course_${c.id}`,
+            id: (useMesariAsPrimary() || /^[0-9a-f-]{36}$/i.test(String(c.id)))
+              ? `mesari_course_${c.id}`
+              : `taleb_course_${c.id}`,
             name: (function () {
               let n = String(c.title || "").replace(/\s+/g, " ").trim();
               const tn = String(th?.name || "").replace(/\s+/g, " ").trim();
@@ -3762,7 +3771,7 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
           } catch {}
         }
       }
-      return res.json({ success: true, message: "Success", data, source: "taleb" });
+      return res.json({ success: true, message: "Success", data, source: contentSource() });
     }
     if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
       const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
@@ -3792,10 +3801,19 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
       const cat = await getPrimaryCatalog();
       const cid = String(req.params.id);
       let lectures = [];
+      let courseId = null;
+
       if (cid.startsWith("taleb_course_")) {
-        const courseId = cid.slice("taleb_course_".length);
+        courseId = cid.slice("taleb_course_".length);
+      } else if (cid.startsWith("mesari_course_") || cid.startsWith("mesari_ch_")) {
+        courseId = cid.replace(/^mesari_(?:course_|ch_)/i, "");
+      } else if (/^[0-9a-f-]{36}$/i.test(cid)) {
+        courseId = cid;
+      }
+
+      if (courseId) {
         let teacherName = "";
-        for (const th of cat.teachers) {
+        for (const th of cat.teachers || []) {
           const course = (th.courses || []).find((c) => String(c.id) === String(courseId));
           if (course) {
             teacherName = th.name || "";
@@ -3811,12 +3829,14 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
         }
         // عزل صارم: محاضرات هذا الكورس فقط
         lectures = (lectures || []).filter((l) => String(l.courseId || courseId) === String(courseId));
-      } else if (cid.startsWith("taleb_ch_")) {
-        const tid = cid.slice("taleb_ch_".length);
-        const th = cat.teachers.find((x) => x.id === tid);
+      } else if (cid.startsWith("taleb_ch_") || cid.startsWith("mesari_t_")) {
+        const tid = cid.replace(/^(?:taleb_ch_|mesari_t_)/i, "");
+        const th = (cat.teachers || []).find((x) =>
+          x.id === cid || x.id === tid || String(x.uuid || "") === tid || String(x.mesariTeacherId || "") === tid
+        );
         lectures = th?.lectures || [];
       } else {
-        for (const th of cat.teachers) lectures.push(...(th.lectures || []));
+        for (const th of cat.teachers || []) lectures.push(...(th.lectures || []));
       }
       // كل عنصر = محاضرة بأقسام: الشرح / الحل / الامتحان / الملفات
       const data = lectures.map((lec, i) => {
@@ -3867,7 +3887,7 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
           lecture_num: lec.lectureNum || null
         };
       });
-      return res.json({ success: true, message: "Success", data, source: "taleb" });
+      return res.json({ success: true, message: "Success", data, source: contentSource() });
     }
     const cid = Number(req.params.id);
     if (Number.isFinite(cid) && cid >= HOSSAM_CHAPTER_BASE && cid < HOSSAM_CHAPTER_BASE + 100) {
@@ -3898,6 +3918,101 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
 });
 
 
+
+async function findPrimaryLectureById(rawId) {
+  const key0 = String(rawId || "").trim();
+  if (!key0) return null;
+
+  const isMesariHint =
+    useMesariAsPrimary() ||
+    /^mesari_/i.test(key0) ||
+    /^[0-9a-f-]{36}$/i.test(key0);
+
+  if (isMesariHint) {
+    const cat = await getPrimaryCatalog();
+    const key = key0.replace(/^mesari_mesari_/i, "mesari_");
+
+    const matchLec = (lec) => {
+      if (!lec) return false;
+      if (lec.id === key || lec.id === key0) return true;
+      const pure = key.replace(/^mesari_lec_/i, "");
+      if (String(lec.mesariLessonId || "") === pure) return true;
+      return false;
+    };
+    const matchPart = (p) => {
+      if (!p) return false;
+      if (p.id === key || p.videoId === key || p.id === key0 || p.videoId === key0) return true;
+      if (p.mesariVideoId && (`mesari_${p.mesariVideoId}` === key || String(p.mesariVideoId) === key.replace(/^mesari_/i, ""))) return true;
+      return false;
+    };
+
+    for (const th of cat.teachers || []) {
+      for (const c of th.courses || []) {
+        for (const lec of c.lectures || []) {
+          if (matchLec(lec)) return { lecture: lec, teacher: th, course: c, source: "mesari" };
+          for (const p of lec.parts || []) {
+            if (matchPart(p)) return { lecture: lec, teacher: th, course: c, part: p, source: "mesari" };
+          }
+        }
+      }
+      for (const lec of th.lectures || []) {
+        if (matchLec(lec)) return { lecture: lec, teacher: th, course: null, source: "mesari" };
+        for (const p of lec.parts || []) {
+          if (matchPart(p)) return { lecture: lec, teacher: th, course: null, part: p, source: "mesari" };
+        }
+      }
+    }
+
+    // expand chapters lazily for mesari_lec_*
+    const mLec = key.match(/^mesari_lec_(.+)$/i);
+    if (mLec) {
+      for (const th of cat.teachers || []) {
+        for (const c of th.courses || []) {
+          try {
+            const det = await ensureMesariChapterLectures(String(c.id));
+            const found = (det.lectures || []).find(
+              (l) => l.id === key || l.id === key0 || String(l.mesariLessonId || "") === mLec[1]
+            );
+            if (found) return { lecture: found, teacher: th, course: c, source: "mesari" };
+          } catch (e) {
+            console.warn("[findPrimary] expand", c.id, e && e.message);
+          }
+        }
+      }
+    }
+
+    // direct video id mesari_<uuid>
+    if (/^mesari_[0-9a-f-]{8,}/i.test(key) || /^[0-9a-f-]{36}$/i.test(key)) {
+      const vid = key.startsWith("mesari_") ? key : `mesari_${key}`;
+      return {
+        lecture: {
+          id: vid,
+          title: "فيديو",
+          courseId: null,
+          parts: [{
+            id: vid,
+            title: "فيديو",
+            group: "الشرح",
+            kind: "video",
+            videoId: vid,
+            mesariVideoId: key.replace(/^mesari_/i, "")
+          }]
+        },
+        teacher: null,
+        course: null,
+        source: "mesari"
+      };
+    }
+    return null;
+  }
+
+  // taleb fallback
+  try {
+    return await findTalebLectureById(key0);
+  } catch {
+    return null;
+  }
+}
 
 async function findTalebLectureById(rawId) {
   const cat = await getTalebCatalog();
@@ -3986,14 +4101,23 @@ function lectureGroupsPayload(lecture) {
 app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
-    if (useTalebAsPrimary() || rawId.startsWith("taleb_")) {
-      const hit = await findTalebLectureById(rawId);
+    if (
+      useMesariAsPrimary() ||
+      useTalebAsPrimary() ||
+      rawId.startsWith("taleb_") ||
+      rawId.startsWith("mesari_")
+    ) {
+      let hit = await findPrimaryLectureById(rawId);
       if (!hit || !hit.lecture) return jsonError(res, 404, "المحاضرة غير موجودة");
-      const lecture = { ...hit.lecture, parts: (hit.lecture.parts || []).filter((p) => !p.courseId || String(p.courseId) === String(hit.lecture.courseId || p.courseId)) };
-      // لو مفيش أجزاء — حاول تحميل الكورس
+      const lecture = {
+        ...hit.lecture,
+        parts: (hit.lecture.parts || []).filter(
+          (p) => !p.courseId || String(p.courseId) === String(hit.lecture.courseId || p.courseId)
+        )
+      };
       if (!(lecture.parts || []).length && lecture.courseId) {
         try { await ensurePrimaryCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
-        const again = await findTalebLectureById(rawId);
+        const again = await findPrimaryLectureById(rawId);
         if (again && again.lecture) Object.assign(lecture, again.lecture);
       }
       const groups = lectureGroupsPayload(lecture);
@@ -4001,7 +4125,7 @@ app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) =>
         success: true,
         message: "Success",
         data: { id: lecture.id, name: lecture.title || "محاضرة", groups },
-        source: "taleb"
+        source: hit.source || contentSource()
       });
     }
     return jsonError(res, 404, "غير متاح");
@@ -4012,13 +4136,13 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
     if (useMesariAsPrimary() || useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_") || rawId.startsWith("mesari_")) {
-      // 1) محاضرة كاملة متعددة الأجزاء
+      // 1) محاضرة كاملة متعددة الأجزاء (mesari + taleb)
       {
-        const hit = await findTalebLectureById(rawId);
+        const hit = await findPrimaryLectureById(rawId);
         let lecture = hit && hit.lecture;
         if (lecture && !(lecture.parts || []).length && lecture.courseId) {
           try { await ensurePrimaryCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
-          const again = await findTalebLectureById(rawId);
+          const again = await findPrimaryLectureById(rawId);
           if (again) lecture = again.lecture;
         }
         if (lecture && Array.isArray(lecture.parts) && lecture.parts.length) {
@@ -4033,10 +4157,12 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
               name: p.title || "جزء",
               title: p.title || "جزء",
               group: p.group || null,
-              type: isFile ? "file" : "video",
-              platform: "stream"
+              type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
+              platform: "stream",
+              file_url: p.fileUrl || null
             };
-            if (isFile) pdfs.push(row); else videos.push(row);
+            if (isFile) pdfs.push(row);
+            else if (p.kind !== "exam") videos.push(row);
           }
           return res.json({
             success: true,
@@ -4051,19 +4177,32 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
               pdfs,
               files: pdfs
             },
-            source: "taleb"
+            source: (hit && hit.source) || contentSource()
           });
         }
       }
-      const cat = await getTalebCatalog();
+      // fallback: catalogs (primary first, then taleb legacy)
+      let cat = null;
+      try { cat = await getPrimaryCatalog(); } catch {}
+      if (!cat || !(cat.teachers || []).length) {
+        try { cat = await getTalebCatalog(); } catch { cat = { teachers: [] }; }
+      }
+      // keep variable name used below
       let key = rawId;
       while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
 
-      // fallback قديم
+      // fallback: بحث في lectures + courses
       let lecture = null;
-      for (const th of cat.teachers) {
+      for (const th of cat.teachers || []) {
         for (const lec of th.lectures || []) {
           if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
+        }
+        if (lecture) break;
+        for (const c of th.courses || []) {
+          for (const lec of c.lectures || []) {
+            if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
+          }
+          if (lecture) break;
         }
         if (lecture) break;
       }
@@ -4160,9 +4299,20 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
         }
       }
 
-      if (!playId && /^[0-9a-f-]{36}$/i.test(key)) playId = key.startsWith("taleb_") ? key : `taleb_${key}`;
-      if (playId && !/^taleb_/i.test(playId) && !/^[0-9a-f-]{36}$/i.test(playId)) playId = `taleb_${playId}`;
+      // mesari direct video ids
+      if (!playId && /^mesari_/i.test(key)) playId = key;
+      if (!playId && /^mesari_/i.test(rawId)) playId = rawId;
+      if (!playId && /^[0-9a-f-]{36}$/i.test(key)) {
+        playId = useMesariAsPrimary() ? `mesari_${key}` : (key.startsWith("taleb_") ? key : `taleb_${key}`);
+      }
+      if (playId && useMesariAsPrimary() && !/^mesari_/i.test(playId) && !/^taleb_/i.test(playId) && /^[0-9a-f-]{36}$/i.test(playId)) {
+        playId = `mesari_${playId}`;
+      }
+      if (playId && !useMesariAsPrimary() && !/^taleb_/i.test(playId) && !/^mesari_/i.test(playId) && !/^[0-9a-f-]{36}$/i.test(playId)) {
+        playId = `taleb_${playId}`;
+      }
       while (playId && /^taleb_taleb_/i.test(playId)) playId = playId.replace(/^taleb_/i, "");
+      while (playId && /^mesari_mesari_/i.test(playId)) playId = playId.replace(/^mesari_/i, "mesari_");
 
       if (!playId) return jsonError(res, 404, "المحاضرة غير موجودة");
 
@@ -4180,7 +4330,7 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
             platform: "stream"
           }]
         },
-        source: "taleb"
+        source: contentSource()
       });
     }
 
