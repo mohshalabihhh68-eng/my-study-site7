@@ -374,21 +374,37 @@ const isWatched=id=>{
   catch{return false;}
 };
 
+/* بدون ملفات — زي مساري فيديوهات فقط */
+const isFileItem=(it)=>{
+  if(!it) return true;
+  const t=String(it.type||it.kind||'').toLowerCase();
+  if(t==='file'||t==='pdf'||t==='document') return true;
+  if(it.is_file===true) return true;
+  const g=String(it.group||'');
+  if(/ملف/i.test(g)) return true;
+  return false;
+};
+const isExamItem=(it)=>{
+  const t=String(it.type||it.kind||'').toLowerCase();
+  return t==='exam';
+};
+
 /* classify */
 const classify=(title,type)=>{
   if(type==='pdf'||type==='file') return 'file';
   if(type==='exam') return 'exam';
-  const t=String(title||'').toLowerCase();
-  if(/امتحان|اختبار|كويز|quiz|exam/.test(t)) return 'exam';
-  if(/تدريب|تطبيق|حصة|تمرين|تكليف|worksheet/.test(t)) return 'practice';
+  const t=String(title||'');
+  if(/امتحان|اختبار|كويز|quiz|exam/i.test(t)) return 'exam';
+  if(/واجب|حل\s*واجب/i.test(t)) return 'homework';
+  if(/تدريب|تدريبات|تطبيق|تمرين/i.test(t)) return 'practice';
   return 'lesson';
 };
 
 const GRP={
-  lesson:  {label:'الشرح',           dot:'',  iconCls:'',  tagCls:'',  tagTxt:'مشاهدة'},
-  practice:{label:'التطبيق التفاعلي',dot:'g', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
-  exam:    {label:'الامتحان',         dot:'a', iconCls:'a', tagCls:'a', tagTxt:'حل الامتحان'},
-  file:    {label:'الملفات',          dot:'p', iconCls:'p', tagCls:'a', tagTxt:'فتح الملف'},
+  lesson:   {label:'الشرح',     dot:'',  iconCls:'',  tagCls:'',  tagTxt:'مشاهدة'},
+  homework: {label:'حل الواجب', dot:'g', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
+  practice: {label:'التدريبات',  dot:'g', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
+  exam:     {label:'الامتحان',  dot:'a', iconCls:'a', tagCls:'a', tagTxt:'حل الامتحان'},
 };
 
 const IC_PLAY=`<svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>`;
@@ -412,22 +428,19 @@ const resolvePlayId=(item,lid)=>{
   return id;
 };
 const buildItem=(item,lid)=>{
+  if(isFileItem(item)) return '';
   const id=resolvePlayId(item,lid);
   const title=item.title||item.name||'';
-  const type=item.type||item.kind||'video';
-  const url=item.url||item.file_url||'';
+  const type=isExamItem(item)?'exam':'video';
   const duration=item.duration;
   const cat=classify(title,type);
   const cfg=GRP[cat]||GRP.lesson;
   const watched=type==='video'?isWatched(id):false;
-  const icon=(type==='pdf'||type==='file')?IC_FILE:(type==='exam'?IC_EXAM:IC_PLAY);
+  const icon=type==='exam'?IC_EXAM:IC_PLAY;
   const sub=duration?`<span class="item-sub">${esc(duration)}</span>`:'';
 
   let onclick='';
-  if(type==='pdf'||type==='file'||item.is_file){
-    const pu=url?'/api/file-proxy/document.pdf?url='+encodeURIComponent(url):'#';
-    onclick=`window.open('${esc(pu)}','_blank')`;
-  } else if(type==='exam'){
+  if(type==='exam'){
     onclick=`window.location.href='exam.html?examId=${esc(id)}&lectureId=${esc(lid)}'`;
   } else {
     onclick=`window.location.href='player.html?lectureId=${esc(lid)}&videoId=${esc(id)}'`;
