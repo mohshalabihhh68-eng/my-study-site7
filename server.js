@@ -30,43 +30,54 @@ try {
   console.warn("[API] undici not available — UPSTREAM_PROXY disabled");
 }
 
-import {
-  thanawicaLogin,
-  thSubjectsForYear,
-  thTeachers,
-  thChapters,
-  thLectures,
-  thLectureContent,
-  thGetVideoSource,
-  thResolveMp4Url,
-  thMintAndFetchSegment,
-  thResolvePlaylistHash,
-  thResolveVideo,
-  isChemOrMathName,
-  chemMathKind,
-  isThId,
-  encodeThId,
-  decodeThId,
-  getThanawicaSessionInfo
-} from "./thanawica.js";
+// ===== thanawica (optional) =====
+function _thMissing() {
+  const e = new Error("thanawica disabled");
+  e.status = 503;
+  throw e;
+}
+let thanawicaLogin = async () => null;
+let thSubjectsForYear = async () => [];
+let thTeachers = async () => [];
+let thChapters = async () => [];
+let thLectures = async () => [];
+let thLectureContent = async () => ({});
+let thGetVideoSource = async () => _thMissing();
+let thResolveMp4Url = async () => null;
+let thMintAndFetchSegment = async () => _thMissing();
+let thResolvePlaylistHash = async () => null;
+let thResolveVideo = async () => null;
+let isChemOrMathName = () => false;
+let chemMathKind = () => null;
+let isThId = () => false;
+let encodeThId = (x) => x;
+let decodeThId = (x) => x;
+let getThanawicaSessionInfo = () => null;
+try {
+  const th = await import("./thanawica.js");
+  thanawicaLogin = th.thanawicaLogin;
+  thSubjectsForYear = th.thSubjectsForYear;
+  thTeachers = th.thTeachers;
+  thChapters = th.thChapters;
+  thLectures = th.thLectures;
+  thLectureContent = th.thLectureContent;
+  thGetVideoSource = th.thGetVideoSource;
+  thResolveMp4Url = th.thResolveMp4Url;
+  thMintAndFetchSegment = th.thMintAndFetchSegment;
+  thResolvePlaylistHash = th.thResolvePlaylistHash;
+  thResolveVideo = th.thResolveVideo;
+  isChemOrMathName = th.isChemOrMathName;
+  chemMathKind = th.chemMathKind;
+  isThId = th.isThId;
+  encodeThId = th.encodeThId;
+  decodeThId = th.decodeThId;
+  getThanawicaSessionInfo = th.getThanawicaSessionInfo;
+  console.log("[API] thanawica.js loaded");
+} catch {
+  console.warn("[API] thanawica.js not found — skipped");
+}
 
-// ===== upstream catalog adapter =====
-import {
-  buildTalebSource,
-  buildTalebSourceFromAnyId,
-  getTalebTeachers,
-  crawlTalebFullCatalog,
-  ensureCourseLectures,
-  clearTalebCatalogCache,
-  getTalebKey,
-  getTalebPlaylist,
-  resolveTalebPartId,
-  TALEB_STREAM_HOSTS,
-  updateTalebCookies,
-  subjectNameAr as talebSubjectNameAr
-} from "./taleb.js";
-
-// ===== mesari.online upstream (primary when CONTENT_SOURCE=mesari) =====
+// ===== upstream adapters (soft-load: mesari required, taleb optional) =====
 import {
   buildMesariSource,
   buildMesariSourceFromAnyId,
@@ -78,6 +89,59 @@ import {
   mesariAuthStatus,
   MESARI_STREAM_HOSTS
 } from "./mesari.js";
+
+function _talebUnavailable(name) {
+  const err = new Error("مصدر talep غير مفعّل على السيرفر");
+  err.status = 503;
+  err.expose = true;
+  throw err;
+}
+const _talebStub = {
+  buildTalebSource: async () => _talebUnavailable("buildTalebSource"),
+  buildTalebSourceFromAnyId: async () => _talebUnavailable("buildTalebSourceFromAnyId"),
+  getTalebTeachers: async () => [],
+  crawlTalebFullCatalog: async () => ({ subjects: [], teachers: [], stats: {} }),
+  ensureCourseLectures: async () => ({ lectures: [], lecturesCount: 0, partsCount: 0 }),
+  clearTalebCatalogCache: () => {},
+  getTalebKey: async () => _talebUnavailable("getTalebKey"),
+  getTalebPlaylist: async () => _talebUnavailable("getTalebPlaylist"),
+  resolveTalebPartId: async () => _talebUnavailable("resolveTalebPartId"),
+  TALEB_STREAM_HOSTS: [],
+  updateTalebCookies: () => {},
+  subjectNameAr: (sid) => String(sid || "مادة")
+};
+
+let buildTalebSource = _talebStub.buildTalebSource;
+let buildTalebSourceFromAnyId = _talebStub.buildTalebSourceFromAnyId;
+let getTalebTeachers = _talebStub.getTalebTeachers;
+let crawlTalebFullCatalog = _talebStub.crawlTalebFullCatalog;
+let ensureCourseLectures = _talebStub.ensureCourseLectures;
+let clearTalebCatalogCache = _talebStub.clearTalebCatalogCache;
+let getTalebKey = _talebStub.getTalebKey;
+let getTalebPlaylist = _talebStub.getTalebPlaylist;
+let resolveTalebPartId = _talebStub.resolveTalebPartId;
+let TALEB_STREAM_HOSTS = _talebStub.TALEB_STREAM_HOSTS;
+let updateTalebCookies = _talebStub.updateTalebCookies;
+let talebSubjectNameAr = _talebStub.subjectNameAr;
+
+try {
+  const talebMod = await import("./taleb.js");
+  buildTalebSource = talebMod.buildTalebSource;
+  buildTalebSourceFromAnyId = talebMod.buildTalebSourceFromAnyId;
+  getTalebTeachers = talebMod.getTalebTeachers;
+  crawlTalebFullCatalog = talebMod.crawlTalebFullCatalog;
+  ensureCourseLectures = talebMod.ensureCourseLectures;
+  clearTalebCatalogCache = talebMod.clearTalebCatalogCache;
+  getTalebKey = talebMod.getTalebKey;
+  getTalebPlaylist = talebMod.getTalebPlaylist;
+  resolveTalebPartId = talebMod.resolveTalebPartId;
+  TALEB_STREAM_HOSTS = talebMod.TALEB_STREAM_HOSTS || [];
+  updateTalebCookies = talebMod.updateTalebCookies;
+  talebSubjectNameAr = talebMod.subjectNameAr || talebSubjectNameAr;
+  console.log("[API] taleb.js loaded");
+} catch (e) {
+  console.warn("[API] taleb.js not found — running mesari-only mode");
+}
 
 // if stored creds are mesari token
 function applyLoadedCreds(device, session) {
@@ -3368,12 +3432,11 @@ function contentSource() {
   if (raw === "mesari" || process.env.MESARI_PRIMARY === "1") return "mesari";
   if (raw === "taleb" || process.env.TALEB_PRIMARY === "1") return "taleb";
   if (raw === "coursatk") return "coursatk";
-  // default: mesari if token present, else taleb if configured, else coursatk
+  // default: mesari first (especially when taleb.js absent)
   if (String(process.env.MESARI_AUTH_TOKEN || "").trim()) return "mesari";
   if (String(process.env.TALEB_DEVICE || "").trim() && String(process.env.TALEB_SESSION || "").trim()) return "taleb";
-  const tok = String(getCoursatkTokenSync() || "").trim();
-  if (!tok) return "mesari";
-  return "coursatk";
+  // no explicit creds — still prefer mesari adapter
+  return "mesari";
 }
 function useTalebAsPrimary() {
   return contentSource() === "taleb";
