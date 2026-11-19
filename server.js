@@ -84,6 +84,7 @@ import {
   getMesariTeachers,
   crawlMesariFullCatalog,
   ensureMesariChapterLectures,
+  getMesariLesson,
   clearMesariCatalogCache,
   updateMesariAuth,
   mesariAuthStatus,
@@ -3760,17 +3761,21 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
             teacher_name: th?.name || "",
             lectures_count: (th?.lectures || []).length
           }];
-      // حدّث عدد المحاضرات فعليًا (كسلان)
-      for (const row of data) {
-        if (row._courseId && !(row.lectures_count > 0)) {
+      // حدّث عدد المحاضرات فعليًا + وسّع mesari لكل فصل
+      await Promise.all(
+        (data || []).map(async (row) => {
+          if (!row._courseId) return;
           try {
             const det = await ensurePrimaryCourseLectures(row._courseId, th?.name || "");
-            row.lectures_count = det.lecturesCount || (det.lectures || []).length || 0;
+            row.lectures_count = det.lecturesCount || (det.lectures || []).length || row.lectures_count || 0;
             row.lecture_count = row.lectures_count;
+            row.parts_count = det.partsCount || row.parts_count || 0;
             if (det.title) row.name = det.title;
-          } catch {}
-        }
-      }
+          } catch (e) {
+            console.warn("[teachers/chapters] ensure", row._courseId, e && e.message);
+          }
+        })
+      );
       return res.json({ success: true, message: "Success", data, source: contentSource() });
     }
     if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
@@ -3821,11 +3826,21 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
             break;
           }
         }
-        if (!lectures.length) {
+        // دائمًا وسّع الفصل من mesari عشان أسماء الفيديوهات تبقى كاملة لكل المحاضرات
+        const needsExpand =
+          !lectures.length ||
+          lectures.some((l) => {
+            const parts = l.parts || [];
+            if (!parts.length) return true;
+            return parts.some((p) => p.needsExpand || (p.kind === "video" && !p.title) || (p.kind === "video" && /^فيديو\s*\d+$/i.test(String(p.title || ""))));
+          });
+        if (needsExpand || useMesariAsPrimary()) {
           try {
             const det = await ensurePrimaryCourseLectures(courseId, teacherName);
-            lectures = det.lectures || [];
-          } catch {}
+            if (det && (det.lectures || []).length) lectures = det.lectures;
+          } catch (e) {
+            console.warn("[chapters/lectures] ensure", courseId, e && e.message);
+          }
         }
         // عزل صارم: محاضرات هذا الكورس فقط
         lectures = (lectures || []).filter((l) => String(l.courseId || courseId) === String(courseId));
@@ -3929,8 +3944,35 @@ async function findPrimaryLectureById(rawId) {
     /^[0-9a-f-]{36}$/i.test(key0);
 
   if (isMesariHint) {
-    const cat = await getPrimaryCatalog();
     const key = key0.replace(/^mesari_mesari_/i, "mesari_");
+
+    // 1) مسار مباشر: mesari_lec_<lessonUuid> أو lesson uuid خام
+    const mLecDirect = key.match(/^mesari_lec_(.+)$/i);
+    const lessonUuid = mLecDirect ? mLecDirect[1] : (/^[0-9a-f-]{36}$/i.test(key) && !key.startsWith("mesari_") ? key : null);
+    // لو id شكله lesson (مش video) — جرب /lessons/:id مباشرة
+    if (mLecDirect || (lessonUuid && key0.includes("lec"))) {
+      try {
+        const lec = await getMesariLesson(mLecDirect ? mLecDirect[1] : lessonUuid);
+        if (lec && (lec.parts || []).length) {
+          return { lecture: lec, teacher: null, course: lec.courseId ? { id: lec.courseId } : null, source: "mesari" };
+        }
+      } catch (e) {
+        console.warn("[findPrimary] getMesariLesson", e && e.message);
+      }
+    }
+    // لو key = lesson uuid من الواجهة (بدون prefix)
+    if (/^[0-9a-f-]{36}$/i.test(key) && !/^mesari_v_/i.test(key0)) {
+      try {
+        const lec = await getMesariLesson(key);
+        if (lec && (lec.parts || []).length) {
+          return { lecture: lec, teacher: null, course: lec.courseId ? { id: lec.courseId } : null, source: "mesari" };
+        }
+      } catch (e) {
+        // مش درس — كمّل بحث فيديو/كتالوج
+      }
+    }
+
+    const cat = await getPrimaryCatalog();
 
     const matchLec = (lec) => {
       if (!lec) return false;
