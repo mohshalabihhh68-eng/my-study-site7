@@ -4249,21 +4249,27 @@ async function buildSrcFromClientPlaylists(videoId, { masterText, mediaText, key
 }
 
 function clientFetchPayload(videoId, upstreamTok) {
+  const vid = String(videoId);
+  // ملاحظة: المتصفح على دومين ثانوية-club غالبًا هيتمنع بـ CORS من api.coursatk.online
+  // الحل الجذري = UPSTREAM_PROXY / UPSTREAM_RELAY_URL من IP مش محظور
   return {
     type: "client_fetch",
-    videoId: String(videoId),
+    videoId: vid,
     reason: "upstream_blocked",
-    message: "سيرفر الاستضافة محظور من Cloudflare/كورساتك — المشغّل هيجلب القائمة من جهازك",
-    playlistUrl: `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`,
+    message: "سيرفر الاستضافة محظور من Cloudflare/كورساتك. لازم UPSTREAM_PROXY أو RELAY. محاولة جلب من جهاز الطالب قد تفشل بسبب CORS.",
+    // CDN (أحيانًا يشتغل) + weave play للمسار الأحدث
+    playlistUrl: `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(vid)}/playlist.m3u8`,
+    weavePlayUrl: `${CONFIG.COURSATK_API}/video/${encodeURIComponent(vid)}/stream-weave/play`,
     headers: {
       Authorization: `Bearer ${upstreamTok}`,
-      Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
-      Origin: CONFIG.STREAM_ORIGIN,
-      Referer: CONFIG.STREAM_REFERER,
+      Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, application/json, */*",
+      Origin: "https://coursatk.online",
+      Referer: "https://coursatk.online/",
       "User-Agent": CONFIG.STREAM_UA,
       "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH || "com.mycompany.app.soulbrowser"
     },
-    hydratePath: `/api/play/${encodeURIComponent(videoId)}/hydrate`
+    hydratePath: `/api/play/${encodeURIComponent(vid)}/hydrate`,
+    hint: "Set env UPSTREAM_PROXY=http://user:pass@residential-proxy:port or UPSTREAM_RELAY_URL"
   };
 }
 
@@ -5135,10 +5141,33 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
     if (src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
     if (src.mode === "thanawica-mp4" && src.mp4Url) return res.json({ success: true, data: { type: "mp4", play_url: src.mp4Url, mp4_url: src.mp4Url } });
 
-    // مصدر كورساتك مشترك في الذاكرة (sourceCache) — لكن جلسة HLS خاصة بكل طالب
-    // عشان لينك التشغيل ومتفتاح sk ميترموش بين منصات تانية
     assertPlayerOrigin(req);
 
+    // —— مسار stream-weave المباشر: السيرفر جاب الـ session، والمشغّل يشغّل من جهاز الطالب
+    // كده مقاطع الفيديو تخرج من api.stream-weave.com مش من IP بتاع Railway (المحظور)
+    if (src.mode === "weave" && src.token && (src.streamUrl || src.videoId)) {
+      return res.json({
+        success: true,
+        data: {
+          type: "weave_session",
+          token: src.token,
+          video_id: src.videoId || src.resolvedVideoId || null,
+          session_id: src.sessionId || null,
+          key_seed: src.keySeed || null,
+          key_version: src.keyVersion || 3,
+          api_base: src.apiBase || "https://api.stream-weave.com",
+          stream_url: src.streamUrl || null,
+          heartbeat_url: src.heartbeatUrl || null,
+          end_url: src.endUrl || null,
+          sw_ticket: src.swTicket || null,
+          // احتياطي: لو حابب تستخدم بروكسي السيرفر برضه
+          play_url: null,
+          message: "session جاهزة — المشغّل يشغّل من stream-weave مباشرة"
+        }
+      });
+    }
+
+    // باقي المصادر (Bunny / CDN محلي…): جلسة HLS على السيرفر
     const id = crypto.randomUUID().replace(/-/g, "");
     const streamKey = crypto.randomBytes(16).toString("hex");
     const deviceId = (req.session && req.session.deviceId) || (req.student && req.student.deviceId) || null;
@@ -5157,7 +5186,6 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
       lastUsed: now()
     };
     streamSessions.set(id, sessionRow);
-    // بدون persist Firebase لتقليل التسريب والكتابة — الجلسة في الذاكرة فقط
     const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
     res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, shared: false } });
   } catch (e) {
