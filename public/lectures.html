@@ -407,11 +407,12 @@ const isPlayableVideo=(it,lid)=>{
   // معرفات مش فيديو
   if(/^mesari_(?:file|exam)_/i.test(id)) return false;
   if(/^mesari_lesson_/i.test(id) && !it.mesariVideoId) return false;
-  // UUID أو mesari_ أو taleb_ أو bn_ — صيغ تشغيل معروفة
-  if(/^(mesari_|taleb_|bn_|hos_)/i.test(id)) return true;
+  // UUID أو mesari_ أو taleb_ أو bn_ أو thv_ — صيغ تشغيل معروفة
+  if(/^(mesari_|taleb_|bn_|hos_|thv_)/i.test(id)) return true;
   if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return true;
-  // id رقمي طويل أحيانًا من مصادر تانية
-  if(/^\d{6,}$/.test(id)) return true;
+  // Coursatk وغيره: أي id رقمي 3+ أرقام يُعتبر فيديو
+  // (الشرط القديم كان 6+ فكان بيشطب فيديوهات Coursatk زي 22658)
+  if(/^\d{3,}$/.test(id)) return true;
   // لو فيه video_id منفصل صالح
   const vid=String(it.video_id||it.videoId||it.mesariVideoId||'').trim();
   if(vid && vid!==id) return isPlayableVideo({...it,id:vid,video_id:vid}, lid);
