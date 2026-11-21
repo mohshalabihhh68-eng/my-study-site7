@@ -1789,18 +1789,31 @@ async function playIndex(i,autoplay){
       return;
     }
 
-    // جلسة stream-weave من السيرفر → التشغيل من جهاز الطالب مباشرة
-    if (playData && (playData.type === 'weave_session' || (playData.token && playData.stream_url))) {
-      setLoading(true, 'جاري تشغيل الجلسة…');
-      try { await loadPlayerScript(); } catch (_) {}
-      await startWeaveSession(playData, my, autoplay, item);
-      return;
-    }
-
+    // المسار الأساسي: السيرفر فك التشفير ورجّع play_url
     if (playData && playData.play_url) {
+      setLoading(true, 'تحميل الفيديو من السيرفر…');
       let playUrl = playData.play_url;
       if (playUrl.startsWith('/')) playUrl = location.origin + playUrl;
-      await startHls(playUrl, my, autoplay, item);
+      try {
+        await startHls(playUrl, my, autoplay, item);
+        return;
+      } catch (hlsErr) {
+        console.warn('[play] server HLS failed', hlsErr);
+        if (playData.weave && playData.weave.token) {
+          setLoading(true, 'تجربة مشغّل stream-weave…');
+          try {
+            await startWeaveSession(playData.weave, my, autoplay, item);
+            return;
+          } catch (_) { throw hlsErr; }
+        }
+        throw hlsErr;
+      }
+    }
+
+    // توافق قديم: type weave_session
+    if (playData && (playData.type === 'weave_session' || (playData.token && playData.stream_url))) {
+      setLoading(true, 'جاري تشغيل الجلسة…');
+      await startWeaveSession(playData, my, autoplay, item);
       return;
     }
 
