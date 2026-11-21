@@ -5143,31 +5143,7 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
 
     assertPlayerOrigin(req);
 
-    // —— مسار stream-weave المباشر: السيرفر جاب الـ session، والمشغّل يشغّل من جهاز الطالب
-    // كده مقاطع الفيديو تخرج من api.stream-weave.com مش من IP بتاع Railway (المحظور)
-    if (src.mode === "weave" && src.token && (src.streamUrl || src.videoId)) {
-      return res.json({
-        success: true,
-        data: {
-          type: "weave_session",
-          token: src.token,
-          video_id: src.videoId || src.resolvedVideoId || null,
-          session_id: src.sessionId || null,
-          key_seed: src.keySeed || null,
-          key_version: src.keyVersion || 3,
-          api_base: src.apiBase || "https://api.stream-weave.com",
-          stream_url: src.streamUrl || null,
-          heartbeat_url: src.heartbeatUrl || null,
-          end_url: src.endUrl || null,
-          sw_ticket: src.swTicket || null,
-          // احتياطي: لو حابب تستخدم بروكسي السيرفر برضه
-          play_url: null,
-          message: "session جاهزة — المشغّل يشغّل من stream-weave مباشرة"
-        }
-      });
-    }
-
-    // باقي المصادر (Bunny / CDN محلي…): جلسة HLS على السيرفر
+    // جلسة HLS على السيرفر (أساسية لغير weave + احتياطي لـ weave)
     const id = crypto.randomUUID().replace(/-/g, "");
     const streamKey = crypto.randomBytes(16).toString("hex");
     const deviceId = (req.session && req.session.deviceId) || (req.student && req.student.deviceId) || null;
@@ -5187,6 +5163,30 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
     };
     streamSessions.set(id, sessionRow);
     const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
+
+    // weave: session مباشرة للمتصفح + play_url احتياطي عبر السيرفر
+    if (src.mode === "weave" && src.token && (src.streamUrl || src.videoId)) {
+      return res.json({
+        success: true,
+        data: {
+          type: "weave_session",
+          token: src.token,
+          video_id: src.videoId || src.resolvedVideoId || null,
+          session_id: src.sessionId || null,
+          key_seed: src.keySeed || null,
+          key_version: Number(src.keyVersion || 3),
+          api_base: src.apiBase || "https://api.stream-weave.com",
+          stream_url: src.streamUrl || null,
+          heartbeat_url: src.heartbeatUrl || null,
+          end_url: src.endUrl || null,
+          sw_ticket: src.swTicket || null,
+          play_url: hlsPath,
+          manifest_url: hlsPath,
+          message: "session جاهزة — مباشر أو احتياطي السيرفر"
+        }
+      });
+    }
+
     res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, shared: false } });
   } catch (e) {
     try { const yt = await tryResolveYoutube(String(req.params.videoId || "")); if (yt) return res.json({ success: true, data: { type: "youtube", youtube_url: yt, url: yt } }); } catch {}
