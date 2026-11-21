@@ -2010,12 +2010,32 @@ async function startWeaveSession(session, my, autoplay, item){
     } catch (_) {}
   }
 
+  const swTicket = session.sw_ticket || session.swTicket || null;
+  const fallbackPlayUrl = session.play_url || session.manifest_url || null;
   curManifest = { url: streamUrl, token: swToken, videoId: swVideoId, keySeed: keySeed, keyVersion: keyVersion };
+
+  async function fallbackToServerProxy(reason) {
+    if (!fallbackPlayUrl) {
+      showError(
+        (reason || 'stream-weave رفض الجلسة') + '\nلو استمرت المشكلة: تأكد أن السيرفر يجلب الـ session صح أو استخدم UPSTREAM_PROXY.',
+        'تعذّر التشغيل'
+      );
+      return;
+    }
+    try {
+      setLoading(true, 'التشغيل المباشر فشل — تحويل عبر السيرفر…');
+      if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+      let playUrl = fallbackPlayUrl;
+      if (playUrl.startsWith('/')) playUrl = location.origin + playUrl;
+      await startHls(playUrl, my, autoplay, item);
+    } catch (e) {
+      showError((e && e.message) || 'فشل المسار الاحتياطي', 'تعذّر التشغيل');
+    }
+  }
 
   return new Promise(function (resolve, reject) {
     if (!(window.Hls && Hls.isSupported())) {
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Safari قد يحتاج proxy للمفتاح — جرّب مباشر
         video.src = streamUrl;
         setLoading(false);
         if (autoplay) video.play().catch(function () {});
@@ -2023,13 +2043,14 @@ async function startWeaveSession(session, my, autoplay, item){
         resolve();
         return;
       }
-      showError('المتصفح لا يدعم HLS', 'تعذّر تشغيل الفيديو');
-      reject(new Error('no hls'));
+      // مفيش HLS — جرّب بروكسي السيرفر
+      fallbackToServerProxy('المتصفح لا يدعم HLS').then(resolve).catch(reject);
       return;
     }
 
     if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
 
+    let fellBack = false;
     hls = new Hls({
       enableWorker: true,
       lowLatencyMode: false,
@@ -2039,14 +2060,17 @@ async function startWeaveSession(session, my, autoplay, item){
       startPosition: (resumeAt && resumeAt > 0) ? resumeAt : -1,
       xhrSetup: function (xhr, url) {
         try {
-          // توكن stream-weave على طلبات api.stream-weave / floravon
-          if (swToken && url && (
+          const isSw = url && (
             /stream-weave|floravon|coursatk/i.test(url) ||
-            (session.api_base && url.indexOf(session.api_base) === 0)
-          )) {
+            (session.api_base && url.indexOf(String(session.api_base)) === 0)
+          );
+          if (swToken && isSw) {
             xhr.setRequestHeader('Authorization', 'Bearer ' + swToken);
+            if (swTicket) {
+              try { xhr.setRequestHeader('x-sw-ticket', String(swTicket)); } catch (e1) {}
+            }
+            try { xhr.setRequestHeader('x-sw-key-version', String(keyVersion || 3)); } catch (e2) {}
           }
-          // توكن طالب المنصة على سيرفرك
           if (token && url && (url.indexOf(location.origin) === 0 || url.charAt(0) === '/')) {
             xhr.setRequestHeader('Authorization', 'Bearer ' + token);
           }
@@ -2054,8 +2078,6 @@ async function startWeaveSession(session, my, autoplay, item){
       }
     });
 
-    // فك مفتاح AES عبر player.js لو المفتاح مش plain
-    hls.on(Hls.Events.KEY_LOADING, function () {});
     hls.on(Hls.Events.MANIFEST_PARSED, function () {
       if (my !== playToken) return;
       if (autoplay) video.play().catch(function () {});
@@ -2064,14 +2086,18 @@ async function startWeaveSession(session, my, autoplay, item){
       resolve();
     });
     hls.on(Hls.Events.ERROR, function (_e, d) {
-      if (my !== playToken || !d || !d.fatal) return;
+      if (my !== playToken || !d || !d.fatal || fellBack) return;
       const code = d.response && d.response.code;
-      if (code === 401 || code === 403) {
-        showError('انتهت صلاحية جلسة التشغيل أو مرفوضة من stream-weave. جرّب تاني.', 'تعذّر التشغيل');
+      // 401/403 أو فشل شبكة متكرر → احتياطي السيرفر
+      if (code === 401 || code === 403 || code === 0) {
+        fellBack = true;
+        try { hls.destroy(); } catch (e) {}
+        hls = null;
+        fallbackToServerProxy('جلسة stream-weave مرفوضة (' + (code || 'CORS') + ')').then(resolve).catch(reject);
         return;
       }
       if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
-        if (hlsRetry.net++ < 3) {
+        if (hlsRetry.net++ < 2) {
           setLoading(true, 'النت ضعيف… بحاول تاني', false);
           setTimeout(function () {
             if (my !== playToken || !hls) return;
@@ -2082,11 +2108,19 @@ async function startWeaveSession(session, my, autoplay, item){
             }
           }, 700 * hlsRetry.net);
         } else {
-          showError('فشل تحميل الفيديو من stream-weave. تأكد من النت أو أن السيرفر رجّع session صحيحة.', 'مشكلة في الاتصال');
+          fellBack = true;
+          try { hls.destroy(); } catch (e) {}
+          hls = null;
+          fallbackToServerProxy('فشل تحميل stream-weave').then(resolve).catch(reject);
         }
       } else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) {
         if (hlsRetry.media++ < 2) hls.recoverMediaError();
-        else showError('الفيديو مش بيشتغل على الجهاز ده. جرّب متصفح تاني.', 'تعذّر تشغيل الفيديو');
+        else {
+          fellBack = true;
+          try { hls.destroy(); } catch (e) {}
+          hls = null;
+          fallbackToServerProxy('خطأ وسائط').then(resolve).catch(reject);
+        }
       } else {
         showError('حصلت مشكلة أثناء التشغيل. جرّب تاني.', 'تعذّر تحميل الفيديو');
       }
