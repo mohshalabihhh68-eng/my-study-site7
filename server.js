@@ -3379,22 +3379,58 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
+function normalizeLectureContentPayload(raw, lectureId) {
+  // وحّد شكل الرد عشان lectures.html (isPlayableVideo) يشتغل مع Coursatk
+  const root = raw && raw.data && typeof raw.data === "object" ? raw.data : (raw || {});
+  const videosIn = Array.isArray(root.videos) ? root.videos
+    : Array.isArray(root.items) ? root.items
+    : Array.isArray(raw) ? raw
+    : [];
+  const videos = videosIn.map((v, i) => {
+    const id = v?.video_id ?? v?.videoId ?? v?.id ?? null;
+    const title = v?.title || v?.name || `فيديو ${i + 1}`;
+    return {
+      ...v,
+      id: id != null ? String(id) : undefined,
+      video_id: id != null ? String(id) : undefined,
+      videoId: id != null ? String(id) : undefined,
+      title,
+      name: title,
+      type: v?.type || "video",
+      duration: v?.duration || v?.duration_seconds || v?.duration_text || null
+    };
+  }).filter((v) => v.id);
+  const pdfs = Array.isArray(root.pdfs) ? root.pdfs : [];
+  const exams = Array.isArray(root.exams) ? root.exams : [];
+  return {
+    success: true,
+    message: "Success",
+    data: {
+      lecture_id: root.lecture_id || lectureId,
+      lecture_name: root.lecture_name || root.name || null,
+      videos,
+      pdfs,
+      exams,
+      // للتوافق مع grouped-content في الفرونت
+      groups: videos.length ? [{ name: "الشرح", items: videos }] : []
+    }
+  };
+}
+
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
     const lid = Number(req.params.id);
     if (Number.isFinite(lid) && lid >= HOSSAM_LECTURE_BASE) {
       const lessonId = lid - HOSSAM_LECTURE_BASE;
-      let found = null; let courseName = "";
+      let found = null;
       for (const c of HOSSAM_CATALOG.courses || []) {
         for (const l of c.lessons || []) {
-          if (Number(l.lessonId) === lessonId) { found = l; courseName = c.name; break; }
+          if (Number(l.lessonId) === lessonId) { found = l; break; }
         }
         if (found) break;
       }
       if (!found) return jsonError(res, 404, "درس حسام غير موجود — حدّث الكتالوج بعد resolve-lesson");
-      return res.json({
-        success: true,
-        message: "Success",
+      return res.json(normalizeLectureContentPayload({
         data: {
           lecture_id: lid,
           lecture_name: found.title || (`درس ${lessonId}`),
@@ -3402,10 +3438,35 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
           pdfs: [],
           exams: []
         }
-      });
+      }, lid));
     }
-    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) return res.json(await thLectureContent(req.params.id));
-    res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`));
+    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
+      const th = await thLectureContent(req.params.id);
+      return res.json(normalizeLectureContentPayload(th, req.params.id));
+    }
+    const upstream = await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`);
+    res.json(normalizeLectureContentPayload(upstream, req.params.id));
+  } catch (e) { jsonError(res, 502, e.message); }
+});
+
+// alias للفرونت (lectures.html بيطلب grouped-content الأول)
+app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
+  try {
+    // إعادة استخدام نفس منطق content
+    const fakeReq = req;
+    // استدعِ handler المحتوى عبر طلب داخلي بسيط
+    const lid = req.params.id;
+    if (CONFIG.THANAWICA_ENABLED && isThId(lid) && studentAllowsThanawica(req.student)) {
+      const th = await thLectureContent(lid);
+      return res.json(normalizeLectureContentPayload(th, lid));
+    }
+    const n = Number(lid);
+    if (Number.isFinite(n) && n >= HOSSAM_LECTURE_BASE) {
+      // مرّر على content path
+      req.url = `/api/lectures/${lid}/content`;
+    }
+    const upstream = await upstreamJson(`/user/lectures/${encodeURIComponent(lid)}/content`);
+    res.json(normalizeLectureContentPayload(upstream, lid));
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
