@@ -227,8 +227,6 @@ const ALLOWED_ORIGINS = new Set([
   "https://durosakplus.com",
   "https://thanawya-club.up.railway.app",
   "https://thanawya-club.vercel.app",
-  "https://thanaweya-club.up.railway.app",   // spelling used in production
-  "https://thanaweya-club.vercel.app",
   ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
 // Railway/Vercel public domain من البيئة
@@ -1345,8 +1343,16 @@ let decryptPlaybackKeyFn = null;
 
 async function loadDecryptionUtils() {
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
+  // استخرج الـ version المطلوب من CONFIG.PLAYER_JS لإلغاء كاش قديم
+  const targetVersion = (() => { try { return new URL(CONFIG.PLAYER_JS).searchParams.get("v") || ""; } catch { return ""; } })();
   let source = null;
   try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
+  // بطّل الكاش لو مش فيه الـ version المطلوب
+  if (source && targetVersion && !source.includes(targetVersion)) {
+    console.log(`[crypto] cache version mismatch (want ${targetVersion}) — re-fetching player.js`);
+    source = null;
+    try { fs.unlinkSync(cachePath); } catch {}
+  }
   // نظّف أي سطر هيدر مش JS (زي رابط الملف)
   if (source) {
     const lines = source.split(/\r?\n/);
@@ -1370,7 +1376,9 @@ async function loadDecryptionUtils() {
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
     setTimeout, clearTimeout, setInterval, clearInterval,
-    Promise, Error, TypeError, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Function, RegExp, parseInt, parseFloat, isNaN, Infinity, NaN, undefined,
+    queueMicrotask: (fn) => Promise.resolve().then(fn),
+    structuredClone: (v) => JSON.parse(JSON.stringify(v)),
+    Promise, Error, TypeError, RangeError, ReferenceError, SyntaxError, URIError, EvalError, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Function, RegExp, parseInt, parseFloat, isNaN, isFinite, encodeURIComponent, decodeURIComponent, Infinity, NaN, undefined,
     document: {
       createElement: () => ({ style: {}, setAttribute() {}, getAttribute() { return null; }, appendChild() {}, remove() {}, classList: { add() {}, remove() {} }, addEventListener() {}, removeEventListener() {} }),
       head: { appendChild() {} }, body: { appendChild() {} }, documentElement: { style: {} },
@@ -1401,25 +1409,38 @@ async function loadDecryptionUtils() {
   } catch (e) {
     console.warn("[crypto] player.js vm partial/fail:", e && e.message ? e.message : e);
   }
-  // ابحث عن DecryptionUtils بأي اسم
+  // ابحث عن DecryptionUtils بأي اسم — v4 ممكن يصدّرها تحت اسم obfuscated
   let du = sandbox.DecryptionUtils || sandbox.decryptionUtils || null;
+  let standaloneDecryptFn = null;
   if (!du?.decryptPlaybackKey) {
     for (const k of Object.getOwnPropertyNames(sandbox)) {
       try {
         const v = sandbox[k];
-        if (v && typeof v === "object" && typeof v.decryptPlaybackKey === "function") { du = v; break; }
-        if (v && typeof v === "function" && k.toLowerCase().includes("decrypt") && v.length >= 1) {
-          // function itself
+        if (!v || k === "window" || k === "self" || k === "globalThis" || k === "global") continue;
+        if (typeof v === "object" && typeof v.decryptPlaybackKey === "function") { du = v; break; }
+        // v4: قد يصدّر object فيه decrypt / decryptKey / unwrap
+        if (typeof v === "object") {
+          for (const m of ["decryptPlaybackKey", "decrypt", "decryptKey", "unwrapKey", "unwrap"]) {
+            if (typeof v[m] === "function") { du = { decryptPlaybackKey: v[m].bind(v) }; break; }
+          }
+          if (du) break;
+        }
+        // standalone function اسمها يحتوي decrypt أو unwrap
+        if (typeof v === "function" && (k.toLowerCase().includes("decrypt") || k.toLowerCase().includes("unwrap")) && v.length >= 1) {
+          standaloneDecryptFn = standaloneDecryptFn || v;
         }
       } catch {}
     }
   }
+  if (!du && standaloneDecryptFn) {
+    du = { decryptPlaybackKey: standaloneDecryptFn };
+  }
   if (du?.decryptPlaybackKey) {
-    decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-    console.log("[crypto] ready (DecryptionUtils)");
+    decryptPlaybackKeyFn = du.decryptPlaybackKey.bind ? du.decryptPlaybackKey.bind(du) : du.decryptPlaybackKey;
+    console.log("[crypto] ready (DecryptionUtils v4.2.4)");
   } else {
     decryptPlaybackKeyFn = null;
-    console.warn("[crypto] DecryptionUtils غير متاح في player.js الجديد — استخدام fallback keys (plain/CDN)");
+    console.warn("[crypto] DecryptionUtils غير متاح في player.js v4.2.4 — استخدام fallback keys (plain/CDN)");
   }
 }
 
@@ -2232,36 +2253,4 @@ function friendlyDeviceName(brand, model) {
     "SM-S721": "Galaxy S24 FE", "SM-A146": "Galaxy A14 5G"
   };
   for (const [code, name] of Object.entries(sam)) {
-    if (up.startsWith(code) || up.includes(code)) return (b || "Samsung") + " " + name + " (" + m + ")";
-  }
-  if (/^SM-/i.test(m)) return (b || "Samsung") + " " + m;
-  if (/^RMX/i.test(m)) return (b || "Realme") + " " + m;
-  if (/^CPH/i.test(m)) return (b || "OPPO") + " " + m;
-  if (/REDMI|POCO|MI\s/i.test(m) || /xiaomi/i.test(b)) return (b || "Xiaomi") + " " + m;
-  if (/iphone/i.test(m)) return "Apple " + m;
-  if (/ipad/i.test(m)) return "Apple " + m;
-  if (/pixel/i.test(m)) return "Google " + m;
-  if (b && m) return b + " " + m;
-  return m || b || null;
-}
-
-/** عكس إحداثيات GPS → حي/مدينة أدق (Nominatim) */
-const revGeoCache = new Map();
-async function reverseGeocode(lat, lon) {
-  try {
-    const key = Number(lat).toFixed(4) + "," + Number(lon).toFixed(4);
-    const hit = revGeoCache.get(key);
-    if (hit && Date.now() < hit.exp) return hit.data;
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&accept-language=ar&zoom=16&addressdetails=1`;
-    const r = await fetchT(url, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "ThanawyaClub-VisitTracker/1.0 (admin analytics)"
-      }
-    }, { timeout: 3500, retries: 0 });
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (!j || !j.address) return null;
-    const a = j.address;
-    const data = {
-      district: a.suburb || a.neighbourhood || a.quarter || a.city_district
+    if (up.startsWith(code) || up.includes(code)) return (b || "Samsung") + " " 
