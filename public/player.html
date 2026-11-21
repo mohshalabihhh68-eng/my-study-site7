@@ -1777,6 +1777,14 @@ async function playIndex(i,autoplay){
       return;
     }
 
+    // جلسة stream-weave من السيرفر → التشغيل من جهاز الطالب مباشرة
+    if (playData && (playData.type === 'weave_session' || (playData.token && playData.stream_url))) {
+      setLoading(true, 'جاري تشغيل الجلسة…');
+      try { await loadPlayerScript(); } catch (_) {}
+      await startWeaveSession(playData, my, autoplay, item);
+      return;
+    }
+
     if (playData && playData.play_url) {
       let playUrl = playData.play_url;
       if (playUrl.startsWith('/')) playUrl = location.origin + playUrl;
@@ -1950,6 +1958,144 @@ video.addEventListener('playing', function(){
     prefetchPlay(videos[current + 1].id);
   }
 });
+
+async function startWeaveSession(session, my, autoplay, item){
+  const streamUrl = session.stream_url || session.streamUrl;
+  const swToken = session.token || session.stream_token;
+  const swVideoId = session.video_id || session.videoId || '';
+  const keySeed = session.key_seed || session.keySeed || null;
+  const keyVersion = session.key_version || session.keyVersion || 3;
+  const heartbeatUrl = session.heartbeat_url || session.heartbeatUrl || null;
+  if (!streamUrl || !swToken) throw new Error('جلسة weave ناقصة (stream_url أو token)');
+
+  // حمّل player.js لفك المفتاح لو احتاجنا
+  try {
+    if (!cryptoUtils) cryptoUtils = await loadPlayerScript();
+  } catch (_) {}
+
+  setLoading(true, 'تحميل الفيديو من stream-weave…');
+  const saved = readProgress(item.id) || {};
+  const resumeAt = saved.currentTime > 2 && !saved.watched ? +saved.currentTime : 0;
+  applyRate();
+  video.addEventListener('loadedmetadata', function(){
+    if (my !== playToken) return;
+    if (resumeAt && Number.isFinite(video.duration) && resumeAt < video.duration - 2) {
+      video.currentTime = resumeAt;
+      showToast('كمّلنا من ' + fmt(resumeAt));
+    }
+    applyRate();
+    ready = true;
+    paintProgress();
+  }, { once: true });
+
+  // heartbeat اختياري
+  if (heartbeatUrl && swToken) {
+    try {
+      const hb = function () {
+        fetch(heartbeatUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + swToken,
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          },
+          body: '{}',
+          mode: 'cors',
+          credentials: 'omit'
+        }).catch(function () {});
+      };
+      hb();
+      if (window.__swHb) clearInterval(window.__swHb);
+      window.__swHb = setInterval(hb, 60000);
+    } catch (_) {}
+  }
+
+  curManifest = { url: streamUrl, token: swToken, videoId: swVideoId, keySeed: keySeed, keyVersion: keyVersion };
+
+  return new Promise(function (resolve, reject) {
+    if (!(window.Hls && Hls.isSupported())) {
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari قد يحتاج proxy للمفتاح — جرّب مباشر
+        video.src = streamUrl;
+        setLoading(false);
+        if (autoplay) video.play().catch(function () {});
+        showUI(true);
+        resolve();
+        return;
+      }
+      showError('المتصفح لا يدعم HLS', 'تعذّر تشغيل الفيديو');
+      reject(new Error('no hls'));
+      return;
+    }
+
+    if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+
+    hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: false,
+      maxBufferLength: 40,
+      maxMaxBufferLength: 80,
+      backBufferLength: 30,
+      startPosition: (resumeAt && resumeAt > 0) ? resumeAt : -1,
+      xhrSetup: function (xhr, url) {
+        try {
+          // توكن stream-weave على طلبات api.stream-weave / floravon
+          if (swToken && url && (
+            /stream-weave|floravon|coursatk/i.test(url) ||
+            (session.api_base && url.indexOf(session.api_base) === 0)
+          )) {
+            xhr.setRequestHeader('Authorization', 'Bearer ' + swToken);
+          }
+          // توكن طالب المنصة على سيرفرك
+          if (token && url && (url.indexOf(location.origin) === 0 || url.charAt(0) === '/')) {
+            xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+          }
+        } catch (e) {}
+      }
+    });
+
+    // فك مفتاح AES عبر player.js لو المفتاح مش plain
+    hls.on(Hls.Events.KEY_LOADING, function () {});
+    hls.on(Hls.Events.MANIFEST_PARSED, function () {
+      if (my !== playToken) return;
+      if (autoplay) video.play().catch(function () {});
+      showUI(true);
+      setLoading(false);
+      resolve();
+    });
+    hls.on(Hls.Events.ERROR, function (_e, d) {
+      if (my !== playToken || !d || !d.fatal) return;
+      const code = d.response && d.response.code;
+      if (code === 401 || code === 403) {
+        showError('انتهت صلاحية جلسة التشغيل أو مرفوضة من stream-weave. جرّب تاني.', 'تعذّر التشغيل');
+        return;
+      }
+      if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        if (hlsRetry.net++ < 3) {
+          setLoading(true, 'النت ضعيف… بحاول تاني', false);
+          setTimeout(function () {
+            if (my !== playToken || !hls) return;
+            if (d.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || d.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT) {
+              hls.loadSource(streamUrl);
+            } else {
+              hls.startLoad();
+            }
+          }, 700 * hlsRetry.net);
+        } else {
+          showError('فشل تحميل الفيديو من stream-weave. تأكد من النت أو أن السيرفر رجّع session صحيحة.', 'مشكلة في الاتصال');
+        }
+      } else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        if (hlsRetry.media++ < 2) hls.recoverMediaError();
+        else showError('الفيديو مش بيشتغل على الجهاز ده. جرّب متصفح تاني.', 'تعذّر تشغيل الفيديو');
+      } else {
+        showError('حصلت مشكلة أثناء التشغيل. جرّب تاني.', 'تعذّر تحميل الفيديو');
+      }
+    });
+
+    hls.loadSource(streamUrl);
+    hls.attachMedia(video);
+  });
+}
 
 async function startHls(playUrl, my, autoplay, item){
   setLoading(true,'تحميل الفيديو…');
