@@ -4379,6 +4379,7 @@ async function buildVideoSource(videoId, clientHeaders) {
         let wKv = Number(data.data.key_version || data.data.keyVersion || 0) || 0;
         const wHb = data.data.heartbeat_url || data.data.heartbeatUrl || null;
         const wEnd = data.data.end_url || data.data.endUrl || null;
+        const wExpires = Number(data.data.expires_in || data.data.expiresIn || 28800) || 28800;
         const wApiBase = String(data.data.api_base || data.data.apiBase || "https://api.stream-weave.com").replace(/\/$/, "");
         console.log(`[weave] play ok vid=${wVid} sid=${wSid || "-"} kv=${wKv} seed=${wSeed ? "yes" : "no"} api=${wApiBase}`);
 
@@ -4488,6 +4489,7 @@ async function buildVideoSource(videoId, clientHeaders) {
           keyVersion: wKv,
           heartbeatUrl: wHb,
           endUrl: wEnd,
+          expiresIn: wExpires,
           apiBase: wApiBase,
           swTicket: swTicket || null
         };
@@ -4534,6 +4536,7 @@ async function buildVideoSource(videoId, clientHeaders) {
         keyVersion: got.keyVersion || 0,
         heartbeatUrl: got.heartbeatUrl || null,
         endUrl: got.endUrl || null,
+        expiresIn: got.expiresIn || 28800,
         apiBase: got.apiBase || "https://api.stream-weave.com",
         mediaPlaylistText: got.mediaPlaylistText || null,
         swTicket: got.swTicket || null,
@@ -5170,19 +5173,28 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
         success: true,
         data: {
           type: "weave_session",
+          // حقول رسمية لـ StreamWeavePlayer.playSession
           token: src.token,
           video_id: src.videoId || src.resolvedVideoId || null,
+          videoId: src.videoId || src.resolvedVideoId || null,
           session_id: src.sessionId || null,
+          sessionId: src.sessionId || null,
+          expires_in: Number(src.expiresIn || 28800),
+          expiresIn: Number(src.expiresIn || 28800),
           key_seed: src.keySeed || null,
+          keySeed: src.keySeed || null,
           key_version: Number(src.keyVersion || 3),
+          keyVersion: Number(src.keyVersion || 3),
           api_base: src.apiBase || "https://api.stream-weave.com",
+          apiBase: src.apiBase || "https://api.stream-weave.com",
           stream_url: src.streamUrl || null,
+          streamUrl: src.streamUrl || null,
           heartbeat_url: src.heartbeatUrl || null,
           end_url: src.endUrl || null,
           sw_ticket: src.swTicket || null,
           play_url: hlsPath,
           manifest_url: hlsPath,
-          message: "session جاهزة — مباشر أو احتياطي السيرفر"
+          message: "session جاهزة — استخدم StreamWeavePlayer.playSession"
         }
       });
     }
