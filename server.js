@@ -58,7 +58,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.22-SW424";
+const APP_VERSION = "v1.7.23-server-hls";
 
 // ==================== ANTI-DETECTION HARDENING ====================
 const ANTI_DETECT = {
@@ -1945,6 +1945,9 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
       if (kv > 0) headers["x-sw-key-version"] = String(kv);
       if (session.swTicket) headers["x-sw-ticket"] = String(session.swTicket);
       if (session.swProof) headers["x-sw-proof"] = String(session.swProof);
+      // مطلوب من player.js الرسمي عند جلب المفتاح/الرخصة
+      headers["X-SW-Key-License"] = "1";
+      headers["Accept"] = headers["Accept"] || "application/octet-stream, application/json, */*";
     }
   }
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
@@ -4396,11 +4399,12 @@ async function buildVideoSource(videoId, clientHeaders) {
                   method: "POST",
                   headers: {
                     Authorization: `Bearer ${wToken}`,
-                    Accept: "application/json, application/vnd.apple.mpegurl, */*",
+                    Accept: "application/json, application/vnd.apple.mpegurl, application/octet-stream, */*",
                     Origin: CONFIG.STREAM_ORIGIN,
                     Referer: CONFIG.STREAM_REFERER,
                     "User-Agent": CONFIG.STREAM_UA,
                     "x-sw-key-version": String(wKv || 3),
+                    "X-SW-Key-License": "1",
                     "Content-Length": "0"
                   },
                   body: ""
@@ -5167,39 +5171,35 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
     streamSessions.set(id, sessionRow);
     const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
 
-    // weave: session مباشرة للمتصفح + play_url احتياطي عبر السيرفر
-    if (src.mode === "weave" && src.token && (src.streamUrl || src.videoId)) {
-      return res.json({
-        success: true,
-        data: {
-          type: "weave_session",
-          // حقول رسمية لـ StreamWeavePlayer.playSession
-          token: src.token,
-          video_id: src.videoId || src.resolvedVideoId || null,
-          videoId: src.videoId || src.resolvedVideoId || null,
-          session_id: src.sessionId || null,
-          sessionId: src.sessionId || null,
-          expires_in: Number(src.expiresIn || 28800),
-          expiresIn: Number(src.expiresIn || 28800),
-          key_seed: src.keySeed || null,
-          keySeed: src.keySeed || null,
-          key_version: Number(src.keyVersion || 3),
-          keyVersion: Number(src.keyVersion || 3),
-          api_base: src.apiBase || "https://api.stream-weave.com",
-          apiBase: src.apiBase || "https://api.stream-weave.com",
-          stream_url: src.streamUrl || null,
-          streamUrl: src.streamUrl || null,
-          heartbeat_url: src.heartbeatUrl || null,
-          end_url: src.endUrl || null,
-          sw_ticket: src.swTicket || null,
-          play_url: hlsPath,
-          manifest_url: hlsPath,
-          message: "session جاهزة — استخدم StreamWeavePlayer.playSession"
-        }
-      });
+    // السيرفر هو اللي يشغّل: رجّع play_url (HLS مفكوك على السيرفر) كمسار أساسي
+    // مع بيانات weave احتياطية لو حابب المشغّل يجرّب StreamWeavePlayer
+    const payload = {
+      play_url: hlsPath,
+      manifest_url: hlsPath,
+      shared: false,
+      mode: src.mode || "proxy"
+    };
+    if (src.mode === "weave" && src.token && src.sessionId) {
+      payload.weave = {
+        token: src.token,
+        video_id: src.videoId || null,
+        videoId: src.videoId || null,
+        session_id: src.sessionId,
+        sessionId: src.sessionId,
+        expires_in: Number(src.expiresIn || 28800),
+        expiresIn: Number(src.expiresIn || 28800),
+        key_seed: src.keySeed || null,
+        key_version: Number(src.keyVersion || 3),
+        api_base: src.apiBase || "https://api.stream-weave.com",
+        stream_url: src.streamUrl || null,
+        heartbeat_url: src.heartbeatUrl || null,
+        end_url: src.endUrl || null,
+        sw_ticket: src.swTicket || null
+      };
+      payload.has_plain_key = Boolean(src.plainKey);
+      payload.segs = Array.isArray(src.segs) ? src.segs.length : 0;
     }
-
-    res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, shared: false } });
+    res.json({ success: true, data: payload });
   } catch (e) {
     try { const yt = await tryResolveYoutube(String(req.params.videoId || "")); if (yt) return res.json({ success: true, data: { type: "youtube", youtube_url: yt, url: yt } }); } catch {}
     console.error("[play]", e.message);
