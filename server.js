@@ -1,6 +1,9 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.12 — math from Coursatk only + anti-bulk-download + 4 videos/min
+ * VERSION v1.7.22-SW424 — stream-weave player v4.2.4 flow
+ * - Uses official play response: token, session_id, key_seed, key_version=3, stream_url
+ * - PLAYER_JS → https://player.stream-weave.com/player.js?v=4.2.4
+ * - Token pool + balanced anti-detect kept
  */
 import express from "express";
 import cors from "cors";
@@ -13,10 +16,19 @@ import { fileURLToPath } from "node:url";
 
 let ProxyAgent = null;
 let undiciFetch = null;
+let undiciAgent = null;
 try {
   const undici = await import("undici");
   ProxyAgent = undici.ProxyAgent;
   undiciFetch = undici.fetch;
+  if (undici.Agent) {
+    undiciAgent = new undici.Agent({
+      allowH2: false,
+      keepAliveTimeout: 10_000,
+      connections: 24,
+      connect: { timeout: 12_000, rejectUnauthorized: true }
+    });
+  }
 } catch {
   console.warn("[API] undici not available — UPSTREAM_PROXY disabled");
 }
@@ -46,7 +58,144 @@ const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.12";
+const APP_VERSION = "v1.7.22-SW424";
+
+// ==================== ANTI-DETECTION HARDENING ====================
+const ANTI_DETECT = {
+  // Balanced mode: videos work smoothly + still harder to detect than original
+  REQUIRE_PROXY: process.env.REQUIRE_PROXY === "1",
+  MAX_TOKENS: 12,
+  MAX_UPSTREAM_CONCURRENT: Number(process.env.UPSTREAM_CONCURRENCY || 28), // was 7 — too low, broke playback
+  PREFETCH_AHEAD: Number(process.env.PREFETCH_AHEAD || 2),                 // small prefetch helps startup
+  HLS_RATE_MAX: Number(process.env.HLS_RATE_MAX || 180),
+  PLAY_RATE_MAX: Number(process.env.PLAY_RATE_MAX || 20),
+  GLOBAL_RATE_MAX: Number(process.env.GLOBAL_RATE_MAX || 800),
+  SEG_DELAY_MIN: 0,   // remove forced delay — was breaking smooth playback
+  SEG_DELAY_MAX: 40,  // tiny jitter only
+  STREAM_IDLE_MS: 35 * 60 * 1000,
+  STREAM_MAX_MS: 8 * 3600 * 1000,
+  LOCK_HEALTH: process.env.LOCK_HEALTH === "1", // only if explicitly set
+  DISABLE_SHARED_PLAY: false, // allow shared play again so same video is efficient
+  TOKEN_FAIL_BAN_MS: 20 * 60 * 1000,
+  TOKEN_HARD_BAN_MS: 3 * 3600 * 1000,
+};
+
+const tokenPool = {
+  tokens: [],
+  idx: 0,
+};
+
+function loadTokenPool() {
+  const envTokens = String(process.env.COURSATK_TOKENS || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 30);
+  const single = (process.env.COURSATK_TOKEN || "").trim();
+
+  // ممنوع نقرأ runtime هنا — بتتعلن بعدين ويحصل Temporal Dead Zone
+  const all = [...new Set([
+    ...(single ? [single] : []),
+    ...envTokens
+  ])];
+
+  tokenPool.tokens = all.map((t) => ({
+    token: t,
+    lastUsed: 0,
+    fails: 0,
+    bannedUntil: 0,
+  }));
+
+  if (tokenPool.tokens.length) {
+    console.log(`[ANTI] token pool loaded: ${tokenPool.tokens.length} token(s)`);
+  } else {
+    console.warn("[ANTI] WARNING: no tokens found in COURSATK_TOKEN / COURSATK_TOKENS — videos will fail");
+  }
+}
+
+function getAliveToken() {
+  const now = Date.now();
+  let alive = tokenPool.tokens.filter((t) => t.bannedUntil < now);
+  if (!alive.length) {
+    // fallback من الـ env فقط (آمن في أي وقت)
+    const fallback = (process.env.COURSATK_TOKEN || "").trim();
+    if (fallback && fallback.length > 30) {
+      tokenPool.tokens.push({ token: fallback, lastUsed: 0, fails: 0, bannedUntil: 0 });
+      alive = tokenPool.tokens.filter((t) => t.bannedUntil < now);
+    }
+  }
+  if (!alive.length) throw new Error("جميع التوكنات محظورة مؤقتًا أو غير متوفرة");
+  alive.sort((a, b) => a.lastUsed - b.lastUsed);
+  const chosen = alive[0];
+  chosen.lastUsed = now;
+  return chosen.token;
+}
+
+function markTokenFailed(token, hard = false) {
+  const row = tokenPool.tokens.find((t) => t.token === token);
+  if (!row) return;
+  row.fails += 1;
+  if (hard || row.fails >= 4) {
+    row.bannedUntil = Date.now() + (hard ? ANTI_DETECT.TOKEN_HARD_BAN_MS : ANTI_DETECT.TOKEN_FAIL_BAN_MS);
+    row.fails = 0;
+    console.warn("[ANTI] token temporarily banned", hard ? "(hard)" : "(soft)");
+  }
+}
+
+function markTokenSuccess(token) {
+  const row = tokenPool.tokens.find((t) => t.token === token);
+  if (row) row.fails = Math.max(0, row.fails - 1);
+}
+
+loadTokenPool();
+
+// Expanded mobile UA pool for fingerprint reduction
+const MOBILE_UAS = [
+  "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 13; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 14; Redmi Note 13 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 12; M2101K6G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 14; SM-A556E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 15; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 14; V2330) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 13; 2201116SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+];
+
+function randomUpstreamHeaders(extra = {}, isStream = false) {
+  const ua = MOBILE_UAS[Math.floor(Math.random() * MOBILE_UAS.length)];
+  const isAndroid = /Android/i.test(ua);
+  const headers = {
+    "User-Agent": ua,
+    Accept: isStream ? "*/*" : "application/json, text/plain, */*",
+    "Accept-Language": Math.random() > 0.45 ? "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7" : "ar,en;q=0.9",
+    Origin: "https://coursatk.online",
+    Referer: "https://coursatk.online/",
+    "Sec-Fetch-Site": "same-site",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  };
+  if (isAndroid) {
+    headers["X-Requested-With"] = "com.mycompany.app.soulbrowser";
+    headers["Sec-CH-UA-Mobile"] = "?1";
+    headers["Sec-CH-UA-Platform"] = '"Android"';
+  }
+  let token = "";
+  try {
+    token = getAliveToken();
+    headers.Authorization = `Bearer ${token}`;
+  } catch (e) {
+    // fallback later
+  }
+  for (const [k, v] of Object.entries(extra || {})) {
+    if (v != null && v !== "") headers[k] = v;
+  }
+  return { headers, token };
+}
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -76,8 +225,20 @@ app.set("trust proxy", 1);
 const ALLOWED_ORIGINS = new Set([
   "https://www.durosakplus.com",
   "https://durosakplus.com",
+  "https://thanawya-club.up.railway.app",
+  "https://thanawya-club.vercel.app",
+  "https://thanaweya-club.up.railway.app",
+  "https://thanaweya-club.vercel.app",
   ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
+// Railway/Vercel public domain من البيئة
+for (const envKey of ["RAILWAY_PUBLIC_DOMAIN", "RAILWAY_STATIC_URL", "VERCEL_URL"]) {
+  const v = String(process.env[envKey] || "").trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
+  if (v) {
+    ALLOWED_ORIGINS.add("https://" + v);
+    ALLOWED_ORIGINS.add("http://" + v);
+  }
+}
 const CORS_STRICT = process.env.CORS_STRICT === "1";
 app.use(cors({
   credentials: true,
@@ -190,8 +351,10 @@ function isCloudflareBlock(status, text) {
 async function rawFetch(url, opts = {}, timeout = 15_000) {
   const signal = opts.signal || AbortSignal.timeout(timeout);
   const fetchOpts = { ...opts, signal };
-  if (proxyAgent && undiciFetch) {
-    return undiciFetch(url, { ...fetchOpts, dispatcher: proxyAgent });
+  // استخدم undici + HTTP/1.1 دائمًا لو متاح (يتجنب 426 من بعض الـ CDNs)
+  if (undiciFetch) {
+    const dispatcher = proxyAgent || undiciAgent || undefined;
+    return undiciFetch(url, dispatcher ? { ...fetchOpts, dispatcher } : fetchOpts);
   }
   return fetch(url, fetchOpts);
 }
@@ -297,11 +460,12 @@ function makeLimiter(max, maxQueue = 3000) {
   run.stats = () => ({ active, queued: q.length });
   return run;
 }
-const upstreamSlot = makeLimiter(Number(process.env.UPSTREAM_CONCURRENCY || 96));
+const upstreamSlot = makeLimiter(Number(process.env.UPSTREAM_CONCURRENCY || ANTI_DETECT.MAX_UPSTREAM_CONCURRENT));
 
-const SEG_CACHE_MAX = Number(process.env.SEGMENT_CACHE_MB || 256) * 1024 * 1024;
-const SEG_CACHE_TTL = 10 * 60_000;
-const PREFETCH_AHEAD = Number(process.env.PREFETCH_AHEAD || 3);
+const SEG_CACHE_MAX = Number(process.env.SEGMENT_CACHE_MB || 128) * 1024 * 1024;
+const SEG_CACHE_TTL = 6 * 60_000;
+const PREFETCH_AHEAD = ANTI_DETECT.PREFETCH_AHEAD;
+
 const segCache = new Map();
 let segCacheBytes = 0;
 function segDel(k) {
@@ -471,17 +635,29 @@ const CONFIG = {
   STREAM_HOSTS: [
     "api.coursatk.online",
     "stream-weave.com",
+    "api.stream-weave.com",
     "floravon.online",
+    "floravon.shop",
+    "suo2.floravon.online",
     "c-cdn.online",
     "thanawica.com",
-    "www.thanawica.com"
+    "www.thanawica.com",
+    "b-cdn.net",
+    "mediadelivery.net",
+    "iframe.mediadelivery.net",
+    "vz-878412bf-692.b-cdn.net"
   ],
+  // Bunny Stream (د. حسام عيسى / drhossamissa.com)
+  BUNNY_CDN_HOST: (process.env.BUNNY_CDN_HOST || "vz-878412bf-692.b-cdn.net").replace(/^https?:\/\//, "").replace(/\/$/, ""),
+  BUNNY_LIBRARY_ID: process.env.BUNNY_LIBRARY_ID || "396717",
+  BUNNY_REFERER: "https://iframe.mediadelivery.net/",
+  BUNNY_ORIGIN: "https://iframe.mediadelivery.net",
+  BUNNY_ENABLED: process.env.BUNNY_ENABLED !== "0",
   STREAM_ORIGIN: "https://coursatk.online",
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
   STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
-  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=1.1.1",
-  PLAYER_SCRIPT_URL: "https://player.stream-weave.com/player.js?v=4.2.4",
+  PLAYER_JS: "https://player.stream-weave.com/player.js?v=4.2.4",
   FIREBASE: (process.env.FIREBASE_URL || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, ""),
   BOOTSTRAP_ADMIN: {
     username: process.env.ADMIN_USER || "admin",
@@ -494,10 +670,11 @@ const CONFIG = {
   },
   STUDENT_SESSION_MS: 7 * 24 * 3600 * 1000,
   ADMIN_SESSION_MS: 12 * 3600 * 1000,
-  STREAM_SESSION_MS: 15 * 60 * 1000,
-  STREAM_IDLE_MS: 45 * 60 * 1000,
-  STREAM_MAX_MS: 12 * 3600 * 1000,
-  MAX_PROXY_BYTES: 12 * 1024 * 1024,
+  STREAM_SESSION_MS: 12 * 60 * 1000,
+  STREAM_IDLE_MS: ANTI_DETECT.STREAM_IDLE_MS,
+  STREAM_MAX_MS: ANTI_DETECT.STREAM_MAX_MS,
+  MAX_PROXY_BYTES: 8 * 1024 * 1024,
+
   THANAWICA_CODE: process.env.THANAWICA_CODE || "",
   THANAWICA_ENABLED: process.env.THANAWICA_ENABLED !== "0",
   CODE_TYPES: {
@@ -631,6 +808,19 @@ function getCoursatkTokenSync() {
 }
 
 loadRuntimeFile();
+// reload token pool after runtime is available + add runtime token if present
+try {
+  loadTokenPool();
+  if (runtime && runtime.coursatkToken && String(runtime.coursatkToken).length > 30) {
+    const tok = String(runtime.coursatkToken).trim();
+    if (!tokenPool.tokens.some(t => t.token === tok)) {
+      tokenPool.tokens.push({ token: tok, lastUsed: 0, fails: 0, bannedUntil: 0 });
+      console.log("[ANTI] added runtime.coursatkToken to pool, total:", tokenPool.tokens.length);
+    }
+  }
+} catch (e) {
+  console.warn("[ANTI] token pool reload:", e.message);
+}
 // لو مفيش رابط Firebase متظبط → استخدم الفايربيز الأصلي
 if (!runtime.firebaseUrl) {
   runtime.firebaseUrl = (process.env.FIREBASE_URL || CONFIG.FIREBASE || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, "");
@@ -985,7 +1175,19 @@ async function getStorageBucket() {
   return "";
 }
 
-function getCoursatkToken() { if (runtime.coursatkToken) return runtime.coursatkToken; return process.env.COURSATK_TOKEN || CONFIG.COURSATK_TOKEN || ""; }
+function getCoursatkToken() {
+  // Prefer live token from pool (supports rotation)
+  try {
+    if (tokenPool.tokens && tokenPool.tokens.length) {
+      return getAliveToken();
+    }
+  } catch {}
+  // Fallbacks
+  if (runtime && runtime.coursatkToken) return runtime.coursatkToken;
+  const envTok = (process.env.COURSATK_TOKEN || process.env.COURSATK_TOKENS || "").split(",")[0].trim();
+  if (envTok) return envTok;
+  return CONFIG.COURSATK_TOKEN || "";
+}
 
 async function refreshCoursatkTokenFromFb() {
   try { const remote = await fbGet("config/coursatkToken"); if (typeof remote === "string" && remote.length > 20) { runtime.coursatkToken = remote; CONFIG.COURSATK_TOKEN = remote; return remote; } } catch {}
@@ -1145,81 +1347,110 @@ async function loadDecryptionUtils() {
   const cachePath = path.join(__dirname, "player.stream-weave.cache.js");
   let source = null;
   try { if (fs.existsSync(cachePath)) source = fs.readFileSync(cachePath, "utf8"); } catch {}
-  if (!source) {
-    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" } });
+  // نظّف أي سطر هيدر مش JS (زي رابط الملف)
+  if (source) {
+    const lines = source.split(/\r?\n/);
+    let i = 0;
+    while (i < lines.length && lines[i] && !/^\s*(function|\(function|!function|var |const |let |\/\*|\/\/)/.test(lines[i])) i++;
+    if (i > 0) source = lines.slice(i).join("\n");
+    const cssIdx = source.indexOf("/* streamweave:embedded-css");
+    if (cssIdx > 0) source = source.slice(0, cssIdx);
+  }
+  if (!source || source.length < 1000) {
+    const r = await fetch(CONFIG.PLAYER_JS, { headers: { "User-Agent": "Mozilla/5.0", Accept: "*/*" }, signal: AbortSignal.timeout(15_000) });
     if (!r.ok) throw new Error(`player.js HTTP ${r.status}`);
     source = await r.text();
     try { fs.writeFileSync(cachePath, source); } catch {}
   }
   const { webcrypto } = crypto;
-  // The upstream player bundle expects browser EventTarget methods even though
-  // it is evaluated in Node. Provide harmless stubs for its non-DOM bootstrap.
-  const noop = () => {};
-  const eventTarget = {
-    addEventListener: noop,
-    removeEventListener: noop,
-    dispatchEvent: () => true
-  };
-  const makeElement = () => ({
-    ...eventTarget,
-    style: {},
-    setAttribute: noop,
-    removeAttribute: noop,
-    appendChild: noop,
-    removeChild: noop,
-    append: noop,
-    remove: noop,
-    canPlayType: () => ""
-  });
-  const documentStub = {
-    ...eventTarget,
-    createElement: makeElement,
-    head: makeElement(),
-    body: makeElement(),
-    documentElement: makeElement(),
-    querySelector: () => null,
-    getElementById: () => null
-  };
   const sandbox = {
-    ...eventTarget,
     window: {}, self: {}, globalThis: {}, global: {},
     console: { log() {}, warn() {}, error() {}, info() {} },
-    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer,
+    crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, Int8Array, Uint16Array, Int16Array, Uint32Array, Int32Array, Float32Array, Float64Array, DataView,
     atob: (s) => Buffer.from(s, "base64").toString("binary"),
     btoa: (s) => Buffer.from(s, "binary").toString("base64"),
     setTimeout, clearTimeout, setInterval, clearInterval,
-    requestAnimationFrame: (fn) => setTimeout(() => fn(Date.now()), 0),
-    cancelAnimationFrame: clearTimeout,
-    Promise, Error, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, Symbol, Proxy, Reflect,
-    document: documentStub,
-    navigator: { userAgent: "Node" }, location: { href: "https://coursatk.online/" },
-    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class {},
-    Event: class { constructor(type, init = {}) { this.type = type; Object.assign(this, init); } },
-    CustomEvent: class { constructor(type, init = {}) { this.type = type; Object.assign(this, init); } },
-    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
+    Promise, Error, TypeError, Object, Array, String, Number, Boolean, Math, JSON, Date, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Function, RegExp, parseInt, parseFloat, isNaN, Infinity, NaN, undefined,
+    document: {
+      createElement: () => ({ style: {}, setAttribute() {}, getAttribute() { return null; }, appendChild() {}, remove() {}, classList: { add() {}, remove() {} }, addEventListener() {}, removeEventListener() {} }),
+      head: { appendChild() {} }, body: { appendChild() {} }, documentElement: { style: {} },
+      querySelector: () => null, querySelectorAll: () => [], getElementById: () => null, addEventListener() {}, cookie: "", readyState: "complete"
+    },
+    navigator: { userAgent: "Mozilla/5.0", language: "en", mediaDevices: {} },
+    location: { href: "https://coursatk.online/", hostname: "coursatk.online", protocol: "https:", origin: "https://coursatk.online", pathname: "/", search: "", hash: "" },
+    HTMLElement: class {}, HTMLVideoElement: class {}, MediaSource: class { static isTypeSupported() { return true; } },
+    URL: { createObjectURL: () => "blob:x", revokeObjectURL() {}, canParse: () => true },
     Blob: class { constructor(p) { this.p = p; } },
-    fetch: async () => ({ ok: false }),
-    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} }
+    fetch: async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) }),
+    XMLHttpRequest: class { open() {} send() {} setRequestHeader() {} addEventListener() {} },
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    matchMedia: () => ({ matches: false, addListener() {}, addEventListener() {} }),
+    requestAnimationFrame: (cb) => setTimeout(cb, 0),
+    performance: { now: () => Date.now() },
+    EventTarget: class { addEventListener() {} removeEventListener() {} dispatchEvent() { return true; } },
+    Event: class { constructor(t) { this.type = t; } },
+    CustomEvent: class {},
+    Worker: class {},
+    WebAssembly
   };
   sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox; sandbox.global = sandbox;
-  sandbox.document = documentStub;
-  vm.runInNewContext(source, sandbox, { timeout: 8000 });
-  const du = sandbox.DecryptionUtils;
-  if (!du?.decryptPlaybackKey) throw new Error("DecryptionUtils missing");
-  decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
-  console.log("[crypto] ready");
+  sandbox.top = sandbox; sandbox.parent = sandbox;
+  try {
+    vm.runInNewContext(source, sandbox, { timeout: 12_000 });
+  } catch (e) {
+    console.warn("[crypto] player.js vm partial/fail:", e && e.message ? e.message : e);
+  }
+  // ابحث عن DecryptionUtils بأي اسم
+  let du = sandbox.DecryptionUtils || sandbox.decryptionUtils || null;
+  if (!du?.decryptPlaybackKey) {
+    for (const k of Object.getOwnPropertyNames(sandbox)) {
+      try {
+        const v = sandbox[k];
+        if (v && typeof v === "object" && typeof v.decryptPlaybackKey === "function") { du = v; break; }
+        if (v && typeof v === "function" && k.toLowerCase().includes("decrypt") && v.length >= 1) {
+          // function itself
+        }
+      } catch {}
+    }
+  }
+  if (du?.decryptPlaybackKey) {
+    decryptPlaybackKeyFn = du.decryptPlaybackKey.bind(du);
+    console.log("[crypto] ready (DecryptionUtils)");
+  } else {
+    decryptPlaybackKeyFn = null;
+    console.warn("[crypto] DecryptionUtils غير متاح في player.js الجديد — استخدام fallback keys (plain/CDN)");
+  }
 }
 
 async function unwrapKey(wrappedBuf, videoId) {
-  if (!decryptPlaybackKeyFn) throw new Error("crypto not loaded");
-  const wrapped = Buffer.isBuffer(wrappedBuf) ? new Uint8Array(wrappedBuf) : new Uint8Array(wrappedBuf);
-  if (wrapped.byteLength === 16) return Buffer.from(wrapped);
-  const result = await decryptPlaybackKeyFn(wrapped, String(videoId));
-  const key = result?.key;
-  if (!key) throw new Error("empty key");
-  const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
-  if (aes.length !== 16) throw new Error(`key len ${aes.length}`);
-  return aes;
+  const wrapped = Buffer.isBuffer(wrappedBuf) ? Buffer.from(wrappedBuf) : Buffer.from(wrappedBuf);
+  if (wrapped.length === 16) return wrapped;
+  // 1) stream-weave decryptPlaybackKey لو اتحمل
+  if (decryptPlaybackKeyFn) {
+    try {
+      const result = await decryptPlaybackKeyFn(new Uint8Array(wrapped), String(videoId));
+      const key = result?.key;
+      if (key) {
+        const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+        if (aes.length === 16) return aes;
+      }
+    } catch (e) {
+      console.warn("[unwrapKey] decryptPlaybackKey failed:", e.message);
+    }
+  }
+  // 2) CDN-style blob (pbkdf2 + aes-gcm)
+  try {
+    return await unwrapCdnKey(wrapped);
+  } catch (e) {
+    console.warn("[unwrapKey] CDN unwrap failed:", e.message);
+  }
+  // 3) لو المفتاح hex نصّي 32 حرف
+  try {
+    const s = wrapped.toString("utf8").trim();
+    if (/^[0-9a-fA-F]{32}$/.test(s)) return Buffer.from(s, "hex");
+  } catch {}
+  throw new Error("فشل فك مفتاح التشغيل — حدّث player.stream-weave.cache.js أو جرّب فيديو تاني");
 }
 
 const CDN_KEY_PASSWORD = "pQDKIpCkQxsulP";
@@ -1242,34 +1473,358 @@ function decryptSegment(encrypted, key, iv) { const decipher = crypto.createDeci
 function parseIvHex(hex) { const h = String(hex || "").replace(/^0x/i, "").trim(); if (!/^[0-9a-fA-F]{32}$/.test(h)) return null; return Buffer.from(h, "hex"); }
 function ivFromMediaSequence(seq) { const iv = Buffer.alloc(16, 0); iv.writeUInt32BE(Number(seq) >>> 0, 12); return iv; }
 
-// Upstream helpers
-async function upstreamHeaders(extra = {}, profileIdx = 0) {
-  const tok = await getCoursatkToken();
-  const profile = UA_PROFILES[profileIdx % UA_PROFILES.length];
-  return {
-    Authorization: `Bearer ${tok}`,
-    Accept: "application/json",
-    ...profile,
-    ...extra
+function decodeKeySeed(seed) {
+  if (!seed) return null;
+  const s = String(seed).trim();
+  for (const enc of ["base64url", "base64"]) {
+    try {
+      const b = Buffer.from(s, enc);
+      if (b.length >= 8) return b;
+    } catch {}
+  }
+  try { return Buffer.from(s, "utf8"); } catch { return null; }
+}
+
+/** مرشّحات مفتاح AES-128 لـ stream-weave key_version=3 (من تحليل player.js: PBKDF2 iterations=1337) */
+function weaveV3KeyCandidates(keyBin, keySeed, extraTicket) {
+  const out = [];
+  const push = (buf, tag) => {
+    if (!buf || buf.length < 16) return;
+    const k = Buffer.from(buf.subarray(0, 16));
+    const hex = k.toString("hex");
+    if (out.some((x) => x.hex === hex)) return;
+    out.push({ key: k, tag, hex });
   };
+  const bin = Buffer.isBuffer(keyBin) ? keyBin : Buffer.from(keyBin || []);
+  if (bin.length === 16) push(bin, "bin16");
+  if (bin.length === 32) {
+    push(bin.subarray(0, 16), "bin32-hi");
+    push(bin.subarray(16, 32), "bin32-lo");
+  }
+  const seed = decodeKeySeed(keySeed);
+  let ticketBuf = null;
+  if (extraTicket) {
+    try {
+      ticketBuf = Buffer.from(String(extraTicket), "base64url");
+    } catch {
+      try { ticketBuf = Buffer.from(String(extraTicket), "base64"); } catch {}
+    }
+  }
+
+  const pbkdf = (password, salt, iter, tag) => {
+    try {
+      const derived = crypto.pbkdf2Sync(password, salt, iter, 32, "sha256");
+      push(derived, tag + "-hi");
+      push(derived.subarray(16), tag + "-lo");
+    } catch {}
+  };
+
+  if (seed) {
+    push(seed, "seed16");
+    if (seed.length >= 32) push(seed.subarray(16, 32), "seed32-lo");
+    const sh = crypto.createHash("sha256").update(seed).digest();
+    push(sh, "sha256(seed)");
+    if (bin.length >= 16) {
+      const b16 = bin.subarray(0, 16);
+      const x = Buffer.alloc(16);
+      for (let i = 0; i < 16; i++) x[i] = b16[i] ^ seed[i % seed.length];
+      push(x, "bin16-xor-seed");
+      const x2 = Buffer.alloc(16);
+      for (let i = 0; i < 16; i++) x2[i] = b16[i] ^ sh[i];
+      push(x2, "bin16-xor-sha256seed");
+      push(crypto.createHash("sha256").update(Buffer.concat([b16, seed])).digest(), "sha256(bin||seed)");
+      push(crypto.createHash("sha256").update(Buffer.concat([seed, b16])).digest(), "sha256(seed||bin)");
+      try {
+        push(crypto.createHmac("sha256", seed).update(b16).digest(), "hmac(seed,bin)");
+        push(crypto.createHmac("sha256", b16).update(seed).digest(), "hmac(bin,seed)");
+      } catch {}
+
+      // player.js: deriveBits / PBKDF2 iterations = 1337
+      for (const iter of [1337, 1000, 1, 100, 10000]) {
+        pbkdf(seed, b16, iter, `pbkdf2(seed,bin,${iter})`);
+        pbkdf(b16, seed, iter, `pbkdf2(bin,seed,${iter})`);
+        pbkdf(seed, Buffer.concat([b16, seed]), iter, `pbkdf2(seed,bin||seed,${iter})`);
+      }
+      // HKDF-SHA256 style expand
+      try {
+        const prk = crypto.createHmac("sha256", b16).update(seed).digest();
+        const okm = crypto.createHmac("sha256", prk).update(Buffer.concat([Buffer.from([1])])).digest();
+        push(okm, "hkdf-ish(bin,seed)");
+        const prk2 = crypto.createHmac("sha256", seed).update(b16).digest();
+        push(crypto.createHmac("sha256", prk2).update(Buffer.concat([Buffer.from([1])])).digest(), "hkdf-ish(seed,bin)");
+      } catch {}
+
+      // AES-ECB "unwrap" of bin using seed as key (and reverse)
+      try {
+        if (seed.length >= 16) {
+          const d1 = crypto.createDecipheriv("aes-128-ecb", seed.subarray(0, 16), null);
+          d1.setAutoPadding(false);
+          push(Buffer.concat([d1.update(b16), d1.final()]), "aes-ecb-dec(seed,bin)");
+          const e1 = crypto.createCipheriv("aes-128-ecb", seed.subarray(0, 16), null);
+          e1.setAutoPadding(false);
+          push(Buffer.concat([e1.update(b16), e1.final()]), "aes-ecb-enc(seed,bin)");
+        }
+        const d2 = crypto.createDecipheriv("aes-128-ecb", b16, null);
+        d2.setAutoPadding(false);
+        if (seed.length >= 16) push(Buffer.concat([d2.update(seed.subarray(0, 16)), d2.final()]), "aes-ecb-dec(bin,seed)");
+      } catch {}
+    }
+  }
+
+  if (ticketBuf && ticketBuf.length >= 16) {
+    push(ticketBuf, "ticket16");
+    if (bin.length >= 16) {
+      const x = Buffer.alloc(16);
+      for (let i = 0; i < 16; i++) x[i] = bin[i] ^ ticketBuf[i];
+      push(x, "bin-xor-ticket");
+      if (seed) {
+        pbkdf(seed, ticketBuf.subarray(0, 16), 1337, "pbkdf2(seed,ticket,1337)");
+        pbkdf(ticketBuf.subarray(0, 16), bin.subarray(0, 16), 1337, "pbkdf2(ticket,bin,1337)");
+      }
+    }
+  }
+
+  try {
+    const t = bin.toString("utf8").trim();
+    if (/^[0-9a-fA-F]{32}$/.test(t)) push(Buffer.from(t, "hex"), "hex-text");
+  } catch {}
+  return out;
+}
+
+function looksLikeMpegTs(buf, strict = false) {
+  if (!buf || buf.length < 188) return false;
+  // fMP4 / CMAF
+  try {
+    const head = buf.slice(4, 8).toString("ascii");
+    if (head === "ftyp" || head === "moof" || head === "mdat" || head === "sidx" || head === "styp") return true;
+  } catch {}
+  const need = strict ? 8 : 5;
+  let hits = 0;
+  const limit = Math.min(buf.length, 188 * 12);
+  for (let off = 0; off + 188 <= limit; off += 188) {
+    if (buf[off] === 0x47) hits++;
+  }
+  if (hits >= need) return true;
+  // scan for alignment
+  for (let i = 0; i < Math.min(188, buf.length - 188 * 3); i++) {
+    let h = 0;
+    for (let k = 0; k < 4; k++) if (buf[i + k * 188] === 0x47) h++;
+    if (h >= 4) return true;
+  }
+  return false;
+}
+
+function decryptSegmentCtr(encrypted, key, iv) {
+  const decipher = crypto.createDecipheriv("aes-128-ctr", key, iv);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+}
+
+/**
+ * جرّب مرشّحات المفتاح مع IV من الـ playlist على أول مقطع — يرجع المفتاح الصالح أو null
+ */
+async function resolveWeaveV3PlainKey({ keyBuf, keySeed, iv, sampleEncrypted, ticket, logTag = "weave-v3" }) {
+  if (keyBuf && Buffer.isBuffer(keyBuf) && keyBuf.length === 16) {
+    console.log(`[${logTag}] raw 16-byte key detected`);
+    const rawKey = Buffer.from(keyBuf);
+    const ivs = [];
+    if (iv && Buffer.isBuffer(iv) && iv.length === 16) ivs.push({ iv, tag: "playlist" });
+    for (let s = 0; s < 4; s++) ivs.push({ iv: ivFromMediaSequence(s), tag: `seq${s}` });
+    ivs.push({ iv: Buffer.alloc(16, 0), tag: "zero" });
+    if (!sampleEncrypted || sampleEncrypted.length < 32) return { key: rawKey, mode: "cbc", ivMode: "playlist", tag: "raw-16" };
+    for (const { iv: ti, tag: it } of ivs) {
+      try { if (looksLikeMpegTs(decryptSegment(sampleEncrypted, rawKey, ti), true)) return { key: rawKey, mode: "cbc", ivMode: it.startsWith("seq") ? "seq" : "playlist", tag: "raw-16" }; } catch {}
+    }
+    for (const { iv: ti, tag: it } of ivs) {
+      try { if (looksLikeMpegTs(decryptSegmentCtr(sampleEncrypted, rawKey, ti), true)) return { key: rawKey, mode: "ctr", ivMode: it.startsWith("seq") ? "seq" : "playlist", tag: "raw-16" }; } catch {}
+    }
+    return { key: rawKey, mode: "cbc", ivMode: "playlist", tag: "raw-16-fallback" };
+  }
+  const cands = weaveV3KeyCandidates(keyBuf, keySeed, ticket);
+  if (!cands.length) {
+    console.warn(`[${logTag}] no key candidates (binLen=${keyBuf?.length || 0} seed=${keySeed ? "yes" : "no"})`);
+    return null;
+  }
+  const ivs = [];
+  if (iv && Buffer.isBuffer(iv) && iv.length === 16) ivs.push({ iv, tag: "playlist" });
+  for (let s = 0; s < 4; s++) ivs.push({ iv: ivFromMediaSequence(s), tag: `seq${s}` });
+  // zero IV
+  ivs.push({ iv: Buffer.alloc(16, 0), tag: "zero" });
+
+  if (!sampleEncrypted || sampleEncrypted.length < 32) {
+    const prefer = cands.find((c) => c.tag === "bin16") || cands[0];
+    console.warn(`[${logTag}] no sample segment — using candidate ${prefer.tag} without TS validate`);
+    return { key: prefer.key, mode: "cbc", ivMode: "playlist", tag: prefer.tag };
+  }
+
+  console.log(`[${logTag}] testing ${cands.length} keys × ${ivs.length} IVs on sample len=${sampleEncrypted.length}`);
+
+  let ctrFallback = null;
+
+  // 1) فضّل CBC أولاً (HLS AES-128 القياسي + player.html)
+  for (const cand of cands) {
+    for (const { iv: testIv, tag: ivTag } of ivs) {
+      try {
+        const plain = decryptSegment(sampleEncrypted, cand.key, testIv);
+        if (looksLikeMpegTs(plain, true)) {
+          console.log(`[${logTag}] plainKey OK via ${cand.tag} CBC iv=${ivTag}`);
+          return { key: cand.key, mode: "cbc", ivMode: ivTag.startsWith("seq") ? "seq" : "playlist", tag: cand.tag, ivTag };
+        }
+      } catch {}
+      try {
+        const d = crypto.createDecipheriv("aes-128-cbc", cand.key, testIv);
+        d.setAutoPadding(false);
+        const aligned = sampleEncrypted.subarray(0, sampleEncrypted.length - (sampleEncrypted.length % 16));
+        if (aligned.length >= 188) {
+          const plain = Buffer.concat([d.update(aligned), d.final()]);
+          if (looksLikeMpegTs(plain, true)) {
+            console.log(`[${logTag}] plainKey OK via ${cand.tag} CBC-nopad iv=${ivTag}`);
+            return { key: cand.key, mode: "cbc-nopad", ivMode: ivTag.startsWith("seq") ? "seq" : "playlist", tag: cand.tag, ivTag };
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 2) CTR — قبول فقط مع تحقق صارم (تقليل false positive)
+  for (const cand of cands) {
+    for (const { iv: testIv, tag: ivTag } of ivs) {
+      try {
+        const plain = decryptSegmentCtr(sampleEncrypted, cand.key, testIv);
+        if (looksLikeMpegTs(plain, true)) {
+          console.log(`[${logTag}] plainKey OK via ${cand.tag} CTR iv=${ivTag}`);
+          const hit = { key: cand.key, mode: "ctr", ivMode: ivTag.startsWith("seq") ? "seq" : "playlist", tag: cand.tag, ivTag };
+          // لو playlist IV مع CTR نفضّله؛ seq CTR نخزّنه كـ fallback
+          if (ivTag === "playlist") return hit;
+          if (!ctrFallback) ctrFallback = hit;
+        }
+      } catch {}
+    }
+  }
+  if (ctrFallback) {
+    console.log(`[${logTag}] using CTR fallback ${ctrFallback.tag} iv=${ctrFallback.ivTag}`);
+    return ctrFallback;
+  }
+
+  console.warn(`[${logTag}] reject key candidates all IVs failed (tried ${cands.length} keys × ${ivs.length} IVs)`);
+  try {
+    console.warn(`[${logTag}] debug bin16=${Buffer.from(keyBuf).subarray(0, 16).toString("hex")} seedPrefix=${String(keySeed || "").slice(0, 12)}`);
+  } catch {}
+  // player.js Vd: 16-byte key payload returns as raw AES key — keep it for per-segment recovery
+  const prefer = cands.find((c) => c.tag === "bin16") || cands[0];
+  if (prefer) {
+    console.warn(`[${logTag}] soft-accept ${prefer.tag} without sample TS match (player.js treats bin16 as plain key)`);
+    return { key: prefer.key, mode: "cbc", ivMode: "playlist", tag: prefer.tag + "-soft" };
+  }
+  return null;
+}
+
+/** x-sw-proof — جرّب عدة صيغ (الـ player.js الحقيقي معقّد) */
+function makeSwProof({ keySeed, sessionId, token, path, ticket }) {
+  const seed = decodeKeySeed(keySeed) || Buffer.from(String(keySeed || ""), "utf8");
+  const sid = String(sessionId || "");
+  const pathStr = String(path || `/playback/session/${sid}/key`);
+  const tokTail = String(token || "").slice(-16);
+  const ticketStr = String(ticket || "");
+  const ticketBuf = (() => { try { return Buffer.from(ticketStr, "base64url"); } catch { return Buffer.from(ticketStr); } })();
+
+  const msgs = [
+    [sid, pathStr, tokTail].join("|"),
+    [sid, "/key", tokTail].join("|"),
+    [sid, pathStr].join("|"),
+    sid + pathStr,
+    pathStr,
+    ticketStr,
+    [sid, ticketStr].join("|"),
+    [ticketStr, sid].join("|"),
+    Buffer.concat([seed.slice(0, 16), Buffer.from(sid)]),
+    Buffer.concat([ticketBuf.length === 32 ? ticketBuf : Buffer.alloc(0), Buffer.from(sid)]),
+  ];
+
+  // أول مرشّح (للتوافق مع الكود القديم)
+  const primary = crypto.createHmac("sha256", seed.length ? seed : Buffer.from("sw")).update(Buffer.from(String(msgs[0]))).digest();
+  return primary.toString("base64url").replace(/=+$/, "");
+}
+
+/** قائمة proofs للتجربة المتتالية */
+function makeSwProofCandidates({ keySeed, sessionId, token, path, ticket }) {
+  const seed = decodeKeySeed(keySeed) || Buffer.from(String(keySeed || ""), "utf8");
+  const sid = String(sessionId || "");
+  const pathStr = String(path || `/playback/session/${sid}/key`);
+  const tokTail = String(token || "").slice(-16);
+  const ticketStr = String(ticket || "");
+  let ticketBuf = Buffer.alloc(0);
+  try { ticketBuf = Buffer.from(ticketStr, "base64url"); } catch {}
+
+  const out = new Set();
+  const add = (buf) => { if (buf && buf.length) out.add(Buffer.from(buf).toString("base64url").replace(/=+$/, "")); };
+
+  const msgList = [
+    [sid, pathStr, tokTail].join("|"),
+    [sid, "/key", tokTail].join("|"),
+    [sid, pathStr].join("|"),
+    sid + "|" + pathStr,
+    pathStr,
+    "/key",
+    ticketStr,
+    sid + "|" + ticketStr,
+    ticketStr + "|" + sid,
+    sid + ticketStr,
+    ticketStr + sid,
+    [sid, ticketStr, "/key"].join("|"),
+  ];
+
+  for (const msg of msgList) {
+    add(crypto.createHmac("sha256", seed.length ? seed : Buffer.from("sw")).update(String(msg)).digest());
+    if (ticketBuf.length) add(crypto.createHmac("sha256", ticketBuf).update(String(msg)).digest());
+    add(crypto.createHash("sha256").update(Buffer.concat([seed, Buffer.from(String(msg))])).digest());
+  }
+  if (ticketBuf.length === 32) {
+    const xored = Buffer.alloc(32);
+    for (let i = 0; i < 32; i++) xored[i] = seed[i % seed.length] ^ ticketBuf[i];
+    add(xored);
+    add(crypto.createHash("sha256").update(xored).digest());
+    add(crypto.createHmac("sha256", seed).update(ticketBuf).digest());
+    add(crypto.createHmac("sha256", ticketBuf).update(seed).digest());
+  }
+  // proof معروف من جلسة ناجحة (للاختبار فقط — مش عام)
+  return [...out];
+}
+
+// Upstream helpers (hardened)
+async function upstreamHeaders(extra = {}, _profileIdx = 0) {
+  const { headers, token } = randomUpstreamHeaders(extra, false);
+  if (!headers.Authorization) {
+    const tok = await getCoursatkToken().catch(() => getAliveToken());
+    headers.Authorization = `Bearer ${tok}`;
+  }
+  return headers;
 }
 
 async function upstreamJsonRaw(apiPath, options = {}) {
   const isGet = !options.method || String(options.method).toUpperCase() === "GET";
   const url = `${CONFIG.COURSATK_API}${apiPath}`;
   let lastErr = null;
+  const maxAttempts = Math.min(6, Math.max(3, tokenPool.tokens.length || 3));
 
-  for (let p = 0; p < UA_PROFILES.length; p++) {
+  for (let p = 0; p < maxAttempts; p++) {
+    let usedToken = "";
     try {
-      const headers = await upstreamHeaders(options.headers || {}, p);
+      const { headers, token } = randomUpstreamHeaders(options.headers || {}, false);
+      usedToken = token;
+      if (!headers.Authorization) {
+        const tok = await getCoursatkToken().catch(() => getAliveToken());
+        headers.Authorization = `Bearer ${tok}`;
+        usedToken = tok;
+      }
       const r = await upstreamSlot(() =>
         fetchT(url, { ...options, headers }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES, retryOn: [429, 502, 503, 504, 408, 500] })
       );
       const text = await r.text();
       if (isCloudflareBlock(r.status, text)) {
-        lastErr = new Error("Cloudflare حاجب IP السيرفر على Coursatk — استخدم UPSTREAM_PROXY أو UPSTREAM_RELAY_URL");
-        console.warn("[upstream] CF block", apiPath, "profile", p);
-        if (p < UA_PROFILES.length - 1) continue;
+        lastErr = new Error("Cloudflare block — use UPSTREAM_PROXY or UPSTREAM_RELAY_URL");
+        console.warn("[upstream] CF block", apiPath);
+        if (usedToken) markTokenFailed(usedToken, false);
+        if (p < maxAttempts - 1) continue;
         throw lastErr;
       }
       let data;
@@ -1277,23 +1832,31 @@ async function upstreamJsonRaw(apiPath, options = {}) {
         data = JSON.parse(text);
       } catch {
         lastErr = new Error(`Upstream non-JSON (${r.status})`);
-        if (r.status === 403 || r.status === 401) {
-          if (p < UA_PROFILES.length - 1) continue;
+        if ((r.status === 403 || r.status === 401) && p < maxAttempts - 1) {
+          if (usedToken) markTokenFailed(usedToken, r.status === 401);
+          continue;
         }
         throw lastErr;
       }
       if (!r.ok) {
         const msg = data?.error || data?.message || `Upstream HTTP ${r.status}`;
-        if (/اشتراك|انته|expired|token/i.test(String(msg))) throw new Error(msg);
+        if (/اشتراك|انته|expired|token/i.test(String(msg))) {
+          if (usedToken) markTokenFailed(usedToken, true);
+          throw new Error(msg);
+        }
         lastErr = new Error(msg);
-        if (r.status === 403 && p < UA_PROFILES.length - 1) continue;
+        if ((r.status === 403 || r.status === 401) && p < maxAttempts - 1) {
+          if (usedToken) markTokenFailed(usedToken, r.status === 401);
+          continue;
+        }
         throw lastErr;
       }
+      if (usedToken) markTokenSuccess(usedToken);
       return data;
     } catch (e) {
       lastErr = e;
-      if (p < UA_PROFILES.length - 1 && /non-JSON|403|Cloudflare|Hajeb|حاجب/i.test(String(e.message || ""))) {
-        await delay(150 + Math.random() * 200);
+      if (p < maxAttempts - 1 && /non-JSON|403|401|Cloudflare|block/i.test(String(e.message || ""))) {
+        await delay(180 + Math.random() * 220);
         continue;
       }
       throw e;
@@ -1346,46 +1909,64 @@ function allowedStreamUrl(raw, session = null) {
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
   const ch = clientHeaders || {};
-  const headers = {
-    Authorization: `Bearer ${session.token}`, Accept: "*/*", "Cache-Control": "no-cache",
-    Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER,
-    "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH,
-    "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
-  };
+  const isBunny = session && (session.mode === "bunny" || session.mode === "hossam");
+  let headers;
+  if (isBunny) {
+    // Bunny: keep required referer, randomize UA
+    const ua = MOBILE_UAS[Math.floor(Math.random() * MOBILE_UAS.length)];
+    headers = {
+      Accept: "*/*",
+      "Cache-Control": "no-cache",
+      Origin: CONFIG.BUNNY_ORIGIN || "https://iframe.mediadelivery.net",
+      Referer: CONFIG.BUNNY_REFERER || "https://iframe.mediadelivery.net/",
+      "User-Agent": ua
+    };
+  } else {
+    let host = "";
+    try { host = new URL(url).hostname.toLowerCase(); } catch {}
+    const isFloravon = /floravon\./i.test(host) || /\.floravon\./i.test(host);
+    const isSw = /stream-weave\.com$/i.test(host) || host.endsWith(".stream-weave.com");
+    const { headers: rnd } = randomUpstreamHeaders({}, true);
+    headers = {
+      Accept: "*/*",
+      "Cache-Control": "no-cache",
+      Origin: CONFIG.STREAM_ORIGIN,
+      Referer: CONFIG.STREAM_REFERER,
+      "User-Agent": rnd["User-Agent"] || CONFIG.STREAM_UA,
+      "Accept-Language": rnd["Accept-Language"] || "ar,en;q=0.9",
+    };
+    // floravon CDN موقّع بـ token في الـ query — متبعتش Bearer
+    if (!isFloravon && session.token) {
+      headers.Authorization = `Bearer ${session.token}`;
+      headers["X-Requested-With"] = "com.mycompany.app.soulbrowser";
+    }
+    if (isSw) {
+      const kv = Number(session.keyVersion || session.key_version || 0);
+      if (kv > 0) headers["x-sw-key-version"] = String(kv);
+      if (session.swTicket) headers["x-sw-ticket"] = String(session.swTicket);
+      if (session.swProof) headers["x-sw-proof"] = String(session.swProof);
+    }
+  }
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
     if (ch[name]) headers[name] = ch[name];
   }
   for (const [k, v] of Object.entries(extra || {})) { if (v != null && v !== "") headers[k] = v; }
   const hasRange = Boolean(headers.Range || headers.range);
-  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 30_000, retries: hasRange ? 2 : UPSTREAM_FETCH_RETRIES }));
+  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 30_000, retries: hasRange ? 2 : Math.min(3, UPSTREAM_FETCH_RETRIES) }));
 }
 
-app.use(rateLimit({ max: 1500, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
-app.use("/api/stream/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
-// حد المقاطع: يمنع سحب المحاضرة كاملة بسرعة من سكربت/منصة تانية
-app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || 420), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات بث كثيرة — هدّي شوية" }));
-app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 30), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
+app.use(rateLimit({ max: ANTI_DETECT.GLOBAL_RATE_MAX, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
+app.use("/api/stream/", rateLimit({ max: 400, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
+// حد المقاطع صارم ضد bulk / detection
+app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || ANTI_DETECT.HLS_RATE_MAX), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات كثيرة" }));
+app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || ANTI_DETECT.PLAY_RATE_MAX), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات كثيرة" }));
 
 app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    service: "thanawya-world-api",
-    cryptoReady: Boolean(decryptPlaybackKeyFn),
-    decryptSegments: true,
-    directSegments: process.env.HLS_DIRECT_SEGMENTS !== "0",
-    version: APP_VERSION,
-    upstreamProxy: Boolean(proxyAgent),
-    upstreamRelay: Boolean(UPSTREAM_RELAY_URL),
-    tokenConfigured: Boolean(getCoursatkTokenSync()),
-    cache: {
-      segments: segCache.size,
-      segmentMB: Math.round(segCacheBytes / 1048576),
-      sources: sourceCache.size,
-      streamSessions: streamSessions.size,
-      upstream: upstreamSlot.stats()
-    },
-    now: new Date().toISOString()
-  });
+  if (ANTI_DETECT.LOCK_HEALTH) {
+    return res.status(404).end();
+  }
+  // minimal response only — no version, no cache stats, no token info
+  res.json({ ok: true });
 });
 
 app.get("/api/public/code-types", (_req, res) => {
@@ -2644,7 +3225,7 @@ app.get("/api/config", requireStudent, async (req, res) => {
   let subjectIds = [];
   const secInfo = await resolveSection(req.student.section, yearOverride);
   if (secInfo) { yearId = secInfo.yearId || yearId; subjectIds = secInfo.subjectIds || []; }
-  res.json({ success: true, yearId, subjectIds, cryptoReady: Boolean(decryptPlaybackKeyFn), decryptSegments: true, playerScriptUrl: CONFIG.PLAYER_SCRIPT_URL });
+  res.json({ success: true, yearId, subjectIds, cryptoReady: Boolean(decryptPlaybackKeyFn), decryptSegments: true });
 });
 
 const THANAWICA_ALLOWED_SECTIONS = new Set(["scientific_sciences", "scientific_math", "azhari"]);
@@ -2705,6 +3286,17 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
       } catch (e) { console.warn("[subjects] thanawica hybrid skip:", e.message); }
     }
 
+    // حقن مادة أحياء — د. حسام عيسى (Bunny)
+    results.push({
+      id: HOSSAM_SUBJECT_ID,
+      name: "أحياء — د. حسام عيسى",
+      image_url: null,
+      year_id: yearId,
+      is_published: true,
+      order_index: results.length + 1,
+      _source: "hossam"
+    });
+
     res.json({ success: true, message: "Success", data: results });
   } catch (e) { jsonError(res, 502, e.message); }
 });
@@ -2712,6 +3304,18 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (String(req.params.id) === String(HOSSAM_SUBJECT_ID) || String(req.params.id) === "hos_biology") {
+      return res.json({
+        success: true,
+        message: "Success",
+        data: {
+          id: HOSSAM_SUBJECT_ID,
+          name: "أحياء — د. حسام عيسى",
+          image_url: null,
+          teachers: [{ id: HOSSAM_TEACHER_ID, name: "د. حسام عيسى", image_url: null, chapter_count: (HOSSAM_CATALOG.courses || []).length }]
+        }
+      });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thTeachers(req.params.id);
       return res.json({ success: true, message: "Success", data });
@@ -2723,6 +3327,19 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
+      const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
+        id: HOSSAM_CHAPTER_BASE + i,
+        name: c.name,
+        image_url: null,
+        teacher_name: HOSSAM_CATALOG.teacher,
+        subject_name: HOSSAM_CATALOG.subject,
+        lecture_count: (c.lessons || []).length,
+        _source: "hossam",
+        _courseId: c.id
+      }));
+      return res.json({ success: true, message: "Success", data: chapters });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thChapters(req.params.id);
       return res.json({ success: true, message: "Success", data });
@@ -2734,6 +3351,26 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    const cid = Number(req.params.id);
+    if (Number.isFinite(cid) && cid >= HOSSAM_CHAPTER_BASE && cid < HOSSAM_CHAPTER_BASE + 100) {
+      const idx = cid - HOSSAM_CHAPTER_BASE;
+      const course = (HOSSAM_CATALOG.courses || [])[idx];
+      if (!course) return jsonError(res, 404, "فصل حسام غير موجود");
+      const lectures = (course.lessons || []).map((l) => ({
+        id: HOSSAM_LECTURE_BASE + Number(l.lessonId),
+        name: l.title || (`درس ${l.lessonId}`),
+        image_url: null,
+        chapter_name: course.name,
+        teacher_name: HOSSAM_CATALOG.teacher,
+        subject_name: HOSSAM_CATALOG.subject,
+        video_count: l.videoId ? 1 : 0,
+        pdf_count: 0,
+        exam_count: 0,
+        _source: "hossam",
+        _videoId: l.videoId || null
+      }));
+      return res.json({ success: true, message: "Success", data: lectures });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
       const data = await thLectures(req.params.id);
       return res.json({ success: true, message: "Success", data });
@@ -2744,10 +3381,226 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
 
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
+    const lid = Number(req.params.id);
+    if (Number.isFinite(lid) && lid >= HOSSAM_LECTURE_BASE) {
+      const lessonId = lid - HOSSAM_LECTURE_BASE;
+      let found = null; let courseName = "";
+      for (const c of HOSSAM_CATALOG.courses || []) {
+        for (const l of c.lessons || []) {
+          if (Number(l.lessonId) === lessonId) { found = l; courseName = c.name; break; }
+        }
+        if (found) break;
+      }
+      if (!found) return jsonError(res, 404, "درس حسام غير موجود — حدّث الكتالوج بعد resolve-lesson");
+      return res.json({
+        success: true,
+        message: "Success",
+        data: {
+          lecture_id: lid,
+          lecture_name: found.title || (`درس ${lessonId}`),
+          videos: found.videoId ? [{ id: found.videoId, title: found.title || found.videoId, duration: 0, _source: "hossam" }] : [],
+          pdfs: [],
+          exams: []
+        }
+      });
+    }
     if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) return res.json(await thLectureContent(req.params.id));
     res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`));
   } catch (e) { jsonError(res, 502, e.message); }
 });
+
+
+// ==================== Bunny Stream (د. حسام عيسى) — فك حماية iframe/Referer + AES-128 ====================
+// كتالوج أولي — د. حسام عيسى (Bunny). أضف guids بعد resolve-lesson
+const HOSSAM_SUBJECT_ID = 900001;
+const HOSSAM_TEACHER_ID = 900001;
+const HOSSAM_CHAPTER_BASE = 900100;
+const HOSSAM_LECTURE_BASE = 910000;
+const HOSSAM_CATALOG = {
+  teacher: "د. حسام عيسى",
+  subject: "أحياء",
+  platform: "drhossamissa.com",
+  libraryId: "396717",
+  courses: [
+    {
+      id: "hormones-workshop",
+      name: "ورشة الهرمونات",
+      courseId: 9,
+      lessons: [
+        { lessonId: 120, title: "ورشة الهرمونات — الدرس المتاح", videoId: "bn_1e836766-fc56-46cf-a702-e245d193cfbb", guid: "1e836766-fc56-46cf-a702-e245d193cfbb" },
+        { lessonId: 121, title: "الدرس الاول", videoId: null, guid: null },
+        { lessonId: 122, title: "الدرس الثاني", videoId: null, guid: null },
+        { lessonId: 123, title: "حل الدرس الاول", videoId: null, guid: null },
+        { lessonId: 124, title: "حل الدرس الثاني", videoId: null, guid: null },
+        { lessonId: 125, title: "حل كتاب المرشد", videoId: null, guid: null },
+        { lessonId: 126, title: "مقدمة الهرمونات في النبات والإنسان", videoId: null, guid: null },
+        { lessonId: 127, title: "الغدة النخامية", videoId: null, guid: null },
+        { lessonId: 128, title: "الغدة الدرقية والجارات درقية", videoId: null, guid: null },
+        { lessonId: 129, title: "الهرمونات — تكملة", videoId: null, guid: null },
+        { lessonId: 130, title: "الهرمونات — مراجعة", videoId: null, guid: null }
+      ]
+    }
+  ]
+};
+
+function isBunnyVideoId(id) {
+  return /^(?:bn|hos|hossam)_/i.test(String(id || ""));
+}
+function parseBunnyGuid(videoId) {
+  const raw = String(videoId || "");
+  const m = raw.match(/^(?:bn|hos|hossam)_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+async function bunnyFetch(url, extraHeaders = {}) {
+  const headers = {
+    Accept: "*/*",
+    "Cache-Control": "no-cache",
+    Origin: CONFIG.BUNNY_ORIGIN || "https://iframe.mediadelivery.net",
+    Referer: CONFIG.BUNNY_REFERER || "https://iframe.mediadelivery.net/",
+    "User-Agent": CONFIG.STREAM_UA || "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
+    ...extraHeaders
+  };
+  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 30_000, retries: 2 }));
+}
+function pickBunnyVariant(masterText, prefer = ["720p", "480p", "1080p", "360p", "240p"]) {
+  const lines = String(masterText || "").split(/\r?\n/);
+  const variants = [];
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t.startsWith("#EXT-X-STREAM-INF")) continue;
+    const next = (lines[i + 1] || "").trim();
+    if (!next || next.startsWith("#")) continue;
+    const bw = Number((t.match(/BANDWIDTH=(\d+)/) || [])[1] || 0);
+    const res = ((t.match(/RESOLUTION=(\d+x\d+)/) || [])[1] || "");
+    variants.push({ line: next, bw, res, raw: t });
+  }
+  if (!variants.length) return null;
+  for (const p of prefer) {
+    const hit = variants.find((v) => v.line.includes(p) || (p === "720p" && v.res.startsWith("1280")) || (p === "1080p" && v.res.startsWith("1920")) || (p === "480p" && v.res.startsWith("854")) || (p === "360p" && v.res.startsWith("640")));
+    if (hit) return hit.line;
+  }
+  variants.sort((a, b) => b.bw - a.bw);
+  return variants[0].line;
+}
+async function buildBunnySource(guid, clientHeaders) {
+  const host = CONFIG.BUNNY_CDN_HOST || "vz-878412bf-692.b-cdn.net";
+  const base = `https://${host}/${guid}`;
+  const masterUrl = `${base}/playlist.m3u8`;
+  const masterRes = await bunnyFetch(masterUrl);
+  if (!masterRes.ok) {
+    const e = new Error(`Bunny master HTTP ${masterRes.status}`);
+    e.status = masterRes.status === 403 ? 403 : 502;
+    throw e;
+  }
+  const masterText = await masterRes.text();
+  if (!masterText.includes("#EXTM3U")) throw new Error("Bunny playlist غير صالح");
+
+  let variantRel = pickBunnyVariant(masterText) || "720p/video.m3u8";
+  let variantUrl;
+  try { variantUrl = new URL(variantRel, masterUrl).href; } catch { variantUrl = `${base}/${variantRel.replace(/^\//, "")}`; }
+
+  const varRes = await bunnyFetch(variantUrl);
+  if (!varRes.ok) throw new Error(`Bunny variant HTTP ${varRes.status}`);
+  const varText = await varRes.text();
+  if (!varText.includes("#EXTM3U")) throw new Error("Bunny variant غير صالح");
+
+  const allowedHosts = new Set([
+    ...CONFIG.STREAM_HOSTS,
+    host,
+    "b-cdn.net",
+    "mediadelivery.net",
+    "iframe.mediadelivery.net"
+  ]);
+  try { allowedHosts.add(new URL(variantUrl).hostname); } catch {}
+
+  const src = {
+    reqVideoId: "bn_" + guid,
+    videoId: guid,
+    mode: "bunny",
+    token: "bunny",
+    streamUrl: masterUrl,
+    allowedHosts,
+    plainKey: null,
+    defaultIv: null,
+    mediaSeq: 0,
+    segs: [],
+    playlist: "",
+    targetDuration: 4,
+    createdAt: now()
+  };
+
+  const lines = varText.split(/\r?\n/);
+  const out = [];
+  const segs = [];
+  let mediaSeq = 0;
+  let currentIv = null;
+  let keyFetched = false;
+  let segIndex = 0;
+  let targetDuration = 4;
+
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (t.startsWith("#EXT-X-MEDIA-SEQUENCE:")) mediaSeq = Number(t.split(":")[1]) || 0;
+    if (t.startsWith("#EXT-X-TARGETDURATION:")) targetDuration = Number(t.split(":")[1]) || targetDuration;
+  }
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#EXT-X-KEY:")) {
+      const uri = line.match(/URI="([^"]+)"/)?.[1];
+      const ivHex = line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i)?.[1];
+      if (ivHex) currentIv = parseIvHex(ivHex);
+      if (uri && !keyFetched) {
+        const keyUrl = new URL(uri, variantUrl).href;
+        try { allowedHosts.add(new URL(keyUrl).hostname); } catch {}
+        const keyRes = await bunnyFetch(keyUrl);
+        if (!keyRes.ok) throw new Error(`Bunny key HTTP ${keyRes.status}`);
+        const keyBuf = Buffer.from(await keyRes.arrayBuffer());
+        if (keyBuf.length !== 16) throw new Error(`Bunny key len ${keyBuf.length}`);
+        // مفتاح AES-128 صريح — بدون unwrap stream-weave
+        src.plainKey = keyBuf;
+        src.defaultIv = currentIv;
+        keyFetched = true;
+        console.log(`[key] bunny for ${guid}`);
+      }
+      continue; // السيرفر يفك التشفير قبل الإرسال
+    }
+    if (line.startsWith("#EXTINF:")) {
+      out.push(raw);
+      const dur = Number(line.slice(8).split(",")[0]) || targetDuration;
+      // duration stored with next seg
+      src._lastDur = dur;
+      continue;
+    }
+    if (line && !line.startsWith("#")) {
+      const segmentUrl = new URL(line, variantUrl).href;
+      try { allowedHosts.add(new URL(segmentUrl).hostname); } catch {}
+      const seq = mediaSeq + segIndex;
+      const iv = currentIv || ivFromMediaSequence(seq);
+      segs.push({ u: segmentUrl, iv: iv.toString("hex"), s: seq, i: segIndex, dur: src._lastDur || targetDuration });
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      segIndex++;
+      continue;
+    }
+    if (line.startsWith("#EXT-X-ENDLIST") || line.startsWith("#EXTM3U") || line.startsWith("#EXT-X-VERSION") || line.startsWith("#EXT-X-TARGETDURATION") || line.startsWith("#EXT-X-MEDIA-SEQUENCE") || line.startsWith("#EXT-X-PLAYLIST-TYPE")) {
+      out.push(raw);
+      continue;
+    }
+    if (line.startsWith("#")) {
+      out.push(raw);
+      continue;
+    }
+  }
+
+  if (!src.plainKey) throw new Error("فشل جلب مفتاح Bunny");
+  if (!segs.length) throw new Error("مفيش مقاطع في قائمة Bunny");
+  src.mediaSeq = mediaSeq;
+  src.segs = segs;
+  src.targetDuration = targetDuration;
+  src.playlist = out.join("\n");
+  src.allowedHosts = allowedHosts;
+  return src;
+}
 
 const SOURCE_TTL_MS = Number(process.env.SOURCE_TTL_MS || 15 * 60_000);
 const sourceCache = new Map();
@@ -2756,24 +3609,42 @@ const SID_TOKEN = "{{SID}}";
 async function buildPlaylist(src, masterText, clientHeaders) {
   if (masterText == null) {
     const m = await streamFetch(src, src.streamUrl, {}, clientHeaders);
-    if (!m.ok) throw new Error(`Stream master HTTP ${m.status}`);
     masterText = await m.text();
+    if (!masterText.includes("#EXTM3U")) throw new Error(`Stream master HTTP ${m.status}`);
   }
   let text = masterText;
   let baseUrl = src.streamUrl;
-  const mLines = masterText.split(/\r?\n/);
-  let variant = null;
-  for (let i = 0; i < mLines.length; i++) {
-    if (mLines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
-      const next = mLines[i + 1]?.trim();
-      if (next && !next.startsWith("#")) { variant = new URL(next, src.streamUrl).href; break; }
+
+  // لو عندنا media playlist من key-ticket (فيه EXTINF + floravon) استخدمه مباشرة
+  if (src.mediaPlaylistText && /#EXTINF/i.test(src.mediaPlaylistText) && /#EXTM3U/i.test(src.mediaPlaylistText)) {
+    text = src.mediaPlaylistText;
+    baseUrl = src.streamUrl || `https://api.stream-weave.com/api/v1/videos/${src.videoId}/stream/600/playlist.m3u8`;
+    console.log("[weave-v3] buildPlaylist using mediaPlaylistText from key-ticket");
+  } else {
+    const mLines = masterText.split(/\r?\n/);
+    let variant = null;
+    for (let i = 0; i < mLines.length; i++) {
+      if (mLines[i].trim().startsWith("#EXT-X-STREAM-INF")) {
+        const next = mLines[i + 1]?.trim();
+        if (next && !next.startsWith("#")) {
+          // data: URL من تلفيف سابق؟
+          if (next.startsWith("data:")) continue;
+          variant = new URL(next, src.streamUrl).href;
+          break;
+        }
+      }
     }
-  }
-  if (variant) {
-    const v = await streamFetch(src, variant, {}, clientHeaders);
-    if (!v.ok) throw new Error(`Variant HTTP ${v.status}`);
-    text = await v.text();
-    baseUrl = variant;
+    if (variant) {
+      const v = await streamFetch(src, variant, {}, clientHeaders);
+      text = await v.text();
+      if (!text.includes("#EXTM3U")) throw new Error(`Variant HTTP ${v.status}`);
+      baseUrl = variant;
+    }
+    // لو الـ media لسة مفيش EXTINF وkey-ticket موجود
+    if (!/#EXTINF/i.test(text) && src.mediaPlaylistText && /#EXTINF/i.test(src.mediaPlaylistText)) {
+      text = src.mediaPlaylistText;
+      console.log("[weave-v3] fallback to key-ticket media after empty variant");
+    }
   }
   try { src.allowedHosts.add(new URL(baseUrl).hostname); } catch {}
   const lines = text.split(/\r?\n/);
@@ -2790,8 +3661,16 @@ async function buildPlaylist(src, masterText, clientHeaders) {
   function toWeaveSegUrl(absUrl, fallbackVideoId) {
     try {
       const u = new URL(absUrl);
+      // احتفظ بروابط floravon/CDN اللي فيها token/expires — متكسرش التوقيع
+      if (/floravon\.(online|shop)$/i.test(u.hostname) || /\.floravon\./i.test(u.hostname)) {
+        return u.href;
+      }
+      if (/b-cdn\.net$/i.test(u.hostname) || /mediadelivery\.net$/i.test(u.hostname)) {
+        return u.href;
+      }
       if (/stream-weave\.com$/i.test(u.hostname) || u.hostname.endsWith(".stream-weave.com")) {
-        return u.href.split("?")[0];
+        // للإبقاء على sid لو موجود
+        return u.href;
       }
       const parts = u.pathname.split("/").filter(Boolean);
       const vi = parts.indexOf("videos");
@@ -2800,6 +3679,7 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         const quality = parts[vi + 2];
         const fname = (parts[vi + 3] || "").split("?")[0];
         if (vid && quality && fname) {
+          // مرّر عبر stream-weave API مع الـ Bearer بدل token الـ CDN
           return `https://api.stream-weave.com/api/v1/videos/${vid}/stream/${quality}/${fname}`;
         }
       }
@@ -2812,7 +3692,72 @@ async function buildPlaylist(src, masterText, clientHeaders) {
     return absUrl;
   }
 
+  // اقرأ kv من الـ playlist لو موجود
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (t.startsWith("#EXT-X-SW-KV:")) {
+      const n = Number(t.split(":")[1]);
+      if (Number.isFinite(n) && n > 0) src.keyVersion = n;
+    }
+  }
+
+  // weave v3: اجلب المفتاح من /session/{sid}/key مع ticket + proofs متعددة
+  if (src.mode === "weave" && src.sessionId && src.token && Number(src.keyVersion || 0) >= 3) {
+    try {
+      src.allowedHosts.add("api.stream-weave.com");
+      const sessKeyUrl = `https://api.stream-weave.com/api/v1/playback/session/${src.sessionId}/key`;
+      const pathForProof = `/playback/session/${src.sessionId}/key`;
+      const proofs = makeSwProofCandidates({
+        keySeed: src.keySeed,
+        sessionId: src.sessionId,
+        token: src.token,
+        path: pathForProof,
+        ticket: src.swTicket
+      });
+      // حط أول proof كافتراضي
+      if (proofs.length) src.swProof = proofs[0];
+
+      let gotKeyBuf = null;
+      for (let pi = 0; pi < Math.min(proofs.length, 12); pi++) {
+        src.swProof = proofs[pi];
+        try {
+          const skRes = await streamFetch(src, sessKeyUrl, { Accept: "application/octet-stream, application/json, */*" }, clientHeaders);
+          const skBuf = Buffer.from(await skRes.arrayBuffer());
+          console.log(`[weave-v3] sess /key try#${pi} status=${skRes.status} len=${skBuf.length} proof=${String(proofs[pi]).slice(0, 14)}`);
+          if (skRes.status === 401) {
+            const body = skBuf.toString("utf8").slice(0, 100);
+            if (body.includes("invalid key proof") || body.includes("proof")) continue;
+          }
+          if (skRes.ok && skBuf.length >= 16) {
+            // JSON ticket refresh؟
+            if (skBuf.length < 200 && skBuf[0] === 0x7b) {
+              try {
+                const sk = JSON.parse(skBuf.toString("utf8"));
+                if (sk.ticket) src.swTicket = sk.ticket;
+                if (sk.key_version) src.keyVersion = Number(sk.key_version) || src.keyVersion;
+                console.log(`[weave-v3] sess /key JSON ticket refresh`);
+                continue;
+              } catch {}
+            }
+            gotKeyBuf = skBuf;
+            console.log(`[weave-v3] sess /key OK len=${skBuf.length} via proof#${pi}`);
+            break;
+          }
+        } catch (e) {
+          console.warn(`[weave-v3] sess /key try#${pi} err:`, e.message);
+        }
+      }
+      if (gotKeyBuf) {
+        src._pendingKeyBuf = gotKeyBuf;
+        src._keyFromSession = true;
+      }
+    } catch (e) {
+      console.warn("[weave-v3] sess key skip:", e.message);
+    }
+  }
+
   let segIndex = 0;
+  let firstSegUrl = null;
   for (const raw of lines) {
     const line = raw.trim();
     if (line.startsWith("#EXT-X-KEY:")) {
@@ -2823,22 +3768,38 @@ async function buildPlaylist(src, masterText, clientHeaders) {
         keyIvAttr = `IV=${ivHex.startsWith("0x") || ivHex.startsWith("0X") ? ivHex : ("0x" + ivHex)}`;
       }
       if (uri && !keyFetched) {
+        src.defaultIv = currentIv;
+        src._pendingKeyUri = uri;
+
+        // لو جبنا المفتاح من /session/.../key خلاص
+        if (src._pendingKeyBuf && src._pendingKeyBuf.length >= 16) {
+          console.log(`[weave-v3] using session /key buf len=${src._pendingKeyBuf.length}`);
+          keyFetched = true;
+          continue;
+        }
+
         let keyUrl = new URL(uri, baseUrl).href;
         try {
-          if (!/stream-weave\.com/i.test(keyUrl) && src.videoId) {
-            keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/key`;
+          const ku = new URL(keyUrl);
+          if (!/stream-weave\.com/i.test(ku.hostname) && src.videoId) {
+            const sidQ = src.sessionId ? `?sid=${encodeURIComponent(src.sessionId)}` : "";
+            // استخدم نفس الـ quality من الـ URI لو موجود (360/600...)
+            const quality = (uri.match(/\/stream\/(\d+)\//) || [])[1] || "360";
+            keyUrl = `https://api.stream-weave.com/api/v1/videos/${src.videoId}/stream/${quality}/key.bin${sidQ}`;
+          } else if (src.sessionId && !ku.searchParams.get("sid")) {
+            ku.searchParams.set("sid", src.sessionId);
+            keyUrl = ku.href;
           }
         } catch {}
         try { src.allowedHosts.add(new URL(keyUrl).hostname); } catch {}
         src.allowedHosts.add("api.stream-weave.com");
         const keyRes = await streamFetch(src, keyUrl, {}, clientHeaders);
-        if (!keyRes.ok) throw new Error(`Key HTTP ${keyRes.status}`);
         const wrapped = Buffer.from(await keyRes.arrayBuffer());
-        if (src.mode === "cdn" || String(uri).includes("/user/auth/")) src.plainKey = await unwrapCdnKey(wrapped);
-        else src.plainKey = await unwrapKey(wrapped, src.videoId);
-        src.defaultIv = currentIv;
+        console.log(`[weave-v3] key.bin status ${keyRes.status} len ${wrapped.length}`);
+        if (!wrapped.length) throw new Error(`Key HTTP ${keyRes.status} — empty`);
+
+        src._pendingKeyBuf = wrapped;
         keyFetched = true;
-        console.log(`[key] ${src.mode || "weave"} for ${src.videoId} via stream-weave API`);
       }
       continue;
     }
@@ -2849,15 +3810,190 @@ async function buildPlaylist(src, masterText, clientHeaders) {
       src.allowedHosts.add("api.stream-weave.com");
       const seq = mediaSeq + segIndex;
       const iv = currentIv || ivFromMediaSequence(seq);
-      const ivHex = iv.toString("hex");
-      segs.push({ u: segmentUrl, iv: ivHex, s: seq, i: segIndex });
+      const ivHexOut = iv.toString("hex");
+      segs.push({ u: segmentUrl, iv: ivHexOut, s: seq, i: segIndex });
+      if (!firstSegUrl) firstSegUrl = segmentUrl;
       out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
       segIndex++;
       continue;
     }
     out.push(raw);
   }
+
+  // —— فك/اختيار المفتاح بعد ما نعرف أول مقطع ——
+  if (src._pendingKeyBuf) {
+    const wrapped = src._pendingKeyBuf;
+    src._lastKeyBuf = Buffer.from(wrapped); // للاستخدام لو decrypt فشل لاحقًا
+    delete src._pendingKeyBuf;
+    const uri = src._pendingKeyUri || "";
+    delete src._pendingKeyUri;
+
+    let sampleEncrypted = null;
+    if (firstSegUrl && src.mode === "weave") {
+      try {
+        const segRes = await streamFetch(src, firstSegUrl, {}, clientHeaders);
+        if (segRes.ok) {
+          sampleEncrypted = Buffer.from(await segRes.arrayBuffer());
+          console.log(`[weave-v3] sample seg len=${sampleEncrypted.length}`);
+        } else {
+          console.warn(`[weave-v3] sample seg HTTP ${segRes.status}`);
+        }
+      } catch (e) {
+        console.warn("[weave-v3] sample seg fetch:", e.message);
+      }
+    }
+
+    const isCdnStyle = src.mode === "cdn" || String(uri).includes("/user/auth/");
+    if (isCdnStyle) {
+      try {
+        src.plainKey = await unwrapCdnKey(wrapped);
+      } catch (ke) {
+        try { src.plainKey = await unwrapKey(wrapped, src.videoId); } catch {
+          throw new Error(`Key unwrap failed: ${ke.message}`);
+        }
+      }
+    } else {
+      // weave / key_version 3: جرّب مرشّحات + تحقق TS
+      const resolved = await resolveWeaveV3PlainKey({
+        keyBuf: wrapped,
+        keySeed: src.keySeed,
+        iv: src.defaultIv || currentIv,
+        sampleEncrypted,
+        ticket: src.swTicket || null,
+        logTag: "weave-v3"
+      });
+      if (resolved && resolved.key) {
+        src.plainKey = resolved.key;
+        src.cipherMode = resolved.mode || "cbc";
+        src.ivMode = resolved.ivMode || "playlist";
+        console.log(`[weave-v3] cipherMode=${src.cipherMode} ivMode=${src.ivMode} tag=${resolved.tag || "?"}`);
+      } else if (resolved && Buffer.isBuffer(resolved)) {
+        src.plainKey = resolved;
+        src.cipherMode = "cbc";
+        src.ivMode = "playlist";
+      } else {
+        // kv>=3: مفيش قبول raw key.bin من غير تحقق TS — بيسبب bad decrypt
+        // جرّب decryptPlaybackKey من player.js بصيغ متعددة
+        let got = null;
+        if (decryptPlaybackKeyFn) {
+          const attempts = [
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), String(src.videoId)),
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), String(src.videoId), src.keySeed),
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), String(src.videoId), src.keySeed, src.sessionId),
+            () => decryptPlaybackKeyFn(new Uint8Array(wrapped), { videoId: src.videoId, keySeed: src.keySeed, sessionId: src.sessionId, ticket: src.swTicket }),
+          ];
+          for (const fn of attempts) {
+            try {
+              const result = await fn();
+              const key = result?.key || result;
+              if (!key) continue;
+              const aes = Buffer.isBuffer(key) ? key : key instanceof ArrayBuffer ? Buffer.from(key) : Buffer.from(key.buffer || key, key.byteOffset || 0, key.byteLength || key.length);
+              if (aes.length === 16) {
+                // validate against sample if available
+                if (sampleEncrypted && sampleEncrypted.length >= 32) {
+                  let ok = false;
+                  for (const testIv of [src.defaultIv, currentIv, ivFromMediaSequence(0)].filter(Boolean)) {
+                    try {
+                      const plain = decryptSegment(sampleEncrypted, aes, testIv);
+                      if (looksLikeMpegTs(plain, true)) { ok = true; break; }
+                    } catch {}
+                    try {
+                      const plain = decryptSegmentCtr(sampleEncrypted, aes, testIv);
+                      if (looksLikeMpegTs(plain, true)) { ok = true; src.cipherMode = "ctr"; break; }
+                    } catch {}
+                  }
+                  if (!ok) continue;
+                }
+                got = aes;
+                console.log("[weave-v3] decryptPlaybackKeyFn produced valid key");
+                break;
+              }
+            } catch (e) {
+              console.warn("[weave-v3] decryptPlaybackKey attempt:", e.message);
+            }
+          }
+        }
+        if (got) {
+          src.plainKey = got;
+          src.cipherMode = src.cipherMode || "cbc";
+          src.ivMode = "playlist";
+        } else {
+          // soft fallback: pass-through كامل → hls.js يفك على المتصفح
+          console.warn("[weave-v3] plainKey not validated — pass-through encrypt (client hls.js decrypt)");
+          // لو الرد 86 بايت (مفتاح مغلف)، خذ أول/آخر 16 أو XOR مع seed
+          let k16 = null;
+          if (wrapped.length === 16) {
+            k16 = Buffer.from(wrapped);
+          } else if (wrapped.length >= 16) {
+            // جرّب صيغ شائعة للمفتاح المغلف
+            const seedBuf = decodeKeySeed(src.keySeed);
+            const tries = [
+              wrapped.subarray(0, 16),
+              wrapped.subarray(wrapped.length - 16),
+              wrapped.subarray(16, 32),
+            ];
+            if (seedBuf && seedBuf.length >= 16) {
+              const x = Buffer.alloc(16);
+              for (let i = 0; i < 16; i++) x[i] = wrapped[i] ^ seedBuf[i];
+              tries.push(x);
+              const x2 = Buffer.alloc(16);
+              for (let i = 0; i < 16; i++) x2[i] = wrapped[wrapped.length - 16 + i] ^ seedBuf[i];
+              tries.push(x2);
+            }
+            k16 = Buffer.from(tries[0]);
+            // لو عندنا sample، اختبر أي مرشّح يطلع TS
+            if (sampleEncrypted && sampleEncrypted.length >= 32) {
+              for (const cand of tries) {
+                try {
+                  const plain = decryptSegment(sampleEncrypted, cand, src.defaultIv || currentIv || ivFromMediaSequence(0));
+                  if (looksLikeMpegTs(plain, true)) { k16 = Buffer.from(cand); console.log("[weave-v3] unwrapped key matched TS"); break; }
+                } catch {}
+              }
+            }
+          } else {
+            k16 = Buffer.alloc(16);
+          }
+          src.plainKey = k16;
+          src.cipherMode = "cbc";
+          src.ivMode = "playlist";
+          src._keyUnverified = true;
+          src.passThroughEncrypt = true;
+          src._lastKeyBuf = Buffer.from(wrapped);
+        }
+        // weave v3: دايمًا pass-through لو مفيش تحقق TS صارم — أضمن للتشغيل
+        if (Number(src.keyVersion || 0) >= 3 && !src.passThroughEncrypt) {
+          // حتى لو لقينا key، لو مش متأكدين 100% خلّي الخيار مفتوح
+        }
+      }
+    }
+    console.log(`[key] ${src.mode || "weave"} for ${src.videoId} len=${src.plainKey?.length} kv=${src.keyVersion || 0} mode=${src.cipherMode || "cbc"}`);
+  }
+
   if (!src.plainKey) throw new Error("فشل تجهيز مفتاح التشفير");
+  // weave-v3: مرّر المقاطع مشفرة + المفتاح للعميل (hls.js) — أضمن من فك السيرفر الغلط
+  if (src.mode === "weave" && Number(src.keyVersion || 0) >= 3) {
+    src.passThroughEncrypt = true;
+  }
+  console.log(`[weave] v3 ready segs=${segs.length} key=${src.plainKey?.length || 0} cipher=${src.cipherMode || "cbc"} passThrough=${!!src.passThroughEncrypt}`);
+  if (src.passThroughEncrypt && src.plainKey) {
+    // playlist للعميل: خليه يفك AES عبر hls.js
+    const keyLine = `#EXT-X-KEY:METHOD=AES-128,URI="/api/hls/${SID_TOKEN}/key"${keyIvAttr ? "," + keyIvAttr : ""}`;
+    // حط KEY بعد الهيدر وقبل أول EXTINF
+    const rebuilt = [];
+    let keyInserted = false;
+    for (const L of out) {
+      if (!keyInserted && L.startsWith("#EXTINF")) {
+        rebuilt.push(keyLine);
+        keyInserted = true;
+      }
+      // لو كان فيه KEY قديم امسحه
+      if (L.startsWith("#EXT-X-KEY:")) continue;
+      rebuilt.push(L);
+    }
+    if (!keyInserted) rebuilt.splice(1, 0, keyLine);
+    out.length = 0;
+    out.push(...rebuilt);
+  }
   src.mediaSeq = mediaSeq; src.segs = segs; src.playlist = out.join("\n");
 }
 
@@ -2896,6 +4032,238 @@ async function tryResolveYoutube(videoId) {
   return null;
 }
 
+
+/** جلب playlist مع تعدد محاولات (H1.1 / Accept / بدون auth أحيانًا) */
+
+/** بناء مصدر تشغيل من playlist جلبها المتصفح (تجاوز حظر Cloudflare على IP السيرفر) */
+async function buildSrcFromClientPlaylists(videoId, { masterText, mediaText, keyBase64, keyUrl, variantUrl }) {
+  const master = String(masterText || "");
+  let media = String(mediaText || "");
+  let baseUrl = String(variantUrl || `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/`);
+  if (!media.includes("#EXTM3U") && master.includes("#EXTM3U")) {
+    // اختار أعلى variant من الماستر
+    const lines = master.split(/\r?\n/);
+    let best = null; let bestBw = -1; let pending = null;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.startsWith("#EXT-X-STREAM-INF:")) {
+        const bw = Number((line.match(/BANDWIDTH=(\d+)/) || [])[1] || 0);
+        pending = bw;
+      } else if (line && !line.startsWith("#") && pending != null) {
+        if (pending >= bestBw) { bestBw = pending; best = line; }
+        pending = null;
+      }
+    }
+    if (!best) throw new Error("الماستر مفيهوش جودة");
+    // المتصفح لازم يبعت mediaText — لو مش موجود نفشل بوضوح
+    throw new Error("ابعت mediaPlaylist مع الـ hydrate (نص الـ variant)");
+  }
+  if (!media.includes("#EXTM3U")) throw new Error("media playlist غير صالح");
+
+  let keyBuf = null;
+  if (keyBase64) {
+    keyBuf = Buffer.from(String(keyBase64), "base64");
+  }
+  const upstreamTok = await getCoursatkToken();
+  const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+  allowedHosts.add("floravon.shop");
+  allowedHosts.add("floravon.online");
+  allowedHosts.add("api.coursatk.online");
+  allowedHosts.add("api.stream-weave.com");
+  try { allowedHosts.add(new URL(baseUrl).hostname); } catch {}
+
+  const src = {
+    reqVideoId: videoId,
+    videoId: String(videoId),
+    mode: "cdn",
+    token: upstreamTok || "client",
+    streamUrl: baseUrl,
+    allowedHosts,
+    plainKey: null,
+    defaultIv: null,
+    mediaSeq: 0,
+    segs: [],
+    playlist: "",
+    createdAt: now()
+  };
+
+  // parse media playlist similar to buildPlaylist
+  const lines = media.split(/\r?\n/);
+  let mediaSeq = 0;
+  const msm = media.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/);
+  if (msm) mediaSeq = Number(msm[1]) || 0;
+  src.mediaSeq = mediaSeq;
+  const tdm = media.match(/#EXT-X-TARGETDURATION:([\d.]+)/);
+  src.targetDuration = tdm ? Number(tdm[1]) : 6;
+
+  let currentIv = null;
+  let keyIvAttr = null;
+  let segIndex = 0;
+  const segs = [];
+  const out = ["#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(src.targetDuration || 6))}`, "#EXT-X-PLAYLIST-TYPE:VOD", `#EXT-X-MEDIA-SEQUENCE:${mediaSeq}`];
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#EXT-X-KEY:")) {
+      const uri = (line.match(/URI="([^"]+)"/) || [])[1];
+      const ivHex = (line.match(/IV=(0x[0-9a-fA-F]+|[0-9a-fA-F]{32})/i) || [])[1];
+      if (ivHex) {
+        currentIv = parseIvHex(ivHex);
+        keyIvAttr = `IV=${ivHex.startsWith("0x") || ivHex.startsWith("0X") ? ivHex : ("0x" + ivHex)}`;
+      }
+      if (!keyBuf && uri) {
+        // حاول جلب المفتاح من السيرفر كمحاولة أخيرة
+        try {
+          const keyUrlAbs = new URL(uri, baseUrl).href;
+          const keyRes = await streamFetch(src, keyUrlAbs, {}, null);
+          keyBuf = Buffer.from(await keyRes.arrayBuffer());
+        } catch (e) {
+          console.warn("[hydrate] server key fetch failed", e.message);
+        }
+      }
+      if (keyBuf && keyBuf.length) {
+        try {
+          if (keyBuf.length === 16) src.plainKey = keyBuf;
+          else if (String(uri || keyUrl || "").includes("/user/auth/") || src.mode === "cdn") src.plainKey = await unwrapCdnKey(keyBuf);
+          else src.plainKey = await unwrapKey(keyBuf, src.videoId);
+        } catch (e1) {
+          try { src.plainKey = await unwrapCdnKey(keyBuf); } catch (e2) {
+            try { src.plainKey = await unwrapKey(keyBuf, src.videoId); } catch (e3) {
+              throw new Error("فشل فك مفتاح التشغيل من العميل: " + e1.message);
+            }
+          }
+        }
+        src.defaultIv = currentIv;
+      }
+      continue;
+    }
+    if (line.startsWith("#EXTINF:")) {
+      // duration handled with next uri line
+      continue;
+    }
+    if (line && !line.startsWith("#")) {
+      // find preceding EXTINF duration
+      let dur = src.targetDuration || 6;
+      // scan previous non-empty in original - approximate
+      const segUrl = new URL(line, baseUrl).href;
+      try { src.allowedHosts.add(new URL(segUrl).hostname); } catch {}
+      const seq = mediaSeq + segIndex;
+      const iv = currentIv || ivFromMediaSequence(seq);
+      segs.push({ u: segUrl, iv: iv.toString("hex"), s: seq, i: segIndex, dur });
+      out.push(`#EXTINF:${Number(dur).toFixed(5)},`);
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      segIndex++;
+    }
+  }
+  // better duration parse
+  segs.length = 0; out.length = 0;
+  out.push("#EXTM3U", "#EXT-X-VERSION:3", `#EXT-X-TARGETDURATION:${Math.max(1, Math.ceil(src.targetDuration || 6))}`, "#EXT-X-PLAYLIST-TYPE:VOD", `#EXT-X-MEDIA-SEQUENCE:${mediaSeq}`);
+  let pendingDur = src.targetDuration || 6;
+  segIndex = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("#EXTINF:")) {
+      const d = Number((line.match(/#EXTINF:([\d.]+)/) || [])[1]);
+      if (Number.isFinite(d) && d > 0) pendingDur = d;
+      continue;
+    }
+    if (line.startsWith("#EXT-X-KEY:")) continue;
+    if (line && !line.startsWith("#")) {
+      const segUrl = new URL(line, baseUrl).href;
+      try { src.allowedHosts.add(new URL(segUrl).hostname); } catch {}
+      const seq = mediaSeq + segIndex;
+      const iv = currentIv || ivFromMediaSequence(seq);
+      segs.push({ u: segUrl, iv: iv.toString("hex"), s: seq, i: segIndex, dur: pendingDur });
+      out.push(`#EXTINF:${Number(pendingDur).toFixed(5)},`);
+      out.push(`/api/hls/${SID_TOKEN}/seg/${segIndex}`);
+      segIndex++;
+    }
+  }
+  if (!segs.length) throw new Error("مفيش مقاطع في الـ playlist");
+  if (!src.plainKey) throw new Error("مفيش مفتاح تشغيل — ابعت keyBase64 في الـ hydrate");
+  src.segs = segs;
+  src.playlist = out.join("\n");
+  src.directSegments = false;
+  return src;
+}
+
+function clientFetchPayload(videoId, upstreamTok) {
+  return {
+    type: "client_fetch",
+    videoId: String(videoId),
+    reason: "upstream_blocked",
+    message: "سيرفر الاستضافة محظور من Cloudflare/كورساتك — المشغّل هيجلب القائمة من جهازك",
+    playlistUrl: `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`,
+    headers: {
+      Authorization: `Bearer ${upstreamTok}`,
+      Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+      Origin: CONFIG.STREAM_ORIGIN,
+      Referer: CONFIG.STREAM_REFERER,
+      "User-Agent": CONFIG.STREAM_UA,
+      "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH || "com.mycompany.app.soulbrowser"
+    },
+    hydratePath: `/api/play/${encodeURIComponent(videoId)}/hydrate`
+  };
+}
+
+async function fetchPlaylistSmart(url, token, label = "pl") {
+  const accepts = [
+    "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+    "*/*",
+    "application/json, text/plain, */*"
+  ];
+  let last = { status: 0, text: "" };
+  for (let pi = 0; pi < UA_PROFILES.length; pi++) {
+    for (const accept of accepts) {
+      try {
+        const headers = {
+          ...UA_PROFILES[pi],
+          Accept: accept,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache"
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        // stream-weave غالبًا يطلب x-sw-key-version مع الماستر
+        if (String(label).includes("weave") || /stream-weave\.com/i.test(String(url))) {
+          headers["x-sw-key-version"] = "3";
+        }
+        const probe = await upstreamSlot(() =>
+          fetchT(url, { headers, cache: "no-store" }, { timeout: 20_000, retries: 1, retryOn: [429, 502, 503, 504, 408] })
+        );
+        const masterText = await probe.text();
+        last = { status: probe.status, text: masterText };
+        if (masterText.includes("#EXTM3U")) {
+          console.log(`[${label}] ok status=${probe.status} profile=${pi}`);
+          return { status: probe.status, text: masterText };
+        }
+        console.warn(`[${label}] status=${probe.status} no-m3u profile=${pi}`, masterText.slice(0, 60).replace(/\n/g, " "));
+      } catch (e) {
+        last = { status: 0, text: "", error: e.message };
+        console.warn(`[${label}] err profile=${pi}`, e.message);
+      }
+    }
+  }
+  // محاولة أخيرة بدون بعض الهيدر
+  try {
+    const probe = await fetchT(url, {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : undefined,
+        Accept: "*/*",
+        "User-Agent": CONFIG.STREAM_UA
+      },
+      cache: "no-store"
+    }, { timeout: 20_000, retries: 0 });
+    const masterText = await probe.text();
+    if (masterText.includes("#EXTM3U")) return { status: probe.status, text: masterText };
+    last = { status: probe.status, text: masterText };
+  } catch (e) {
+    last.error = e.message;
+  }
+  const err = new Error(`${label} ${last.status || ""} — playlist غير صالح`.trim());
+  err.detail = (last.text || "").slice(0, 120);
+  throw err;
+}
+
 async function buildVideoSource(videoId, clientHeaders) {
   const upstreamTok = await getCoursatkToken();
   if (!upstreamTok) { const e = new Error("توكن كورساتك غير مضبوط"); e.status = 503; throw e; }
@@ -2905,52 +4273,238 @@ async function buildVideoSource(videoId, clientHeaders) {
     if (ytUrl) return { reqVideoId: videoId, videoId: String(videoId), mode: "coursatk-youtube", youtubeUrl: ytUrl, streamUrl: ytUrl, plainKey: Buffer.from("youtube"), segs: [], playlist: "", mediaSeq: 0, allowedHosts: new Set(), createdAt: now() };
   } catch (e) { console.warn("[platforms youtube]", e.message); }
 
+  // اقرأ المنصات المتاحة — لو CDN فقط نتخطى weave
+  let platformNames = [];
+  try {
+    const pdata = await upstreamJson(`/video/${encodeURIComponent(videoId)}/platforms`);
+    const plats = (pdata && pdata.data && pdata.data.platforms) || pdata.platforms || [];
+    platformNames = (Array.isArray(plats) ? plats : []).map((p) => String(p?.name || p || "").toLowerCase());
+  } catch (e) { console.warn("[platforms]", e.message); }
+  const preferCdn = platformNames.includes("cdn") && !platformNames.includes("stream-weave") && !platformNames.includes("weave");
+  const preferYoutube = platformNames.includes("youtube") && !platformNames.includes("cdn") && !platformNames.includes("stream-weave");
+  const onlyRutube = platformNames.length && platformNames.every((n) => n === "rutube" || n === "youtube") && !platformNames.includes("cdn") && !platformNames.includes("stream-weave") && !platformNames.includes("weave");
+  if (onlyRutube && !platformNames.includes("youtube")) {
+    const err = new Error("الفيديو على منصة Rutube فقط — مش مدعوم حاليًا. جرّب فيديو CDN أو يوتيوب.");
+    err.status = 501;
+    throw err;
+  }
+
   let mode = null; let streamUrl = null; let sessionToken = null; let resolvedVideoId = videoId; let probeText = null;
   const errors = [];
 
-  // جلسة كورساتك/stream-weave — إعادة محاولة قوية ثم حفظ في الذاكرة (sourceCache)
-  {
+  async function tryCdn() {
+    const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+    const got = await fetchPlaylistSmart(masterUrl, upstreamTok, "cdn");
+    return { mode: "cdn", streamUrl: masterUrl, sessionToken: upstreamTok, probeText: got.text, resolvedVideoId: String(videoId) };
+  }
+
+  async function tryWeave() {
     let lastWeaveErr = null;
     for (let attempt = 1; attempt <= UPSTREAM_FETCH_RETRIES; attempt++) {
       try {
         const data = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
         if (!data?.success || !data?.data?.token || !data?.data?.stream_url) throw new Error("Weave response ناقص");
-        mode = "weave"; sessionToken = data.data.token; streamUrl = data.data.stream_url; resolvedVideoId = String(data.data.video_id || videoId);
-        lastWeaveErr = null;
-        break;
+        const wToken = data.data.token;
+        const wUrl = data.data.stream_url;
+        const wVid = String(data.data.video_id || videoId);
+        const wSid = data.data.session_id || data.data.sessionId || null;
+        const wSeed = data.data.key_seed || data.data.keySeed || null;
+        let wKv = Number(data.data.key_version || data.data.keyVersion || 0) || 0;
+        const wHb = data.data.heartbeat_url || data.data.heartbeatUrl || null;
+        const wEnd = data.data.end_url || data.data.endUrl || null;
+        const wApiBase = String(data.data.api_base || data.data.apiBase || "https://api.stream-weave.com").replace(/\/$/, "");
+        console.log(`[weave] play ok vid=${wVid} sid=${wSid || "-"} kv=${wKv} seed=${wSeed ? "yes" : "no"} api=${wApiBase}`);
+
+        // —— v3: POST key-ticket → غالبًا JSON {ticket, key_version, expires_in}
+        let mediaFromTicket = null;
+        let swTicket = null;
+        if (wSid && wKv >= 3) {
+          try {
+            const ktUrl = `${wApiBase}/api/v1/playback/session/${wSid}/key-ticket`;
+            const ktRes = await upstreamSlot(() =>
+              fetchT(
+                ktUrl,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${wToken}`,
+                    Accept: "application/json, application/vnd.apple.mpegurl, */*",
+                    Origin: CONFIG.STREAM_ORIGIN,
+                    Referer: CONFIG.STREAM_REFERER,
+                    "User-Agent": CONFIG.STREAM_UA,
+                    "x-sw-key-version": String(wKv || 3),
+                    "Content-Length": "0"
+                  },
+                  body: ""
+                },
+                { timeout: 20_000, retries: 2 }
+              )
+            );
+            const ktText = await ktRes.text();
+            console.log(`[weave-v3] key-ticket status=${ktRes.status} len=${ktText.length} head=${ktText.slice(0, 60).replace(/\n/g, " ")}`);
+            if (ktRes.ok && ktText.includes("#EXTM3U") && /#EXTINF/i.test(ktText)) {
+              mediaFromTicket = ktText;
+            } else if (ktRes.ok) {
+              try {
+                const j = JSON.parse(ktText);
+                if (j.ticket) swTicket = String(j.ticket);
+                if (j.key_version) wKv = Number(j.key_version) || wKv;
+                const maybe = j.playlist || j.media || j.data?.playlist || j.data?.media;
+                if (typeof maybe === "string" && maybe.includes("#EXTM3U")) mediaFromTicket = maybe;
+                console.log(`[weave-v3] key-ticket ticket=${swTicket ? "yes" : "no"} kv=${wKv}`);
+              } catch {}
+            }
+          } catch (kte) {
+            console.warn("[weave-v3] key-ticket fail:", kte.message);
+          }
+        }
+
+        // اجلب الماستر — لو 426 جرّب مسارات بديلة
+        let probeText = null;
+        let streamUrlUsed = wUrl;
+        const candidates = [wUrl];
+        try {
+          const u = new URL(wUrl);
+          candidates.push(`${wApiBase}/api/v1/videos/${wVid}/stream/master.m3u8`);
+          candidates.push(`${wApiBase}/api/v1/videos/${wVid}/stream/playlist.m3u8`);
+          if (!/master\.m3u8|playlist\.m3u8/i.test(u.pathname)) {
+            candidates.push(wUrl.replace(/\/?$/, "/playlist.m3u8"));
+            candidates.push(wUrl.replace(/\/?$/, "/master.m3u8"));
+          }
+        } catch {}
+        let lastPlErr = null;
+        for (const cand of [...new Set(candidates)]) {
+          try {
+            const got = await fetchPlaylistSmart(cand, wToken, "weave");
+            probeText = got.text;
+            streamUrlUsed = cand;
+            break;
+          } catch (pe) {
+            lastPlErr = pe;
+            console.warn("[weave] playlist candidate fail", cand.slice(0, 80), pe.message);
+          }
+        }
+
+        // لو key-ticket رجّع media playlist كامل، فضّله (فيه روابط floravon الموقّعة)
+        if (mediaFromTicket) {
+          // لو الماستر فيه variants فقط، اعتبر ticket هو الـ media مباشرة
+          const masterIsVariantOnly =
+            probeText &&
+            /#EXT-X-STREAM-INF/i.test(probeText) &&
+            !/#EXTINF/i.test(probeText);
+          if (!probeText || masterIsVariantOnly || !/#EXTINF/i.test(probeText)) {
+            // لفّه كـ master بسيط → media
+            probeText =
+              "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=1800000\n" +
+              "data:application/vnd.apple.mpegurl;base64," +
+              Buffer.from(mediaFromTicket).toString("base64");
+            // أبسط: مرّر media كـ probe مع علامة
+            probeText = mediaFromTicket;
+            streamUrlUsed = `https://api.stream-weave.com/api/v1/videos/${wVid}/stream/600/playlist.m3u8`;
+            console.log("[weave-v3] using key-ticket media playlist as probe");
+          } else {
+            // احتفظ بالماستر، ومرّر media منفصل عبر حقل إضافي
+          }
+        }
+
+        if (!probeText) throw lastPlErr || new Error("Weave playlist failed");
+
+        return {
+          mode: "weave",
+          sessionToken: wToken,
+          streamUrl: streamUrlUsed,
+          resolvedVideoId: wVid,
+          probeText,
+          mediaPlaylistText: mediaFromTicket || null,
+          sessionId: wSid,
+          keySeed: wSeed,
+          keyVersion: wKv,
+          heartbeatUrl: wHb,
+          endUrl: wEnd,
+          apiBase: wApiBase,
+          swTicket: swTicket || null
+        };
       } catch (e) {
         lastWeaveErr = e;
         console.warn(`[weave] play attempt ${attempt}/${UPSTREAM_FETCH_RETRIES}:`, e.message);
         if (attempt < UPSTREAM_FETCH_RETRIES) await delay(250 * attempt + Math.random() * 200);
       }
     }
-    if (lastWeaveErr) errors.push(lastWeaveErr.message);
+    throw lastWeaveErr || new Error("weave failed");
   }
 
-  if (!mode) {
+  // ترتيب المحاولة: لو مفيش stream-weave في المنصات نتخطاه (يقلل 426 الفارغة)
+  const hasWeave = platformNames.some((n) => n.includes("weave") || n.includes("stream-weave"));
+  const order = preferCdn || !hasWeave ? ["cdn", "weave"] : ["weave", "cdn"];
+  if (!hasWeave) console.log(`[play] video ${videoId} platforms=${platformNames.join(",")||"?"} → prefer CDN`);
+  for (const which of order) {
     try {
-      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
-      const probe = await upstreamSlot(() => fetchT(masterUrl, { headers: { Authorization: `Bearer ${upstreamTok}`, Accept: "*/*", Origin: CONFIG.STREAM_ORIGIN, Referer: CONFIG.STREAM_REFERER, "User-Agent": CONFIG.STREAM_UA }, cache: "no-store" }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES }));
-      if (!probe.ok) throw new Error(`CDN ${probe.status}`);
-      const masterText = await probe.text();
-      if (!masterText.includes("#EXTM3U")) throw new Error("CDN playlist غير صالح");
-      mode = "cdn"; streamUrl = masterUrl; sessionToken = upstreamTok; probeText = masterText;
-    } catch (e) { errors.push(e.message); }
+      const got = which === "cdn" ? await tryCdn() : await tryWeave();
+      mode = got.mode; streamUrl = got.streamUrl; sessionToken = got.sessionToken;
+      resolvedVideoId = got.resolvedVideoId; probeText = got.probeText;
+      // جهّز الـ playlist — لو فشل (426 وغيره) جرّب المنصة التالية
+      const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
+      try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
+      allowedHosts.add("floravon.shop");
+      allowedHosts.add("floravon.online");
+      allowedHosts.add("suo2.floravon.online");
+      allowedHosts.add("api.stream-weave.com");
+      const src = {
+        reqVideoId: videoId,
+        videoId: resolvedVideoId,
+        mode,
+        token: sessionToken,
+        streamUrl,
+        allowedHosts,
+        plainKey: null,
+        defaultIv: null,
+        mediaSeq: 0,
+        segs: [],
+        playlist: "",
+        createdAt: now(),
+        sessionId: got.sessionId || null,
+        keySeed: got.keySeed || null,
+        keyVersion: got.keyVersion || 0,
+        heartbeatUrl: got.heartbeatUrl || null,
+        endUrl: got.endUrl || null,
+        apiBase: got.apiBase || "https://api.stream-weave.com",
+        mediaPlaylistText: got.mediaPlaylistText || null,
+        swTicket: got.swTicket || null,
+        swProof: null
+      };
+      try {
+        await buildPlaylist(src, probeText, clientHeaders);
+        return src;
+      } catch (bpErr) {
+        console.warn(`[${mode}] buildPlaylist failed:`, bpErr.message);
+        errors.push(`${mode}: ${bpErr.message}`);
+        mode = null; streamUrl = null; sessionToken = null; probeText = null;
+      }
+    } catch (e) {
+      errors.push(`${which}: ${e.message}`);
+    }
   }
 
-  if (!mode || !streamUrl || !sessionToken) throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
-
-  const allowedHosts = new Set(CONFIG.STREAM_HOSTS);
-  try { allowedHosts.add(new URL(streamUrl).hostname); } catch {}
-  const src = { reqVideoId: videoId, videoId: resolvedVideoId, mode, token: sessionToken, streamUrl, allowedHosts, plainKey: null, defaultIv: null, mediaSeq: 0, segs: [], playlist: "", createdAt: now() };
-  await buildPlaylist(src, probeText, clientHeaders);
-  return src;
+  throw new Error(errors.join(" | ") || "مفيش منصة تشغيل");
 }
 
 function getVideoSource(videoId, clientHeaders) {
   const hit = sourceCache.get(videoId);
   if (hit && now() < hit.exp) return Promise.resolve(hit.src);
   return coalesce("src:" + videoId, async () => {
+    // —— Bunny / د. حسام عيسى (drhossamissa.com iframe protect bypass)
+    if (CONFIG.BUNNY_ENABLED !== false && isBunnyVideoId(videoId)) {
+      const guid = parseBunnyGuid(videoId);
+      if (!guid) {
+        const e = new Error("معرّف فيديو Bunny غير صالح — استخدم bn_<guid>");
+        e.status = 400;
+        throw e;
+      }
+      const src = await buildBunnySource(guid, clientHeaders);
+      src.reqVideoId = String(videoId);
+      sourceCache.set(videoId, { src, exp: now() + SOURCE_TTL_MS });
+      return src;
+    }
     if (CONFIG.THANAWICA_ENABLED && /^th[pvmy]_/i.test(String(videoId))) {
       const raw = String(videoId);
       if (/^thy_/i.test(raw)) {
@@ -3023,6 +4577,7 @@ function touchSharedPlay(session) {
   if (!session) return;
   session.lastUsed = now();
   streamSessions.set(session.id, session);
+  if (ANTI_DETECT.DISABLE_SHARED_PLAY) return; // isolation mode
   const keys = new Set([String(session.videoId || "")]);
   if (session.src?.reqVideoId) keys.add(String(session.src.reqVideoId));
   if (session.src?.videoId) keys.add(String(session.src.videoId));
@@ -3030,6 +4585,7 @@ function touchSharedPlay(session) {
 }
 
 function getSharedPlay(videoId) {
+  if (ANTI_DETECT.DISABLE_SHARED_PLAY) return null; // force per-session isolation
   const key = String(videoId || "");
   if (!key) return null;
   const s = sharedPlayByVideo.get(key);
@@ -3040,7 +4596,6 @@ function getSharedPlay(videoId) {
     try { streamSessions.delete(s.id); } catch {}
     return null;
   }
-  // لازم تكون لسه في streamSessions
   if (!streamSessions.has(s.id)) {
     streamSessions.set(s.id, s);
   }
@@ -3050,32 +4605,37 @@ function getSharedPlay(videoId) {
 
 // حماية من السحب: السماح بتشغيل الـ HLS من دومينات موقعك فقط (أو بدون Origin مثل بعض مشغّلات الموبايل)
 function assertPlayerOrigin(req) {
-  const strict = process.env.PLAYER_ORIGIN_STRICT !== "0"; // افتراضي صارم
+  // PLAYER_ORIGIN_STRICT=0 يلغي الفحص بالكامل
+  const strict = process.env.PLAYER_ORIGIN_STRICT !== "0";
   if (!strict) return true;
   const origin = String(req.headers.origin || "").replace(/\/$/, "");
   const referer = String(req.headers.referer || "");
-  // طلبات السيرفر لنفسها / أدوات بلا Origin
   if (!origin && !referer) return true;
-  const allowed = ALLOWED_ORIGINS;
-  if (origin && allowed.has(origin)) return true;
+
+  // اسمح بنفس هوست السيرفر (Railway/Vercel/أي deploy)
+  let reqOrigin = "";
+  try {
+    const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+    const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim() || "https";
+    if (host) reqOrigin = (proto + "://" + host).replace(/\/$/, "");
+  } catch {}
+
+  const allowed = new Set(ALLOWED_ORIGINS);
+  if (reqOrigin) allowed.add(reqOrigin);
+  // أي *.up.railway.app / *.vercel.app
+  function isDeployHost(o) {
+    try {
+      const h = new URL(o).hostname;
+      return /\.up\.railway\.app$/i.test(h) || /\.railway\.app$/i.test(h) || /\.vercel\.app$/i.test(h);
+    } catch { return false; }
+  }
+
+  if (origin && (allowed.has(origin) || isDeployHost(origin))) return true;
   if (referer) {
     try {
       const h = new URL(referer).origin;
-      if (allowed.has(h)) return true;
+      if (allowed.has(h) || isDeployHost(h)) return true;
     } catch {}
-  }
-  // www وغير www لنفس الدومين
-  const extras = new Set([
-    "https://www.durosakplus.com",
-    "https://durosakplus.com",
-    "http://www.durosakplus.com",
-    "http://durosakplus.com",
-    "https://unique-transformation-production-ceaf.up.railway.app",
-    ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((x) => x.trim().replace(/\/$/, "")).filter(Boolean)
-  ]);
-  if (origin && extras.has(origin)) return true;
-  if (referer) {
-    try { if (extras.has(new URL(referer).origin)) return true; } catch {}
   }
   const e = new Error("غير مصرح — التشغيل من هذا الموقع غير مسموح");
   e.status = 403;
@@ -3273,6 +4833,211 @@ async function logPlayEvent(req, videoId) {
 }
 
 
+
+// حل صفحة درس drhossamissa → bn_<guid> (يحتاج كوكيز الجلسة من المنصة)
+app.get("/api/bunny/catalog", requireStudent, (_req, res) => {
+  res.json({ success: true, data: HOSSAM_CATALOG });
+});
+
+app.get("/api/public/hossam", rateLimit({ max: 60, windowMs: 60_000, scope: "hossam-pub" }), (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      teacher: HOSSAM_CATALOG.teacher,
+      subject: HOSSAM_CATALOG.subject,
+      courses: (HOSSAM_CATALOG.courses || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        lessons: (c.lessons || []).map((l) => ({ lessonId: l.lessonId, title: l.title, videoId: l.videoId }))
+      }))
+    }
+  });
+});
+
+
+// استيراد كل دروس كورس حسام دفعة واحدة (يحتاج cookies صالحة من المتصفح)
+app.post("/api/bunny/import-course", requireStudent, rateLimit({ max: 5, windowMs: 300_000, scope: "bunny-import" }), async (req, res) => {
+  try {
+    const cookies = String(req.body?.cookies || process.env.HOSSAM_COOKIES || "").trim();
+    if (!cookies) return jsonError(res, 400, "ابعت cookies من جلسة drhossamissa.com");
+    const courseSlug = String(req.body?.courseSlug || "ورشة-الهرمونات-9").trim();
+    const start = Math.max(1, Number(req.body?.start || 100) || 100);
+    const end = Math.min(start + 80, Number(req.body?.end || start + 40) || start + 40);
+    const found = [];
+    for (let lessonId = start; lessonId <= end; lessonId++) {
+      try {
+        const pageUrl = `https://drhossamissa.com/play-course/${encodeURIComponent(courseSlug)}/${lessonId}`;
+        const r = await fetch(pageUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+            Accept: "text/html",
+            Cookie: cookies,
+            Referer: "https://drhossamissa.com/my-courses"
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(20_000)
+        });
+        const html = await r.text();
+        if (r.status === 401 || r.status === 403 || /login|تسجيل الدخول/i.test(html.slice(0, 2000)) && !/mediadelivery|iframe/i.test(html)) {
+          if (lessonId === start) return jsonError(res, 401, "الكوكيز منتهية — جدّدها من المتصفح");
+          continue;
+        }
+        const guidM = html.match(/mediadelivery\.net\/embed\/\d+\/([a-f0-9-]{36})/i)
+          || html.match(/vz-[a-z0-9-]+\.b-cdn\.net\/([a-f0-9-]{36})\//i)
+          || html.match(/["']([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})["']/i);
+        if (!guidM) continue;
+        const guid = guidM[1];
+        const titleM = html.match(/<title>([^<]+)<\/title>/i);
+        const title = (titleM && titleM[1] ? titleM[1].replace(/\s*\|\s*.*$/, "").trim() : `درس ${lessonId}`);
+        const videoId = "bn_" + guid;
+        found.push({ lessonId, title, videoId, guid });
+        // حدّث الكتالوج في الذاكرة
+        const course = HOSSAM_CATALOG.courses[0];
+        if (course) {
+          const existing = (course.lessons || []).find((l) => Number(l.lessonId) === lessonId);
+          if (existing) { existing.videoId = videoId; existing.guid = guid; if (title) existing.title = title; }
+          else (course.lessons || (course.lessons = [])).push({ lessonId, title, videoId, guid });
+        }
+        console.log("[bunny-import] lesson", lessonId, videoId);
+      } catch (e) {
+        console.warn("[bunny-import]", lessonId, e.message);
+      }
+    }
+    res.json({ success: true, imported: found.length, lessons: found, catalog: HOSSAM_CATALOG.courses[0] });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+app.post("/api/bunny/resolve-lesson", requireStudent, rateLimit({ max: 20, windowMs: 60_000, scope: "bunny-resolve" }), async (req, res) => {
+  try {
+    if (CONFIG.BUNNY_ENABLED === false) return jsonError(res, 503, "Bunny معطّل");
+    const lessonUrl = String(req.body?.url || req.body?.lessonUrl || "").trim();
+    const lessonId = String(req.body?.lessonId || "").replace(/\D/g, "");
+    const cookies = String(req.body?.cookies || process.env.DRHOSSAM_COOKIES || "").trim();
+    let target = lessonUrl;
+    if (!target && lessonId) {
+      target = `https://drhossamissa.com/play-course/x/${lessonId}`;
+    }
+    if (!target) return jsonError(res, 400, "url أو lessonId مطلوب");
+    if (!/^https:\/\/(?:www\.)?drhossamissa\.com\//i.test(target)) return jsonError(res, 400, "رابط غير مدعوم");
+    const headers = {
+      "User-Agent": CONFIG.STREAM_UA,
+      Accept: "text/html,application/xhtml+xml",
+      Referer: "https://drhossamissa.com/my-courses",
+      "Accept-Language": "ar,en;q=0.9"
+    };
+    if (cookies) headers.Cookie = cookies;
+    const r = await upstreamSlot(() => fetchT(target, { headers, redirect: "follow" }, { timeout: 25_000, retries: 1 }));
+    const html = await r.text();
+    if (!r.ok) return jsonError(res, 502, `صفحة الدرس HTTP ${r.status}`);
+    if (/\/login/i.test(String(r.url || "")) || /سجل دخولك|تسجيل الدخول/i.test(html.slice(0, 2000))) {
+      return jsonError(res, 401, "الكوكيز منتهية أو غير صالحة — ابعت cookies من المتصفح");
+    }
+    const m = html.match(/iframe\.mediadelivery\.net\/embed\/(\d+)\/([0-9a-f-]{36})\?[^"']*token=([a-f0-9]+)(?:&|&amp;)expires=(\d+)/i)
+      || html.match(/iframe\.mediadelivery\.net\/embed\/(\d+)\/([0-9a-f-]{36})/i);
+    if (!m) return jsonError(res, 404, "مفيش iframe Bunny في الصفحة");
+    const libraryId = m[1];
+    const guid = m[2].toLowerCase();
+    const token = m[3] || null;
+    const expires = m[4] ? Number(m[4]) : null;
+    // اكتشاف CDN zone من thumbnail لو موجود
+    const cdnM = html.match(/https:\/\/(vz-[a-z0-9-]+\.b-cdn\.net)\//i);
+    if (cdnM && cdnM[1] && cdnM[1] !== CONFIG.BUNNY_CDN_HOST) {
+      console.log("[bunny] detected CDN host", cdnM[1]);
+    }
+    const videoId = "bn_" + guid;
+    res.json({
+      success: true,
+      data: {
+        videoId,
+        guid,
+        libraryId,
+        token,
+        expires,
+        cdnHost: (cdnM && cdnM[1]) || CONFIG.BUNNY_CDN_HOST,
+        playHint: `POST /api/play/${videoId}`
+      }
+    });
+  } catch (e) {
+    console.error("[bunny resolve]", e.message);
+    jsonError(res, 502, e.message);
+  }
+});
+
+
+app.get("/api/debug/stream-probe/:videoId", requireStudent, rateLimit({ max: 10, windowMs: 60_000, scope: "dbg-stream" }), async (req, res) => {
+  try {
+    const videoId = String(req.params.videoId || "");
+    const tok = await getCoursatkToken();
+    const out = { videoId, tokenConfigured: Boolean(tok), platforms: null, weave: null, cdn: null };
+    try {
+      out.platforms = await upstreamJson(`/video/${encodeURIComponent(videoId)}/platforms`);
+    } catch (e) { out.platforms = { error: e.message }; }
+    try {
+      out.weave = await upstreamJson(`/video/${encodeURIComponent(videoId)}/stream-weave/play`, { method: "POST", headers: { Accept: "application/json" } });
+    } catch (e) { out.weave = { error: e.message }; }
+    try {
+      const masterUrl = `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`;
+      const got = await fetchPlaylistSmart(masterUrl, tok, "dbg-cdn");
+      out.cdn = { status: got.status, hasM3U: got.text.includes("#EXTM3U"), head: got.text.slice(0, 200) };
+    } catch (e) { out.cdn = { error: e.message, detail: e.detail || null }; }
+    res.json({ success: true, data: out, version: APP_VERSION });
+  } catch (e) {
+    jsonError(res, 500, e.message);
+  }
+});
+
+
+app.post("/api/play/:videoId/hydrate", requireStudent, playLimiter, async (req, res) => {
+  try {
+    const videoId = String(req.params.videoId || "");
+    if (!videoId) return jsonError(res, 400, "videoId مطلوب");
+    if (/^bn_/i.test(videoId) || /^th/i.test(videoId)) return jsonError(res, 400, "hydrate لكورساتك فقط");
+    const body = req.body || {};
+    const masterText = body.masterPlaylist || body.master || body.playlist || "";
+    const mediaText = body.mediaPlaylist || body.media || body.variant || "";
+    const keyBase64 = body.keyBase64 || body.key || null;
+    const keyUrl = body.keyUrl || null;
+    const variantUrl = body.variantUrl || body.mediaUrl || null;
+    if (!mediaText && !masterText) return jsonError(res, 400, "ابعت masterPlaylist أو mediaPlaylist");
+
+    const src = await buildSrcFromClientPlaylists(videoId, {
+      masterText,
+      mediaText: mediaText || masterText,
+      keyBase64,
+      keyUrl,
+      variantUrl: variantUrl || `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/480.m3u8`
+    });
+    // cache source briefly
+    sourceCache.set(videoId, { src, exp: now() + 10 * 60_000 });
+
+    const id = crypto.randomBytes(12).toString("hex");
+    const streamKey = crypto.randomBytes(18).toString("base64url");
+    const deviceId = (req.session && req.session.deviceId) || null;
+    const sessionRow = {
+      id,
+      src,
+      ownerCode: req.session && req.session.code,
+      ownerToken: req.sessionToken,
+      ownerDeviceId: deviceId,
+      streamKey,
+      createdAt: now(),
+      lastUsed: now()
+    };
+    streamSessions.set(id, sessionRow);
+    try {
+      const secure = (req.secure || req.headers["x-forwarded-proto"] === "https") ? "; Secure" : "";
+      res.setHeader("Set-Cookie", `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`);
+    } catch {}
+    const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
+    res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, mode: "client_hydrated", segs: (src.segs || []).length } });
+  } catch (e) {
+    console.error("[hydrate]", e.message);
+    jsonError(res, 502, e.message);
+  }
+});
+
 app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => {
   try {
     let videoId = String(req.params.videoId);
@@ -3337,6 +5102,17 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
   } catch (e) {
     try { const yt = await tryResolveYoutube(String(req.params.videoId || "")); if (yt) return res.json({ success: true, data: { type: "youtube", youtube_url: yt, url: yt } }); } catch {}
     console.error("[play]", e.message);
+    const msg = String(e && e.message || "");
+    const blocked = /CDN|weave|playlist|403|500|426|cloudflare|blocked|غير صالح|fetch failed|UPSTREAM/i.test(msg);
+    if (blocked && !/^bn_/i.test(String(req.params.videoId || "")) && !/^th/i.test(String(req.params.videoId || ""))) {
+      try {
+        const tok = await getCoursatkToken();
+        if (tok) {
+          console.warn("[play] falling back to client_fetch for", req.params.videoId, msg);
+          return res.json({ success: true, data: clientFetchPayload(String(req.params.videoId), tok) });
+        }
+      } catch (e2) { console.warn("[play] client_fetch payload failed", e2.message); }
+    }
     jsonError(res, e.status || 502, e.message);
   }
 });
@@ -3426,6 +5202,11 @@ app.get("/api/hls/:pid/master.m3u8", requireStudent, async (req, res) => {
 });
 
 async function getSegmentPlain(session, meta, url, iv, headers) {
+  // tiny optional jitter only (does not block playback)
+  if (ANTI_DETECT.SEG_DELAY_MAX > 0) {
+    const d = ANTI_DETECT.SEG_DELAY_MIN + Math.random() * (ANTI_DETECT.SEG_DELAY_MAX - ANTI_DETECT.SEG_DELAY_MIN);
+    if (d > 5) await delay(d);
+  }
   const key = url + "|" + (meta.iv || "");
   const hit = segGet(key);
   if (hit) return hit;
@@ -3486,11 +5267,80 @@ async function getSegmentPlain(session, meta, url, iv, headers) {
     }
 
     let plain;
+    const mode = (usedSrc.cipherMode || "cbc").toLowerCase();
+    // لو ivMode=seq استخدم media sequence لكل مقطع
+    if (usedSrc.ivMode === "seq" && Number.isFinite(meta.s)) {
+      usedIv = ivFromMediaSequence(meta.s);
+    }
     try {
-      plain = decryptSegment(encrypted, usedSrc.plainKey, usedIv);
+      if (mode === "ctr") {
+        plain = decryptSegmentCtr(encrypted, usedSrc.plainKey, usedIv);
+      } else if (mode === "cbc-nopad") {
+        const d = crypto.createDecipheriv("aes-128-cbc", usedSrc.plainKey, usedIv);
+        d.setAutoPadding(false);
+        const aligned = encrypted.subarray(0, encrypted.length - (encrypted.length % 16));
+        plain = Buffer.concat([d.update(aligned), d.final()]);
+      } else {
+        plain = decryptSegment(encrypted, usedSrc.plainKey, usedIv);
+      }
+      if (usedSrc.mode === "weave" && !looksLikeMpegTs(plain)) {
+        throw new Error("not mpeg-ts after decrypt");
+      }
     } catch (decErr) {
-      console.warn("[seg] decrypt failed, serving raw:", decErr.message);
-      plain = encrypted;
+      let recovered = null;
+      if (usedSrc.mode === "weave" && encrypted.length >= 32) {
+        try {
+          const raw = usedSrc._lastKeyBuf || usedSrc.plainKey;
+          const cands = weaveV3KeyCandidates(raw, usedSrc.keySeed, usedSrc.swTicket);
+          // player.js: len===16 → raw AES key as-is (Vd early return)
+          if (raw && raw.length >= 16) {
+            const bin16 = Buffer.from(raw.subarray(0, 16));
+            if (!cands.some((c) => c.hex === bin16.toString("hex"))) {
+              cands.unshift({ key: bin16, tag: "bin16-raw", hex: bin16.toString("hex") });
+            }
+          }
+          const ivs = [];
+          for (const x of [usedIv, usedSrc.defaultIv, meta && meta.iv ? parseIvHex(meta.iv) : null]) {
+            if (x && Buffer.isBuffer(x) && x.length === 16) ivs.push(x);
+          }
+          const seqBase = Number.isFinite(meta.s) ? meta.s : 0;
+          for (let s = Math.max(0, seqBase - 2); s <= seqBase + 5; s++) ivs.push(ivFromMediaSequence(s));
+          ivs.push(Buffer.alloc(16, 0));
+          for (const cand of cands) {
+            for (const testIv of ivs) {
+              for (const m of ["cbc", "ctr", "cbc-nopad"]) {
+                try {
+                  let p;
+                  if (m === "ctr") p = decryptSegmentCtr(encrypted, cand.key, testIv);
+                  else if (m === "cbc-nopad") {
+                    const d = crypto.createDecipheriv("aes-128-cbc", cand.key, testIv);
+                    d.setAutoPadding(false);
+                    const aligned = encrypted.subarray(0, encrypted.length - (encrypted.length % 16));
+                    p = Buffer.concat([d.update(aligned), d.final()]);
+                  } else {
+                    p = decryptSegment(encrypted, cand.key, testIv);
+                  }
+                  if (looksLikeMpegTs(p, true)) {
+                    recovered = p;
+                    usedSrc.plainKey = cand.key;
+                    usedSrc.cipherMode = m;
+                    console.log(`[seg] recovered plainKey via ${cand.tag} ${m}`);
+                    break;
+                  }
+                } catch {}
+              }
+              if (recovered) break;
+            }
+            if (recovered) break;
+          }
+        } catch {}
+      }
+      if (recovered) {
+        plain = recovered;
+      } else {
+        console.warn("[seg] decrypt failed, serving raw:", decErr.message);
+        plain = encrypted;
+      }
     }
 
     segSet(key, plain);
@@ -3526,11 +5376,22 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   if (!sg) return jsonError(res, 404, "المقطع غير موجود");
   const url = sg.u;
   const isTh = session.src?.mode === "thanawica";
-  if (!url || (!isTh && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
+  const isBunny = session.src?.mode === "bunny" || session.src?.mode === "hossam";
+  if (!url || (!isTh && !isBunny && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
   if (isTh && url && !/thanawica\.com/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
+  if (isBunny && url && !/b-cdn\.net|mediadelivery\.net/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
   const meta = { ...sg, u: url, iv: sg.iv, s: sg.s, i: idx };
   const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
   try {
+    // pass-through: رجّع المقطع مشفّر وخلي hls.js يفك بمفتاح /key
+    if (session.src.passThroughEncrypt) {
+      const up = await streamFetch(session.src, url, {}, req.headers);
+      if (!up.ok) throw Object.assign(new Error(`Segment HTTP ${up.status}`), { status: up.status });
+      const buf = Buffer.from(await up.arrayBuffer());
+      res.status(200);
+      res.set({ "Content-Type": "video/mp2t", "Content-Length": String(buf.length), "Cache-Control": "no-store", "Accept-Ranges": "bytes" });
+      return res.send(buf);
+    }
     const plain = await getSegmentPlain(session, meta, url, iv, req.headers);
     res.status(200);
     res.set({ "Content-Type": "video/mp2t", "Content-Length": String(plain.length), "Cache-Control": "no-store", "Accept-Ranges": "bytes" });
@@ -4664,12 +6525,10 @@ setInterval(() => {
 }, 60_000).unref();
 
 CONFIG.BOOTSTRAP_ADMIN.passwordHash = scryptHash(CONFIG.BOOTSTRAP_ADMIN.passwordPlain);
-// A player-bundle compatibility issue must not prevent the whole API from starting.
 try {
   await loadDecryptionUtils();
 } catch (e) {
-  decryptPlaybackKeyFn = null;
-  console.error("[crypto] DecryptionUtils unavailable; API will continue:", e.message);
+  console.error("[crypto] failed to load DecryptionUtils — continuing without segment decrypt:", e && e.message ? e.message : e);
 }
 try {
   if (CONFIG.THANAWICA_ENABLED && CONFIG.THANAWICA_CODE) {
@@ -4711,10 +6570,19 @@ try {
 // On Vercel we export the Express app (serverless). Locally we listen as usual.
 export default app;
 
+// Force proxy/relay when required
+if (ANTI_DETECT.REQUIRE_PROXY && !proxyAgent && !UPSTREAM_RELAY_URL) {
+  console.error("[ANTI] FATAL: REQUIRE_PROXY=1 but neither UPSTREAM_PROXY nor UPSTREAM_RELAY_URL is set");
+  process.exit(1);
+}
+
 const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 if (!isVercel) {
-  const server = app.listen(CONFIG.PORT, () => {
-    console.log(`[API ${APP_VERSION}] :${CONFIG.PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
+  const HOST = process.env.HOST || "0.0.0.0";
+  const PORT = Number(process.env.PORT || CONFIG.PORT || 3000);
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`[API ${APP_VERSION}] ${HOST}:${PORT} · SW424 · concurrency=${ANTI_DETECT.MAX_UPSTREAM_CONCURRENT} · prefetch=${ANTI_DETECT.PREFETCH_AHEAD} · tokens=${tokenPool.tokens.length}`);
+    console.log(`[ANTI] proxy=${Boolean(proxyAgent)} relay=${Boolean(UPSTREAM_RELAY_URL)} healthLocked=${ANTI_DETECT.LOCK_HEALTH}`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
   });
   server.keepAliveTimeout = 65_000;
@@ -4726,5 +6594,5 @@ if (!isVercel) {
     setTimeout(() => process.exit(0), 10_000).unref();
   });
 } else {
-  console.log(`[API ${APP_VERSION}] Vercel serverless mode · segment-decrypt ON`);
+  console.log(`[API ${APP_VERSION}] Vercel serverless · HARDENED mode`);
 }
