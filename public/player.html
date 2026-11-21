@@ -717,42 +717,115 @@ const PLAY_CACHE_TTL = 45000;
 
 async function clientFetchAndHydrate(videoId, meta) {
   const playlistUrl = meta.playlistUrl || meta.playlist_url;
+  const weavePlayUrl = meta.weavePlayUrl || meta.weave_play_url || '';
   const headers = Object.assign({}, meta.headers || {});
-  // المتصفح مش هيقدر يبعت Origin مخصص أحيانًا — سيبه للمتصفح
   const hdrs = {
-    Accept: headers.Accept || 'application/vnd.apple.mpegurl, application/x-mpegURL, */*',
+    Accept: headers.Accept || 'application/vnd.apple.mpegurl, application/x-mpegURL, application/json, */*',
     Authorization: headers.Authorization || ''
   };
-  if (!hdrs.Authorization) throw Object.assign(new Error('مفيش توكن كورساتك للجلب من الجهاز'), { kind: 'auth' });
+  if (!hdrs.Authorization) {
+    throw Object.assign(new Error('مفيش توكن كورساتك — تأكد من COURSATK_TOKEN على السيرفر'), { kind: 'auth' });
+  }
+
+  function withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error((label || 'الطلب') + ' استغرق وقت طويل'), { status: 0 })), ms))
+    ]);
+  }
+
+  async function fetchRaw(url, init, ms) {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = setTimeout(() => { try { ctrl && ctrl.abort(); } catch (_) {} }, ms || 12000);
+    try {
+      const r = await fetch(url, Object.assign({ mode: 'cors', credentials: 'omit', cache: 'no-store', signal: ctrl && ctrl.signal }, init || {}));
+      return r;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  // 1) محاولة عبر نفس السيرفر (لو اتضبط UPSTREAM_PROXY هتنجح)
+  async function viaServerProxy(url) {
+    try {
+      const path = '/api/file-proxy?url=' + encodeURIComponent(url);
+      const r = await fetchRaw(location.origin + path, {
+        method: 'GET',
+        headers: { Accept: hdrs.Accept },
+        mode: 'cors',
+        credentials: 'include'
+      }, 20000);
+      if (!r.ok) return null;
+      const t = await r.text();
+      if (t && t.includes('#EXTM3U')) return t;
+    } catch (_) {}
+    return null;
+  }
 
   async function getText(url) {
-    // مباشرة — غالبًا CORS هيمنع من دومين تاني؛ لو فشل نجرب بروكسي اختياري
-    async function once(u, h) {
-      const r = await fetch(u, { method: 'GET', headers: h, mode: 'cors', credentials: 'omit', cache: 'no-store' });
-      const t = await r.text();
-      return { r, t };
-    }
     let lastStatus = 0;
+    let lastErr = '';
+    // أ) مباشرة من المتصفح (غالبًا CORS يمنع)
     try {
-      const { r, t } = await once(url, hdrs);
+      const r = await fetchRaw(url, { method: 'GET', headers: hdrs }, 12000);
       lastStatus = r.status;
+      const t = await r.text();
       if (t && t.includes('#EXTM3U')) return t;
-    } catch (e) { /* CORS */ }
-    // بروكسي عام (لو متاح) — يمرر الـ URL فقط؛ التوكن في query
-    const proxies = [];
+    } catch (e) {
+      lastErr = (e && e.message) || 'cors';
+    }
+    // ب) عبر سيرفرك (ينجح فقط لو السيرفر مش محظور / عليه proxy)
+    const via = await viaServerProxy(url);
+    if (via) return via;
+    // ج) CORS proxy اختياري من الإعدادات
     try {
       const envProxy = (window.CORS_PROXY || localStorage.getItem('CORS_PROXY') || '').trim();
-      if (envProxy) proxies.push(envProxy);
+      if (envProxy) {
+        const r = await fetchRaw(envProxy + encodeURIComponent(url), { method: 'GET', headers: hdrs }, 15000);
+        const t = await r.text();
+        if (t && t.includes('#EXTM3U')) return t;
+        lastStatus = r.status;
+      }
     } catch (_) {}
-    // بدون بروكسي نرمي خطأ واضح
-    const err = new Error('المتصفح ممنوع من كورساتك (CORS) أو القائمة فاشلة (' + lastStatus + '). الحل: UPSTREAM_PROXY على السيرفر أو CORS_PROXY.');
+
+    const err = new Error(
+      'تعذّر جلب قائمة التشغيل من جهازك.\n' +
+      'سبب شائع: IP السيرفر محظور من Cloudflare + المتصفح ممنوع بـ CORS من كورساتك.\n' +
+      'الحل: اضبط UPSTREAM_PROXY (Residential) على Railway ثم Redeploy.\n' +
+      (lastStatus ? ('آخر كود: ' + lastStatus) : (lastErr || ''))
+    );
     err.status = lastStatus || 0;
+    err.kind = 'network';
     throw err;
   }
 
-  const master = await getText(playlistUrl);
+  // لو مفيش playlistUrl — جرّب weave play من المتصفح (قد يفشل CORS)
+  let resolvedPlaylist = playlistUrl;
+  if (!resolvedPlaylist && weavePlayUrl) {
+    try {
+      const r = await fetchRaw(weavePlayUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: hdrs.Authorization,
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: '{}'
+      }, 15000);
+      const j = await r.json().catch(() => ({}));
+      const d = (j && j.data) || j || {};
+      if (d.stream_url) resolvedPlaylist = d.stream_url;
+      if (d.token) hdrs.Authorization = 'Bearer ' + d.token;
+    } catch (_) {}
+  }
+  if (!resolvedPlaylist) {
+    throw Object.assign(new Error('مفيش رابط playlist — السيرفر محظور ولازم UPSTREAM_PROXY'), { kind: 'network' });
+  }
+
+  setLoading(true, 'جاري جلب قائمة التشغيل…');
+  const master = await getText(resolvedPlaylist);
   let media = master;
-  let variantUrl = playlistUrl;
+  let variantUrl = resolvedPlaylist;
   if (master.includes('#EXT-X-STREAM-INF')) {
     const lines = master.split(/\r?\n/);
     let best = null, bestBw = -1, pending = null;
@@ -767,7 +840,8 @@ async function clientFetchAndHydrate(videoId, meta) {
       }
     }
     if (!best) throw new Error('الماستر فاضي');
-    variantUrl = new URL(best, playlistUrl).href;
+    variantUrl = new URL(best, resolvedPlaylist).href;
+    setLoading(true, 'جاري جلب الجودة…');
     media = await getText(variantUrl);
   }
 
@@ -778,9 +852,22 @@ async function clientFetchAndHydrate(videoId, meta) {
     const m = keyLine.match(/URI="([^"]+)"/);
     if (m) {
       keyUrl = new URL(m[1], variantUrl).href;
-      const kr = await fetch(keyUrl, { method: 'GET', headers: hdrs, mode: 'cors', credentials: 'omit', cache: 'no-store' });
-      const buf = await kr.arrayBuffer();
-      if (!buf || !buf.byteLength) throw new Error('فشل جلب مفتاح التشغيل (' + kr.status + ')');
+      setLoading(true, 'جاري فك مفتاح التشفير…');
+      let buf = null;
+      try {
+        const kr = await fetchRaw(keyUrl, { method: 'GET', headers: hdrs }, 12000);
+        if (kr.ok) buf = await kr.arrayBuffer();
+      } catch (_) {}
+      if (!buf || !buf.byteLength) {
+        // محاولة عبر سيرفرك
+        try {
+          const kr2 = await fetchRaw(location.origin + '/api/file-proxy?url=' + encodeURIComponent(keyUrl), {
+            method: 'GET', credentials: 'include'
+          }, 15000);
+          if (kr2.ok) buf = await kr2.arrayBuffer();
+        } catch (_) {}
+      }
+      if (!buf || !buf.byteLength) throw new Error('فشل جلب مفتاح التشفير — غالبًا السيرفر محظور (UPSTREAM_PROXY مطلوب)');
       const bytes = new Uint8Array(buf);
       let s = '';
       for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
@@ -788,18 +875,22 @@ async function clientFetchAndHydrate(videoId, meta) {
     }
   }
 
+  setLoading(true, 'جاري تجهيز التشغيل على السيرفر…');
   const hydratePath = meta.hydratePath || ('/api/play/' + encodeURIComponent(videoId) + '/hydrate');
-  const hydrated = await api(hydratePath, {
-    method: 'POST',
-    body: JSON.stringify({
-      masterPlaylist: master,
-      mediaPlaylist: media,
-      variantUrl: variantUrl,
-      keyUrl: keyUrl,
-      keyBase64: keyBase64
-    })
-  });
-  // api() might return data nested
+  const hydrated = await withTimeout(
+    api(hydratePath, {
+      method: 'POST',
+      body: JSON.stringify({
+        masterPlaylist: master,
+        mediaPlaylist: media,
+        variantUrl: variantUrl,
+        keyUrl: keyUrl,
+        keyBase64: keyBase64
+      })
+    }),
+    25000,
+    'hydrate'
+  );
   const data = (hydrated && hydrated.play_url) ? hydrated : (hydrated && hydrated.data) ? hydrated.data : hydrated;
   if (!data || !data.play_url) throw new Error('hydrate فشل — مفيش play_url');
   return data;
@@ -1645,11 +1736,25 @@ async function playIndex(i,autoplay){
     }
     if (my !== playToken) return;
 
-    // Cloudflare حظر IP السيرفر → جلب playlist من جهاز الطالب ثم hydrate
+    // Cloudflare حظر IP السيرفر → محاولة جلب من جهاز الطالب ثم hydrate
     if (playData && (playData.type === 'client_fetch' || playData.needsClientFetch)) {
-      setLoading(true, 'جاري جلب الفيديو من جهازك (تجاوز الحظر)…');
-      playData = await clientFetchAndHydrate(item.id, playData);
-      playCache.set(String(item.id), { data: playData, ts: Date.now() });
+      setLoading(true, 'السيرفر محظور — محاولة التشغيل من جهازك…');
+      try {
+        playData = await clientFetchAndHydrate(item.id, playData);
+        playCache.set(String(item.id), { data: playData, ts: Date.now() });
+      } catch (cfErr) {
+        // امسح الكاش عشان المرة الجاية يعيد المحاولة
+        try { playCache.delete(String(item.id)); } catch (_) {}
+        const msg = (cfErr && cfErr.message) || 'فشل التشغيل';
+        if (/UPSTREAM_PROXY|محظور|CORS|Cloudflare/i.test(msg)) {
+          showError(
+            'IP السيرفر محظور من كورساتك/Cloudflare والمتصفح لا يستطيع تجاوز ذلك بسبب CORS.\n\nالحل: أضف UPSTREAM_PROXY (Residential Proxy) في Railway ثم Redeploy.',
+            'تعذّر تشغيل الفيديو'
+          );
+          return;
+        }
+        throw cfErr;
+      }
     }
 
     if (playData && (playData.type === 'youtube' || playData.youtube_url)) {
