@@ -1,9 +1,6 @@
 /**
  * Thanawya World API — Protected Backend
- * VERSION v1.7.22-SW424 — stream-weave player v4.2.4 flow
- * - Uses official play response: token, session_id, key_seed, key_version=3, stream_url
- * - PLAYER_JS → https://player.stream-weave.com/player.js?v=4.2.4
- * - Token pool + balanced anti-detect kept
+ * VERSION v1.8.4 — multi-source stream + credential hardening + anti-bulk-download
  */
 import express from "express";
 import cors from "cors";
@@ -33,169 +30,131 @@ try {
   console.warn("[API] undici not available — UPSTREAM_PROXY disabled");
 }
 
+// ===== thanawica (optional) =====
+function _thMissing() {
+  const e = new Error("thanawica disabled");
+  e.status = 503;
+  throw e;
+}
+let thanawicaLogin = async () => null;
+let thSubjectsForYear = async () => [];
+let thTeachers = async () => [];
+let thChapters = async () => [];
+let thLectures = async () => [];
+let thLectureContent = async () => ({});
+let thGetVideoSource = async () => _thMissing();
+let thResolveMp4Url = async () => null;
+let thMintAndFetchSegment = async () => _thMissing();
+let thResolvePlaylistHash = async () => null;
+let thResolveVideo = async () => null;
+let isChemOrMathName = () => false;
+let chemMathKind = () => null;
+let isThId = () => false;
+let encodeThId = (x) => x;
+let decodeThId = (x) => x;
+let getThanawicaSessionInfo = () => null;
+try {
+  const th = await import("./thanawica.js");
+  thanawicaLogin = th.thanawicaLogin;
+  thSubjectsForYear = th.thSubjectsForYear;
+  thTeachers = th.thTeachers;
+  thChapters = th.thChapters;
+  thLectures = th.thLectures;
+  thLectureContent = th.thLectureContent;
+  thGetVideoSource = th.thGetVideoSource;
+  thResolveMp4Url = th.thResolveMp4Url;
+  thMintAndFetchSegment = th.thMintAndFetchSegment;
+  thResolvePlaylistHash = th.thResolvePlaylistHash;
+  thResolveVideo = th.thResolveVideo;
+  isChemOrMathName = th.isChemOrMathName;
+  chemMathKind = th.chemMathKind;
+  isThId = th.isThId;
+  encodeThId = th.encodeThId;
+  decodeThId = th.decodeThId;
+  getThanawicaSessionInfo = th.getThanawicaSessionInfo;
+  console.log("[API] thanawica.js loaded");
+} catch {
+  console.warn("[API] thanawica.js not found — skipped");
+}
+
+// ===== upstream adapters (soft-load: mesari required, taleb optional) =====
 import {
-  thanawicaLogin,
-  thSubjectsForYear,
-  thTeachers,
-  thChapters,
-  thLectures,
-  thLectureContent,
-  thGetVideoSource,
-  thResolveMp4Url,
-  thMintAndFetchSegment,
-  thResolvePlaylistHash,
-  thResolveVideo,
-  isChemOrMathName,
-  chemMathKind,
-  isThId,
-  encodeThId,
-  decodeThId,
-  getThanawicaSessionInfo
-} from "./thanawica.js";
+  buildMesariSource,
+  buildMesariSourceFromAnyId,
+  getMesariTeachers,
+  crawlMesariFullCatalog,
+  ensureMesariChapterLectures,
+  getMesariLesson,
+  clearMesariCatalogCache,
+  updateMesariAuth,
+  mesariAuthStatus,
+  MESARI_STREAM_HOSTS
+} from "./mesari.js";
+
+function _talebUnavailable(name) {
+  const err = new Error("مصدر talep غير مفعّل على السيرفر");
+  err.status = 503;
+  err.expose = true;
+  throw err;
+}
+const _talebStub = {
+  buildTalebSource: async () => _talebUnavailable("buildTalebSource"),
+  buildTalebSourceFromAnyId: async () => _talebUnavailable("buildTalebSourceFromAnyId"),
+  getTalebTeachers: async () => [],
+  crawlTalebFullCatalog: async () => ({ subjects: [], teachers: [], stats: {} }),
+  ensureCourseLectures: async () => ({ lectures: [], lecturesCount: 0, partsCount: 0 }),
+  clearTalebCatalogCache: () => {},
+  getTalebKey: async () => _talebUnavailable("getTalebKey"),
+  getTalebPlaylist: async () => _talebUnavailable("getTalebPlaylist"),
+  resolveTalebPartId: async () => _talebUnavailable("resolveTalebPartId"),
+  TALEB_STREAM_HOSTS: [],
+  updateTalebCookies: () => {},
+  subjectNameAr: (sid) => String(sid || "مادة")
+};
+
+let buildTalebSource = _talebStub.buildTalebSource;
+let buildTalebSourceFromAnyId = _talebStub.buildTalebSourceFromAnyId;
+let getTalebTeachers = _talebStub.getTalebTeachers;
+let crawlTalebFullCatalog = _talebStub.crawlTalebFullCatalog;
+let ensureCourseLectures = _talebStub.ensureCourseLectures;
+let clearTalebCatalogCache = _talebStub.clearTalebCatalogCache;
+let getTalebKey = _talebStub.getTalebKey;
+let getTalebPlaylist = _talebStub.getTalebPlaylist;
+let resolveTalebPartId = _talebStub.resolveTalebPartId;
+let TALEB_STREAM_HOSTS = _talebStub.TALEB_STREAM_HOSTS;
+let updateTalebCookies = _talebStub.updateTalebCookies;
+let talebSubjectNameAr = _talebStub.subjectNameAr;
+
+try {
+  const talebMod = await import("./taleb.js");
+  buildTalebSource = talebMod.buildTalebSource;
+  buildTalebSourceFromAnyId = talebMod.buildTalebSourceFromAnyId;
+  getTalebTeachers = talebMod.getTalebTeachers;
+  crawlTalebFullCatalog = talebMod.crawlTalebFullCatalog;
+  ensureCourseLectures = talebMod.ensureCourseLectures;
+  clearTalebCatalogCache = talebMod.clearTalebCatalogCache;
+  getTalebKey = talebMod.getTalebKey;
+  getTalebPlaylist = talebMod.getTalebPlaylist;
+  resolveTalebPartId = talebMod.resolveTalebPartId;
+  TALEB_STREAM_HOSTS = talebMod.TALEB_STREAM_HOSTS || [];
+  updateTalebCookies = talebMod.updateTalebCookies;
+  talebSubjectNameAr = talebMod.subjectNameAr || talebSubjectNameAr;
+  console.log("[API] taleb.js loaded");
+} catch (e) {
+  console.warn("[API] taleb.js not found — running mesari-only mode");
+}
+
+// if stored creds are mesari token
+function applyLoadedCreds(device, session) {
+  if (String(device) === "mesari" && session) updateMesariAuth(session);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "data");
 const MEDIA_DIR = path.join(DATA_DIR, "media");
 const TEMP_DIR = path.join(DATA_DIR, "temp_files");
 try { fs.mkdirSync(MEDIA_DIR, { recursive: true }); fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
-const APP_VERSION = "v1.7.23-server-hls";
-
-// ==================== ANTI-DETECTION HARDENING ====================
-const ANTI_DETECT = {
-  // Balanced mode: videos work smoothly + still harder to detect than original
-  REQUIRE_PROXY: process.env.REQUIRE_PROXY === "1",
-  MAX_TOKENS: 12,
-  MAX_UPSTREAM_CONCURRENT: Number(process.env.UPSTREAM_CONCURRENCY || 28), // was 7 — too low, broke playback
-  PREFETCH_AHEAD: Number(process.env.PREFETCH_AHEAD || 2),                 // small prefetch helps startup
-  HLS_RATE_MAX: Number(process.env.HLS_RATE_MAX || 180),
-  PLAY_RATE_MAX: Number(process.env.PLAY_RATE_MAX || 20),
-  GLOBAL_RATE_MAX: Number(process.env.GLOBAL_RATE_MAX || 800),
-  SEG_DELAY_MIN: 0,   // remove forced delay — was breaking smooth playback
-  SEG_DELAY_MAX: 40,  // tiny jitter only
-  STREAM_IDLE_MS: 35 * 60 * 1000,
-  STREAM_MAX_MS: 8 * 3600 * 1000,
-  LOCK_HEALTH: process.env.LOCK_HEALTH === "1", // only if explicitly set
-  DISABLE_SHARED_PLAY: false, // allow shared play again so same video is efficient
-  TOKEN_FAIL_BAN_MS: 20 * 60 * 1000,
-  TOKEN_HARD_BAN_MS: 3 * 3600 * 1000,
-};
-
-const tokenPool = {
-  tokens: [],
-  idx: 0,
-};
-
-function loadTokenPool() {
-  const envTokens = String(process.env.COURSATK_TOKENS || "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t.length > 30);
-  const single = (process.env.COURSATK_TOKEN || "").trim();
-
-  // ممنوع نقرأ runtime هنا — بتتعلن بعدين ويحصل Temporal Dead Zone
-  const all = [...new Set([
-    ...(single ? [single] : []),
-    ...envTokens
-  ])];
-
-  tokenPool.tokens = all.map((t) => ({
-    token: t,
-    lastUsed: 0,
-    fails: 0,
-    bannedUntil: 0,
-  }));
-
-  if (tokenPool.tokens.length) {
-    console.log(`[ANTI] token pool loaded: ${tokenPool.tokens.length} token(s)`);
-  } else {
-    console.warn("[ANTI] WARNING: no tokens found in COURSATK_TOKEN / COURSATK_TOKENS — videos will fail");
-  }
-}
-
-function getAliveToken() {
-  const now = Date.now();
-  let alive = tokenPool.tokens.filter((t) => t.bannedUntil < now);
-  if (!alive.length) {
-    // fallback من الـ env فقط (آمن في أي وقت)
-    const fallback = (process.env.COURSATK_TOKEN || "").trim();
-    if (fallback && fallback.length > 30) {
-      tokenPool.tokens.push({ token: fallback, lastUsed: 0, fails: 0, bannedUntil: 0 });
-      alive = tokenPool.tokens.filter((t) => t.bannedUntil < now);
-    }
-  }
-  if (!alive.length) throw new Error("جميع التوكنات محظورة مؤقتًا أو غير متوفرة");
-  alive.sort((a, b) => a.lastUsed - b.lastUsed);
-  const chosen = alive[0];
-  chosen.lastUsed = now;
-  return chosen.token;
-}
-
-function markTokenFailed(token, hard = false) {
-  const row = tokenPool.tokens.find((t) => t.token === token);
-  if (!row) return;
-  row.fails += 1;
-  if (hard || row.fails >= 4) {
-    row.bannedUntil = Date.now() + (hard ? ANTI_DETECT.TOKEN_HARD_BAN_MS : ANTI_DETECT.TOKEN_FAIL_BAN_MS);
-    row.fails = 0;
-    console.warn("[ANTI] token temporarily banned", hard ? "(hard)" : "(soft)");
-  }
-}
-
-function markTokenSuccess(token) {
-  const row = tokenPool.tokens.find((t) => t.token === token);
-  if (row) row.fails = Math.max(0, row.fails - 1);
-}
-
-loadTokenPool();
-
-// Expanded mobile UA pool for fingerprint reduction
-const MOBILE_UAS = [
-  "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 13; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 14; Redmi Note 13 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 12; M2101K6G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 14; SM-A556E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 15; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-  "Mozilla/5.0 (Linux; Android 14; V2330) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 13; 2201116SG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
-];
-
-function randomUpstreamHeaders(extra = {}, isStream = false) {
-  const ua = MOBILE_UAS[Math.floor(Math.random() * MOBILE_UAS.length)];
-  const isAndroid = /Android/i.test(ua);
-  const headers = {
-    "User-Agent": ua,
-    Accept: isStream ? "*/*" : "application/json, text/plain, */*",
-    "Accept-Language": Math.random() > 0.45 ? "ar-EG,ar;q=0.9,en-US;q=0.8,en;q=0.7" : "ar,en;q=0.9",
-    Origin: "https://coursatk.online",
-    Referer: "https://coursatk.online/",
-    "Sec-Fetch-Site": "same-site",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Dest": "empty",
-    "Cache-Control": "no-cache",
-    Pragma: "no-cache",
-  };
-  if (isAndroid) {
-    headers["X-Requested-With"] = "com.mycompany.app.soulbrowser";
-    headers["Sec-CH-UA-Mobile"] = "?1";
-    headers["Sec-CH-UA-Platform"] = '"Android"';
-  }
-  let token = "";
-  try {
-    token = getAliveToken();
-    headers.Authorization = `Bearer ${token}`;
-  } catch (e) {
-    // fallback later
-  }
-  for (const [k, v] of Object.entries(extra || {})) {
-    if (v != null && v !== "") headers[k] = v;
-  }
-  return { headers, token };
-}
+const APP_VERSION = "v1.9.0-mesari";
 
 process.on("unhandledRejection", (r) => console.error("[unhandledRejection]", (r && r.stack) || r));
 process.on("uncaughtException", (e) => console.error("[uncaughtException]", (e && e.stack) || e));
@@ -227,8 +186,6 @@ const ALLOWED_ORIGINS = new Set([
   "https://durosakplus.com",
   "https://thanawya-club.up.railway.app",
   "https://thanawya-club.vercel.app",
-  "https://thanaweya-club.up.railway.app",
-  "https://thanaweya-club.vercel.app",
   ...String(process.env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean)
 ]);
 // Railway/Vercel public domain من البيئة
@@ -460,12 +417,11 @@ function makeLimiter(max, maxQueue = 3000) {
   run.stats = () => ({ active, queued: q.length });
   return run;
 }
-const upstreamSlot = makeLimiter(Number(process.env.UPSTREAM_CONCURRENCY || ANTI_DETECT.MAX_UPSTREAM_CONCURRENT));
+const upstreamSlot = makeLimiter(Number(process.env.UPSTREAM_CONCURRENCY || 96));
 
-const SEG_CACHE_MAX = Number(process.env.SEGMENT_CACHE_MB || 128) * 1024 * 1024;
-const SEG_CACHE_TTL = 6 * 60_000;
-const PREFETCH_AHEAD = ANTI_DETECT.PREFETCH_AHEAD;
-
+const SEG_CACHE_MAX = Number(process.env.SEGMENT_CACHE_MB || 256) * 1024 * 1024;
+const SEG_CACHE_TTL = 10 * 60_000;
+const PREFETCH_AHEAD = Number(process.env.PREFETCH_AHEAD || 3);
 const segCache = new Map();
 let segCacheBytes = 0;
 function segDel(k) {
@@ -645,7 +601,21 @@ const CONFIG = {
     "b-cdn.net",
     "mediadelivery.net",
     "iframe.mediadelivery.net",
-    "vz-878412bf-692.b-cdn.net"
+    "vz-878412bf-692.b-cdn.net",
+    // taleb.pro
+    "video.talep.pro",
+    "talep.pro",
+    // mesari.online
+    "api.mesari.online",
+    "mesari.online",
+    "vidmoly.me",
+    "vidmoly.to",
+    "www.vidmoly.me",
+    "files.coursatk.online",
+    "vmpx.online",
+    "vmeas.cloud",
+    "staticmoly.me",
+    "vidmoly.biz"
   ],
   // Bunny Stream (د. حسام عيسى / drhossamissa.com)
   BUNNY_CDN_HOST: (process.env.BUNNY_CDN_HOST || "vz-878412bf-692.b-cdn.net").replace(/^https?:\/\//, "").replace(/\/$/, ""),
@@ -657,7 +627,7 @@ const CONFIG = {
   STREAM_REFERER: "https://coursatk.online/",
   STREAM_X_REQUESTED_WITH: "com.mycompany.app.soulbrowser",
   STREAM_UA: "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 Chrome/153.0.0.0 Mobile Safari/537.36",
-  PLAYER_JS: "https://player.stream-weave.com/player.js?v=4.2.4",
+  PLAYER_JS: "https://player.stream-weave.com/assets/player.js?v=3.0.0",
   FIREBASE: (process.env.FIREBASE_URL || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, ""),
   BOOTSTRAP_ADMIN: {
     username: process.env.ADMIN_USER || "admin",
@@ -670,11 +640,10 @@ const CONFIG = {
   },
   STUDENT_SESSION_MS: 7 * 24 * 3600 * 1000,
   ADMIN_SESSION_MS: 12 * 3600 * 1000,
-  STREAM_SESSION_MS: 12 * 60 * 1000,
-  STREAM_IDLE_MS: ANTI_DETECT.STREAM_IDLE_MS,
-  STREAM_MAX_MS: ANTI_DETECT.STREAM_MAX_MS,
-  MAX_PROXY_BYTES: 8 * 1024 * 1024,
-
+  STREAM_SESSION_MS: 15 * 60 * 1000,
+  STREAM_IDLE_MS: 45 * 60 * 1000,
+  STREAM_MAX_MS: 12 * 3600 * 1000,
+  MAX_PROXY_BYTES: 12 * 1024 * 1024,
   THANAWICA_CODE: process.env.THANAWICA_CODE || "",
   THANAWICA_ENABLED: process.env.THANAWICA_ENABLED !== "0",
   CODE_TYPES: {
@@ -808,23 +777,21 @@ function getCoursatkTokenSync() {
 }
 
 loadRuntimeFile();
-// reload token pool after runtime is available + add runtime token if present
-try {
-  loadTokenPool();
-  if (runtime && runtime.coursatkToken && String(runtime.coursatkToken).length > 30) {
-    const tok = String(runtime.coursatkToken).trim();
-    if (!tokenPool.tokens.some(t => t.token === tok)) {
-      tokenPool.tokens.push({ token: tok, lastUsed: 0, fails: 0, bannedUntil: 0 });
-      console.log("[ANTI] added runtime.coursatkToken to pool, total:", tokenPool.tokens.length);
-    }
-  }
-} catch (e) {
-  console.warn("[ANTI] token pool reload:", e.message);
-}
 // لو مفيش رابط Firebase متظبط → استخدم الفايربيز الأصلي
 if (!runtime.firebaseUrl) {
   runtime.firebaseUrl = (process.env.FIREBASE_URL || CONFIG.FIREBASE || "https://plus-f09b5-default-rtdb.firebaseio.com").replace(/\/$/, "");
 }
+
+// تحميل بيانات مصادقة البث (مشفرة) عند الـ startup — بدون طباعة قيم
+(async () => {
+  try {
+    const creds = await loadStreamCredentials();
+    if (creds) console.log("[stream-auth] credentials ready (" + creds.source + ")");
+    else console.warn("[stream-auth] no credentials configured");
+  } catch {
+    console.warn("[stream-auth] load skipped");
+  }
+})();
 
 const maintenance = { mode: "off", message: "السيرفر في وضع الصيانة حاليًا. حاول لاحقًا.", updatedAt: 0, updatedBy: null };
 
@@ -1115,6 +1082,105 @@ function getFirebaseSecret() {
   return (process.env.FIREBASE_SECRET || process.env.FIREBASE_DATABASE_SECRET || process.env.FB_SECRET || runtime.firebaseSecret || "").trim();
 }
 
+/** مفتاح تشفير بيانات المصادقة عند التخزين (AES-256-GCM) */
+function getCredCryptoKey() {
+  const raw = String(
+    process.env.STREAM_CRED_SECRET ||
+    process.env.STUDENT_JWT_SECRET ||
+    process.env.JWT_SECRET ||
+    process.env.SESSION_SECRET ||
+    process.env.FIREBASE_SECRET ||
+    "thanawya-stream-cred-fallback"
+  );
+  return crypto.createHash("sha256").update("stream-cred-v1|" + raw).digest();
+}
+
+function encryptCredPayload(obj) {
+  const iv = crypto.randomBytes(12);
+  const key = getCredCryptoKey();
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const pt = Buffer.from(JSON.stringify(obj), "utf8");
+  const enc = Buffer.concat([cipher.update(pt), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    v: 1,
+    iv: iv.toString("base64"),
+    tag: tag.toString("base64"),
+    data: enc.toString("base64"),
+    updatedAt: Date.now()
+  };
+}
+
+function decryptCredPayload(row) {
+  if (!row || typeof row !== "object") return null;
+  // backward compat: plaintext legacy
+  if (row.device && row.session && !row.data) {
+    return { device: String(row.device), session: String(row.session) };
+  }
+  if (!row.data || !row.iv || !row.tag) return null;
+  try {
+    const key = getCredCryptoKey();
+    const iv = Buffer.from(row.iv, "base64");
+    const tag = Buffer.from(row.tag, "base64");
+    const data = Buffer.from(row.data, "base64");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(tag);
+    const pt = Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
+    const obj = JSON.parse(pt);
+    if (!obj.device || !obj.session) return null;
+    return { device: String(obj.device), session: String(obj.session) };
+  } catch {
+    return null;
+  }
+}
+
+async function loadStreamCredentials() {
+  // 0) mesari JWT from env
+  const envMesari = String(process.env.MESARI_AUTH_TOKEN || "").trim();
+  if (envMesari) {
+    updateMesariAuth(envMesari);
+  }
+  // 1) env wins if both set
+  const envD = String(process.env.TALEB_DEVICE || "").trim();
+  const envS = String(process.env.TALEB_SESSION || "").trim();
+  if (envD && envS) {
+    if (envD === "mesari" && envS.length > 20) {
+      updateMesariAuth(envS);
+      return { device: envD, session: envS, source: "env-mesari" };
+    }
+    return { device: envD, session: envS, source: "env" };
+  }
+  // 2) encrypted (or legacy) firebase
+  try {
+    const row = await fbGet("config/stream_auth");
+    const dec = decryptCredPayload(row);
+    if (dec) {
+      process.env.TALEB_DEVICE = dec.device;
+      process.env.TALEB_SESSION = dec.session;
+      return { ...dec, source: "firebase" };
+    }
+  } catch {}
+  // 3) legacy path
+  try {
+    const legacy = await fbGet("config/taleb_cookies");
+    const dec = decryptCredPayload(legacy);
+    if (dec) {
+      process.env.TALEB_DEVICE = dec.device;
+      process.env.TALEB_SESSION = dec.session;
+      return { ...dec, source: "legacy" };
+    }
+  } catch {}
+  return null;
+}
+
+async function persistStreamCredentials(device, session, by) {
+  const payload = encryptCredPayload({ device, session, by: by || null });
+  await fbSet("config/stream_auth", payload);
+  // wipe legacy plaintext if exists
+  try { await fbSet("config/taleb_cookies", null); } catch {}
+}
+
+
 function fbUrl(p) {
   const base = getFirebaseUrl();
   if (!base) throw new Error("Firebase غير مضبوط");
@@ -1175,19 +1241,7 @@ async function getStorageBucket() {
   return "";
 }
 
-function getCoursatkToken() {
-  // Prefer live token from pool (supports rotation)
-  try {
-    if (tokenPool.tokens && tokenPool.tokens.length) {
-      return getAliveToken();
-    }
-  } catch {}
-  // Fallbacks
-  if (runtime && runtime.coursatkToken) return runtime.coursatkToken;
-  const envTok = (process.env.COURSATK_TOKEN || process.env.COURSATK_TOKENS || "").split(",")[0].trim();
-  if (envTok) return envTok;
-  return CONFIG.COURSATK_TOKEN || "";
-}
+function getCoursatkToken() { if (runtime.coursatkToken) return runtime.coursatkToken; return process.env.COURSATK_TOKEN || CONFIG.COURSATK_TOKEN || ""; }
 
 async function refreshCoursatkTokenFromFb() {
   try { const remote = await fbGet("config/coursatkToken"); if (typeof remote === "string" && remote.length > 20) { runtime.coursatkToken = remote; CONFIG.COURSATK_TOKEN = remote; return remote; } } catch {}
@@ -1251,7 +1305,24 @@ function openSse(req, res) {
   res.on("error", () => clearInterval(hb));
 }
 
-function jsonError(res, status, message) { return res.status(status).json({ success: false, message }); }
+function sanitizeClientMessage(message) {
+  const msg = String(message || "").trim();
+  if (!msg) return "حدث خطأ";
+  if (/talep\.pro|taleb\.pro|\btaleb\b|coursatk|stream-weave|thanawica|bunny|mediadelivery|b-cdn\.net|cookie|taleb-device|taleb-session|TALEB_|FIREBASE|scrypt\$|Bearer\s+[A-Za-z0-9._-]{10,}/i.test(msg)) {
+    return "تعذر إكمال الطلب";
+  }
+  if (/https?:\/\//i.test(msg) || /\/api\/video\/|\/watch\/\d+/i.test(msg)) {
+    return "تعذر إكمال الطلب";
+  }
+  if (msg.length > 160 || /[A-Za-z0-9_-]{40,}/.test(msg)) {
+    return "تعذر إكمال الطلب";
+  }
+  return msg;
+}
+
+function jsonError(res, status, message) {
+  return res.status(status).json({ success: false, message: sanitizeClientMessage(message) });
+}
 
 function getBearer(req) {
   const h = req.headers.authorization || "";
@@ -1790,41 +1861,40 @@ function makeSwProofCandidates({ keySeed, sessionId, token, path, ticket }) {
   return [...out];
 }
 
-// Upstream helpers (hardened)
-async function upstreamHeaders(extra = {}, _profileIdx = 0) {
-  const { headers, token } = randomUpstreamHeaders(extra, false);
-  if (!headers.Authorization) {
-    const tok = await getCoursatkToken().catch(() => getAliveToken());
-    headers.Authorization = `Bearer ${tok}`;
+// Upstream helpers
+async function upstreamHeaders(extra = {}, profileIdx = 0) {
+  const tok = String(await getCoursatkToken() || "").trim();
+  if (!tok) throw new Error("COURSATK_TOKEN غير مضبوط");
+  // لو التوكن اتحط فيه كلمة Bearer بالغلط
+  const clean = tok.replace(/^Bearer\s+/i, "");
+  if (!clean || clean === "undefined" || clean === "null") {
+    throw new Error("COURSATK_TOKEN فاضي أو غير صالح");
   }
-  return headers;
+  const profile = UA_PROFILES[profileIdx % UA_PROFILES.length];
+  return {
+    Authorization: `Bearer ${clean}`,
+    Accept: "application/json",
+    ...profile,
+    ...extra
+  };
 }
 
 async function upstreamJsonRaw(apiPath, options = {}) {
   const isGet = !options.method || String(options.method).toUpperCase() === "GET";
   const url = `${CONFIG.COURSATK_API}${apiPath}`;
   let lastErr = null;
-  const maxAttempts = Math.min(6, Math.max(3, tokenPool.tokens.length || 3));
 
-  for (let p = 0; p < maxAttempts; p++) {
-    let usedToken = "";
+  for (let p = 0; p < UA_PROFILES.length; p++) {
     try {
-      const { headers, token } = randomUpstreamHeaders(options.headers || {}, false);
-      usedToken = token;
-      if (!headers.Authorization) {
-        const tok = await getCoursatkToken().catch(() => getAliveToken());
-        headers.Authorization = `Bearer ${tok}`;
-        usedToken = tok;
-      }
+      const headers = await upstreamHeaders(options.headers || {}, p);
       const r = await upstreamSlot(() =>
         fetchT(url, { ...options, headers }, { timeout: 22_000, retries: UPSTREAM_FETCH_RETRIES, retryOn: [429, 502, 503, 504, 408, 500] })
       );
       const text = await r.text();
       if (isCloudflareBlock(r.status, text)) {
-        lastErr = new Error("Cloudflare block — use UPSTREAM_PROXY or UPSTREAM_RELAY_URL");
-        console.warn("[upstream] CF block", apiPath);
-        if (usedToken) markTokenFailed(usedToken, false);
-        if (p < maxAttempts - 1) continue;
+        lastErr = new Error("Cloudflare حاجب IP السيرفر على Coursatk — استخدم UPSTREAM_PROXY أو UPSTREAM_RELAY_URL");
+        console.warn("[upstream] CF block", apiPath, "profile", p);
+        if (p < UA_PROFILES.length - 1) continue;
         throw lastErr;
       }
       let data;
@@ -1832,31 +1902,23 @@ async function upstreamJsonRaw(apiPath, options = {}) {
         data = JSON.parse(text);
       } catch {
         lastErr = new Error(`Upstream non-JSON (${r.status})`);
-        if ((r.status === 403 || r.status === 401) && p < maxAttempts - 1) {
-          if (usedToken) markTokenFailed(usedToken, r.status === 401);
-          continue;
+        if (r.status === 403 || r.status === 401) {
+          if (p < UA_PROFILES.length - 1) continue;
         }
         throw lastErr;
       }
       if (!r.ok) {
         const msg = data?.error || data?.message || `Upstream HTTP ${r.status}`;
-        if (/اشتراك|انته|expired|token/i.test(String(msg))) {
-          if (usedToken) markTokenFailed(usedToken, true);
-          throw new Error(msg);
-        }
+        if (/اشتراك|انته|expired|token/i.test(String(msg))) throw new Error(msg);
         lastErr = new Error(msg);
-        if ((r.status === 403 || r.status === 401) && p < maxAttempts - 1) {
-          if (usedToken) markTokenFailed(usedToken, r.status === 401);
-          continue;
-        }
+        if (r.status === 403 && p < UA_PROFILES.length - 1) continue;
         throw lastErr;
       }
-      if (usedToken) markTokenSuccess(usedToken);
       return data;
     } catch (e) {
       lastErr = e;
-      if (p < maxAttempts - 1 && /non-JSON|403|401|Cloudflare|block/i.test(String(e.message || ""))) {
-        await delay(180 + Math.random() * 220);
+      if (p < UA_PROFILES.length - 1 && /non-JSON|403|Cloudflare|Hajeb|حاجب/i.test(String(e.message || ""))) {
+        await delay(150 + Math.random() * 200);
         continue;
       }
       throw e;
@@ -1907,47 +1969,65 @@ function allowedStreamUrl(raw, session = null) {
 }
 
 async function streamFetch(session, url, extra = {}, clientHeaders = null) {
-  if (!allowedStreamUrl(url, session)) throw new Error(`URL غير مسموح: ${url}`);
+  if (!allowedStreamUrl(url, session)) {
+    const err = new Error("مصدر غير مسموح");
+    err.status = 403;
+    throw err;
+  }
   const ch = clientHeaders || {};
   const isBunny = session && (session.mode === "bunny" || session.mode === "hossam");
+  const isTaleb = session && session.mode === "taleb";
   let headers;
-  if (isBunny) {
-    // Bunny: keep required referer, randomize UA
-    const ua = MOBILE_UAS[Math.floor(Math.random() * MOBILE_UAS.length)];
+  if (isTaleb) {
+    const device = String(process.env.TALEB_DEVICE || "").trim();
+    const sess = String(process.env.TALEB_SESSION || "").trim();
+    if (!device || !sess) {
+      const err = new Error("خدمة البث غير مهيأة حالياً");
+      err.status = 503;
+      err.expose = true;
+      throw err;
+    }
+    headers = {
+      Accept: "*/*",
+      "Cache-Control": "no-cache",
+      Origin: "https://talep.pro",
+      Referer: "https://talep.pro/",
+      "User-Agent": ch["user-agent"] || "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "accept-language": "ar-AE,ar;q=0.9,en-US;q=0.8,en;q=0.7",
+      cookie: `taleb-device=${device}; taleb-session=${sess}`
+    };
+  } else if (isBunny) {
+    // فك حماية Bunny: Referer من iframe.mediadelivery.net مطلوب
     headers = {
       Accept: "*/*",
       "Cache-Control": "no-cache",
       Origin: CONFIG.BUNNY_ORIGIN || "https://iframe.mediadelivery.net",
       Referer: CONFIG.BUNNY_REFERER || "https://iframe.mediadelivery.net/",
-      "User-Agent": ua
+      "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
     };
   } else {
     let host = "";
     try { host = new URL(url).hostname.toLowerCase(); } catch {}
     const isFloravon = /floravon\./i.test(host) || /\.floravon\./i.test(host);
     const isSw = /stream-weave\.com$/i.test(host) || host.endsWith(".stream-weave.com");
-    const { headers: rnd } = randomUpstreamHeaders({}, true);
     headers = {
       Accept: "*/*",
       "Cache-Control": "no-cache",
       Origin: CONFIG.STREAM_ORIGIN,
       Referer: CONFIG.STREAM_REFERER,
-      "User-Agent": rnd["User-Agent"] || CONFIG.STREAM_UA,
-      "Accept-Language": rnd["Accept-Language"] || "ar,en;q=0.9",
+      "User-Agent": ch["user-agent"] || CONFIG.STREAM_UA
     };
-    // floravon CDN موقّع بـ token في الـ query — متبعتش Bearer
+    // floravon CDN موقّع بـ token في الـ query — متبعتش Bearer (أحيانًا يبوّظ)
     if (!isFloravon && session.token) {
       headers.Authorization = `Bearer ${session.token}`;
-      headers["X-Requested-With"] = "com.mycompany.app.soulbrowser";
+      headers["X-Requested-With"] = CONFIG.STREAM_X_REQUESTED_WITH;
     }
+    // stream-weave key_version=3
     if (isSw) {
       const kv = Number(session.keyVersion || session.key_version || 0);
       if (kv > 0) headers["x-sw-key-version"] = String(kv);
       if (session.swTicket) headers["x-sw-ticket"] = String(session.swTicket);
       if (session.swProof) headers["x-sw-proof"] = String(session.swProof);
-      // مطلوب من player.js الرسمي عند جلب المفتاح/الرخصة
-      headers["X-SW-Key-License"] = "1";
-      headers["Accept"] = headers["Accept"] || "application/octet-stream, application/json, */*";
     }
   }
   for (const name of ["sec-ch-ua-platform", "sec-ch-ua", "sec-ch-ua-mobile", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "accept-language"]) {
@@ -1955,21 +2035,37 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
   }
   for (const [k, v] of Object.entries(extra || {})) { if (v != null && v !== "") headers[k] = v; }
   const hasRange = Boolean(headers.Range || headers.range);
-  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 30_000, retries: hasRange ? 2 : Math.min(3, UPSTREAM_FETCH_RETRIES) }));
+  return upstreamSlot(() => fetchT(url, { headers, cache: "no-store" }, { timeout: 30_000, retries: hasRange ? 2 : UPSTREAM_FETCH_RETRIES }));
 }
 
-app.use(rateLimit({ max: ANTI_DETECT.GLOBAL_RATE_MAX, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
-app.use("/api/stream/", rateLimit({ max: 400, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
-// حد المقاطع صارم ضد bulk / detection
-app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || ANTI_DETECT.HLS_RATE_MAX), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات كثيرة" }));
-app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || ANTI_DETECT.PLAY_RATE_MAX), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات كثيرة" }));
+app.use(rateLimit({ max: 1500, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
+app.use("/api/stream/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
+// حد المقاطع: يمنع سحب المحاضرة كاملة بسرعة من سكربت/منصة تانية
+app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || 420), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات بث كثيرة — هدّي شوية" }));
+app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 30), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
 
 app.get("/health", (_req, res) => {
-  if (ANTI_DETECT.LOCK_HEALTH) {
-    return res.status(404).end();
-  }
-  // minimal response only — no version, no cache stats, no token info
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    service: "thanawya-world-api",
+    cryptoReady: Boolean(decryptPlaybackKeyFn),
+    decryptSegments: true,
+    directSegments: process.env.HLS_DIRECT_SEGMENTS !== "0",
+    bunnyEnabled: CONFIG.BUNNY_ENABLED !== false,
+    bunnyCdn: CONFIG.BUNNY_CDN_HOST || null,
+    version: APP_VERSION,
+    upstreamProxy: Boolean(proxyAgent),
+    upstreamRelay: Boolean(UPSTREAM_RELAY_URL),
+    tokenConfigured: Boolean(getCoursatkTokenSync()),
+    cache: {
+      segments: segCache.size,
+      segmentMB: Math.round(segCacheBytes / 1048576),
+      sources: sourceCache.size,
+      streamSessions: streamSessions.size,
+      upstream: upstreamSlot.stats()
+    },
+    now: new Date().toISOString()
+  });
 });
 
 app.get("/api/public/code-types", (_req, res) => {
@@ -1982,10 +2078,24 @@ app.get("/api/public/code-types", (_req, res) => {
   res.json({ success: true, data: types });
 });
 
+
+function dayGreeting(d = new Date()) {
+  // توقيت مصر
+  let hour = d.getHours();
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Africa/Cairo" }).formatToParts(d);
+    const h = parts.find((x) => x.type === "hour");
+    if (h) hour = Number(h.value);
+  } catch {}
+  // صباح: 5–11 | مساء: 12–4 صباحًا
+  if (hour >= 5 && hour < 12) return "صباح النور";
+  return "مساء النور";
+}
+
 app.get("/api/public/site", rateLimit({ max: 120, windowMs: 60_000, scope: "public-site" }), (_req, res) => {
   const packages = (runtime.packages || []).filter((p) => p.active !== false).map((p) => ({ id: p.id, name: p.name, price: p.price ?? 0, days: p.days || 0, hours: p.hours || 0 }));
   const agents = (runtime.agents || []).filter((a) => a.active !== false).map((a) => ({ id: a.id, name: a.name, telegram: a.telegram || "" }));
-  res.json({ success: true, data: { siteName: runtime.siteName || "ثانوية World", packages, agents, firebaseConfigured: Boolean(getFirebaseUrl()), tokenConfigured: Boolean(getCoursatkTokenSync()) } });
+  res.json({ success: true, data: { siteName: runtime.siteName || "ثانوية World", packages, agents, firebaseConfigured: Boolean(getFirebaseUrl()), tokenConfigured: Boolean(getCoursatkTokenSync()), greeting: dayGreeting() } });
 });
 
 // ==================== تتبع فتح الموقع للطالب ====================
@@ -3163,6 +3273,7 @@ app.get("/api/auth/me", requireStudent, async (req, res) => {
         phone: profile.phone,
         governorate: profile.governorate,
         needsProfile: profile.needsProfile,
+        greeting: dayGreeting(),
         missingFields: profile.missingFields,
         visitCount: Number(s.visitCount) || 0,
         lastSeen: s.lastSeen || null
@@ -3222,6 +3333,177 @@ app.patch("/api/auth/profile", requireStudent, rateLimit({ max: 20, windowMs: 60
   }
 });
 
+
+// ===== كتالوج taleb.pro الكامل =====
+
+/** إخفاء روابط المنصة الأصلية — الصور تتلبس عبر بروكسي محلي */
+function maskMediaUrl(raw) {
+  if (!raw) return null;
+  const u = String(raw).trim();
+  if (!u) return null;
+  // لو أصلاً بروكسي محلي
+  if (u.startsWith("/api/img") || u.startsWith("/api/file-proxy")) return u;
+  try {
+    const host = new URL(u, "https://local.invalid").hostname.toLowerCase();
+    // أي صورة من talep/taleb أو CDN خارجي نمررها من البروكسي
+    if (/talep\.pro|taleb|b-cdn|cloudinary|googleapis|googleusercontent|fbcdn|cdn/i.test(host) || /^https?:\/\//i.test(u)) {
+      const b64 = Buffer.from(u, "utf8").toString("base64url");
+      return "/api/img?u=" + b64;
+    }
+  } catch {}
+  return u;
+}
+
+function maskTreeImages(node) {
+  if (!node || typeof node !== "object") return node;
+  if (Array.isArray(node)) return node.map(maskTreeImages);
+  const out = { ...node };
+  for (const k of Object.keys(out)) {
+    if (k === "image_url" || k === "image" || k === "avatar" || k === "cover") {
+      out[k] = maskMediaUrl(out[k]);
+    } else if (out[k] && typeof out[k] === "object") {
+      out[k] = maskTreeImages(out[k]);
+    }
+  }
+  return out;
+}
+
+async function getTalebCatalog() {
+  const cat = await crawlTalebFullCatalog();
+  // نحافظ على تقسيم طالب برو: كورس → محاضرة → أجزاء
+  // (ما نفردش الأجزاء على مستوى المدرس عشان ما تتلغبطش)
+  const teachers = (cat.teachers || []).map((th) => ({
+    ...th,
+    image_url: th.image_url || null,
+    courses: (th.courses || []).map((c) => ({
+      id: String(c.id),
+      title: c.title,
+      image_url: c.image_url || null,
+      lecturesCount: c.lecturesCount || (c.lectures || []).length,
+      partsCount: c.partsCount || 0,
+      lectures: c.lectures || []
+    })),
+    lectures: th.lectures || []
+  }));
+  const SUBJECT_ORDER = ["arabic","english","chemistry","physics","biology"];
+  const rank = new Map(SUBJECT_ORDER.map((s, i) => [s, i]));
+  const allowed = new Set(SUBJECT_ORDER);
+  const normId = (id) => {
+    const s = String(id || "").toLowerCase();
+    // رياضة ملغية — تجاهل
+    if (/math|رياض/i.test(s)) return "__skip_math__";
+    return s;
+  };
+  const merged = new Map();
+  for (const s of (cat.subjects || [])) {
+    const id = normId(s.id);
+    if (!allowed.has(id)) continue;
+    if (!merged.has(id)) {
+      merged.set(id, {
+        ...s,
+        id,
+        name: id === "mathematics" ? "رياضة" : s.name,
+        teachers: [...(s.teachers || [])]
+      });
+    } else {
+      const cur = merged.get(id);
+      const seen = new Set((cur.teachers || []).map((th) => th.id || th.name));
+      for (const th of (s.teachers || [])) {
+        const k = th.id || th.name;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        cur.teachers.push(th);
+      }
+    }
+  }
+  const subjects = [...merged.values()].sort((a, b) => {
+      const ra = rank.has(a.id) ? rank.get(a.id) : 100;
+      const rb = rank.has(b.id) ? rank.get(b.id) : 100;
+      if (ra !== rb) return ra - rb;
+      return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+    });
+  const out = { subjects, teachers, stats: cat.stats };
+  return maskTreeImages(out);
+}
+function subjectNameAr(sid) {
+  try { return talebSubjectNameAr(sid); } catch { return String(sid || "مادة"); }
+}
+function contentSource() {
+  const raw = String(process.env.CONTENT_SOURCE || "").trim().toLowerCase();
+  if (raw === "mesari" || process.env.MESARI_PRIMARY === "1") return "mesari";
+  if (raw === "taleb" || process.env.TALEB_PRIMARY === "1") return "taleb";
+  if (raw === "coursatk") return "coursatk";
+  // default: mesari first (especially when taleb.js absent)
+  if (String(process.env.MESARI_AUTH_TOKEN || "").trim()) return "mesari";
+  if (String(process.env.TALEB_DEVICE || "").trim() && String(process.env.TALEB_SESSION || "").trim()) return "taleb";
+  // no explicit creds — still prefer mesari adapter
+  return "mesari";
+}
+function useTalebAsPrimary() {
+  return contentSource() === "taleb";
+}
+function useMesariAsPrimary() {
+  return contentSource() === "mesari";
+}
+
+async function ensurePrimaryCourseLectures(courseId, teacherName = "") {
+  const cid = String(courseId || "");
+  if (!cid) return { lectures: [], lecturesCount: 0, partsCount: 0, title: null, image_url: null };
+
+  // mesari: UUID أو prefix mesari_
+  if (useMesariAsPrimary() || /^[0-9a-f-]{36}$/i.test(cid) || /^mesari_/i.test(cid)) {
+    try {
+      const pure = cid.replace(/^mesari_(?:course_|ch_|c_)?/i, "");
+      return await ensureMesariChapterLectures(pure);
+    } catch (e) {
+      console.warn("[ensure] mesari chapter", cid, e && e.message);
+    }
+  }
+
+  // taleb فقط (لو الملف موجود)
+  try {
+    return await ensureCourseLectures(cid, teacherName);
+  } catch (e) {
+    console.warn("[ensure] taleb course", cid, e && e.message);
+    return { lectures: [], lecturesCount: 0, partsCount: 0, title: null, image_url: null };
+  }
+}
+
+
+async function getPrimaryCatalog() {
+  if (useMesariAsPrimary()) return getMesariCatalog();
+  if (useTalebAsPrimary()) return getTalebCatalog();
+  // still prefer mesari catalog for UI if available
+  try {
+    if (String(process.env.MESARI_AUTH_TOKEN || "").trim()) return getMesariCatalog();
+  } catch {}
+  return getTalebCatalog();
+}
+
+
+async function getMesariCatalog() {
+  const cat = await crawlMesariFullCatalog();
+  const teachers = (cat.teachers || []).map((th) => ({
+    ...th,
+    image_url: th.image_url || null,
+    courses: (th.courses || []).map((c) => ({
+      id: String(c.id),
+      title: c.title,
+      image_url: c.image_url || null,
+      lecturesCount: c.lecturesCount || (c.lectures || []).length,
+      partsCount: c.partsCount || 0,
+      lectures: c.lectures || []
+    })),
+    lectures: th.lectures || []
+  }));
+  const subjects = (cat.subjects || []).map((s) => ({
+    ...s,
+    teachers: (s.teachers || []).map((th) => teachers.find((t) => t.uuid === th.uuid && t.subjectSlug === s.id) || th)
+  }));
+  return maskTreeImages({ subjects, teachers, stats: cat.stats, source: "mesari" });
+}
+
+
 app.get("/api/config", requireStudent, async (req, res) => {
   const yearOverride = req.query.year != null ? req.query.year : null;
   let yearId = yearOverride != null ? resolveYearId(yearOverride) : CONFIG.DEFAULT_YEAR_ID;
@@ -3236,6 +3518,24 @@ function studentAllowsThanawica(student) { const sec = normalizeSection(student 
 
 app.get("/api/subjects/:id", requireStudent, async (req, res) => {
   try {
+    if (useMesariAsPrimary() || useTalebAsPrimary()) {
+      const cat = await getPrimaryCatalog();
+      const data = cat.subjects.map((s, i) => {
+        const teachers = s.teachers || [];
+        const coursesCount = teachers.reduce((a, th) => a + ((th.courses && th.courses.length) || 0), 0);
+        return {
+          id: s.id,
+          name: s.name,
+          image_url: s.image_url,
+          year_id: resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID),
+          is_published: true,
+          teachers_count: teachers.length,
+          courses_count: coursesCount,
+          chapters_count: coursesCount
+        };
+      });
+      return res.json({ success: true, message: "Success", data, source: "taleb" });
+    }
     const yearId = resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID);
     const secInfo = await resolveSection(req.student.section, yearId);
     let wantedIds = [];
@@ -3307,6 +3607,73 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (useMesariAsPrimary() || useTalebAsPrimary()) {
+      const cat = await getPrimaryCatalog();
+      const sid = String(req.params.id);
+      let teachers = [];
+      if (sid === "all" || sid === "0") teachers = cat.teachers;
+      else {
+        const sub = cat.subjects.find((s) => String(s.id) === sid);
+        teachers = sub ? sub.teachers : cat.teachers.filter((x) => String(x.subjectId || "") === sid);
+      }
+      let list = (teachers || []).map((th) => ({
+        id: th.id,
+        name: th.name,
+        image_url: th.image_url || null,
+        chapter_count: (th.courses && th.courses.length) ? th.courses.length : (th.lectures || []).length,
+        subject_id: th.subjectId || sid,
+        _numericId: th.numericId || null
+      }));
+      // إزالة تكرار الـ id فقط (متدمجش مدرسين مختلفين بنفس اللقب)
+      {
+        const out = [];
+        const seen = new Set();
+        for (const th of list) {
+          const key = String(th.id);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(th);
+        }
+        list = out;
+      }
+      // دمج د. حسام عيسى ضمن مدرسي الأحياء (Bunny) حتى لو مش ظاهر في زحف طالب برو
+      const isBio = sid === "biology" || /أحياء|احياء/i.test(String(sid));
+      if (isBio || sid === "all" || sid === "0") {
+        const hasHossam = list.some((t) => /حسام/.test(String(t.name || "")) || String(t.id) === String(HOSSAM_TEACHER_ID));
+        if (!hasHossam) {
+          list = list.concat([{
+            id: HOSSAM_TEACHER_ID,
+            name: "د. حسام عيسى",
+            image_url: null,
+            chapter_count: (HOSSAM_CATALOG.courses || []).length,
+            subject_id: isBio ? sid : "biology"
+          }]);
+        }
+      }
+      // تنظيف أسماء شاذة زي "الرجوع إلى المواد"
+      list = list
+        .filter((t) => t && t.name && !/رجوع|المواد|عرض|اختر/i.test(String(t.name)))
+        .map((t) => ({
+          ...t,
+          name: String(t.name)
+            .replace(/\s+/g, " ")
+            .replace(/^أ\s*\.?\s*/u, "أ. ")
+            .replace(/^د\s*\.?\s*/u, "د. ")
+            .trim()
+        }));
+      const subMeta = (sid === "all" || sid === "0") ? null : cat.subjects.find((s) => String(s.id) === sid);
+      return res.json({
+        success: true,
+        message: "Success",
+        data: {
+          id: sid,
+          name: (subMeta && subMeta.name) || subjectNameAr(sid),
+          image_url: (subMeta && subMeta.image_url) || null,
+          teachers: list
+        },
+        source: "taleb"
+      });
+    }
     if (String(req.params.id) === String(HOSSAM_SUBJECT_ID) || String(req.params.id) === "hos_biology") {
       return res.json({
         success: true,
@@ -3330,6 +3697,87 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    // حسام عيسى (Bunny) — فصوله من الكتالوج المحلي
+    if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
+      const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
+        id: HOSSAM_CHAPTER_BASE + i,
+        name: c.name,
+        image_url: null,
+        teacher_name: HOSSAM_CATALOG.teacher,
+        lectures_count: (c.lessons || []).length,
+        _source: "hossam",
+        _courseId: c.id
+      }));
+      return res.json({ success: true, message: "Success", data: chapters });
+    }
+    if (useMesariAsPrimary() || useTalebAsPrimary() || String(req.params.id).startsWith("taleb_t_") || String(req.params.id).startsWith("mesari_t_")) {
+      const cat = await getPrimaryCatalog();
+      const tid = String(req.params.id);
+      const th = cat.teachers.find((x) =>
+        x.id === tid ||
+        x.name === tid ||
+        String(x.uuid || "") === tid ||
+        String(x.numericId || "") === tid ||
+        tid.endsWith("_" + String(x.numericId || ""))
+      );
+      const courses = th?.courses || [];
+      // كل كورس = فصل/مجموعة زي تقسيم طالب برو
+      const data = courses.length
+        ? courses
+            .filter((c) => c && c.title && !/رجوع|عرض المواد|اختر/i.test(String(c.title)))
+            .filter((c) => !/كتب\s*المدرس|كتاب\s*المدرس/i.test(String(c.title || "")))
+            .map((c) => ({
+            id: (useMesariAsPrimary() || /^[0-9a-f-]{36}$/i.test(String(c.id)))
+              ? `mesari_course_${c.id}`
+              : `taleb_course_${c.id}`,
+            name: (function () {
+              let n = String(c.title || "").replace(/\s+/g, " ").trim();
+              const tn = String(th?.name || "").replace(/\s+/g, " ").trim();
+              if (tn) {
+                const first = tn.split(/\s+/).filter(Boolean)[0] || "";
+                n = n.replace(new RegExp("\\s*[-–—|]\\s*" + tn.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + "\\s*$", "i"), "");
+                n = n.replace(new RegExp("\\s+و\\s+" + tn.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + "\\s*$", "i"), "");
+                if (first.length >= 3) {
+                  n = n.replace(new RegExp("\\s*[-–—|]?\\s*(?:أ\\.?|د\\.?|مستر)?\\s*" + first.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&") + ".*$", "i"), "");
+                }
+              }
+              n = n.replace(/\s*[-–—|]\s*(?:أ\.?|د\.?|مستر)\s*[\u0600-\u06FF].*$/u, "");
+              n = n.replace(/\s+و\s+(?:أ\.?|د\.?|مستر)\s*[\u0600-\u06FF].*$/u, "");
+              n = n.trim();
+              if (!n || /^كورس\s*\d+$/i.test(n) || (tn && (n === tn || tn.includes(n)))) n = `كورس ${c.id}`;
+              return n;
+            })(),
+            image_url: c.image_url || null,
+            teacher_name: th?.name || "",
+            lectures_count: Number(c.lecturesCount || (c.lectures || []).length || 0),
+            lecture_count: Number(c.lecturesCount || (c.lectures || []).length || 0),
+            parts_count: Number(c.partsCount || 0),
+            _courseId: String(c.id)
+          }))
+        : [{
+            id: `taleb_ch_${tid}`,
+            name: "المحاضرات",
+            image_url: th?.image_url || null,
+            teacher_name: th?.name || "",
+            lectures_count: (th?.lectures || []).length
+          }];
+      // حدّث عدد المحاضرات فعليًا + وسّع mesari لكل فصل
+      await Promise.all(
+        (data || []).map(async (row) => {
+          if (!row._courseId) return;
+          try {
+            const det = await ensurePrimaryCourseLectures(row._courseId, th?.name || "");
+            row.lectures_count = det.lecturesCount || (det.lectures || []).length || row.lectures_count || 0;
+            row.lecture_count = row.lectures_count;
+            row.parts_count = det.partsCount || row.parts_count || 0;
+            if (det.title) row.name = det.title;
+          } catch (e) {
+            console.warn("[teachers/chapters] ensure", row._courseId, e && e.message);
+          }
+        })
+      );
+      return res.json({ success: true, message: "Success", data, source: contentSource() });
+    }
     if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
       const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
         id: HOSSAM_CHAPTER_BASE + i,
@@ -3354,6 +3802,115 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (useMesariAsPrimary() || useTalebAsPrimary() || String(req.params.id).startsWith("taleb_ch_") || String(req.params.id).startsWith("taleb_course_") || String(req.params.id).startsWith("mesari_")) {
+      const cat = await getPrimaryCatalog();
+      const cid = String(req.params.id);
+      let lectures = [];
+      let courseId = null;
+
+      if (cid.startsWith("taleb_course_")) {
+        courseId = cid.slice("taleb_course_".length);
+      } else if (cid.startsWith("mesari_course_") || cid.startsWith("mesari_ch_")) {
+        courseId = cid.replace(/^mesari_(?:course_|ch_)/i, "");
+      } else if (/^[0-9a-f-]{36}$/i.test(cid)) {
+        courseId = cid;
+      }
+
+      if (courseId) {
+        let teacherName = "";
+        for (const th of cat.teachers || []) {
+          const course = (th.courses || []).find((c) => String(c.id) === String(courseId));
+          if (course) {
+            teacherName = th.name || "";
+            lectures = course.lectures || [];
+            break;
+          }
+        }
+        // دائمًا وسّع الفصل من mesari عشان أسماء الفيديوهات تبقى كاملة لكل المحاضرات
+        const needsExpand =
+          !lectures.length ||
+          lectures.some((l) => {
+            const parts = l.parts || [];
+            if (!parts.length) return true;
+            return parts.some((p) => p.needsExpand || (p.kind === "video" && !p.title) || (p.kind === "video" && /^فيديو\s*\d+$/i.test(String(p.title || ""))));
+          });
+        if (needsExpand || useMesariAsPrimary()) {
+          try {
+            const det = await ensurePrimaryCourseLectures(courseId, teacherName);
+            if (det && (det.lectures || []).length) lectures = det.lectures;
+          } catch (e) {
+            console.warn("[chapters/lectures] ensure", courseId, e && e.message);
+          }
+        }
+        // عزل صارم: محاضرات هذا الكورس فقط
+        lectures = (lectures || []).filter((l) => String(l.courseId || courseId) === String(courseId));
+      } else if (cid.startsWith("taleb_ch_") || cid.startsWith("mesari_t_")) {
+        const tid = cid.replace(/^(?:taleb_ch_|mesari_t_)/i, "");
+        const th = (cat.teachers || []).find((x) =>
+          x.id === cid || x.id === tid || String(x.uuid || "") === tid || String(x.mesariTeacherId || "") === tid
+        );
+        lectures = th?.lectures || [];
+      } else {
+        for (const th of cat.teachers || []) lectures.push(...(th.lectures || []));
+      }
+      // كل عنصر = محاضرة بأقسام: الشرح / الحل / الامتحان / الملفات
+      const data = lectures.map((lec, i) => {
+        const parts = lec.parts || [];
+        const main = parts.find((p) => (p.kind || "video") === "video") || parts.find((p) => p.kind !== "file") || null;
+        let name = lec.title || `محاضرة ${lec.lectureNum || i + 1}`;
+        if (/^محاضرة\s*\d+/i.test(name) && main && main.title) name = main.title;
+
+        const mapped = parts.map((p) => {
+          const isFile = p.kind === "file" || /ملف/i.test(String(p.group || "")) || /ملف|pdf/i.test(String(p.title || ""));
+          const kind = isFile ? "file" : (p.kind || "video");
+          const group = isFile ? "الملفات" : (p.group || "الشرح");
+          return {
+            id: p.id,
+            title: p.title,
+            group,
+            kind,
+            type: isFile ? "file" : "video",
+            video_id: isFile ? null : (p.videoId || p.id),
+            file_id: isFile ? (p.id || p.videoId) : null,
+            partNum: p.partNum,
+            is_file: isFile
+          };
+        });
+
+        // ترتيب الأقسام كما ظهرت في الموقع
+        const bySection = new Map();
+        for (const p of mapped) {
+          if (!bySection.has(p.group)) bySection.set(p.group, []);
+          bySection.get(p.group).push(p);
+        }
+        // الملفات في الآخر دائمًا
+        const sectionKeys = [...bySection.keys()].filter((k) => k !== "الملفات");
+        if (bySection.has("الملفات")) sectionKeys.push("الملفات");
+        const sections = sectionKeys.map((s) => ({ title: s, items: bySection.get(s) }));
+
+        return {
+          id: lec.id || `taleb_lec_${i}`,
+          name,
+          title: name,
+          image_url: lec.image_url || null,
+          video_id: main && main.kind !== "file" ? (main.videoId || main.id) : null,
+          parts_count: mapped.length,
+          parts: mapped,
+          sections,
+          is_published: true,
+          course_id: lec.courseId || null,
+          lecture_num: lec.lectureNum || null
+        };
+      });
+      // ترتيب المحاضرات زي مساري
+      data.sort((a, b) => {
+        const an = Number(a.lecture_num);
+        const bn = Number(b.lecture_num);
+        if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
+        return 0;
+      });
+      return res.json({ success: true, message: "Success", data, source: contentSource() });
+    }
     const cid = Number(req.params.id);
     if (Number.isFinite(cid) && cid >= HOSSAM_CHAPTER_BASE && cid < HOSSAM_CHAPTER_BASE + 100) {
       const idx = cid - HOSSAM_CHAPTER_BASE;
@@ -3382,58 +3939,463 @@ app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
-function normalizeLectureContentPayload(raw, lectureId) {
-  // وحّد شكل الرد عشان lectures.html (isPlayableVideo) يشتغل مع Coursatk
-  const root = raw && raw.data && typeof raw.data === "object" ? raw.data : (raw || {});
-  const videosIn = Array.isArray(root.videos) ? root.videos
-    : Array.isArray(root.items) ? root.items
-    : Array.isArray(raw) ? raw
-    : [];
-  const videos = videosIn.map((v, i) => {
-    const id = v?.video_id ?? v?.videoId ?? v?.id ?? null;
-    const title = v?.title || v?.name || `فيديو ${i + 1}`;
-    return {
-      ...v,
-      id: id != null ? String(id) : undefined,
-      video_id: id != null ? String(id) : undefined,
-      videoId: id != null ? String(id) : undefined,
-      title,
-      name: title,
-      type: v?.type || "video",
-      duration: v?.duration || v?.duration_seconds || v?.duration_text || null
-    };
-  }).filter((v) => v.id);
-  const pdfs = Array.isArray(root.pdfs) ? root.pdfs : [];
-  const exams = Array.isArray(root.exams) ? root.exams : [];
-  return {
-    success: true,
-    message: "Success",
-    data: {
-      lecture_id: root.lecture_id || lectureId,
-      lecture_name: root.lecture_name || root.name || null,
-      videos,
-      pdfs,
-      exams,
-      // للتوافق مع grouped-content في الفرونت
-      groups: videos.length ? [{ name: "الشرح", items: videos }] : []
+
+
+async function findPrimaryLectureById(rawId) {
+  const key0 = String(rawId || "").trim();
+  if (!key0) return null;
+
+  const isMesariHint =
+    useMesariAsPrimary() ||
+    /^mesari_/i.test(key0) ||
+    /^[0-9a-f-]{36}$/i.test(key0);
+
+  if (isMesariHint) {
+    const key = key0.replace(/^mesari_mesari_/i, "mesari_");
+
+    // 1) مسار مباشر: mesari_lec_<lessonUuid> أو lesson uuid خام
+    const mLecDirect = key.match(/^mesari_lec_(.+)$/i);
+    const lessonUuid = mLecDirect ? mLecDirect[1] : (/^[0-9a-f-]{36}$/i.test(key) && !key.startsWith("mesari_") ? key : null);
+    // لو id شكله lesson (مش video) — جرب /lessons/:id مباشرة
+    if (mLecDirect || (lessonUuid && key0.includes("lec"))) {
+      try {
+        const lec = await getMesariLesson(mLecDirect ? mLecDirect[1] : lessonUuid);
+        if (lec && (lec.parts || []).length) {
+          return { lecture: lec, teacher: null, course: lec.courseId ? { id: lec.courseId } : null, source: "mesari" };
+        }
+      } catch (e) {
+        console.warn("[findPrimary] getMesariLesson", e && e.message);
+      }
     }
-  };
+    // لو key = lesson uuid من الواجهة (بدون prefix)
+    if (/^[0-9a-f-]{36}$/i.test(key) && !/^mesari_v_/i.test(key0)) {
+      try {
+        const lec = await getMesariLesson(key);
+        if (lec && (lec.parts || []).length) {
+          return { lecture: lec, teacher: null, course: lec.courseId ? { id: lec.courseId } : null, source: "mesari" };
+        }
+      } catch (e) {
+        // مش درس — كمّل بحث فيديو/كتالوج
+      }
+    }
+
+    const cat = await getPrimaryCatalog();
+
+    const matchLec = (lec) => {
+      if (!lec) return false;
+      if (lec.id === key || lec.id === key0) return true;
+      const pure = key.replace(/^mesari_lec_/i, "");
+      if (String(lec.mesariLessonId || "") === pure) return true;
+      return false;
+    };
+    const matchPart = (p) => {
+      if (!p) return false;
+      if (p.id === key || p.videoId === key || p.id === key0 || p.videoId === key0) return true;
+      if (p.mesariVideoId && (`mesari_${p.mesariVideoId}` === key || String(p.mesariVideoId) === key.replace(/^mesari_/i, ""))) return true;
+      return false;
+    };
+
+    for (const th of cat.teachers || []) {
+      for (const c of th.courses || []) {
+        for (const lec of c.lectures || []) {
+          if (matchLec(lec)) return { lecture: lec, teacher: th, course: c, source: "mesari" };
+          for (const p of lec.parts || []) {
+            if (matchPart(p)) return { lecture: lec, teacher: th, course: c, part: p, source: "mesari" };
+          }
+        }
+      }
+      for (const lec of th.lectures || []) {
+        if (matchLec(lec)) return { lecture: lec, teacher: th, course: null, source: "mesari" };
+        for (const p of lec.parts || []) {
+          if (matchPart(p)) return { lecture: lec, teacher: th, course: null, part: p, source: "mesari" };
+        }
+      }
+    }
+
+    // expand chapters lazily for mesari_lec_*
+    const mLec = key.match(/^mesari_lec_(.+)$/i);
+    if (mLec) {
+      for (const th of cat.teachers || []) {
+        for (const c of th.courses || []) {
+          try {
+            const det = await ensureMesariChapterLectures(String(c.id));
+            const found = (det.lectures || []).find(
+              (l) => l.id === key || l.id === key0 || String(l.mesariLessonId || "") === mLec[1]
+            );
+            if (found) return { lecture: found, teacher: th, course: c, source: "mesari" };
+          } catch (e) {
+            console.warn("[findPrimary] expand", c.id, e && e.message);
+          }
+        }
+      }
+    }
+
+    // direct video id mesari_<uuid>
+    if (/^mesari_[0-9a-f-]{8,}/i.test(key) || /^[0-9a-f-]{36}$/i.test(key)) {
+      const vid = key.startsWith("mesari_") ? key : `mesari_${key}`;
+      return {
+        lecture: {
+          id: vid,
+          title: "فيديو",
+          courseId: null,
+          parts: [{
+            id: vid,
+            title: "فيديو",
+            group: "الشرح",
+            kind: "video",
+            videoId: vid,
+            mesariVideoId: key.replace(/^mesari_/i, "")
+          }]
+        },
+        teacher: null,
+        course: null,
+        source: "mesari"
+      };
+    }
+    return null;
+  }
+
+  // taleb fallback
+  try {
+    return await findTalebLectureById(key0);
+  } catch {
+    return null;
+  }
 }
+
+async function findTalebLectureById(rawId) {
+  const cat = await getTalebCatalog();
+  let key = String(rawId || "");
+  while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
+
+  function search(catalog) {
+    for (const th of catalog.teachers || []) {
+      for (const lec of (th.lectures || [])) {
+        if (lec.id === key || lec.id === rawId) return { lecture: lec, teacher: th };
+      }
+      for (const c of (th.courses || [])) {
+        for (const lec of (c.lectures || [])) {
+          if (lec.id === key || lec.id === rawId) return { lecture: lec, teacher: th, course: c };
+        }
+      }
+    }
+    return null;
+  }
+
+  let hit = search(cat);
+  if (hit && hit.lecture && (hit.lecture.parts || []).length) return hit;
+
+  // taleb_lec_{courseId}_{lectureNum} أو taleb_w_{c}_{l}_{p}
+  let courseId = null;
+  let lectureNum = null;
+  const mLec = String(key).match(/^taleb_lec_(\d+)_(\d+)$/i) || String(rawId).match(/^taleb_lec_(\d+)_(\d+)$/i);
+  const mW = String(key).match(/^taleb_w_(\d+)_(\d+)(?:_(\d+))?$/i) || String(rawId).match(/^taleb_w_(\d+)_(\d+)(?:_(\d+))?$/i);
+  if (mLec) { courseId = mLec[1]; lectureNum = mLec[2]; }
+  else if (mW) { courseId = mW[1]; lectureNum = mW[2]; }
+
+  if (courseId) {
+    let teacherName = "";
+    for (const th of cat.teachers || []) {
+      if ((th.courses || []).some((c) => String(c.id) === String(courseId))) {
+        teacherName = th.name || "";
+        break;
+      }
+    }
+    try {
+      await ensurePrimaryCourseLectures(courseId, teacherName);
+    } catch (e) {
+      console.warn("[findTalebLecture] ensure", courseId, e && e.message);
+    }
+    const cat2 = await getTalebCatalog();
+    hit = search(cat2);
+    if (hit && hit.lecture) return hit;
+    // بالرقم
+    for (const th of cat2.teachers || []) {
+      for (const c of (th.courses || [])) {
+        if (String(c.id) !== String(courseId)) continue;
+        let lec = null;
+        if (lectureNum != null) lec = (c.lectures || []).find((l) => String(l.lectureNum) === String(lectureNum));
+        if (!lec && (c.lectures || []).length) lec = c.lectures[0];
+        if (lec) return { lecture: lec, teacher: th, course: c };
+      }
+    }
+  }
+  return hit;
+}
+
+function lectureGroupsPayload(lecture) {
+  const groupMap = new Map();
+  for (const p of (lecture.parts || [])) {
+    const isFile = p.kind === "file" || /ملف/i.test(String(p.group || "")) || /ملف|pdf/i.test(String(p.title || ""));
+    const gName = isFile ? "الملفات" : (p.group || "الشرح");
+    if (!groupMap.has(gName)) groupMap.set(gName, []);
+    groupMap.get(gName).push({
+      id: p.videoId || p.id,
+      video_id: isFile ? null : (p.videoId || p.id),
+      file_id: isFile ? (p.id || p.videoId) : null,
+      name: p.title || "جزء",
+      title: p.title || "جزء",
+      type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
+      kind: isFile ? "file" : (p.kind || "video"),
+      group: gName,
+      platform: "stream"
+    });
+  }
+  const keys = [...groupMap.keys()].filter((k) => k !== "الملفات");
+  if (groupMap.has("الملفات")) keys.push("الملفات");
+  return keys.map((name) => ({ name, title: name, key: name, items: groupMap.get(name) }));
+}
+
+
+app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
+  try {
+    const rawId = String(req.params.id || "");
+    if (
+      useMesariAsPrimary() ||
+      useTalebAsPrimary() ||
+      rawId.startsWith("taleb_") ||
+      rawId.startsWith("mesari_")
+    ) {
+      let hit = await findPrimaryLectureById(rawId);
+      if (!hit || !hit.lecture) return jsonError(res, 404, "المحاضرة غير موجودة");
+      const lecture = {
+        ...hit.lecture,
+        parts: (hit.lecture.parts || []).filter(
+          (p) => !p.courseId || String(p.courseId) === String(hit.lecture.courseId || p.courseId)
+        )
+      };
+      if (!(lecture.parts || []).length && lecture.courseId) {
+        try { await ensurePrimaryCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
+        const again = await findPrimaryLectureById(rawId);
+        if (again && again.lecture) Object.assign(lecture, again.lecture);
+      }
+      const groups = lectureGroupsPayload(lecture);
+      return res.json({
+        success: true,
+        message: "Success",
+        data: { id: lecture.id, name: lecture.title || "محاضرة", groups },
+        source: hit.source || contentSource()
+      });
+    }
+    return jsonError(res, 404, "غير متاح");
+  } catch (e) { jsonError(res, 502, e.message); }
+});
 
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
-    const lid = Number(req.params.id);
+    const rawId = String(req.params.id || "");
+    if (useMesariAsPrimary() || useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_") || rawId.startsWith("mesari_")) {
+      // 1) محاضرة كاملة متعددة الأجزاء (mesari + taleb)
+      {
+        const hit = await findPrimaryLectureById(rawId);
+        let lecture = hit && hit.lecture;
+        if (lecture && !(lecture.parts || []).length && lecture.courseId) {
+          try { await ensurePrimaryCourseLectures(lecture.courseId, hit.teacher?.name || ""); } catch {}
+          const again = await findPrimaryLectureById(rawId);
+          if (again) lecture = again.lecture;
+        }
+        if (lecture && Array.isArray(lecture.parts) && lecture.parts.length) {
+          const groups = lectureGroupsPayload(lecture);
+          const videos = [];
+          const pdfs = [];
+          for (const p of lecture.parts) {
+            const isFile = p.kind === "file" || /ملف/i.test(String(p.group || ""));
+            const row = {
+              id: p.videoId || p.id,
+              video_id: isFile ? null : (p.videoId || p.id),
+              name: p.title || "جزء",
+              title: p.title || "جزء",
+              group: p.group || null,
+              type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
+              platform: "stream",
+              file_url: p.fileUrl || null
+            };
+            if (isFile) pdfs.push(row);
+            else if (p.kind !== "exam") videos.push(row);
+          }
+          return res.json({
+            success: true,
+            message: "Success",
+            data: {
+              id: lecture.id,
+              name: lecture.title || "محاضرة",
+              image_url: lecture.image_url || null,
+              course_id: lecture.courseId || null,
+              groups,
+              videos,
+              pdfs,
+              files: pdfs
+            },
+            source: (hit && hit.source) || contentSource()
+          });
+        }
+      }
+      // fallback: catalogs (primary first, then taleb legacy)
+      let cat = null;
+      try { cat = await getPrimaryCatalog(); } catch {}
+      if (!cat || !(cat.teachers || []).length) {
+        try { cat = await getTalebCatalog(); } catch { cat = { teachers: [] }; }
+      }
+      // keep variable name used below
+      let key = rawId;
+      while (/^taleb_taleb_/i.test(key)) key = key.replace(/^taleb_/i, "");
+
+      // fallback: بحث في lectures + courses
+      let lecture = null;
+      for (const th of cat.teachers || []) {
+        for (const lec of th.lectures || []) {
+          if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
+        }
+        if (lecture) break;
+        for (const c of th.courses || []) {
+          for (const lec of c.lectures || []) {
+            if (lec.id === key || lec.id === rawId) { lecture = lec; break; }
+          }
+          if (lecture) break;
+        }
+        if (lecture) break;
+      }
+      if (lecture && Array.isArray(lecture.parts) && lecture.parts.length) {
+        // تنظيم زي طالب برو: مجموعات (شرح / حل / ملفات) داخل المحاضرة
+        const groupMap = new Map();
+        for (const p of lecture.parts) {
+          const g = p.group || "شرح المحاضرة";
+          if (!groupMap.has(g)) groupMap.set(g, []);
+          groupMap.get(g).push(p);
+        }
+        // الملفات في الآخر
+        const orderedNames = [...groupMap.keys()].filter((k) => k !== "الملفات");
+        if (groupMap.has("الملفات")) orderedNames.push("الملفات");
+        const groups = orderedNames.map((gName) => ({
+          name: gName,
+          title: gName,
+          key: gName,
+          items: (groupMap.get(gName) || []).map((p, i) => {
+            const isFile = p.kind === "file" || gName === "الملفات";
+            return {
+              id: p.videoId || p.id,
+              video_id: isFile ? null : (p.videoId || p.id),
+              file_id: isFile ? (p.id || p.videoId) : null,
+              name: p.title || `جزء ${i + 1}`,
+              title: p.title || `جزء ${i + 1}`,
+              type: isFile ? "file" : (p.kind === "exam" ? "exam" : "video"),
+              kind: isFile ? "file" : (p.kind || "video"),
+              group: gName,
+              platform: "stream"
+            };
+          })
+        }));
+        const videos = [];
+        const pdfs = [];
+        for (const p of lecture.parts) {
+          const isFile = p.kind === "file" || /ملف/i.test(String(p.group || ""));
+          const row = {
+            id: p.videoId || p.id,
+            video_id: isFile ? null : (p.videoId || p.id),
+            name: p.title || "جزء",
+            title: p.title || "جزء",
+            group: p.group || null,
+            type: isFile ? "file" : "video",
+            platform: "stream"
+          };
+          if (isFile) pdfs.push(row);
+          else videos.push(row);
+        }
+        return res.json({
+          success: true,
+          message: "Success",
+          data: {
+            id: lecture.id,
+            name: lecture.title || "محاضرة",
+            image_url: lecture.image_url || null,
+            course_id: lecture.courseId || null,
+            groups,
+            videos,
+            pdfs,
+            files: pdfs
+          },
+          source: "taleb"
+        });
+      }
+
+      // 2) جزء فيديو مباشر taleb_w_c_l_p
+      let playId = null;
+      let title = null;
+      if (/^taleb_w_\d+_\d+_\d+$/i.test(key)) playId = key;
+      if (!playId && /^taleb_w_\d+_\d+_\d+$/i.test(rawId)) playId = rawId.replace(/^(taleb_)+/i, "taleb_");
+      // معرّف ناقص: taleb_w_90_ أو taleb_w_90_1_
+      if (!playId) {
+        const inc = String(key || rawId).match(/^taleb_w_(\d+)_?(\d+)?_?(\d+)?$/i);
+        if (inc) {
+          const c = inc[1], l = inc[2] || "1", p = inc[3] || "1";
+          playId = `taleb_w_${c}_${l}_${p}`;
+        }
+      }
+
+      if (!playId) {
+        for (const th of cat.teachers) {
+          for (const lec of th.lectures || []) {
+            for (const p of lec.parts || []) {
+              if (p.id === key || p.videoId === key || p.id === rawId || p.videoId === rawId) {
+                playId = p.videoId || p.id;
+                title = p.title || lec.title;
+                break;
+              }
+            }
+            if (playId) break;
+          }
+          if (playId) break;
+        }
+      }
+
+      // mesari direct video ids
+      if (!playId && /^mesari_/i.test(key)) playId = key;
+      if (!playId && /^mesari_/i.test(rawId)) playId = rawId;
+      if (!playId && /^[0-9a-f-]{36}$/i.test(key)) {
+        playId = useMesariAsPrimary() ? `mesari_${key}` : (key.startsWith("taleb_") ? key : `taleb_${key}`);
+      }
+      if (playId && useMesariAsPrimary() && !/^mesari_/i.test(playId) && !/^taleb_/i.test(playId) && /^[0-9a-f-]{36}$/i.test(playId)) {
+        playId = `mesari_${playId}`;
+      }
+      if (playId && !useMesariAsPrimary() && !/^taleb_/i.test(playId) && !/^mesari_/i.test(playId) && !/^[0-9a-f-]{36}$/i.test(playId)) {
+        playId = `taleb_${playId}`;
+      }
+      while (playId && /^taleb_taleb_/i.test(playId)) playId = playId.replace(/^taleb_/i, "");
+      while (playId && /^mesari_mesari_/i.test(playId)) playId = playId.replace(/^mesari_/i, "mesari_");
+
+      if (!playId) return jsonError(res, 404, "المحاضرة غير موجودة");
+
+      return res.json({
+        success: true,
+        message: "Success",
+        data: {
+          id: rawId,
+          name: title || "محاضرة",
+          videos: [{
+            id: playId,
+            video_id: playId,
+            name: title || "فيديو",
+            type: "video",
+            platform: "stream"
+          }]
+        },
+        source: contentSource()
+      });
+    }
+
     if (Number.isFinite(lid) && lid >= HOSSAM_LECTURE_BASE) {
       const lessonId = lid - HOSSAM_LECTURE_BASE;
-      let found = null;
+      let found = null; let courseName = "";
       for (const c of HOSSAM_CATALOG.courses || []) {
         for (const l of c.lessons || []) {
-          if (Number(l.lessonId) === lessonId) { found = l; break; }
+          if (Number(l.lessonId) === lessonId) { found = l; courseName = c.name; break; }
         }
         if (found) break;
       }
       if (!found) return jsonError(res, 404, "درس حسام غير موجود — حدّث الكتالوج بعد resolve-lesson");
-      return res.json(normalizeLectureContentPayload({
+      return res.json({
+        success: true,
+        message: "Success",
         data: {
           lecture_id: lid,
           lecture_name: found.title || (`درس ${lessonId}`),
@@ -3441,35 +4403,10 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
           pdfs: [],
           exams: []
         }
-      }, lid));
+      });
     }
-    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) {
-      const th = await thLectureContent(req.params.id);
-      return res.json(normalizeLectureContentPayload(th, req.params.id));
-    }
-    const upstream = await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`);
-    res.json(normalizeLectureContentPayload(upstream, req.params.id));
-  } catch (e) { jsonError(res, 502, e.message); }
-});
-
-// alias للفرونت (lectures.html بيطلب grouped-content الأول)
-app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
-  try {
-    // إعادة استخدام نفس منطق content
-    const fakeReq = req;
-    // استدعِ handler المحتوى عبر طلب داخلي بسيط
-    const lid = req.params.id;
-    if (CONFIG.THANAWICA_ENABLED && isThId(lid) && studentAllowsThanawica(req.student)) {
-      const th = await thLectureContent(lid);
-      return res.json(normalizeLectureContentPayload(th, lid));
-    }
-    const n = Number(lid);
-    if (Number.isFinite(n) && n >= HOSSAM_LECTURE_BASE) {
-      // مرّر على content path
-      req.url = `/api/lectures/${lid}/content`;
-    }
-    const upstream = await upstreamJson(`/user/lectures/${encodeURIComponent(lid)}/content`);
-    res.json(normalizeLectureContentPayload(upstream, lid));
+    if (CONFIG.THANAWICA_ENABLED && isThId(req.params.id) && studentAllowsThanawica(req.student)) return res.json(await thLectureContent(req.params.id));
+    res.json(await upstreamJson(`/user/lectures/${encodeURIComponent(req.params.id)}/content`));
   } catch (e) { jsonError(res, 502, e.message); }
 });
 
@@ -4252,27 +5189,21 @@ async function buildSrcFromClientPlaylists(videoId, { masterText, mediaText, key
 }
 
 function clientFetchPayload(videoId, upstreamTok) {
-  const vid = String(videoId);
-  // ملاحظة: المتصفح على دومين ثانوية-club غالبًا هيتمنع بـ CORS من api.coursatk.online
-  // الحل الجذري = UPSTREAM_PROXY / UPSTREAM_RELAY_URL من IP مش محظور
   return {
     type: "client_fetch",
-    videoId: vid,
+    videoId: String(videoId),
     reason: "upstream_blocked",
-    message: "سيرفر الاستضافة محظور من Cloudflare/كورساتك. لازم UPSTREAM_PROXY أو RELAY. محاولة جلب من جهاز الطالب قد تفشل بسبب CORS.",
-    // CDN (أحيانًا يشتغل) + weave play للمسار الأحدث
-    playlistUrl: `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(vid)}/playlist.m3u8`,
-    weavePlayUrl: `${CONFIG.COURSATK_API}/video/${encodeURIComponent(vid)}/stream-weave/play`,
+    message: "سيرفر الاستضافة محظور من Cloudflare/كورساتك — المشغّل هيجلب القائمة من جهازك",
+    playlistUrl: `${CONFIG.COURSATK_API}/video/stream/${encodeURIComponent(videoId)}/playlist.m3u8`,
     headers: {
       Authorization: `Bearer ${upstreamTok}`,
-      Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, application/json, */*",
-      Origin: "https://coursatk.online",
-      Referer: "https://coursatk.online/",
+      Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+      Origin: CONFIG.STREAM_ORIGIN,
+      Referer: CONFIG.STREAM_REFERER,
       "User-Agent": CONFIG.STREAM_UA,
       "X-Requested-With": CONFIG.STREAM_X_REQUESTED_WITH || "com.mycompany.app.soulbrowser"
     },
-    hydratePath: `/api/play/${encodeURIComponent(vid)}/hydrate`,
-    hint: "Set env UPSTREAM_PROXY=http://user:pass@residential-proxy:port or UPSTREAM_RELAY_URL"
+    hydratePath: `/api/play/${encodeURIComponent(videoId)}/hydrate`
   };
 }
 
@@ -4379,19 +5310,16 @@ async function buildVideoSource(videoId, clientHeaders) {
         const wVid = String(data.data.video_id || videoId);
         const wSid = data.data.session_id || data.data.sessionId || null;
         const wSeed = data.data.key_seed || data.data.keySeed || null;
-        let wKv = Number(data.data.key_version || data.data.keyVersion || 0) || 0;
+        const wKv = Number(data.data.key_version || data.data.keyVersion || 0) || 0;
         const wHb = data.data.heartbeat_url || data.data.heartbeatUrl || null;
-        const wEnd = data.data.end_url || data.data.endUrl || null;
-        const wExpires = Number(data.data.expires_in || data.data.expiresIn || 28800) || 28800;
-        const wApiBase = String(data.data.api_base || data.data.apiBase || "https://api.stream-weave.com").replace(/\/$/, "");
-        console.log(`[weave] play ok vid=${wVid} sid=${wSid || "-"} kv=${wKv} seed=${wSeed ? "yes" : "no"} api=${wApiBase}`);
+        console.log(`[weave] play ok vid=${wVid} sid=${wSid || "-"} kv=${wKv} seed=${wSeed ? "yes" : "no"}`);
 
         // —— v3: POST key-ticket → غالبًا JSON {ticket, key_version, expires_in}
         let mediaFromTicket = null;
         let swTicket = null;
         if (wSid && wKv >= 3) {
           try {
-            const ktUrl = `${wApiBase}/api/v1/playback/session/${wSid}/key-ticket`;
+            const ktUrl = `https://api.stream-weave.com/api/v1/playback/session/${wSid}/key-ticket`;
             const ktRes = await upstreamSlot(() =>
               fetchT(
                 ktUrl,
@@ -4399,12 +5327,11 @@ async function buildVideoSource(videoId, clientHeaders) {
                   method: "POST",
                   headers: {
                     Authorization: `Bearer ${wToken}`,
-                    Accept: "application/json, application/vnd.apple.mpegurl, application/octet-stream, */*",
+                    Accept: "application/json, application/vnd.apple.mpegurl, */*",
                     Origin: CONFIG.STREAM_ORIGIN,
                     Referer: CONFIG.STREAM_REFERER,
                     "User-Agent": CONFIG.STREAM_UA,
                     "x-sw-key-version": String(wKv || 3),
-                    "X-SW-Key-License": "1",
                     "Content-Length": "0"
                   },
                   body: ""
@@ -4437,8 +5364,8 @@ async function buildVideoSource(videoId, clientHeaders) {
         const candidates = [wUrl];
         try {
           const u = new URL(wUrl);
-          candidates.push(`${wApiBase}/api/v1/videos/${wVid}/stream/master.m3u8`);
-          candidates.push(`${wApiBase}/api/v1/videos/${wVid}/stream/playlist.m3u8`);
+          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/master.m3u8`);
+          candidates.push(`https://api.stream-weave.com/api/v1/videos/${wVid}/stream/playlist.m3u8`);
           if (!/master\.m3u8|playlist\.m3u8/i.test(u.pathname)) {
             candidates.push(wUrl.replace(/\/?$/, "/playlist.m3u8"));
             candidates.push(wUrl.replace(/\/?$/, "/master.m3u8"));
@@ -4492,9 +5419,6 @@ async function buildVideoSource(videoId, clientHeaders) {
           keySeed: wSeed,
           keyVersion: wKv,
           heartbeatUrl: wHb,
-          endUrl: wEnd,
-          expiresIn: wExpires,
-          apiBase: wApiBase,
           swTicket: swTicket || null
         };
       } catch (e) {
@@ -4539,9 +5463,6 @@ async function buildVideoSource(videoId, clientHeaders) {
         keySeed: got.keySeed || null,
         keyVersion: got.keyVersion || 0,
         heartbeatUrl: got.heartbeatUrl || null,
-        endUrl: got.endUrl || null,
-        expiresIn: got.expiresIn || 28800,
-        apiBase: got.apiBase || "https://api.stream-weave.com",
         mediaPlaylistText: got.mediaPlaylistText || null,
         swTicket: got.swTicket || null,
         swProof: null
@@ -4566,7 +5487,53 @@ function getVideoSource(videoId, clientHeaders) {
   const hit = sourceCache.get(videoId);
   if (hit && now() < hit.exp) return Promise.resolve(hit.src);
   return coalesce("src:" + videoId, async () => {
+    // ===== mesari.online =====
+    if (/mesari_/i.test(String(videoId)) || (useMesariAsPrimary() && /^[0-9a-f-]{36}$/i.test(String(videoId)))) {
+      try {
+        let vid = String(videoId);
+        while (/^mesari_mesari_/i.test(vid)) vid = vid.replace(/^mesari_/i, "");
+        const src = await buildMesariSourceFromAnyId(vid, {
+          deviceId: (clientHeaders && (clientHeaders["x-device-id"] || clientHeaders["X-Device-Id"])) || null
+        });
+        src.reqVideoId = src.reqVideoId || vid;
+        sourceCache.set(String(videoId), { src, exp: now() + SOURCE_TTL_MS });
+        sourceCache.set(String(src.reqVideoId || vid), { src, exp: now() + SOURCE_TTL_MS });
+        return src;
+      } catch (e) {
+        console.warn("[mesari-source]", e && e.message);
+        if (!useMesariAsPrimary()) {
+          /* fall through to other sources */
+        } else {
+          const err = new Error(e.expose ? e.message : "تعذر تجهيز مصدر الفيديو");
+          err.status = e.status || 502;
+          err.expose = true;
+          throw err;
+        }
+      }
+    }
     // —— Bunny / د. حسام عيسى (drhossamissa.com iframe protect bypass)
+    // ===== taleb.pro: taleb_{partId} =====
+    // taleb: أي معرّف فيه taleb_ أو taleb_w_ (مع تكرار البادئة)
+    if (/taleb_/i.test(String(videoId)) || /^\d+_\d+_\d+$/.test(String(videoId))) {
+      try {
+        let vid = String(videoId);
+        while (/^taleb_taleb_/i.test(vid)) vid = vid.replace(/^taleb_/i, "");
+        const src = await buildTalebSourceFromAnyId(vid);
+        src.reqVideoId = vid;
+        sourceCache.set(String(videoId), { src, exp: now() + SOURCE_TTL_MS });
+        sourceCache.set(vid, { src, exp: now() + SOURCE_TTL_MS });
+        return src;
+      } catch (e) {
+        // لا نمرر 401/403 من المصدر كـ «انتهت جلسة الطالب»
+        const st = e && e.status;
+        e.status = (st === 401 || st === 403) ? 502 : (st || 502);
+        if (!e.message || /تعذر جلب قائمة/i.test(e.message)) {
+          e.message = e.message || "تعذر تشغيل الفيديو من المصدر";
+        }
+        throw e;
+      }
+    }
+
     if (CONFIG.BUNNY_ENABLED !== false && isBunnyVideoId(videoId)) {
       const guid = parseBunnyGuid(videoId);
       if (!guid) {
@@ -4651,7 +5618,6 @@ function touchSharedPlay(session) {
   if (!session) return;
   session.lastUsed = now();
   streamSessions.set(session.id, session);
-  if (ANTI_DETECT.DISABLE_SHARED_PLAY) return; // isolation mode
   const keys = new Set([String(session.videoId || "")]);
   if (session.src?.reqVideoId) keys.add(String(session.src.reqVideoId));
   if (session.src?.videoId) keys.add(String(session.src.videoId));
@@ -4659,7 +5625,6 @@ function touchSharedPlay(session) {
 }
 
 function getSharedPlay(videoId) {
-  if (ANTI_DETECT.DISABLE_SHARED_PLAY) return null; // force per-session isolation
   const key = String(videoId || "");
   if (!key) return null;
   const s = sharedPlayByVideo.get(key);
@@ -4670,6 +5635,7 @@ function getSharedPlay(videoId) {
     try { streamSessions.delete(s.id); } catch {}
     return null;
   }
+  // لازم تكون لسه في streamSessions
   if (!streamSessions.has(s.id)) {
     streamSessions.set(s.id, s);
   }
@@ -5144,13 +6110,63 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
       res.setHeader("Set-Cookie", `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`);
     } catch {}
 
-    if ((src.mode === "thanawica-youtube" || src.mode === "coursatk-youtube") && src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
+    if ((src.mode === "thanawica-youtube" || src.mode === "coursatk-youtube" || src.mode === "taleb-youtube" || src.mode === "mesari-youtube") && src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
     if (src.youtubeUrl) return res.json({ success: true, data: { type: "youtube", youtube_url: src.youtubeUrl, url: src.youtubeUrl } });
+    if (src.mode === "mesari-hls" && (src.masterUrl || src.streamUrl)) {
+      assertPlayerOrigin(req);
+      const id = crypto.randomUUID().replace(/-/g, "");
+      const streamKey = crypto.randomBytes(16).toString("hex");
+      const deviceId = (req.session && req.session.deviceId) || (req.student && req.student.deviceId) || null;
+      revokeOtherSessions(req.session.code, src.videoId, id);
+      streamSessions.set(id, {
+        id, src,
+        videoId: src.videoId,
+        shared: false,
+        ownerCode: req.session.code,
+        ownerToken: req.sessionToken,
+        ownerDeviceId: deviceId,
+        streamKey,
+        createdAt: now(),
+        lastUsed: now()
+      });
+      const master = src.masterUrl || src.streamUrl;
+      const hlsPath = `/api/cdn?u=${b64urlEncode(master)}&rewrite=1`;
+      return res.json({
+        success: true,
+        data: {
+          type: "hls",
+          play_url: hlsPath,
+          manifest_url: hlsPath,
+          mode: "mesari-hls",
+          embed_url: src.embedUrl || null,
+          mesariVideoId: src.mesariVideoId || null,
+          title: src.originalName || null,
+          thumbnail: src.thumbnailUrl || null,
+          session_id: id
+        }
+      });
+    }
+    if (src.mode === "mesari-embed" && (src.embedUrl || src.streamUrl)) {
+      return res.json({
+        success: true,
+        data: {
+          type: "embed",
+          play_url: src.embedUrl || src.streamUrl,
+          embed_url: src.embedUrl || src.streamUrl,
+          url: src.embedUrl || src.streamUrl,
+          servers: src.servers || [],
+          mesariVideoId: src.mesariVideoId || null,
+          title: src.originalName || null,
+          thumbnail: src.thumbnailUrl || null
+        }
+      });
+    }
     if (src.mode === "thanawica-mp4" && src.mp4Url) return res.json({ success: true, data: { type: "mp4", play_url: src.mp4Url, mp4_url: src.mp4Url } });
 
+    // مصدر كورساتك مشترك في الذاكرة (sourceCache) — لكن جلسة HLS خاصة بكل طالب
+    // عشان لينك التشغيل ومتفتاح sk ميترموش بين منصات تانية
     assertPlayerOrigin(req);
 
-    // جلسة HLS على السيرفر (أساسية لغير weave + احتياطي لـ weave)
     const id = crypto.randomUUID().replace(/-/g, "");
     const streamKey = crypto.randomBytes(16).toString("hex");
     const deviceId = (req.session && req.session.deviceId) || (req.student && req.student.deviceId) || null;
@@ -5169,37 +6185,9 @@ app.post("/api/play/:videoId", requireStudent, playLimiter, async (req, res) => 
       lastUsed: now()
     };
     streamSessions.set(id, sessionRow);
+    // بدون persist Firebase لتقليل التسريب والكتابة — الجلسة في الذاكرة فقط
     const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
-
-    // السيرفر هو اللي يشغّل: رجّع play_url (HLS مفكوك على السيرفر) كمسار أساسي
-    // مع بيانات weave احتياطية لو حابب المشغّل يجرّب StreamWeavePlayer
-    const payload = {
-      play_url: hlsPath,
-      manifest_url: hlsPath,
-      shared: false,
-      mode: src.mode || "proxy"
-    };
-    if (src.mode === "weave" && src.token && src.sessionId) {
-      payload.weave = {
-        token: src.token,
-        video_id: src.videoId || null,
-        videoId: src.videoId || null,
-        session_id: src.sessionId,
-        sessionId: src.sessionId,
-        expires_in: Number(src.expiresIn || 28800),
-        expiresIn: Number(src.expiresIn || 28800),
-        key_seed: src.keySeed || null,
-        key_version: Number(src.keyVersion || 3),
-        api_base: src.apiBase || "https://api.stream-weave.com",
-        stream_url: src.streamUrl || null,
-        heartbeat_url: src.heartbeatUrl || null,
-        end_url: src.endUrl || null,
-        sw_ticket: src.swTicket || null
-      };
-      payload.has_plain_key = Boolean(src.plainKey);
-      payload.segs = Array.isArray(src.segs) ? src.segs.length : 0;
-    }
-    res.json({ success: true, data: payload });
+    res.json({ success: true, data: { play_url: hlsPath, manifest_url: hlsPath, shared: false } });
   } catch (e) {
     try { const yt = await tryResolveYoutube(String(req.params.videoId || "")); if (yt) return res.json({ success: true, data: { type: "youtube", youtube_url: yt, url: yt } }); } catch {}
     console.error("[play]", e.message);
@@ -5303,11 +6291,6 @@ app.get("/api/hls/:pid/master.m3u8", requireStudent, async (req, res) => {
 });
 
 async function getSegmentPlain(session, meta, url, iv, headers) {
-  // tiny optional jitter only (does not block playback)
-  if (ANTI_DETECT.SEG_DELAY_MAX > 0) {
-    const d = ANTI_DETECT.SEG_DELAY_MIN + Math.random() * (ANTI_DETECT.SEG_DELAY_MAX - ANTI_DETECT.SEG_DELAY_MIN);
-    if (d > 5) await delay(d);
-  }
   const key = url + "|" + (meta.iv || "");
   const hit = segGet(key);
   if (hit) return hit;
@@ -5478,9 +6461,11 @@ app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   const url = sg.u;
   const isTh = session.src?.mode === "thanawica";
   const isBunny = session.src?.mode === "bunny" || session.src?.mode === "hossam";
-  if (!url || (!isTh && !isBunny && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
+  const isTaleb2 = session.src?.mode === "taleb";
+  if (!url || (!isTh && !isBunny && !isTaleb2 && !allowedStreamUrl(url, session.src))) return jsonError(res, 403, "غير مصرح");
   if (isTh && url && !/thanawica\.com/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
   if (isBunny && url && !/b-cdn\.net|mediadelivery\.net/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
+  if (isTaleb2 && url && !/video\.talep\.pro/i.test(String(url))) return jsonError(res, 403, "غير مصرح");
   const meta = { ...sg, u: url, iv: sg.iv, s: sg.s, i: idx };
   const iv = parseIvHex(sg.iv) || session.src.defaultIv || ivFromMediaSequence(sg.s || 0);
   try {
@@ -6318,14 +7303,81 @@ app.get("/api/cdn", async function (req, res) {
     var target = req.query.url || "";
     if (req.query.u) target = b64urlDecode(String(req.query.u));
     if (!target) return res.status(400).send("missing url");
+    // security: only allow known streaming hosts
+    try {
+      var th = new URL(target).hostname.toLowerCase();
+      var hostOk =
+        CONFIG.STREAM_HOSTS.some(function (h) { return th === h || th.endsWith("." + h); }) ||
+        /vidmoly\.|vmpx\.online|vmeas\.cloud|staticmoly\.me|bunny|b-cdn|mediadelivery|mesari|coursatk|stream-weave|floravon|talep|youtube|googlevideo/i.test(th);
+      if (!hostOk) return res.status(403).send("host not allowed");
+    } catch (e) { return res.status(400).send("bad url"); }
+
     var hdrs = {
-      Origin: "https://coursatk.online",
-      Referer: "https://coursatk.online/",
+      Origin: "https://vidmoly.biz",
+      Referer: "https://vidmoly.biz/",
       Accept: "*/*",
-      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     };
+    // better referer for mesari/vidmoly
+    if (/mesari|coursatk/i.test(target)) {
+      hdrs.Origin = "https://mesari.online";
+      hdrs.Referer = "https://mesari.online/";
+    } else if (/vidmoly|vmpx|vmeas|staticmoly/i.test(target)) {
+      hdrs.Origin = "https://vidmoly.biz";
+      hdrs.Referer = "https://vidmoly.biz/";
+    } else {
+      hdrs.Origin = "https://coursatk.online";
+      hdrs.Referer = "https://coursatk.online/";
+    }
     if (req.headers.range) hdrs.Range = req.headers.range;
     var upstream = await fetchFollow(target, hdrs);
+    var ct = (upstream.headers.get("content-type") || "").toLowerCase();
+    var isM3u =
+      ct.indexOf("mpegurl") !== -1 ||
+      ct.indexOf("m3u8") !== -1 ||
+      /\.m3u8(\?|$)/i.test(target) ||
+      String(req.query.rewrite || "") === "1";
+
+    if (isM3u) {
+      var text = await upstream.text();
+      // if body is not playlist, fall through as binary
+      if (text.indexOf("#EXTM3U") !== -1) {
+        var base = target;
+        try {
+          var u0 = new URL(target);
+          base = u0.href.substring(0, u0.href.lastIndexOf("/") + 1);
+        } catch (e) {}
+        text = text.split("\n").map(function (line) {
+          var t = line.trim();
+          if (!t) return line;
+          if (t.charAt(0) === "#") {
+            return t.replace(/URI="([^"]+)"/g, function (_m, uri) {
+              var abs = uri;
+              if (uri.indexOf("http") !== 0) {
+                try { abs = new URL(uri, base).href; } catch (e) { abs = uri; }
+              }
+              return 'URI="/api/cdn?u=' + b64urlEncode(abs) + '"';
+            });
+          }
+          var abs2 = t;
+          if (t.indexOf("http") !== 0) {
+            try { abs2 = new URL(t, base).href; } catch (e) { abs2 = t; }
+          } else {
+            abs2 = t;
+          }
+          return "/api/cdn?u=" + b64urlEncode(abs2);
+        }).join("\n");
+        res.set("Content-Type", "application/vnd.apple.mpegurl");
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Cache-Control", "no-store");
+        return res.status(200).send(text);
+      }
+      // not actually m3u — send as buffer
+      var buf0 = Buffer.from(text);
+      res.set("Cache-Control", "public, max-age=30");
+      return pipeUpstream(res, upstream, buf0);
+    }
+
     var buf = Buffer.from(await upstream.arrayBuffer());
     res.set("Cache-Control", "public, max-age=30");
     pipeUpstream(res, upstream, buf);
@@ -6403,6 +7455,219 @@ app.post("/api/video/:id/play", async function (req, res) {
   res.status(200).json(r);
 });
 
+// ==================== catalog / stream-auth endpoints ====================
+
+/** كتالوج المدرسين — مسار عام جديد + alias قديم للتوافق */
+async function handleCatalogTeachers(req, res) {
+  try {
+    let teachers;
+    if (useMesariAsPrimary()) teachers = await getMesariTeachers();
+    else teachers = await getTalebTeachers();
+    res.json({ success: true, data: teachers });
+  } catch (e) {
+    console.error("[catalog] teachers failed");
+    jsonError(res, e.status || 502, e.expose ? e.message : "تعذر جلب قائمة المدرسين");
+  }
+}
+app.get("/api/catalog/teachers", requireStudent, handleCatalogTeachers);
+app.get("/api/taleb/teachers", requireStudent, handleCatalogTeachers); // alias
+
+/** playlist داخلي — طلاب فقط، أخطاء عامة */
+async function handleCatalogPlaylist(req, res) {
+  try {
+    const partId = String(req.params.partId || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "معرّف غير صالح");
+    const text = await getTalebPlaylist(partId);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.type("application/vnd.apple.mpegurl").send(text);
+  } catch (e) {
+    jsonError(res, e.status || 502, e.expose ? e.message : "تعذر جلب قائمة التشغيل");
+  }
+}
+app.get("/api/catalog/playlist/:partId", requireStudent, handleCatalogPlaylist);
+app.get("/api/taleb/playlist/:partId", requireStudent, handleCatalogPlaylist); // alias
+
+/** تشغيل بمعرّف الجزء — بدون إرجاع videoId الخام للعميل */
+async function handleCatalogPlay(req, res) {
+  try {
+    const partId = String(req.params.partId || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(partId)) return jsonError(res, 400, "معرّف غير صالح");
+
+    const videoId = useMesariAsPrimary() ? `mesari_${partId}` : `taleb_${partId}`;
+    checkPlayBurst(req.session && req.session.code, videoId);
+    logPlayEvent(req, videoId).catch(() => {});
+
+    assertPlayerOrigin(req);
+    const src = await getVideoSource(videoId, req.headers);
+
+    try {
+      const secure = (req.secure || req.headers["x-forwarded-proto"] === "https") ? "; Secure" : "";
+      res.setHeader("Set-Cookie", `ds_session=${encodeURIComponent(req.sessionToken)}; Path=/; HttpOnly; SameSite=None${secure}; Max-Age=${7 * 24 * 3600}`);
+    } catch {}
+
+    const id = crypto.randomUUID().replace(/-/g, "");
+    const streamKey = crypto.randomBytes(16).toString("hex");
+    const deviceId = (req.session && req.session.deviceId) || null;
+    revokeOtherSessions(req.session.code, src.videoId, id);
+
+    const sessionRow = {
+      id, src,
+      videoId: src.videoId,
+      shared: false,
+      ownerCode: req.session.code,
+      ownerToken: req.sessionToken,
+      ownerDeviceId: deviceId,
+      streamKey,
+      createdAt: now(),
+      lastUsed: now()
+    };
+    streamSessions.set(id, sessionRow);
+    const hlsPath = `/api/hls/${id}/master.m3u8?sk=${streamKey}`;
+    res.json({
+      success: true,
+      data: {
+        play_url: hlsPath,
+        manifest_url: hlsPath,
+        shared: false
+      }
+    });
+  } catch (be) {
+    jsonError(res, be.status || 502, be.expose ? be.message : "تعذر بدء التشغيل");
+  }
+}
+app.post("/api/catalog/play/:partId", requireStudent, playLimiter, handleCatalogPlay);
+app.post("/api/taleb/play/:partId", requireStudent, playLimiter, handleCatalogPlay); // alias
+
+const streamAuthLimiter = rateLimit({
+  max: 8,
+  windowMs: 60_000,
+  scope: "stream-auth-admin",
+  banAfter: 12,
+  banMs: 15 * 60_000,
+  message: "طلبات كثيرة"
+});
+
+/** تحديث بيانات مصادقة البث — مشفّرة في Firebase، بدون إرجاع قيم */
+app.put(
+  "/api/admin/stream-auth",
+  requireAdmin("admins_manage"),
+  streamAuthLimiter,
+  async (req, res) => {
+    try {
+      // mesari JWT (auth_token) OR talep device/session
+      const mesariToken = String(req.body?.mesariToken || req.body?.auth_token || req.body?.token || "").trim();
+      if (mesariToken && mesariToken.length > 20) {
+        updateMesariAuth(mesariToken);
+        try {
+          // store under encrypted stream creds as session field for convenience
+          await persistStreamCredentials("mesari", mesariToken, req.admin && req.admin.username);
+        } catch {
+          console.warn("[stream-auth] mesari persist failed");
+        }
+        return res.json({ success: true, message: "تم تحديث مصادقة مساري", source: "mesari" });
+      }
+      const device = String(req.body?.device || "").trim();
+      const session = String(req.body?.session || "").trim();
+      if (!device || !session) return jsonError(res, 400, "البيانات المطلوبة ناقصة");
+      if (device.length < 8 || session.length < 16) return jsonError(res, 400, "بيانات غير صالحة");
+      if (device.length > 512 || session.length > 4096) return jsonError(res, 400, "بيانات غير صالحة");
+      updateTalebCookies(device, session);
+      try {
+        await persistStreamCredentials(device, session, req.admin && req.admin.username);
+      } catch {
+        console.warn("[stream-auth] persist failed");
+        return jsonError(res, 500, "فشل حفظ البيانات");
+      }
+      res.json({ success: true, message: "تم تحديث بيانات المصادقة" });
+    } catch {
+      jsonError(res, 500, "فشل التحديث");
+    }
+  }
+);
+// alias قديم
+app.put("/api/admin/taleb/cookies", requireAdmin("admins_manage"), streamAuthLimiter, async (req, res) => {
+  req.url = "/api/admin/stream-auth";
+  // reuse body
+  try {
+    const device = String(req.body?.device || "").trim();
+    const session = String(req.body?.session || "").trim();
+    if (!device || !session) return jsonError(res, 400, "البيانات المطلوبة ناقصة");
+    if (device.length < 8 || session.length < 16) return jsonError(res, 400, "بيانات غير صالحة");
+    updateTalebCookies(device, session);
+    try { await persistStreamCredentials(device, session, req.admin && req.admin.username); }
+    catch { return jsonError(res, 500, "فشل حفظ البيانات"); }
+    res.json({ success: true, message: "تم تحديث بيانات المصادقة" });
+  } catch {
+    jsonError(res, 500, "فشل التحديث");
+  }
+});
+
+/** حالة المصادقة فقط — configured/alive بدون أي قيم */
+app.get("/api/admin/stream-auth/status", requireAdmin("admins_manage"), streamAuthLimiter, async (_req, res) => {
+  try {
+    const mesari = await mesariAuthStatus().catch(() => ({ configured: false, alive: false }));
+    const device = String(process.env.TALEB_DEVICE || "").trim();
+    const session = String(process.env.TALEB_SESSION || "").trim();
+    const talebConfigured = Boolean(device && session);
+    let talebAlive = false;
+    if (talebConfigured) {
+      try {
+        const r = await fetch("https://talep.pro/api/notifications", {
+          headers: {
+            "user-agent": "Mozilla/5.0",
+            cookie: `taleb-device=${device}; taleb-session=${session}`,
+            accept: "*/*"
+          },
+          signal: AbortSignal.timeout(8000)
+        });
+        talebAlive = r.ok;
+      } catch {
+        talebAlive = false;
+      }
+    }
+    res.json({
+      success: true,
+      data: {
+        source: contentSource(),
+        mesari,
+        taleb: { configured: talebConfigured, alive: talebAlive },
+        configured: mesari.configured || talebConfigured,
+        alive: mesari.alive || talebAlive
+      }
+    });
+  } catch {
+    jsonError(res, 500, "تعذر فحص الحالة");
+  }
+});
+app.get("/api/admin/taleb/status", requireAdmin("admins_manage"), streamAuthLimiter, async (_req, res) => {
+  try {
+    const device = String(process.env.TALEB_DEVICE || "").trim();
+    const session = String(process.env.TALEB_SESSION || "").trim();
+    const configured = Boolean(device && session);
+    let alive = false;
+    if (configured) {
+      try {
+        const r = await fetch("https://talep.pro/api/notifications", {
+          headers: {
+            "user-agent": "Mozilla/5.0",
+            cookie: `taleb-device=${device}; taleb-session=${session}`,
+            accept: "*/*"
+          },
+          signal: AbortSignal.timeout(8000)
+        });
+        alive = r.ok;
+      } catch {
+        alive = false;
+      }
+    }
+    res.json({ success: true, data: { configured, alive } });
+  } catch {
+    jsonError(res, 500, "تعذر فحص الحالة");
+  }
+});
+
+// ===== END catalog / stream-auth endpoints =====
+
 app.post("/api/heartbeat", async function (req, res) {
   try {
     var url = req.body && req.body.url;
@@ -6438,6 +7703,67 @@ function extractDriveFileId(rawUrl) {
     return null;
   } catch { return null; }
 }
+
+
+// بروكسي صور عام — يخفي المصدر عن العميل
+app.get("/api/img", rateLimit({ max: 240, windowMs: 60_000, scope: "img-proxy" }), async (req, res) => {
+  try {
+    let raw = String(req.query.u || "").trim();
+    if (!raw) return res.status(400).end();
+    // base64url decode
+    try {
+      raw = Buffer.from(raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    } catch {
+      return res.status(400).end();
+    }
+    let parsed;
+    try {
+      parsed = new URL(raw);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return res.status(400).end();
+    } catch {
+      return res.status(400).end();
+    }
+    const host = parsed.hostname.toLowerCase();
+    // allowlist hosts محتملة للصور (مساري + coursatk + talep + CDNs)
+    const ok =
+      host.endsWith("talep.pro") ||
+      host.endsWith("taleb.pro") ||
+      host.endsWith("mesari.online") ||
+      host.endsWith("coursatk.online") ||
+      host.includes("files.coursatk") ||
+      host.includes("cdn") ||
+      host.includes("cloudinary") ||
+      host.includes("googleusercontent") ||
+      host.includes("b-cdn") ||
+      host.includes("amazonaws") ||
+      host.includes("supabase") ||
+      host.includes("storage") ||
+      host.includes("vmeas") ||
+      host.includes("staticmoly");
+    if (!ok) return res.status(403).end();
+
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+      Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      Referer: host.includes("coursatk") || host.includes("mesari") ? "https://mesari.online/" : "https://talep.pro/",
+      Origin: host.includes("coursatk") || host.includes("mesari") ? "https://mesari.online" : "https://talep.pro"
+    };
+    const upstream = await fetchT(raw, { headers }, { timeout: 20_000, retries: 1 });
+    if (!upstream.ok) return res.status(502).end();
+    const ct = (upstream.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
+    if (!/^image\//i.test(ct) && !/octet-stream/i.test(ct)) return res.status(502).end();
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (!buf.length || buf.length > 8 * 1024 * 1024) return res.status(502).end();
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    // لا نكشف المصدر
+    res.removeHeader("Content-Encoding");
+    return res.end(buf);
+  } catch {
+    return res.status(502).end();
+  }
+});
 
 app.get(["/api/file-proxy", "/api/file-proxy/:filename"], async (req, res) => {
   try {
@@ -6671,20 +7997,28 @@ try {
 // On Vercel we export the Express app (serverless). Locally we listen as usual.
 export default app;
 
-// Force proxy/relay when required
-if (ANTI_DETECT.REQUIRE_PROXY && !proxyAgent && !UPSTREAM_RELAY_URL) {
-  console.error("[ANTI] FATAL: REQUIRE_PROXY=1 but neither UPSTREAM_PROXY nor UPSTREAM_RELAY_URL is set");
-  process.exit(1);
-}
-
 const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 if (!isVercel) {
+  // Railway / Docker / أي PaaS: لازم 0.0.0.0 وإلا البروكسي يشوف "Application failed to respond"
   const HOST = process.env.HOST || "0.0.0.0";
   const PORT = Number(process.env.PORT || CONFIG.PORT || 3000);
   const server = app.listen(PORT, HOST, () => {
-    console.log(`[API ${APP_VERSION}] ${HOST}:${PORT} · SW424 · concurrency=${ANTI_DETECT.MAX_UPSTREAM_CONCURRENT} · prefetch=${ANTI_DETECT.PREFETCH_AHEAD} · tokens=${tokenPool.tokens.length}`);
-    console.log(`[ANTI] proxy=${Boolean(proxyAgent)} relay=${Boolean(UPSTREAM_RELAY_URL)} healthLocked=${ANTI_DETECT.LOCK_HEALTH}`);
+    console.log(`[API ${APP_VERSION}] ${HOST}:${PORT} Thanawya World · segment-decrypt ON · segment-cache ${Math.round(SEG_CACHE_MAX / 1048576)}MB`);
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
+    // تسخين الكتالوج في الخلفية (مساري أولاً لو متاح)
+    try {
+      if (useMesariAsPrimary()) {
+        clearMesariCatalogCache();
+        crawlMesariFullCatalog()
+          .then((c) => console.log("[mesari-catalog] warm ok", c.stats))
+          .catch(() => console.warn("[mesari-catalog] warm skipped"));
+      } else {
+        clearTalebCatalogCache();
+        crawlTalebFullCatalog()
+          .then((c) => console.log("[catalog] warm ok", c.stats))
+          .catch(() => console.warn("[catalog] warm skipped"));
+      }
+    } catch {}
   });
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
@@ -6695,5 +8029,5 @@ if (!isVercel) {
     setTimeout(() => process.exit(0), 10_000).unref();
   });
 } else {
-  console.log(`[API ${APP_VERSION}] Vercel serverless · HARDENED mode`);
+  console.log(`[API ${APP_VERSION}] Vercel serverless mode · segment-decrypt ON`);
 }
