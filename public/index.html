@@ -399,7 +399,6 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
     <li><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>دعم لو قابلتك أي مشكلة</li>
   </ul>
 
-  <!-- التعديل هنا: تحويل الزرار لـ primary -->
   <a class="btn btn-primary price-cta" href="login.html">معايا كود</a>
 </article>
 
@@ -426,11 +425,9 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 </article>
 </div>
 
-<!-- إضافة النص الجديد هنا (تم إزالة كلاس reveal) -->
 <div style="text-align: center; margin-top: 35px; margin-bottom: 20px; padding: 0 15px;">
     <span class="marker-highlight">لو انت مشترك في باقة الشهر وعاوز تحوّل لباقة الـ 3 شهور وتدفع الفرق، كلم الأدمن.</span>
 </div>
-<!-- نهاية الإضافة -->
 
 </div></section>
 
@@ -439,20 +436,18 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 </div></section>
 
 <section class="trial" id="trial"><div class="container"><div class="trial-box reveal"><div class="trial-copy">
-    <h2>طب وانا ايش ضمني انكم مش نصابين؟ 👀</h2>
-    <!-- تم دمج النص كله هنا وتطبيق كلاس الهايلايتر -->
+    <h2>وأنا إيش ضمني إنك مش نصاب؟ 👀</h2>
     <span class="marker-highlight">
         من حقك تطمّن قبل ما تشترك. متاح تجربة مجانية للموقع؛ جرّب براحتك، وكلم الأدمن من رابط التيليجرام الموجود هنا.
     </span>
 </div><div class="trial-cta"><a class="btn btn-lg" href="#admins">شوف طرق التواصل <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a></div></div>
-<div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمنز <span class="gradient">المتاحين للتواصل</span></h2><p>تواصل مع الأدمن مباشرة عبر تيليجرام.</p></div>
+<div id="admins"><div class="section-head reveal" style="margin-top:35px;margin-bottom:18px"><h2 style="font-size:24px">الأدمن المتاح <span class="gradient">للتواصل</span></h2><p>تواصل مع الأدمن مباشرة عبر تيليجرام.</p></div>
 <div class="admins" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:620px;margin-inline:auto">
 <a class="admin-card owner" href="https://t.me/S7alaby7" target="_blank" rel="noopener noreferrer">
   <span class="owner-badge"><svg viewBox="0 0 24 24"><path d="M12 2 15 9l7 .5-5.5 4.5 1.8 7L12 17l-6.3 4 1.8-7L2 9.5 9 9l3-7Z"/></svg> صاحب المنصة</span>
   <div class="admin-avatar"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div>
   <div><b>@S7alaby7</b><small>تواصل على تيليجرام ↗</small></div>
 </a>
-<a class="admin-card" href="https://t.me/mohamed3farag" target="_blank" rel="noopener noreferrer"><div class="admin-avatar"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div><div><b>@mohamed3farag</b><small>تواصل على تيليجرام ↗</small></div></a>
 </div></div></div></section>
 
 <section class="section" id="faq"><div class="container"><div class="section-head reveal"><div class="eyebrow">محتاج تعرف إيه؟</div><h2>أسئلة <span class="gradient">بتتكرر.</span></h2></div>
@@ -484,7 +479,7 @@ if (isLoggedIn) {
   if (priceBtns) { priceBtns.forEach(btn => { btn.href = 'subjects.html'; btn.textContent = 'اذهب لموادي'; }); }
 }
 const progressBar = $('scroll-progress');
-const progressBarSide = $('scroll-progress-side'); // الشريط الجانبي
+const progressBarSide = $('scroll-progress-side');
 const backToTop = $('back-to-top');
 const mainNav = $('main-nav');
 const sections = document.querySelectorAll('section[id]');
@@ -529,7 +524,6 @@ if ('IntersectionObserver' in window) {
 })();
 </script>
 <script src="theme.js"></script>
-<!-- تسجيل كل زائر (مسجّل أو لا) في لوحة الأدمن — لازم track-visit.js يكون في /public -->
 <script src="/track-visit.js" defer></script>
 </body>
 </html>
