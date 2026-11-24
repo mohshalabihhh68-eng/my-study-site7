@@ -3430,13 +3430,20 @@ function subjectNameAr(sid) {
 }
 function contentSource() {
   const raw = String(process.env.CONTENT_SOURCE || "").trim().toLowerCase();
+  // explicit override
+  if (raw === "thanawica" || process.env.THANAWICA_PRIMARY === "1") return "thanawica";
   if (raw === "mesari" || process.env.MESARI_PRIMARY === "1") return "mesari";
   if (raw === "taleb" || process.env.TALEB_PRIMARY === "1") return "taleb";
   if (raw === "coursatk") return "coursatk";
-  // default: mesari first (especially when taleb.js absent)
+  // auto: prefer Thanawica when enabled + cookies/code present
+  if (CONFIG.THANAWICA_ENABLED && (
+    String(process.env.THANAWICA_COOKIES || "").includes("student_session=") ||
+    String(process.env.THANAWICA_CODE || "").length >= 7
+  )) {
+    return "thanawica";
+  }
   if (String(process.env.MESARI_AUTH_TOKEN || "").trim()) return "mesari";
   if (String(process.env.TALEB_DEVICE || "").trim() && String(process.env.TALEB_SESSION || "").trim()) return "taleb";
-  // no explicit creds — still prefer mesari adapter
   return "mesari";
 }
 function useTalebAsPrimary() {
@@ -3444,6 +3451,9 @@ function useTalebAsPrimary() {
 }
 function useMesariAsPrimary() {
   return contentSource() === "mesari";
+}
+function useThanawicaAsPrimary() {
+  return contentSource() === "thanawica";
 }
 
 async function ensurePrimaryCourseLectures(courseId, teacherName = "") {
@@ -3513,11 +3523,35 @@ app.get("/api/config", requireStudent, async (req, res) => {
   res.json({ success: true, yearId, subjectIds, cryptoReady: Boolean(decryptPlaybackKeyFn), decryptSegments: true });
 });
 
-const THANAWICA_ALLOWED_SECTIONS = new Set(["scientific_sciences", "scientific_math", "azhari"]);
-function studentAllowsThanawica(student) { const sec = normalizeSection(student && student.section); return THANAWICA_ALLOWED_SECTIONS.has(sec || ""); }
+const THANAWICA_ALLOWED_SECTIONS = new Set(["scientific_sciences", "scientific_math", "azhari", "literary", "languages", ""]);
+function studentAllowsThanawica(student) {
+  // when Thanawica is the primary content source, allow all sections
+  if (typeof useThanawicaAsPrimary === "function" && useThanawicaAsPrimary()) return true;
+  if (process.env.THANAWICA_PRIMARY === "1" || String(process.env.CONTENT_SOURCE || "").toLowerCase() === "thanawica") return true;
+  const sec = normalizeSection(student && student.section);
+  return THANAWICA_ALLOWED_SECTIONS.has(sec || "") || !sec;
+}
 
 app.get("/api/subjects/:id", requireStudent, async (req, res) => {
   try {
+    // ===== Thanawica primary: full catalog from thanawica.com =====
+    if (useThanawicaAsPrimary() && CONFIG.THANAWICA_ENABLED) {
+      const yearId = resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID);
+      const thList = await thSubjectsForYear(yearId);
+      const data = (thList || []).map((s, i) => ({
+        id: s.id,
+        name: s.name,
+        image_url: s.image_url || null,
+        year_id: yearId,
+        is_published: true,
+        teachers_count: s.teachers_count || null,
+        courses_count: s.chapters_count || s.courses_count || null,
+        chapters_count: s.chapters_count || null,
+        _source: "thanawica",
+        _kind: s._kind || null
+      }));
+      return res.json({ success: true, message: "Success", data, source: "thanawica" });
+    }
     if (useMesariAsPrimary() || useTalebAsPrimary()) {
       const cat = await getPrimaryCatalog();
       const data = cat.subjects.map((s, i) => {
@@ -3534,7 +3568,7 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
           chapters_count: coursesCount
         };
       });
-      return res.json({ success: true, message: "Success", data, source: "taleb" });
+      return res.json({ success: true, message: "Success", data, source: contentSource() });
     }
     const yearId = resolveYearId(req.query.year || req.params.id || CONFIG.DEFAULT_YEAR_ID);
     const secInfo = await resolveSection(req.student.section, yearId);
@@ -3607,6 +3641,10 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
 app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    if (useThanawicaAsPrimary() && CONFIG.THANAWICA_ENABLED) {
+      const data = await thTeachers(req.params.id);
+      return res.json({ success: true, message: "Success", data, source: "thanawica" });
+    }
     if (useMesariAsPrimary() || useTalebAsPrimary()) {
       const cat = await getPrimaryCatalog();
       const sid = String(req.params.id);
@@ -7958,10 +7996,10 @@ try {
   console.error("[crypto] failed to load DecryptionUtils — continuing without segment decrypt:", e && e.message ? e.message : e);
 }
 try {
-  if (CONFIG.THANAWICA_ENABLED && CONFIG.THANAWICA_CODE) {
+  if (CONFIG.THANAWICA_ENABLED) {
     await loadMaintenanceFromFirebase();
-    await thanawicaLogin(CONFIG.THANAWICA_CODE);
-    console.log("[API] Thanawica hybrid ON");
+    await thanawicaLogin(CONFIG.THANAWICA_CODE || process.env.THANAWICA_CODE || "");
+    console.log("[API] Thanawica ON · primary=", useThanawicaAsPrimary());
   }
 } catch (e) { console.warn("[API] Thanawica login skipped:", e.message); }
 
@@ -8007,7 +8045,13 @@ if (!isVercel) {
     console.log(`[API] bootstrap admin ready (${CONFIG.BOOTSTRAP_ADMIN.username})`);
     // تسخين الكتالوج في الخلفية (مساري أولاً لو متاح)
     try {
-      if (useMesariAsPrimary()) {
+      if (useThanawicaAsPrimary()) {
+        console.log("[API] primary source = thanawica — catalog on-demand");
+        // warm year subjects
+        thSubjectsForYear(CONFIG.DEFAULT_YEAR_ID || 27)
+          .then((list) => console.log("[thanawica] warm subjects", (list || []).length))
+          .catch((e) => console.warn("[thanawica] warm skip", e.message));
+      } else if (useMesariAsPrimary()) {
         clearMesariCatalogCache();
         crawlMesariFullCatalog()
           .then((c) => console.log("[mesari-catalog] warm ok", c.stats))
