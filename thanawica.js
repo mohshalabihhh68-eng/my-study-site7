@@ -1073,15 +1073,19 @@ export async function thGetVideoSource(playlistHash, { sidToken = "__SID__" } = 
 
   // master
   const masterRes = await thFetch(`/api/stream/playlist/${playlistHash}`, {
-    headers: { Accept: "*/*", Referer: BASE + "/" }
+    headers: { Accept: "*/*", Referer: BASE + "/sw.js" }
   });
   if (!masterRes.ok) throw new Error(`playlist master HTTP ${masterRes.status}`);
   const masterText = await masterRes.text();
-  // pick first variant
-  const varMatch = masterText.match(/\/api\/stream\/playlist\/[a-f0-9]+\/(\w+)/);
-  const quality = varMatch ? varMatch[1] : "480";
+  // Prefer 600 (capture) then highest available, else first variant
+  const qualities = [...masterText.matchAll(/\/api\/stream\/playlist\/[a-f0-9]+\/(\w+)/g)].map((m) => m[1]);
+  let quality = "600";
+  if (!qualities.includes("600")) {
+    const ranked = ["1080", "720", "600", "480", "360", "240"];
+    quality = ranked.find((q) => qualities.includes(q)) || qualities[0] || "480";
+  }
   const mediaRes = await thFetch(`/api/stream/playlist/${playlistHash}/${quality}`, {
-    headers: { Accept: "*/*", Referer: BASE + "/" }
+    headers: { Accept: "*/*", Referer: BASE + "/sw.js" }
   });
   if (!mediaRes.ok) throw new Error(`playlist media HTTP ${mediaRes.status}`);
   const xkm = mediaRes.headers.get("x-km");
@@ -1202,14 +1206,84 @@ export async function thGetVideoSource(playlistHash, { sidToken = "__SID__" } = 
   };
 }
 
+/**
+ * Mint temporary tok for one or more segments (matches current Thanawica traffic).
+ * Capture shows both:
+ *   body: { videoId, segNames: ["seg_0.dat", ...] } → { tokens: [{segName,iat,tok}, ...] }
+ *   and singular { videoId, segName } → { iat, tok }
+ */
 export async function thMintAndFetchSegment(meta) {
   await ensureLogin();
-  // path like /api/c/{hash}/{quality}/seg_N.dat
   const u = new URL(meta.u, BASE);
-  const parts = u.pathname.split("/");
+  const parts = u.pathname.split("/").filter(Boolean);
   // /api/c/HASH/QUALITY/seg_X.dat
-  const segName = parts[parts.length - 1];
-  const hash = parts[3];
+  const segName = parts[parts.length - 1] || "seg_0.dat";
+  const hash = parts[2] || parts[3] || meta.h; // tolerate slight path variance
+  if (!hash) throw new Error("mint: missing video hash");
+
+  const mintHeaders = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    Origin: BASE,
+    Referer: BASE + "/",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache"
+  };
+
+  let iat = null;
+  let tok = null;
+
+  // Prefer batch-style (current site behaviour from capture)
+  try {
+    const batchRes = await thFetch("/api/stream/mint", {
+      method: "POST",
+      headers: mintHeaders,
+      body: JSON.stringify({ videoId: hash, segNames: [segName] })
+    });
+    if (batchRes.ok) {
+      const j = await batchRes.json();
+      if (Array.isArray(j.tokens) && j.tokens.length) {
+        const row = j.tokens.find((t) => t.segName === segName) || j.tokens[0];
+        iat = row.iat;
+        tok = row.tok;
+      } else if (j.iat && j.tok) {
+        iat = j.iat;
+        tok = j.tok;
+      }
+    }
+  } catch (e) {
+    console.warn("[thanawica] batch mint fail", e.message);
+  }
+
+  // Fallback singular
+  if (!tok) {
+    const mintRes = await thFetch("/api/stream/mint", {
+      method: "POST",
+      headers: mintHeaders,
+      body: JSON.stringify({ videoId: hash, segName })
+    });
+    if (!mintRes.ok) throw new Error(`mint HTTP ${mintRes.status}`);
+    const mint = await mintRes.json();
+    iat = mint.iat;
+    tok = mint.tok;
+  }
+
+  if (!tok) throw new Error("mint: no tok returned");
+
+  u.searchParams.set("v", meta.v || "");
+  u.searchParams.set("iat", String(iat));
+  u.searchParams.set("tok", tok);
+
+  const segRes = await thFetch(u.toString(), {
+    headers: { Accept: "*/*", Referer: BASE + "/sw.js" } // capture uses sw.js referer
+  });
+  if (!segRes.ok) throw new Error(`segment HTTP ${segRes.status}`);
+  return Buffer.from(await segRes.arrayBuffer());
+}
+
+/** Optional: pre-mint a window of segments (used by server prefetch) */
+export async function thMintBatch(videoHash, segNames) {
+  await ensureLogin();
   const mintRes = await thFetch("/api/stream/mint", {
     method: "POST",
     headers: {
@@ -1218,18 +1292,11 @@ export async function thMintAndFetchSegment(meta) {
       Origin: BASE,
       Referer: BASE + "/"
     },
-    body: JSON.stringify({ videoId: hash, segName })
+    body: JSON.stringify({ videoId: videoHash, segNames: segNames || [] })
   });
-  if (!mintRes.ok) throw new Error(`mint HTTP ${mintRes.status}`);
-  const mint = await mintRes.json();
-  u.searchParams.set("v", meta.v || "");
-  u.searchParams.set("iat", String(mint.iat));
-  u.searchParams.set("tok", mint.tok);
-  const segRes = await thFetch(u.toString(), {
-    headers: { Accept: "*/*", Referer: BASE + "/" }
-  });
-  if (!segRes.ok) throw new Error(`segment HTTP ${segRes.status}`);
-  return Buffer.from(await segRes.arrayBuffer());
+  if (!mintRes.ok) throw new Error(`mint batch HTTP ${mintRes.status}`);
+  const j = await mintRes.json();
+  return Array.isArray(j.tokens) ? j.tokens : [];
 }
 
 export function getThanawicaSessionInfo() {
