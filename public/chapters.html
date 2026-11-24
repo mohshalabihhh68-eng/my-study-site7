@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f8fafc">
-<title>الفصول | ثانوية club</title>
+<title>المحاضرات | ثانوية club</title>
 <script>
 (function(){
   try {
@@ -21,11 +21,10 @@
 [data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--nav-bg:rgba(255,255,255,.88);--back-btn-bg:#ffffff;--back-btn-bg-hover:#f1f5f9;--placeholder-bg:linear-gradient(135deg,#e2e8f0,#f1f5f9)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,sans-serif;transition:background-color .35s,color .35s}
-button{font:inherit;cursor:pointer;outline:none}
+button{font:inherit;cursor:pointer;outline:none;border:none;background:none}
 
 /* شريط التقدم العلوي */
 #scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .05s linear;box-shadow:none}
-
 /* شريط التقدم الجانبي */
 #scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .05s linear;box-shadow:none;border-radius:0 0 0 4px}
 
@@ -39,7 +38,6 @@ button{font:inherit;cursor:pointer;outline:none}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
 
-/* تكبير خانة البروفايل */
 .profile-wrap{position:relative}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
 .profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.3)}
@@ -68,27 +66,8 @@ button{font:inherit;cursor:pointer;outline:none}
 .chapter-card:hover{border-color:rgba(108,99,255,.35);box-shadow:0 8px 24px rgba(108,99,255,.12);transform:translateY(-4px)}
 
 /* الشريط الجانبي للكارت */
-.side-progress-bar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 6px;
-  background: rgba(0, 0, 0, 0.05);
-  z-index: 10;
-  border-radius: 24px 0 0 24px;
-}
-.side-progress-bar .fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 0%;
-  background: linear-gradient(180deg, #10b981, #34d399, #6ee7b7);
-  box-shadow: 0 0 15px #34d399;
-  transition: height 0.5s ease-in-out;
-  border-radius: 24px 0 0 24px;
-}
+.side-progress-bar {position: absolute;top: 0;bottom: 0;left: 0;width: 6px;background: rgba(0, 0, 0, 0.05);z-index: 10;border-radius: 24px 0 0 24px;}
+.side-progress-bar .fill {position: absolute;top: 0;left: 0;width: 100%;height: 0%;background: linear-gradient(180deg, #10b981, #34d399, #6ee7b7);box-shadow: 0 0 15px #34d399;transition: height 0.5s ease-in-out;border-radius: 24px 0 0 24px;}
 
 .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-right: 6px;}
 .card-text{flex:1;padding-top:4px}
@@ -108,20 +87,52 @@ button{font:inherit;cursor:pointer;outline:none}
 .view-btn svg{width:18px;height:18px;fill:currentColor}
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;color:var(--muted)}
 .spinner{width:40px;height:40px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:15px}
+.spinner-sm{width:20px;height:20px;border-width:2.5px;display:inline-block}
+
+/* الأكورديون الداخلي للفيديوهات */
+.lec-content-panel{margin-top:4px;border-top:1px dashed var(--line);padding-top:14px;margin-right: 6px;}
+.groups{display:flex;flex-direction:column;gap:8px}
+.group{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card-inner);transition:border-color .2s}
+.group:has(.group-toggle[aria-expanded="true"]){border-color:rgba(108,99,255,.3)}
+.group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 15px;color:var(--ink);font-size:13px;font-weight:800;transition:background .2s;cursor:pointer}
+.group-toggle:hover{background:var(--card-hover)}
+.group-label{color:var(--blue);font-weight:900;font-size:13px;display:flex;align-items:center;gap:7px}
+.group-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0}
+.group-dot.g{background:#10b981}.group-dot.a{background:#f59e0b}.group-dot.p{background:#8b5cf6}
+.group-action{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);font-weight:700}
+.group-action svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;transition:transform .28s}
+.group-toggle[aria-expanded="true"] .group-action svg{transform:rotate(-90deg)}
+.group-toggle[aria-expanded="true"] .g-txt{color:var(--blue)}
+.group-body{padding:6px 8px 10px;display:flex;flex-direction:column;gap:4px}
+
+/* العناصر الداخلية (الفيديوهات) */
+.item{display:block;width:100%;text-align:right;padding:10px 12px;border-radius:9px;background:var(--card);color:var(--ink);border:1px solid transparent;transition:background .2s,border-color .2s,transform .2s;cursor:pointer}
+.item:hover{background:var(--card-hover);border-color:var(--line);transform:translateX(-2px)}
+.item.watched{opacity:.52}
+.item-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.item-start{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.item-icon{width:30px;height:30px;flex-shrink:0;border-radius:9px;display:grid;place-items:center;background:rgba(108,99,255,.1);color:var(--blue);transition:background .2s}
+.item-icon svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.9}
+.item-icon.g{background:rgba(16,185,129,.1);color:#10b981}
+.item-icon.a{background:rgba(245,158,11,.1);color:#f59e0b}
+.item-icon.p{background:rgba(139,92,246,.1);color:#8b5cf6}
+.item-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.item-title{font-size:13px;font-weight:800;color:var(--ink);white-space:normal;line-height:1.4}
+.item-sub{font-size:11px;color:var(--muted);font-weight:600}
+.item-tag{font-size:11px;font-weight:800;padding:4px 12px;border-radius:99px;background:rgba(108,99,255,.1);color:var(--blue);white-space:nowrap;flex-shrink:0}
+.item-tag.g{background:rgba(16,185,129,.1);color:#10b981}
+.item-tag.a{background:rgba(245,158,11,.1);color:#f59e0b}
+.watched-dot{width:7px;height:7px;border-radius:50%;background:#10b981;flex-shrink:0;display:none}
+.item.watched .watched-dot{display:block}
+
+.empty-msg{padding:14px;color:var(--muted);font-size:13px;text-align:center}
+
 @media (max-width:768px){.grid{grid-template-columns:1fr}.brand small{display:none}#scroll-progress-side{width:3px}}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
-.grid > *, .video-grid > * {
-  content-visibility: auto;
-  contain-intrinsic-size: 280px;
-}
-
+.grid > *, .video-grid > * { content-visibility: auto; contain-intrinsic-size: 280px; }
 </style>
 </head>
 <body>
@@ -142,16 +153,17 @@ button{font:inherit;cursor:pointer;outline:none}
     </button>
   </div>
 </div></header>
-<main class="wrap" id="main"><div class="loading"><div class="spinner"></div><p>جاري تحميل الفصول...</p></div></main>
+<main class="wrap" id="main"><div class="loading"><div class="spinner"></div><p>جاري تحميل المحاضرات...</p></div></main>
 <script>
 (function(){
 'use strict';
 const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(TOKEN_KEY);
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
-const teacherId = qs.get('teacherId');
+const chapterId   = qs.get('chapterId');
 const teacherName = qs.get('teacherName') || '';
 const subjectName = qs.get('subjectName') || '';
+const chapterName = qs.get('chapterName') || '';
 
 const progressBar = $('scroll-progress');
 const progressBarSide = $('scroll-progress-side');
@@ -192,57 +204,316 @@ const proxyImg = (u) => {
   return u;
 };
 
-
-window.goToLectures = function(url, cardEl) {
-  const barFill = cardEl.querySelector('.side-progress-bar .fill');
-  if(barFill) {
-    barFill.style.height = '100%';
+const isWatched=id=>{
+  try{const s=JSON.parse(localStorage.getItem('cstk_w_'+id)||'null');return s&&(s.watched||s.percent>=90);}
+  catch{return false;}
+};
+const isFileItem=(it)=>{
+  if(!it) return true;
+  const t=String(it.type||it.kind||'').toLowerCase();
+  if(t==='file'||t==='pdf'||t==='document') return true;
+  if(it.is_file===true) return true;
+  const g=String(it.group||'');
+  if(/ملف/i.test(g)) return true;
+  return false;
+};
+const isExamItem=(it)=>{
+  if(!it) return true;
+  const t=String(it.type||it.kind||'').toLowerCase();
+  if(t==='exam'||t==='quiz'||t==='test') return true;
+  const g=String(it.group||'');
+  if(/امتحان|اختبار/i.test(g)) return true;
+  const title=String(it.title||it.name||'');
+  if(/امتحان\s*إلكتروني|اختبار\s*إلكتروني|كويز\s*إلكتروني|electronic\s*exam/i.test(title)) return true;
+  return false;
+};
+const isPlayableVideo=(it,lid)=>{
+  if(!it) return false;
+  if(isFileItem(it)) return false;
+  if(isExamItem(it)) return false;
+  if(it.needsExpand && !it.videoId && !it.video_id && !it.mesariVideoId) return false;
+  const id=String(it.video_id||it.videoId||it.mesariVideoId||it.id||'').trim();
+  if(!id) return false;
+  if(/^mesari_(?:file|exam)_/i.test(id)) return false;
+  if(/^mesari_lesson_/i.test(id) && !it.mesariVideoId) return false;
+  if(/^(mesari_|taleb_|bn_|hos_|th[pvmy]_)/i.test(id)) return true;
+  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return true;
+  if(/^\d{6,}$/.test(id)) return true;
+  const vid=String(it.video_id||it.videoId||it.mesariVideoId||'').trim();
+  if(vid && vid!==id) return isPlayableVideo({...it,id:vid,video_id:vid}, lid);
+  return false;
+};
+const classify=(title,type)=>{
+  const t=String(title||'');
+  if(/واجب|حل\s*واجب/i.test(t)) return 'homework';
+  if(/تدريب|تدريبات|تطبيق|تمرين/i.test(t)) return 'practice';
+  return 'lesson';
+};
+const GRP={
+  lesson:   {label:'الشرح',     dot:'',  iconCls:'',  tagCls:'',  tagTxt:'مشاهدة'},
+  homework: {label:'حل الواجب', dot:'g', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
+  practice: {label:'التدريبات',  dot:'g', iconCls:'g', tagCls:'g', tagTxt:'مشاهدة'},
+};
+const IC_PLAY=`<svg viewBox="0 0 24 24" fill="currentColor"><path d="m8 4 13 8-13 8V4Z"/></svg>`;
+const IC_CHEV=`<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.1"><path d="m14 6-6 6 6 6"/></svg>`;
+const resolvePlayId=(item,lid)=>{
+  let id = item.video_id || item.videoId || item.id || '';
+  id = String(id || '').trim();
+  if(/^taleb_w_\d+_$/.test(id) || /^taleb_w_\d+_\d+_?$/.test(id) || !id){
+    const course = item.courseId || (String(lid).match(/^taleb_lec_(\d+)/)||[])[1] || '';
+    const lec = item.lectureNum || (String(lid).match(/^taleb_lec_\d+_(\d+)/)||[])[1] || '1';
+    const part = item.partNum || item.part_num || '1';
+    if(course) id = `taleb_w_${course}_${lec}_${part}`;
   }
-  setTimeout(() => {
-    window.location.href = url;
-  }, 650);
+  return id;
+};
+const buildItem=(item,lid)=>{
+  if(!isPlayableVideo(item,lid)) return '';
+  const id=resolvePlayId(item,lid);
+  const title=item.title||item.name||'';
+  const duration=item.duration;
+  const cat=classify(title,'video');
+  const cfg=GRP[cat]||GRP.lesson;
+  const watched=isWatched(id);
+  const sub=duration?`<span class="item-sub">${esc(duration)}</span>`:'';
+  const onclick=`window.location.href='player.html?lectureId=${esc(lid)}&videoId=${esc(id)}'`;
+  return `
+  <button type="button" class="item${watched?' watched':''}" onclick="${onclick}">
+    <span class="item-row">
+      <span class="item-start">
+        <span class="item-icon ${cfg.iconCls}">${IC_PLAY}</span>
+        <span class="item-info"><span class="item-title">${esc(title||'بدون عنوان')}</span>${sub}</span>
+        <span class="watched-dot"></span>
+      </span>
+      <span class="item-tag ${cfg.tagCls}">${cfg.tagTxt}</span>
+    </span>
+  </button>`;
+};
+const groupDot=(name)=>{
+  const n=String(name||'');
+  if(/امتحان|اختبار/i.test(n)) return 'a';
+  if(/حل|واجب|تطبيق|تدريب/i.test(n)) return 'g';
+  return '';
+};
+const GROUP_ORDER=['الشرح','حل الواجب','الحل','التدريبات','التطبيق التفاعلي','الامتحان'];
+const groupRank=(name)=>{
+  const n=String(name||'').trim();
+  const i=GROUP_ORDER.findIndex(g=>g===n || n.includes(g) || g.includes(n));
+  return i>=0?i:50;
+};
+const buildGroupsFromNamed=(namedGroups,lid)=>{
+  let html=''; let i=0;
+  for(const g of namedGroups){
+    const title=g.name||g.title||'قسم';
+    if(/ملف/i.test(title)) continue;
+    if(/^الامتحان$/i.test(String(title).trim()) && !(g.items||[]).some(it=>isPlayableVideo(it,lid))) continue;
+    const list=(g.items||[]).filter(it=>isPlayableVideo(it,lid));
+    if(!list.length) continue;
+    const gId=`gbd-${lid}-${i}`,tId=`gbt-${lid}-${i}`;
+    const dot=groupDot(title);
+    const openFirst=i===0;
+    html+=`
+    <div class="group">
+      <button type="button" class="group-toggle" id="${tId}" aria-expanded="${openFirst?'true':'false'}" aria-controls="${gId}">
+        <span class="group-label"><span class="group-dot ${dot}"></span>${esc(title)} <span style="color:var(--muted);font-weight:700;font-size:12px">(${list.length})</span></span>
+        <span class="group-action"><span class="g-txt">${openFirst?'إخفاء':'عرض'}</span>${IC_CHEV}</span>
+      </button>
+      <div id="${gId}" role="region" aria-labelledby="${tId}" ${openFirst?'':'hidden'} class="group-body">
+        ${list.map(it=>buildItem({...it,title:it.title||it.name||'',type:it.type||'video'},lid)).join('')}
+      </div>
+    </div>`;
+    i++;
+  }
+  return html||`<p class="empty-msg">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
+};
+const buildGroups=(items,lid)=>{
+  const clean=(items||[]).filter(it=>isPlayableVideo(it,lid));
+  if(!clean.length) return `<p class="empty-msg">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
+  const hasNamed=clean.some(it=>it.group);
+  if(hasNamed){
+    const map=new Map();
+    for(const it of clean){
+      const g=String(it.group||'الشرح').trim()||'الشرح';
+      if(/ملف/i.test(g)) continue;
+      if(!map.has(g)) map.set(g,[]);
+      map.get(g).push({...it,title:it.title||it.name||''});
+    }
+    const keys=[...map.keys()].sort((a,b)=>{const ra=groupRank(a),rb=groupRank(b);if(ra!==rb)return ra-rb;return 0;});
+    return buildGroupsFromNamed(keys.map(k=>({name:k,items:map.get(k)})), lid);
+  }
+  return buildGroupsFromNamed([{name:'الشرح',items:clean}], lid);
+};
+const flatten=d=>{
+  const out=[];
+  const pushIt=(it,gName)=>{
+    const row={...it,title:it.title||it.name||'',type:'video',group:gName||it.group||'الشرح'};
+    if(isPlayableVideo(row)) out.push(row);
+  };
+  if(d&&Array.isArray(d.groups)){
+    for(const g of d.groups){
+      const gName=g.name||g.title||'';
+      if(/ملف|امتحان/i.test(gName) && !/حل|شرح|فيديو/i.test(gName)) continue;
+      for(const it of (g.items||[])) pushIt(it,gName);
+    }
+    if(out.length) return out;
+  }
+  if(d&&Array.isArray(d.sections)){
+    for(const g of d.sections){
+      const gName=g.title||g.name||'';
+      if(/ملف/i.test(gName)) continue;
+      for(const it of (g.items||[])) pushIt(it,gName);
+    }
+    if(out.length) return out;
+  }
+  for(const v of ((d&&d.videos)||[])) pushIt(v,v.group||'الشرح');
+  return out;
+};
+let allLectures=[];
+const fetchItems=async lid=>{
+  try{
+    const cached=(allLectures||[]).find(l=>String(l.id)===String(lid));
+    if(cached){
+      if(Array.isArray(cached.sections)&&cached.sections.length){
+        const items=[];
+        for(const g of cached.sections){
+          if(/ملف/i.test(String(g.title||g.name||''))) continue;
+          for(const it of (g.items||[])){
+            const row={...it,title:it.title||it.name||'',type:it.type||'video',group:g.title||g.name||it.group||null};
+            if(!isPlayableVideo(row,lid)) continue;
+            items.push(row);
+          }
+        }
+        if(items.length) return items;
+      }
+      if(Array.isArray(cached.parts)&&cached.parts.length){
+        return cached.parts.map(p=>({...p,title:p.title||p.name||'',type:'video',group:p.group||null})).filter(p=>isPlayableVideo(p,lid));
+      }
+    }
+  }catch{}
+  try{
+    const d=await api('/api/lectures/'+encodeURIComponent(lid)+'/grouped-content');
+    if(d&&d.groups&&d.groups.length){const items=flatten(d);if(items.length) return items;}
+  }catch{}
+  try{
+    const d=await api('/api/lectures/'+encodeURIComponent(lid)+'/content');
+    if(!d) return [];
+    return flatten(d);
+  }catch{return [];}
 };
 
 async function load() {
-  if (!teacherId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف المدرس غير موجود.</div>'; return; }
+  if (!chapterId) { $('main').innerHTML = '<div style="text-align:center;padding:50px">معرف الفصل غير موجود.</div>'; return; }
   try {
-    let chapters = await api('/api/teachers/' + teacherId + '/chapters');
-    // شيل فصل «كتب المدرس» فقط — سيب حل الكتب وأي كورس تاني
-    chapters = (chapters || []).filter(c => !/كتب\s*المدرس|كتاب\s*المدرس/i.test(String(c.name || c.title || '')));
-    if (!chapters || !chapters.length) { $('main').innerHTML = '<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد فصول متاحة.</div>'; return; }
-    
+    let lectures = await api('/api/chapters/' + chapterId + '/lectures');
+    if(!lectures||!lectures.length){ $('main').innerHTML='<div style="text-align:center;padding:50px;color:var(--muted)">لا يوجد محاضرات في هذا الفصل.</div>'; return; }
+    lectures = (Array.isArray(lectures)?lectures:[]).slice().sort((a,b)=>{
+      const an=Number(a.lecture_num??a.lectureNum??a.order);
+      const bn=Number(b.lecture_num??b.lectureNum??b.order);
+      if(Number.isFinite(an)&&Number.isFinite(bn)&&an!==bn) return an-bn;
+      return 0;
+    });
+    allLectures = lectures;
+    const cover = lectures[0]?.image_url || '';
+    const title = chapterName || subjectName || 'المحاضرات';
+
     let html = `
     <div class="header-action"><button class="back-btn" onclick="history.back()"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>رجوع للمدرسين</button></div>
-    <div class="page-head"><div class="badge">الفصول</div><h1>الفصول المتاحة</h1><p>اختار الفصل لعرض المحاضرات</p></div>
+    <div class="page-head"><div class="badge">المحاضرات</div><h1>${esc(title)}</h1><p>اختار المحاضرة لعرض محتواها</p></div>
     <div class="grid">`;
-    
-    chapters.forEach((c, index) => {
-      const imgUrl = proxyImg(c.image_url || '');
-      const imgHtml = imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(c.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">` : '';
+
+    lectures.forEach((l, index) => {
+      const imgUrl = proxyImg(l.image_url || cover);
+      const imgHtml = imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(l.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">` : '';
       const phHtml = `<div class="image-placeholder" style="display:${imgUrl?'none':'grid'};"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`;
       
-      html += `<div class="chapter-card" id="card-${c.id}">
-        <div class="side-progress-bar">
-          <div class="fill"></div>
-        </div>
+      let cnt = 0;
+      if (Array.isArray(l.parts)) cnt = l.parts.filter(p => isPlayableVideo(p, l.id)).length;
+      else if (Array.isArray(l.sections)) cnt = l.sections.reduce((s,g)=> /ملف/i.test(String(g.title||g.name||'')) ? s : s + (g.items||[]).filter(it => isPlayableVideo(it, l.id)).length, 0);
+      else cnt = Number(l.video_count||0) || Number(l.parts_count||l.count||0);
+
+      html += `<div class="chapter-card" id="card-${l.id}">
+        <div class="side-progress-bar"><div class="fill"></div></div>
         <div class="card-top">
-          <div class="card-text"><span class="chapter-label">الفصل ${index+1}</span><h2 class="chapter-title">${esc(c.name)}</h2></div>
+          <div class="card-text"><span class="chapter-label">المحاضرة ${index+1}</span><h2 class="chapter-title">${esc(l.name || `المحاضرة ${index+1}`)}</h2></div>
           <div class="card-image">${imgHtml}${phHtml}</div>
         </div>
         <div class="lectures-bar">
-          <div class="lectures-bar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>عدد المحاضرات</div>
-          <div class="lectures-badge">${c.lectures_count || c.lecture_count || c.count || 0}</div>
+          <div class="lectures-bar-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>عدد الأجزاء</div>
+          <div class="lectures-badge">${cnt}</div>
         </div>
-        <button class="view-btn" onclick="goToLectures('lectures.html?chapterId=${c.id}&chapterName=${encodeURIComponent(c.name)}&teacherName=${encodeURIComponent(teacherName)}&subjectName=${encodeURIComponent(subjectName)}', document.getElementById('card-${c.id}'))">عرض المحاضرات<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        <button class="view-btn" onclick="window._loadLectureContent('${l.id}', this, document.getElementById('card-${l.id}'))">محتوى المحاضرة<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        
+        <div class="lec-content-panel" id="lec-panel-${l.id}" hidden>
+          <div class="groups" id="lg-${l.id}"></div>
+        </div>
       </div>`;
     });
-    html += '</div>'; $('main').innerHTML = html;
+    html += '</div>'; 
+    $('main').innerHTML = html;
+
+    /* منطق فتح المحتوى */
+    window._loadLectureContent = async (lid, btn, cardEl) => {
+      const panel = document.getElementById('lec-panel-' + lid);
+      const container = document.getElementById('lg-' + lid);
+      const barFill = cardEl.querySelector('.side-progress-bar .fill');
+
+      if (!panel.hidden) {
+        panel.hidden = true;
+        btn.innerHTML = `محتوى المحاضرة<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+        if(barFill) barFill.style.height = '0%';
+        return;
+      }
+
+      // تأثير الشريط الجانبي
+      if(barFill) barFill.style.height = '100%';
+
+      panel.hidden = false;
+      btn.innerHTML = `<div class="spinner spinner-sm" style="border-top-color:#fff"></div> جاري التحميل...`;
+
+      if (btn.dataset.loaded === '1') {
+        btn.innerHTML = `إخفاء المحتوى`;
+        return;
+      }
+
+      try {
+        let items = await fetchItems(lid);
+        if (!Array.isArray(items)) items = [];
+        
+        if (items.length) {
+          container.innerHTML = buildGroups(items, lid);
+        } else {
+          container.innerHTML = `<p class="empty-msg">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
+        }
+        
+        btn.dataset.loaded = '1';
+        btn.innerHTML = `إخفاء المحتوى`;
+        
+      } catch(err) {
+        container.innerHTML = `<p class="empty-msg">تعذر تحميل المحتوى. جرّب مرة أخرى.</p>`;
+        btn.innerHTML = `محتوى المحاضرة<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+      }
+    };
+
+    /* Accordion للمجموعات الداخلية */
+    document.addEventListener('click', e => {
+      const gt = e.target.closest('.group-toggle');
+      if (!gt) return;
+      const panel = $(gt.getAttribute('aria-controls'));
+      if (!panel) return;
+      const open = gt.getAttribute('aria-expanded') === 'true';
+      gt.setAttribute('aria-expanded', open ? 'false' : 'true');
+      if (open) { panel.setAttribute('hidden', ''); } else { panel.removeAttribute('hidden'); }
+      const txt = gt.querySelector('.g-txt');
+      if (txt) txt.textContent = open ? 'عرض' : 'إخفاء';
+    });
+
   } catch (e) { $('main').innerHTML = `<div style="text-align:center;color:#ff5252;padding:50px;">خطأ: ${e.message}</div>`; }
 }
+
 async function loadProfile(){try{const me=await api('/api/auth/me');if(me){$('nav-name').textContent=me.name||'طالب';$('nav-av').textContent=(me.name||'ط').charAt(0);}}catch(e){}}
 load(); loadProfile();
 })();
 </script>
 <script src="theme.js"></script>
 </body>
-</html>
+  </html>
