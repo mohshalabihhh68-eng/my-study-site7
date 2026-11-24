@@ -731,8 +731,9 @@ body.vpaused .eq i{animation-play-state:paused}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 
 /* ===== layout fixes ===== */
-html{max-width:100%;overflow-x:hidden}
-body{max-width:100%;overflow-x:hidden;width:100%}
+html,body{height:auto;min-height:100%}
+html{max-width:100%;overflow-x:clip}
+body{max-width:100%;overflow-x:clip;width:100%}
 .main-wrap{width:100%;overflow-x:clip}
 .inner,.layout,.phead,.prog-card,.player-col,.sbar{min-width:0;max-width:100%}
 .layout>*{min-width:0}
@@ -1065,7 +1066,18 @@ body{max-width:100%;overflow-x:hidden;width:100%}
   });
 })();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+<script>
+window.addEventListener('error',function(e){var l=document.getElementById('loadText');if(l&&e&&e.message)l.textContent='خطأ: '+e.message;});
+window.__hlsReady=new Promise(function(res){
+  var srcs=['https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js','https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.17/hls.min.js'];
+  (function next(i){
+    if(window.Hls||i>=srcs.length)return res();
+    var sc=document.createElement('script');sc.src=srcs[i];
+    sc.onload=function(){res()};sc.onerror=function(){next(i+1)};
+    document.head.appendChild(sc);
+  })(0);
+});
+</script>
 <script>
 (function(){
 'use strict';
@@ -1673,8 +1685,10 @@ async function api(path,opts={}){
   if(token)headers.Authorization='Bearer '+token;
   if(opts.body && !headers['Content-Type'] && !headers['content-type']) headers['Content-Type']='application/json';
   let r;
-  try{r=await fetch(API+path,{method:opts.method||'GET',headers,body:opts.body,cache:'no-store',credentials:'include'})}
-  catch(e){const er=new Error('مفيش اتصال بالسيرفر. اتأكد من النت وجرّب تاني.');er.kind='network';throw er}
+  const ac=new AbortController();const tm=setTimeout(()=>ac.abort(),30000);
+  try{r=await fetch(API+path,{method:opts.method||'GET',headers,body:opts.body,cache:'no-store',credentials:'include',signal:ac.signal})}
+  catch(e){clearTimeout(tm);const er=new Error(e&&e.name==='AbortError'?'السيرفر مردّش في الوقت المناسب (30 ثانية). جرّب تاني.':'مفيش اتصال بالسيرفر. اتأكد من النت وجرّب تاني.');er.kind='network';throw er}
+  clearTimeout(tm);
   let d={};try{d=await r.json()}catch(e){}
   if(!r.ok){
     const er=new Error(d.message||`السيرفر رجّع خطأ (${r.status})`);
@@ -2018,13 +2032,4 @@ function renderMenu(){
   let h='';
   if(menuView==='speed'){
     h=head('سرعة التشغيل')+'<div class="spdlist">'+RATES.map(x=>
-      `<button type="button" class="mrow spdopt ${x===rate?'on':''}" data-sp="${x}"><span class="lbl">${x===1?'عادية':rateLabel(x)}</span><span class="val">${x===rate?'✓':rateName(x)}</span></button>`).join('')+'</div>';
-  }else if(menuView==='quality'&&!isYtMode){
-    const opts=qualityMenuOptions();
-    const autoOn=preferredQualityH<0 && qualityIdx<0;
-    h=head('الجودة')+`<button type="button" class="mrow ${autoOn?'on':''}" data-qauto="1"><span class="lbl">تلقائي</span><span class="val">${autoOn?'✓':''}</span></button>`+
-      opts.map(o=>{
-        const on=preferredQualityH===o.target;
-        const val=on?'✓':(o.available?'':'—');
-        const dim=o.available?'':'opacity:.45';
-        return `<button type="button" class="mrow ${on?'on':''}" data-qh="${o.
+      `<button type
