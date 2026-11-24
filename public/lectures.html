@@ -43,11 +43,13 @@
   --red:         #ef4444;
   --purple:      #8b5cf6;
   --purple-soft: rgba(139,92,246,.10);
+  --orange:      #ff5e3a;
+  --orange-grad: linear-gradient(135deg, #ff5e3a, #ffb347);
 
   --nav-h:       64px;
   --nav-bg:      rgba(248,250,252,.92);
   --radius-lg:   22px;
-  --radius-md:   14px;
+  --radius-md:   16px;
   --radius-sm:   10px;
   --shadow-card: 0 2px 18px rgba(108,99,255,.07);
   --shadow-btn:  0 4px 16px rgba(108,99,255,.28);
@@ -78,6 +80,7 @@
   --red:         #f87171;
   --purple:      #a78bfa;
   --purple-soft: rgba(167,139,250,.10);
+  --orange:      #ff6b4a;
 
   --nav-bg:      rgba(7,11,20,.92);
   --shadow-card: 0 2px 24px rgba(0,0,0,.40);
@@ -131,7 +134,10 @@ img{display:block;max-width:100%}
 
 /* ═══════════════ HERO ═══════════════ */
 .hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);
-  padding:24px 28px 22px;margin-bottom:24px;box-shadow:var(--shadow-card)}
+  padding:24px 28px 22px;margin-bottom:24px;box-shadow:var(--shadow-card);
+  position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;top:0;right:0;left:0;height:3px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:var(--radius-lg) var(--radius-lg) 0 0}
 .back-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:11px;
   background:var(--card-inner);border:1px solid var(--line);font-size:13px;font-weight:800;
   color:var(--ink);transition:var(--tr);cursor:pointer;margin-bottom:16px}
@@ -149,83 +155,122 @@ img{display:block;max-width:100%}
   background:var(--accent-soft);border:1px solid var(--line2);font-size:12px;font-weight:800;color:var(--accent)}
 .hero-chip svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 
-/* ═══════════════ LAYOUT ═══════════════ */
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:24px;align-items:start}
-.aside{position:sticky;top:calc(var(--nav-h) + 18px)}
+/* ═══════════════ GRID LAYOUT (NEW) ═══════════════ */
+.lectures-grid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:20px;
+  margin-top:20px;
+}
 
-/* hero accent bar */
-.hero{position:relative;overflow:hidden}
-.hero::before{content:"";position:absolute;top:0;right:0;left:0;height:3px;
-  background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+/* ═══════════════ CARD DESIGN (NEW) ═══════════════ */
+.lec-card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius-lg);
+  padding:18px;
+  box-shadow:var(--shadow-card);
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  transition:transform var(--tr), box-shadow var(--tr), border-color var(--tr);
+  position:relative;
+}
+.lec-card:hover{
+  transform:translateY(-3px);
+  box-shadow:0 8px 30px var(--accent-glow);
+  border-color:var(--line2);
+}
 
-/* ═══════════════ SIDE CARD ═══════════════ */
-.side-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);
-  overflow:hidden;box-shadow:var(--shadow-card)}
-.thumb{width:100%;aspect-ratio:4/3;background:var(--card-inner);overflow:hidden;position:relative}
-.thumb img{width:100%;height:100%;object-fit:cover;transition:transform .4s var(--tr)}
-.thumb:hover img{transform:scale(1.03)}
-.thumb-ph{width:100%;height:100%;display:grid;place-items:center;
-  background:linear-gradient(135deg,var(--card-inner),var(--bg2))}
-.thumb-ph svg{width:52px;height:52px;stroke:var(--muted);fill:none;opacity:.35;stroke-width:1.5}
-.stats{border-top:1px solid var(--line)}
-.stat{display:flex;justify-content:space-between;align-items:center;
-  padding:12px 20px;border-bottom:1px solid var(--line);font-size:13px;font-weight:700;color:var(--ink2)}
-.stat:last-child{border-bottom:none}
-.stat-val{color:var(--accent);font-weight:900;font-size:14px}
-.cta-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:15px 20px;
-  background:linear-gradient(135deg,var(--accent),var(--accent2));
-  color:#fff;font-weight:900;font-size:15px;cursor:pointer;
-  box-shadow:var(--shadow-btn);transition:filter var(--tr),transform var(--tr);letter-spacing:.3px}
-.cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
-.cta-btn:active{transform:none}
-.cta-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2.2}
+/* Header: Title + Thumbnail */
+.lec-card-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.lec-card-title-area{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  flex:1;
+}
+.lec-card-num{
+  font-size:12px;
+  font-weight:800;
+  color:var(--muted);
+}
+.lec-card-title{
+  font-size:16px;
+  font-weight:900;
+  color:var(--ink);
+  line-height:1.4;
+}
+.lec-card-thumb{
+  width:80px;
+  height:80px;
+  border-radius:12px;
+  overflow:hidden;
+  flex-shrink:0;
+  background:var(--card-inner);
+  border:2px solid var(--orange);
+  box-shadow:0 4px 12px rgba(255,94,58,.2);
+  position:relative;
+}
+.lec-card-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.lec-card-thumb .thumb-fallback{
+  width:100%;
+  height:100%;
+  display:grid;
+  place-items:center;
+  background:linear-gradient(135deg,var(--card-inner),var(--bg2));
+}
+.lec-card-thumb .thumb-fallback svg{
+  width:32px;height:32px;stroke:var(--muted);fill:none;opacity:.4;stroke-width:1.5;
+}
 
-/* ═══════════════ PROGRESS BAR (per lecture) ═══════════════ */
-.lec-progress-wrap{height:3px;background:var(--line);border-radius:0}
-.lec-progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));
-  border-radius:0;transition:width .5s ease;min-width:0}
+/* Content Button */
+.lec-card-action{
+  width:100%;
+  padding:14px 20px;
+  border-radius:14px;
+  background:var(--orange-grad);
+  color:#fff;
+  font-weight:900;
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  cursor:pointer;
+  transition:filter var(--tr), transform var(--tr);
+  box-shadow:0 4px 15px rgba(255,94,58,.3);
+  border:none;
+}
+.lec-card-action:hover{
+  filter:brightness(1.08);
+  transform:translateY(-1px);
+}
+.lec-card-action:active{
+  transform:none;
+}
+.lec-card-action svg{
+  width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.5;
+}
 
-/* ═══════════════ LESSONS BOX ═══════════════ */
-.lessons-box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);
-  padding:24px;box-shadow:var(--shadow-card)}
-.section-title{font-size:19px;font-weight:900;color:var(--ink);display:flex;align-items:center;gap:10px;margin-bottom:20px}
-.section-title::before{content:"";width:4px;height:22px;border-radius:3px;
-  background:linear-gradient(180deg,var(--accent),var(--accent2));flex-shrink:0}
-.lectures-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
-
-/* ═══════════════ LECTURE ACCORDION ═══════════════ */
-.lec-wrap{border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;
-  background:var(--card-inner);transition:border-color var(--tr),box-shadow var(--tr)}
-.lec-wrap:has(.lec-toggle[aria-expanded="true"]){
-  border-color:var(--line2);box-shadow:0 6px 24px var(--accent-glow)}
-.lec-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;
-  gap:14px;padding:16px 18px;color:var(--ink);text-align:right;
-  transition:background var(--tr);cursor:pointer}
-.lec-toggle:hover{background:rgba(108,99,255,.04)}
-.lec-num{width:30px;height:30px;border-radius:50%;flex-shrink:0;
-  background:var(--accent-soft);border:1px solid var(--line2);
-  display:grid;place-items:center;font-size:12px;font-weight:900;color:var(--accent)}
-.lec-name{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
-.lec-name strong{font-size:15px;font-weight:900;color:var(--ink);line-height:1.4;
-  white-space:normal;word-break:break-word}
-.lec-name small{font-size:11.5px;color:var(--muted);font-weight:700}
-.lec-end{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.lec-badge{font-size:11px;font-weight:800;color:var(--muted);background:var(--card);
-  border:1px solid var(--line);padding:4px 11px;border-radius:99px;white-space:nowrap}
-.lec-arrow{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
-  background:var(--card);border:1px solid var(--line);color:var(--accent);flex-shrink:0;
-  transition:transform .32s var(--tr),background var(--tr),border-color var(--tr),box-shadow var(--tr)}
-.lec-arrow svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.1}
-.lec-toggle[aria-expanded="true"] .lec-arrow{
-  transform:rotate(-90deg);
-  background:linear-gradient(135deg,var(--accent),var(--accent2));
-  color:#fff;border-color:transparent;box-shadow:0 3px 10px var(--accent-glow)}
-.lec-panel{padding:4px 12px 12px}
-
-/* ═══════════════ GROUPS ═══════════════ */
+/* ═══════════════ INNER CONTENT (ACCORDION) ═══════════════ */
+.lec-content-panel{
+  margin-top:4px;
+  border-top:1px dashed var(--line2);
+  padding-top:14px;
+}
 .groups{display:flex;flex-direction:column;gap:8px}
 .group{border:1px solid var(--line);border-radius:11px;overflow:hidden;
-  background:var(--card);transition:border-color var(--tr)}
+  background:var(--card-inner);transition:border-color var(--tr)}
 .group:has(.group-toggle[aria-expanded="true"]){border-color:var(--line2)}
 .group-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;
   gap:10px;padding:11px 15px;color:var(--ink);font-size:13px;font-weight:800;
@@ -243,7 +288,7 @@ img{display:block;max-width:100%}
 
 /* ═══════════════ ITEMS ═══════════════ */
 .item{display:block;width:100%;text-align:right;padding:10px 12px;border-radius:9px;
-  background:none;color:var(--ink);border:1px solid transparent;
+  background:var(--card);color:var(--ink);border:1px solid transparent;
   transition:background var(--tr),border-color var(--tr),transform var(--tr);cursor:pointer}
 .item:hover{background:var(--card-hover);border-color:var(--line);transform:translateX(-2px)}
 .item.watched{opacity:.52}
@@ -292,12 +337,9 @@ img{display:block;max-width:100%}
 
 /* ═══════════════ RESPONSIVE ═══════════════ */
 @media(max-width:900px){
-  .layout{grid-template-columns:1fr}
-  .aside{position:static}
-  .side-card{display:flex;align-items:stretch;border-radius:var(--radius-lg)}
-  .thumb{width:90px;aspect-ratio:1/1;flex-shrink:0;border-radius:var(--radius-lg) 0 0 var(--radius-lg)}
-  .stats{display:none}
-  .cta-btn{flex:1;min-height:90px;border-radius:0 var(--radius-lg) var(--radius-lg) 0}
+  .lectures-grid{
+    grid-template-columns:1fr;
+  }
 }
 @media(max-width:640px){
   .nav-in{padding:0 14px}
@@ -305,8 +347,9 @@ img{display:block;max-width:100%}
   .nav-btn{padding:5px}
   .page{padding:16px 14px 60px}
   .hero{padding:16px 18px 14px;border-radius:18px}
-  .lessons-box{padding:16px;border-radius:18px}
-  .lec-toggle{padding:14px 14px}
+  .lec-card{padding:14px;border-radius:16px;}
+  .lec-card-thumb{width:70px;height:70px;}
+  .lec-card-title{font-size:15px;}
   .hero-chip span{display:none}
 }
 </style>
@@ -374,7 +417,7 @@ const isWatched=id=>{
   catch{return false;}
 };
 
-/* بدون ملفات — زي مساري فيديوهات فقط */
+/* بدون ملفات — فيديوهات فقط */
 const isFileItem=(it)=>{
   if(!it) return true;
   const t=String(it.type||it.kind||'').toLowerCase();
@@ -391,12 +434,10 @@ const isExamItem=(it)=>{
   const g=String(it.group||'');
   if(/امتحان|اختبار/i.test(g)) return true;
   const title=String(it.title||it.name||'');
-  // امتحان إلكتروني صريح — مش فيديو "حل امتحان"
   if(/امتحان\s*إلكتروني|اختبار\s*إلكتروني|كويز\s*إلكتروني|electronic\s*exam/i.test(title)) return true;
   return false;
 };
 
-/* فيديو قابل للتشغيل فقط — من غير ملفات/امتحانات/عناصر فاضية */
 const isPlayableVideo=(it,lid)=>{
   if(!it) return false;
   if(isFileItem(it)) return false;
@@ -404,21 +445,16 @@ const isPlayableVideo=(it,lid)=>{
   if(it.needsExpand && !it.videoId && !it.video_id && !it.mesariVideoId) return false;
   const id=String(it.video_id||it.videoId||it.mesariVideoId||it.id||'').trim();
   if(!id) return false;
-  // معرفات مش فيديو
   if(/^mesari_(?:file|exam)_/i.test(id)) return false;
   if(/^mesari_lesson_/i.test(id) && !it.mesariVideoId) return false;
-  // UUID أو mesari_ أو taleb_ أو bn_ أو th* ثانويكا — صيغ تشغيل معروفة
   if(/^(mesari_|taleb_|bn_|hos_|th[pvmy]_)/i.test(id)) return true;
   if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return true;
-  // id رقمي طويل أحيانًا من مصادر تانية
   if(/^\d{6,}$/.test(id)) return true;
-  // لو فيه video_id منفصل صالح
   const vid=String(it.video_id||it.videoId||it.mesariVideoId||'').trim();
   if(vid && vid!==id) return isPlayableVideo({...it,id:vid,video_id:vid}, lid);
   return false;
 };
 
-/* classify — للفيديوهات فقط */
 const classify=(title,type)=>{
   const t=String(title||'');
   if(/واجب|حل\s*واجب/i.test(t)) return 'homework';
@@ -433,17 +469,12 @@ const GRP={
 };
 
 const IC_PLAY=`<svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>`;
-const IC_FILE=`<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>`;
-const IC_EXAM=`<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
 const IC_CHEV=`<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.1"><path d="m14 6-6 6 6 6"/></svg>`;
 const IC_SEARCH=`<svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>`;
 
-/* build item */
 const resolvePlayId=(item,lid)=>{
-  // فضّل video_id الكامل
   let id = item.video_id || item.videoId || item.id || '';
   id = String(id || '').trim();
-  // لو ناقص زي taleb_w_90_ كمّل من course/lecture/part
   if(/^taleb_w_\d+_$/.test(id) || /^taleb_w_\d+_\d+_?$/.test(id) || !id){
     const course = item.courseId || (String(lid).match(/^taleb_lec_(\d+)/)||[])[1] || '';
     const lec = item.lectureNum || (String(lid).match(/^taleb_lec_\d+_(\d+)/)||[])[1] || '1';
@@ -452,6 +483,7 @@ const resolvePlayId=(item,lid)=>{
   }
   return id;
 };
+
 const buildItem=(item,lid)=>{
   if(!isPlayableVideo(item,lid)) return '';
   const id=resolvePlayId(item,lid);
@@ -480,7 +512,6 @@ const buildItem=(item,lid)=>{
   </button>`;
 };
 
-/* لون نقطة المجموعة */
 const groupDot=(name)=>{
   const n=String(name||'');
   if(/امتحان|اختبار/i.test(n)) return 'a';
@@ -488,7 +519,6 @@ const groupDot=(name)=>{
   return '';
 };
 
-/* ترتيب المجموعات زي مساري: الشرح ثم الحل ثم التدريبات ثم الامتحان — بدون ملفات */
 const GROUP_ORDER=['الشرح','حل الواجب','الحل','التدريبات','التطبيق التفاعلي','الامتحان'];
 const groupRank=(name)=>{
   const n=String(name||'').trim();
@@ -496,7 +526,6 @@ const groupRank=(name)=>{
   return i>=0?i:50;
 };
 
-/* بناء مجموعات بنفس أسماء وترتيب المنصة */
 const buildGroupsFromNamed=(namedGroups,lid)=>{
   let html='';
   let i=0;
@@ -508,7 +537,6 @@ const buildGroupsFromNamed=(namedGroups,lid)=>{
     if(!list.length) continue;
     const gId=`gbd-${lid}-${i}`,tId=`gbt-${lid}-${i}`;
     const dot=groupDot(title);
-    // أول مجموعة مفتوحة تلقائيًا زي تجربة مساري
     const openFirst=i===0;
     html+=`
     <div class="group">
@@ -525,15 +553,11 @@ const buildGroupsFromNamed=(namedGroups,lid)=>{
   return html||`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
 };
 
-/* بناء المحتوى: نحافظ على ترتيب السيرفر/مساري — بدون ملفات */
 const buildGroups=(items,lid)=>{
   const clean=(items||[]).filter(it=>isPlayableVideo(it,lid));
   if(!clean.length){
     return `<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
   }
-
-  // لو السيرفر بعت groups/sections بأسماء — استخدمها بنفس الترتيب (مع استبعاد الملفات)
-  // وإلا لو العناصر ليها group — رتّب المجموعات بترتيب الظهور ثم GROUP_ORDER
   const hasNamed=clean.some(it=>it.group);
   if(hasNamed){
     const map=new Map();
@@ -546,16 +570,13 @@ const buildGroups=(items,lid)=>{
     const keys=[...map.keys()].sort((a,b)=>{
       const ra=groupRank(a), rb=groupRank(b);
       if(ra!==rb) return ra-rb;
-      return 0; // حافظ ترتيب الظهور داخل نفس الرتبة
+      return 0;
     });
     return buildGroupsFromNamed(keys.map(k=>({name:k,items:map.get(k)})), lid);
   }
-
-  // بدون group: قائمة واحدة بنفس ترتيب مساري (الـ API)
   return buildGroupsFromNamed([{name:'الشرح',items:clean}], lid);
 };
 
-/* flatten — فيديوهات شغالة فقط (بدون ملفات/امتحانات) */
 const flatten=d=>{
   const out=[];
   const pushIt=(it,gName)=>{
@@ -579,13 +600,10 @@ const flatten=d=>{
     if(out.length) return out;
   }
   for(const v of ((d&&d.videos)||[])) pushIt(v,v.group||'الشرح');
-  // لا exams ولا files
   return out;
 };
 
-/* fetch — محتوى المحاضرة زي مساري */
 const fetchItems=async lid=>{
-  // 1) من بيانات القائمة لو فيها parts/sections جاهزة
   try{
     const cached=(allLectures||[]).find(l=>String(l.id)===String(lid));
     if(cached){
@@ -613,7 +631,6 @@ const fetchItems=async lid=>{
       }
     }
   }catch{}
-  // 2) grouped-content
   try{
     const d=await api('/api/lectures/'+encodeURIComponent(lid)+'/grouped-content');
     if(d&&d.groups&&d.groups.length){
@@ -621,7 +638,6 @@ const fetchItems=async lid=>{
       if(items.length) return items;
     }
   }catch{}
-  // 3) content
   try{
     const d=await api('/api/lectures/'+encodeURIComponent(lid)+'/content');
     if(!d) return [];
@@ -631,14 +647,13 @@ const fetchItems=async lid=>{
   }
 };
 
-/* search filter */
 let allLectures=[];
 const filterLectures=q=>{
   const term=q.trim().toLowerCase();
-  const items=document.querySelectorAll('.lec-wrap');
+  const items=document.querySelectorAll('.lec-card');
   let found=0;
   items.forEach(el=>{
-    const name=el.querySelector('.lec-name strong')?.textContent?.toLowerCase()||'';
+    const name=el.querySelector('.lec-card-title')?.textContent?.toLowerCase()||'';
     const show=!term||name.includes(term);
     el.style.display=show?'':'none';
     if(show) found++;
@@ -647,7 +662,7 @@ const filterLectures=q=>{
   if(em) em.style.display=found?'none':'block';
 };
 
-/* load */
+/* ═══════════════ LOAD & RENDER (NEW GRID) ═══════════════ */
 const load=async()=>{
   if(!chapterId){$('main').innerHTML=`<div class="state-box"><p>معرف الفصل غير موجود.</p></div>`;return;}
   try{
@@ -655,7 +670,6 @@ const load=async()=>{
     if(!lectures||!lectures.length){
       $('main').innerHTML=`<div class="state-box"><p>لا يوجد محاضرات في هذا الفصل.</p></div>`;return;
     }
-    // ترتيب المحاضرات زي مساري: lecture_num ثم الترتيب الأصلي
     lectures=(Array.isArray(lectures)?lectures:[]).slice().sort((a,b)=>{
       const an=Number(a.lecture_num??a.lectureNum??a.order);
       const bn=Number(b.lecture_num??b.lectureNum??b.order);
@@ -665,7 +679,8 @@ const load=async()=>{
     allLectures=lectures;
     const cover=lectures[0]?.image_url||'';
     const title=chapterName||subjectName||'المحاضرات';
-    // عدّ فقط الفيديوهات (بدون ملفات)
+    
+    // حساب إجمالي عدد الفيديوهات
     const totalParts=lectures.reduce((s,l)=>{
       if(Array.isArray(l.parts)) return s+l.parts.filter(p=>isPlayableVideo(p,l.id)).length;
       if(Array.isArray(l.sections)){
@@ -694,125 +709,115 @@ const load=async()=>{
         </div>
       </section>
 
-      <div class="layout">
-        <div>
-          <section class="lessons-box" id="lessons">
-            <h2 class="section-title">المحاضرات</h2>
-            <div class="search-wrap">
-              ${IC_SEARCH}
-              <input type="search" class="search-input" id="lec-search" placeholder="ابحث عن محاضرة..." oninput="window._filterLec(this.value)">
-            </div>
-            <ul class="lectures-list" id="lec-list">
-              ${lectures.map((l,i)=>{
-                let cnt=0;
-                if(Array.isArray(l.parts)) cnt=l.parts.filter(p=>isPlayableVideo(p,l.id)).length;
-                else if(Array.isArray(l.sections)){
-                  cnt=l.sections.reduce((s,g)=>/ملف/i.test(String(g.title||g.name||''))?s:s+(g.items||[]).filter(it=>isPlayableVideo(it,l.id)).length,0);
-                } else cnt=Number(l.video_count||0)||Number(l.parts_count||l.count||0);
-                const lid=l.id;
-                return `
-                <li class="lec-wrap" id="lw-${lid}">
-                  <div class="lec-progress-wrap"><div class="lec-progress-bar" id="lpb-${lid}" style="width:0%"></div></div>
-                  <button class="lec-toggle" type="button"
-                    id="lt-${lid}" aria-expanded="false" aria-controls="lp-${lid}"
-                    data-lid="${lid}" data-loaded="0">
-                    <span class="lec-num">${i+1}</span>
-                    <span class="lec-name">
-                      <strong>${esc(l.name||`محاضرة ${i+1}`)}</strong>
-                      <small id="lsub-${lid}">${cnt?cnt+' جزء':'اضغط للتحميل'}</small>
-                    </span>
-                    <span class="lec-end">
-                      <span class="lec-badge" id="lbdg-${lid}">0 / ${cnt}</span>
-                      <span class="lec-arrow" aria-hidden="true">${IC_CHEV}</span>
-                    </span>
-                  </button>
-                  <div class="lec-panel" id="lp-${lid}" role="region" aria-labelledby="lt-${lid}" hidden>
-                    <div class="groups" id="lg-${lid}"></div>
-                  </div>
-                </li>`;
-              }).join('')}
-            </ul>
-            <div class="empty-search" id="empty-search" style="display:none">لا توجد محاضرات بهذا الاسم.</div>
-          </section>
-        </div>
-
-        <aside class="aside">
-          <div class="side-card">
-            <div class="thumb">
-              ${cover?`<img src="${esc(cover)}" alt="${esc(title)}" loading="eager">`:`<div class="thumb-ph"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>`}
-            </div>
-            <div class="stats">
-              <div class="stat"><span>عدد المحاضرات</span><span class="stat-val">${lectures.length}</span></div>
-              ${totalParts?`<div class="stat"><span>إجمالي الأجزاء</span><span class="stat-val">${totalParts}</span></div>`:''}
-              ${teacherName?`<div class="stat"><span>المدرس</span><span class="stat-val">${esc(teacherName)}</span></div>`:''}
-            </div>
-            <button class="cta-btn" onclick="document.getElementById('lessons').scrollIntoView({behavior:'smooth'})">
-              <svg viewBox="0 0 24 24"><path d="m8 4 13 8-13 8V4Z"/></svg>
-              ابدأ المشاهدة
-            </button>
-          </div>
-        </aside>
-
+      <div class="search-wrap">
+        ${IC_SEARCH}
+        <input type="search" class="search-input" id="lec-search" placeholder="ابحث عن محاضرة..." oninput="window._filterLec(this.value)">
       </div>
+
+      <div class="lectures-grid" id="lectures-grid">
+        ${lectures.map((l,i)=>{
+          let cnt=0;
+          if(Array.isArray(l.parts)) cnt=l.parts.filter(p=>isPlayableVideo(p,l.id)).length;
+          else if(Array.isArray(l.sections)){
+            cnt=l.sections.reduce((s,g)=>/ملف/i.test(String(g.title||g.name||''))?s:s+(g.items||[]).filter(it=>isPlayableVideo(it,l.id)).length,0);
+          } else cnt=Number(l.video_count||0)||Number(l.parts_count||l.count||0);
+          const lid=l.id;
+          const thumb = l.image_url || cover;
+          
+          return `
+          <div class="lec-card" id="lec-card-${lid}">
+            <div class="lec-card-header">
+              <div class="lec-card-title-area">
+                <span class="lec-card-num">المحاضرة ${i+1}</span>
+                <strong class="lec-card-title">${esc(l.name||`المحاضرة ${i+1}`)}</strong>
+              </div>
+              <div class="lec-card-thumb">
+                ${thumb ? `<img src="${esc(thumb)}" alt="${esc(l.name||'')}" loading="lazy">` : 
+                  `<div class="thumb-fallback"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>`
+                }
+              </div>
+            </div>
+            
+            <button class="lec-card-action" onclick="window._loadLectureContent('${lid}', this)">
+              ${IC_PLAY}
+              محتوى المحاضرة
+            </button>
+
+            <!-- سيتم تحميل المحتوى هنا عند الضغط -->
+            <div class="lec-content-panel" id="lec-panel-${lid}" hidden>
+              <div class="groups" id="lg-${lid}"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="empty-search" id="empty-search" style="display:none">لا توجد محاضرات بهذا الاسم.</div>
     </div>`;
 
-    /* expose filter */
     window._filterLec=filterLectures;
 
-    /* accordion */
-    document.addEventListener('click',async e=>{
-      /* group */
-      const gt=e.target.closest('.group-toggle');
-      if(gt){
-        const panel=$(gt.getAttribute('aria-controls'));if(!panel) return;
-        const open=gt.getAttribute('aria-expanded')==='true';
-        gt.setAttribute('aria-expanded',open?'false':'true');
-        if(open){panel.setAttribute('hidden','');}else{panel.removeAttribute('hidden');}
-        const txt=gt.querySelector('.g-txt');
-        if(txt) txt.textContent=open?'عرض':'إخفاء';
+    /* منطق تحميل المحتوى عند الضغط على الزر البرتقالي */
+    window._loadLectureContent = async (lid, btn) => {
+      const panel = document.getElementById('lec-panel-' + lid);
+      const container = document.getElementById('lg-' + lid);
+      
+      // إذا كان مفتوحاً، أغلقه
+      if (!panel.hidden) {
+        panel.hidden = true;
+        btn.innerHTML = `${IC_PLAY} محتوى المحاضرة`;
         return;
       }
-      /* lecture */
-      const lt=e.target.closest('.lec-toggle');if(!lt) return;
-      const lid=lt.dataset.lid;if(!lid) return;
-      const panel=$('lp-'+lid);if(!panel) return;
-      const open=lt.getAttribute('aria-expanded')==='true';
-      lt.setAttribute('aria-expanded',open?'false':'true');
-      if(open){panel.setAttribute('hidden','');return;}
-      panel.removeAttribute('hidden');
-      if(lt.dataset.loaded==='1') return;
-      lt.dataset.loaded='1';
-      const ge=$('lg-'+lid);
-      if(ge) ge.innerHTML=`<div class="state-box" style="padding:20px 0"><div class="spinner spinner-sm"></div></div>`;
-      try{
-        let items=await fetchItems(lid);
-        if(!Array.isArray(items)) items=[];
-        const ge2=$('lg-'+lid);
-        if(ge2){
-          if(items.length) ge2.innerHTML=buildGroups(items,lid);
-          else ge2.innerHTML=`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
-        }
-        const vids=items.filter(it=>isPlayableVideo(it,lid));
-        const watched=vids.filter(it=>isWatched(resolvePlayId(it,lid))).length;
-        const pct=vids.length?Math.round(watched/vids.length*100):0;
-        const pb=$('lpb-'+lid);if(pb) pb.style.width=pct+'%';
-        const bdg2=$('lbdg-'+lid);if(bdg2) bdg2.textContent=watched+' / '+vids.length;
-        const sub2=$('lsub-'+lid);if(sub2) sub2.textContent=(vids.length?vids.length+' فيديو':'—');
-      }catch(err){
-        // مفيش رسالة خطأ حمراء — رسالة هادية فقط
-        const ge2=$('lg-'+lid);
-        if(ge2) ge2.innerHTML=`<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">تعذر تحميل المحتوى. جرّب مرة أخرى.</p>`;
-        // اسمح بإعادة المحاولة
-        lt.dataset.loaded='0';
+
+      // إظهار اللوحة مع سبينر
+      panel.hidden = false;
+      btn.innerHTML = `<div class="spinner spinner-sm" style="border-top-color:#fff"></div> جاري التحميل...`;
+      
+      // إذا تم تحميله مسبقاً، أظهره فقط
+      if (btn.dataset.loaded === '1') {
+        btn.innerHTML = `${IC_PLAY} إخفاء المحتوى`;
+        return;
       }
+
+      try {
+        let items = await fetchItems(lid);
+        if (!Array.isArray(items)) items = [];
+        
+        if (items.length) {
+          container.innerHTML = buildGroups(items, lid);
+        } else {
+          container.innerHTML = `<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">لا يوجد فيديوهات لهذه المحاضرة حاليًا.</p>`;
+        }
+        
+        btn.dataset.loaded = '1';
+        btn.innerHTML = `${IC_PLAY} إخفاء المحتوى`;
+        
+      } catch(err) {
+        container.innerHTML = `<p style="padding:14px;color:var(--muted);font-size:13px;text-align:center">تعذر تحميل المحتوى. جرّب مرة أخرى.</p>`;
+        btn.innerHTML = `${IC_PLAY} محتوى المحاضرة`;
+      }
+    };
+
+    /* Accordion للمجموعات الداخلية */
+    document.addEventListener('click', e => {
+      const gt = e.target.closest('.group-toggle');
+      if (!gt) return;
+      const panel = $(gt.getAttribute('aria-controls'));
+      if (!panel) return;
+      const open = gt.getAttribute('aria-expanded') === 'true';
+      gt.setAttribute('aria-expanded', open ? 'false' : 'true');
+      if (open) {
+        panel.setAttribute('hidden', '');
+      } else {
+        panel.removeAttribute('hidden');
+      }
+      const txt = gt.querySelector('.g-txt');
+      if (txt) txt.textContent = open ? 'عرض' : 'إخفاء';
     });
 
-  }catch(e){
-    $('main').innerHTML=`<div class="state-box"><p style="color:var(--red)">خطأ: ${esc(e.message)}</p></div>`;
+  } catch(e) {
+    $('main').innerHTML = `<div class="state-box"><p style="color:var(--red)">خطأ: ${esc(e.message)}</p></div>`;
   }
 };
 
-/* profile */
 const loadProfile=async()=>{
   try{
     const c=localStorage.getItem('student_name');
