@@ -77,19 +77,53 @@ try {
   console.warn("[API] thanawica.js not found — skipped");
 }
 
-// ===== upstream adapters (soft-load: mesari required, taleb optional) =====
-import {
-  buildMesariSource,
-  buildMesariSourceFromAnyId,
-  getMesariTeachers,
-  crawlMesariFullCatalog,
-  ensureMesariChapterLectures,
-  getMesariLesson,
-  clearMesariCatalogCache,
-  updateMesariAuth,
-  mesariAuthStatus,
-  MESARI_STREAM_HOSTS
-} from "./mesari.js";
+// ===== upstream adapters (soft-load: mesari + taleb optional) =====
+function _mesariUnavailable(name) {
+  const err = new Error("مصدر مساري غير مفعّل على السيرفر");
+  err.status = 503;
+  err.expose = true;
+  throw err;
+}
+const _mesariStub = {
+  buildMesariSource: async () => _mesariUnavailable("buildMesariSource"),
+  buildMesariSourceFromAnyId: async () => _mesariUnavailable("buildMesariSourceFromAnyId"),
+  getMesariTeachers: async () => [],
+  crawlMesariFullCatalog: async () => ({ subjects: [], teachers: [], stats: {} }),
+  ensureMesariChapterLectures: async () => ({ lectures: [], lecturesCount: 0, partsCount: 0 }),
+  getMesariLesson: async () => null,
+  clearMesariCatalogCache: () => {},
+  updateMesariAuth: () => {},
+  mesariAuthStatus: async () => ({ configured: false, alive: false }),
+  MESARI_STREAM_HOSTS: []
+};
+
+let buildMesariSource = _mesariStub.buildMesariSource;
+let buildMesariSourceFromAnyId = _mesariStub.buildMesariSourceFromAnyId;
+let getMesariTeachers = _mesariStub.getMesariTeachers;
+let crawlMesariFullCatalog = _mesariStub.crawlMesariFullCatalog;
+let ensureMesariChapterLectures = _mesariStub.ensureMesariChapterLectures;
+let getMesariLesson = _mesariStub.getMesariLesson;
+let clearMesariCatalogCache = _mesariStub.clearMesariCatalogCache;
+let updateMesariAuth = _mesariStub.updateMesariAuth;
+let mesariAuthStatus = _mesariStub.mesariAuthStatus;
+let MESARI_STREAM_HOSTS = _mesariStub.MESARI_STREAM_HOSTS;
+
+try {
+  const mesariMod = await import("./mesari.js");
+  buildMesariSource = mesariMod.buildMesariSource;
+  buildMesariSourceFromAnyId = mesariMod.buildMesariSourceFromAnyId;
+  getMesariTeachers = mesariMod.getMesariTeachers;
+  crawlMesariFullCatalog = mesariMod.crawlMesariFullCatalog;
+  ensureMesariChapterLectures = mesariMod.ensureMesariChapterLectures;
+  getMesariLesson = mesariMod.getMesariLesson;
+  clearMesariCatalogCache = mesariMod.clearMesariCatalogCache;
+  updateMesariAuth = mesariMod.updateMesariAuth;
+  mesariAuthStatus = mesariMod.mesariAuthStatus;
+  MESARI_STREAM_HOSTS = mesariMod.MESARI_STREAM_HOSTS || [];
+  console.log("[API] mesari.js loaded");
+} catch (e) {
+  console.warn("[API] mesari.js not found — mesari disabled:", e && e.message);
+}
 
 function _talebUnavailable(name) {
   const err = new Error("مصدر talep غير مفعّل على السيرفر");
