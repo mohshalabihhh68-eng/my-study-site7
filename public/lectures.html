@@ -43,8 +43,6 @@
   --red:         #ef4444;
   --purple:      #8b5cf6;
   --purple-soft: rgba(139,92,246,.10);
-  --orange:      #ff5e3a;
-  --orange-grad: linear-gradient(135deg, #ff5e3a, #ffb347);
 
   --nav-h:       64px;
   --nav-bg:      rgba(248,250,252,.92);
@@ -80,7 +78,6 @@
   --red:         #f87171;
   --purple:      #a78bfa;
   --purple-soft: rgba(167,139,250,.10);
-  --orange:      #ff6b4a;
 
   --nav-bg:      rgba(7,11,20,.92);
   --shadow-card: 0 2px 24px rgba(0,0,0,.40);
@@ -213,8 +210,8 @@ img{display:block;max-width:100%}
   overflow:hidden;
   flex-shrink:0;
   background:var(--card-inner);
-  border:2px solid var(--orange);
-  box-shadow:0 4px 12px rgba(255,94,58,.2);
+  border:2px solid var(--accent); /* تم تغيير الإطار للون الأساسي */
+  box-shadow:0 4px 12px var(--accent-soft);
   position:relative;
 }
 .lec-card-thumb img{
@@ -238,7 +235,7 @@ img{display:block;max-width:100%}
   width:100%;
   padding:14px 20px;
   border-radius:14px;
-  background:var(--orange-grad);
+  background:linear-gradient(135deg, var(--accent), var(--accent2)); /* ألوانك الأصلية */
   color:#fff;
   font-weight:900;
   font-size:14px;
@@ -248,7 +245,7 @@ img{display:block;max-width:100%}
   gap:8px;
   cursor:pointer;
   transition:filter var(--tr), transform var(--tr);
-  box-shadow:0 4px 15px rgba(255,94,58,.3);
+  box-shadow:var(--shadow-btn);
   border:none;
 }
 .lec-card-action:hover{
@@ -755,7 +752,7 @@ const load=async()=>{
 
     window._filterLec=filterLectures;
 
-    /* منطق تحميل المحتوى عند الضغط على الزر البرتقالي */
+    /* منطق تحميل المحتوى عند الضغط على الزر */
     window._loadLectureContent = async (lid, btn) => {
       const panel = document.getElementById('lec-panel-' + lid);
       const container = document.getElementById('lg-' + lid);
