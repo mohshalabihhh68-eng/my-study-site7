@@ -3769,6 +3769,17 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
 app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    // ===== Thanawica first =====
+    if (CONFIG.THANAWICA_ENABLED && (useThanawicaAsPrimary() || isThId(req.params.id)) && studentAllowsThanawica(req.student)) {
+      const data = maskTreeImages(await thChapters(req.params.id));
+      const norm = (Array.isArray(data) ? data : []).map((c) => ({
+        ...c,
+        title: c.title || c.name,
+        lectures_count: c.lectures_count != null ? c.lectures_count : c.count,
+        lecture_count: c.lecture_count != null ? c.lecture_count : (c.lectures_count != null ? c.lectures_count : c.count)
+      }));
+      return res.json({ success: true, message: "Success", data: norm, source: "thanawica" });
+    }
     // حسام عيسى (Bunny) — فصوله من الكتالوج المحلي
     if (String(req.params.id) === String(HOSSAM_TEACHER_ID) || String(req.params.id) === "hos_teacher") {
       const chapters = (HOSSAM_CATALOG.courses || []).map((c, i) => ({
@@ -3874,6 +3885,19 @@ app.get("/api/teachers/:id/chapters", requireStudent, async (req, res) => {
 app.get("/api/chapters/:id/lectures", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
+    // ===== Thanawica primary / ids =====
+    if (CONFIG.THANAWICA_ENABLED && (useThanawicaAsPrimary() || isThId(req.params.id)) && studentAllowsThanawica(req.student)) {
+      const data = maskTreeImages(await thLectures(req.params.id));
+      // normalize fields frontend expects
+      const norm = (Array.isArray(data) ? data : []).map((l) => ({
+        ...l,
+        title: l.title || l.name,
+        video_count: l.video_count != null ? l.video_count : (l.videos_count != null ? l.videos_count : l.count),
+        videos_count: l.videos_count != null ? l.videos_count : l.count,
+        parts_count: l.parts_count != null ? l.parts_count : (l.videos_count || l.count || 0)
+      }));
+      return res.json({ success: true, message: "Success", data: norm, source: "thanawica" });
+    }
     if (useMesariAsPrimary() || useTalebAsPrimary() || String(req.params.id).startsWith("taleb_ch_") || String(req.params.id).startsWith("taleb_course_") || String(req.params.id).startsWith("mesari_")) {
       const cat = await getPrimaryCatalog();
       const cid = String(req.params.id);
@@ -4222,6 +4246,51 @@ function lectureGroupsPayload(lecture) {
 app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
+    // ===== Thanawica =====
+    if (CONFIG.THANAWICA_ENABLED && (useThanawicaAsPrimary() || isThId(rawId)) && studentAllowsThanawica(req.student)) {
+      const raw = await thLectureContent(rawId);
+      const d = raw && raw.data ? raw.data : {};
+      const videos = Array.isArray(d.videos) ? d.videos : [];
+      for (const v of videos) {
+        if (!v.video_id) v.video_id = v.id;
+        if (!v.title) v.title = v.name || "فيديو";
+        v.type = v.type || "video";
+        v.group = v.group || "الشرح";
+      }
+      const files = Array.isArray(d.files) ? d.files : [];
+      const groups = [];
+      if (videos.length) groups.push({ name: "الشرح", title: "الشرح", items: videos });
+      // group other named groups if present
+      const byG = new Map();
+      for (const v of videos) {
+        const g = v.group || "الشرح";
+        if (g === "الشرح") continue;
+        if (!byG.has(g)) byG.set(g, []);
+        byG.get(g).push(v);
+      }
+      for (const [g, items] of byG) groups.push({ name: g, title: g, items });
+      if (files.length) {
+        groups.push({
+          name: "الملفات",
+          title: "الملفات",
+          items: files.map((f) => ({
+            id: f.id,
+            title: f.name || f.title || "ملف",
+            name: f.name || f.title || "ملف",
+            type: "file",
+            kind: "file",
+            url: f.url,
+            download_url: f.download_url
+          }))
+        });
+      }
+      return res.json({
+        success: true,
+        message: "Success",
+        data: { id: d.id || rawId, name: d.name || "محاضرة", groups, videos },
+        source: "thanawica"
+      });
+    }
     if (
       useMesariAsPrimary() ||
       useTalebAsPrimary() ||
@@ -4256,6 +4325,19 @@ app.get("/api/lectures/:id/grouped-content", requireStudent, async (req, res) =>
 app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
   try {
     const rawId = String(req.params.id || "");
+    // ===== Thanawica first =====
+    if (CONFIG.THANAWICA_ENABLED && (useThanawicaAsPrimary() || isThId(rawId)) && studentAllowsThanawica(req.student)) {
+      const raw = await thLectureContent(rawId);
+      if (raw && raw.data && Array.isArray(raw.data.videos)) {
+        for (const v of raw.data.videos) {
+          if (!v.video_id) v.video_id = v.id;
+          if (!v.videoId) v.videoId = v.id;
+          if (!v.title) v.title = v.name || "فيديو";
+          if (!v.type) v.type = "video";
+        }
+      }
+      return res.json(maskTreeImages(raw));
+    }
     if (useMesariAsPrimary() || useTalebAsPrimary() || rawId.startsWith("taleb_lec_") || rawId.startsWith("taleb_w_") || rawId.startsWith("taleb_") || rawId.startsWith("mesari_")) {
       // 1) محاضرة كاملة متعددة الأجزاء (mesari + taleb)
       {
