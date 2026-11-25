@@ -64,15 +64,12 @@ button{cursor:pointer}
 .greeting{margin:0;font-size:clamp(26px,5vw,40px);font-weight:900;line-height:1.7;min-height:1.7em}
 .hl{position:relative;display:inline-block;padding:0 .3em;z-index:0;white-space:nowrap}
 .hl::before{content:"";position:absolute;inset:.5em -.15em .05em -.15em;z-index:-1;background:var(--mark);border-radius:.25em .9em .35em 1em;transform-origin:right center;transform:scaleX(0) rotate(-1.4deg)}
-.pen{position:absolute;top:-.1em;right:0;font-size:.6em;line-height:1;opacity:0;pointer-events:none;transform:translateX(50%) rotate(-25deg)}
 .go .hl::before{animation:mark 1.15s cubic-bezier(.65,0,.3,1) .25s forwards}
-.go .pen{animation:pen 1.15s cubic-bezier(.65,0,.3,1) .25s forwards}
 @keyframes mark{to{transform:scaleX(1) rotate(-1.4deg)}}
-@keyframes pen{0%{right:0;opacity:1}88%{opacity:1}100%{right:100%;opacity:0}}
 .tagline{margin:6px 0 0;color:var(--muted);font-weight:600;font-size:15px}
 
 /* ===== Stats ===== */
-.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:26px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
 .stat{position:relative;display:flex;align-items:center;gap:16px;padding:20px;border-radius:24px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
 .stat::after{content:"";position:absolute;width:150px;height:150px;left:-50px;top:-60px;border-radius:50%;background:var(--accent,var(--blue));opacity:.10;filter:blur(6px)}
 .stat.days{--accent:var(--green)}
@@ -134,18 +131,32 @@ button{cursor:pointer}
 .state.err{color:var(--red)}
 .state button{margin-top:14px;padding:10px 22px;border-radius:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2))}
 
+.stat.subj{--accent:var(--purple)}
+.stat.subj .ico-box{background:linear-gradient(135deg,#8b5cf6,#ec4899);box-shadow:0 10px 24px rgba(139,92,246,.3)}
+.stat .num.loading{opacity:.45}
+.resume{display:none;width:100%;margin-top:16px;align-items:center;gap:14px;padding:14px 18px;border-radius:20px;color:#fff;text-align:right;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 12px 28px color-mix(in srgb,var(--blue) 30%,transparent);transition:transform .2s,filter .2s}
+.resume.show{display:flex;animation:rise .5s ease both}
+.resume:hover{transform:translateY(-3px);filter:brightness(1.06)}
+.resume .r-ico{width:42px;height:42px;border-radius:14px;background:rgba(255,255,255,.2);display:grid;place-items:center;flex:none}
+.resume .r-ico svg{width:20px;height:20px;fill:currentColor}
+.resume .r-t{flex:1;min-width:0}
+.resume .r-t small{display:block;font-size:12px;font-weight:700;opacity:.85}
+.resume .r-t b{display:block;font-size:17px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.resume .r-go{font-weight:800;font-size:13px;background:rgba(255,255,255,.2);padding:8px 14px;border-radius:12px;flex:none}
+.quote{margin:8px 0 0;color:var(--muted);font-weight:600;font-size:15px}
+.search kbd{position:absolute;left:12px;top:50%;transform:translateY(-50%);font:700 11px Cairo,sans-serif;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 7px;background:var(--card-inner)}
 @media(max-width:700px){
   .app-nav-in{padding:10px 12px}.brand small{display:none}
   .profile-btn #nav-name{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .stats{gap:10px}.stat{flex-direction:column;align-items:flex-start;gap:12px;padding:16px;border-radius:20px}
+  .stats{gap:10px;grid-template-columns:repeat(2,1fr)}.stat{flex-direction:column;align-items:flex-start;gap:12px;padding:16px;border-radius:20px}
   .ring,.stat .ico-box{width:60px;height:60px}.stat .ico-box{border-radius:18px}.stat .num{font-size:28px}
+  .stat.days{grid-column:1/-1;flex-direction:row;align-items:center;gap:16px}
   .grid{grid-template-columns:1fr;gap:16px}.card{border-radius:20px}.card-img{aspect-ratio:16/9}
   .search{max-width:none;min-width:100%}
 }
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
   .go .hl::before{transform:scaleX(1) rotate(-1.4deg)}
-  .pen{display:none}
 }
 </style>
 </head>
@@ -175,7 +186,7 @@ button{cursor:pointer}
 <main class="wrap" id="main">
   <p class="hello-sub" id="time-greet">&nbsp;</p>
   <h1 class="greeting" id="greeting"></h1>
-  <p class="tagline" id="tagline">اختار مادتك وكمّل من وين وقفت.</p>
+  <p class="quote" id="tagline">اختار مادتك وكمّل من وين وقفت.</p>
 
   <section class="stats" aria-label="ملخص حسابك">
     <div class="stat days" id="days-box">
@@ -193,17 +204,30 @@ button{cursor:pointer}
       <div class="ico-box"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
       <div>
         <div class="num"><span id="courses-num">—</span></div>
-        <div class="lbl">عدد الكورسات المتاحة</div>
+        <div class="lbl">عدد الكورسات (الفصول)</div>
         <span class="chip" id="courses-chip">جاري التحميل</span>
       </div>
     </div>
+    <div class="stat subj" id="subj-box">
+      <div class="ico-box"><svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5M2 17.5l10 5 10-5"/></svg></div>
+      <div>
+        <div class="num"><span id="subj-num">—</span></div>
+        <div class="lbl">عدد المواد</div>
+        <span class="chip" id="subj-chip">جاري التحميل</span>
+      </div>
+    </div>
   </section>
+  <button type="button" class="resume" id="resume">
+    <span class="r-ico"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>
+    <span class="r-t"><small>كمّل من وين وقفت</small><b id="resume-name"></b></span>
+    <span class="r-go">كمّل</span>
+  </button>
 
   <div class="sec-head">
     <h2>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></h2>
     <label class="search" id="search-wrap" style="display:none">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input type="search" id="search" placeholder="ابحث عن مادة..." aria-label="ابحث عن مادة" autocomplete="off">
+      <input type="search" id="search" placeholder="ابحث عن مادة..." aria-label="ابحث عن مادة" autocomplete="off"><kbd>/</kbd>
     </label>
   </div>
 
@@ -223,6 +247,8 @@ const subjectId = new URLSearchParams(location.search).get('subjectId') || '4';
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let allSubjects = [];
+const QUOTES = ['الخطوة الصغيرة كل يوم أحسن من حماس يوم واحد.','اللي بيذاكر النهارده بيرتاح بكرة.','ركّز في حصة واحدة وخلّصها، والباقي هيمشي.','مفيش حد بيوصل من غير ما يبدأ.','اشرب مياه، خد استراحة، وارجع أقوى.','كل فصل بتخلصه بيقرّبك من حلمك.','التعب مؤقت، والنتيجة بتفضل.','ابدأ بأصعب حاجة وهتلاقي الباقي أسهل.','تنظيم وقتك نص النجاح.','أنت أقدر مما تتخيل.'];
+function dayQuote(){ const d = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / 864e5); return QUOTES[d % QUOTES.length]; }
 
 /* شريط التقدم أثناء السكرول */
 const bar = $('scroll-progress');
@@ -256,7 +282,7 @@ function countUp(el, to){
 function setGreeting(name){
   const h = new Date().getHours();
   $('time-greet').textContent = h >= 18 || h < 4 ? 'مساء الخير 🌙' : (h < 12 ? 'صباح الخير ☀️' : 'نهارك سعيد 🌤️');
-  $('greeting').innerHTML = '<span class="hl">أهلاً بك يا ' + esc(name) + '<span class="pen">🖍️</span></span>';
+  $('greeting').innerHTML = '<span class="hl">أهلاً بك يا ' + esc(name) + '</span>';
 }
 function startMarker(){ document.body.classList.add('go'); }
 
@@ -301,16 +327,69 @@ function renderDays(info){
   try { localStorage.setItem('student_days', String(d)); } catch(e){}
 }
 
-function renderCourses(list){
-  let total = 0, hasCount = false;
+const CHAPTER_GLOBAL = ['/api/chapters'];
+const CHAPTER_PER_SUBJECT = [id => '/api/chapters/' + id, id => '/api/subjects/' + id + '/chapters', id => '/api/chapters?subjectId=' + id];
+const toArr = d => Array.isArray(d) ? d : (d && Array.isArray(d.chapters) ? d.chapters : (d && Array.isArray(d.items) ? d.items : null));
+
+async function loadChaptersCount(list){
+  /* 1) لو المادة نفسها راجعة بعدد الفصول */
+  let sum = 0, any = false;
   list.forEach(s => {
-    const c = s.courses_count != null ? s.courses_count : (s.courses != null ? (Array.isArray(s.courses) ? s.courses.length : s.courses) : null);
-    if (c != null && !isNaN(+c)) { total += +c; hasCount = true; }
+    const v = s.chapters_count != null ? s.chapters_count : (s.chapter_count != null ? s.chapter_count : (s.chaptersCount != null ? s.chaptersCount : (Array.isArray(s.chapters) ? s.chapters.length : null)));
+    if (v != null && !isNaN(+v)) { sum += +v; any = true; }
   });
-  if (!hasCount) total = list.length;
-  countUp($('courses-num'), total);
-  $('courses-chip').textContent = 'في ' + list.length + (list.length === 1 ? ' مادة' : (list.length <= 10 ? ' مواد' : ' مادة'));
+  if (any) return sum;
+  /* 2) ملف الفصول كله في طلب واحد */
+  for (const url of CHAPTER_GLOBAL){
+    try {
+      const arr = toArr(await api(url));
+      if (!arr) continue;
+      const ids = new Set(list.map(s => String(s.id)));
+      const hasSub = arr.some(c => c.subject_id != null || c.subjectId != null);
+      return hasSub ? arr.filter(c => ids.has(String(c.subject_id != null ? c.subject_id : c.subjectId))).length : arr.length;
+    } catch(e){}
+  }
+  /* 3) طلب لكل مادة (بنجرّب أول مادة عشان نعرف الرابط الصح) */
+  for (const mk of CHAPTER_PER_SUBJECT){
+    try {
+      const first = toArr(await api(mk(list[0].id)));
+      if (!first) continue;
+      const rest = await Promise.allSettled(list.slice(1).map(s => api(mk(s.id))));
+      return first.length + rest.reduce((n, r) => n + (r.status === 'fulfilled' && toArr(r.value) ? toArr(r.value).length : 0), 0);
+    } catch(e){}
+  }
+  return null;
 }
+
+function renderCourses(list){
+  countUp($('subj-num'), list.length);
+  $('subj-chip').textContent = list.length ? 'كلها متاحة ليك' : 'لسه مفيش مواد';
+  const num = $('courses-num'), chip = $('courses-chip');
+  num.parentElement.classList.add('loading'); chip.textContent = 'بنحسب الفصول...';
+  if (!list.length){ num.textContent = '0'; num.parentElement.classList.remove('loading'); chip.textContent = '—'; return; }
+  loadChaptersCount(list).then(n => {
+    num.parentElement.classList.remove('loading');
+    if (n == null){ num.textContent = '—'; chip.textContent = 'تعذّر قراءة الفصول'; return; }
+    countUp(num, n);
+    chip.textContent = n === 1 ? 'فصل واحد' : 'موزّعة على ' + list.length + ' مادة';
+  });
+}
+
+function showResume(list){
+  try {
+    const last = JSON.parse(localStorage.getItem('last_subject') || 'null');
+    const hit = last && list.find(s => String(s.id) === String(last.id));
+    if (!hit) return;
+    $('resume-name').textContent = hit.name;
+    const r = $('resume');
+    r.classList.add('show');
+    r.onclick = () => { location.href = 'teachers.html?subjectId=' + encodeURIComponent(hit.id) + '&subjectName=' + encodeURIComponent(hit.name); };
+  } catch(e){}
+}
+
+addEventListener('keydown', e => {
+  if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName) && $('search-wrap').style.display !== 'none'){ e.preventDefault(); $('search').focus(); }
+});
 
 const PALETTE = [['#6c63ff','#00d4ff'],['#8b5cf6','#ec4899'],['#10b981','#06b6d4'],['#f59e0b','#ef4444'],['#3b82f6','#8b5cf6'],['#14b8a6','#84cc16']];
 
@@ -344,6 +423,7 @@ $('subjects-grid').addEventListener('click', e => {
   const card = btn.closest('.card');
   const fill = card.querySelector('.side-progress-bar .fill');
   if (fill) fill.style.height = '100%';
+  try { localStorage.setItem('last_subject', JSON.stringify({ id: btn.dataset.id, name: btn.dataset.name })); } catch(e){}
   const url = 'teachers.html?subjectId=' + encodeURIComponent(btn.dataset.id) + '&subjectName=' + encodeURIComponent(btn.dataset.name);
   setTimeout(() => { location.href = url; }, 400);
 });
@@ -367,6 +447,7 @@ function showError(msg){
 
 async function init(){
   const started = performance.now();
+  $('tagline').textContent = dayQuote();
   const cachedName = localStorage.getItem('student_name');
   if (cachedName){
     setGreeting(cachedName);
@@ -394,7 +475,7 @@ async function init(){
     if (!cachedName) setGreeting(me.name);
   } else if (!cachedName){
     setGreeting('يا بطل');
-    $('greeting').innerHTML = '<span class="hl">أهلاً بك يا بطل<span class="pen">🖍️</span></span>';
+    $('greeting').innerHTML = '<span class="hl">أهلاً بك يا بطل</span>';
   }
   renderDays(findDays(me));
 
@@ -411,6 +492,7 @@ async function init(){
   } else {
     $('search-wrap').style.display = subjects.length > 4 ? 'block' : 'none';
     renderSubjects(subjects);
+    showResume(subjects);
   }
   hideSplash();
 }
