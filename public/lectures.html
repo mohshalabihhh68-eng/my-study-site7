@@ -213,7 +213,12 @@ async function load() {
       else cnt = Number(l.video_count||0) || Number(l.parts_count||l.count||0);
 
       /* التوجيه المباشر لصفحة المشغل عند الضغط على الزر */
-      const targetUrl = `player.html?lectureId=${l.id}&lectureName=${encodeURIComponent(l.name||'')}`;
+      const targetUrl = 'player.html?lectureId=' + encodeURIComponent(l.id)
+        + '&lectureName=' + encodeURIComponent(l.name || '')
+        + '&lectureNum=' + (index + 1)
+        + '&teacherName=' + encodeURIComponent(teacherName || '')
+        + '&subjectName=' + encodeURIComponent(subjectName || '')
+        + (chapterName ? '&chapterName=' + encodeURIComponent(chapterName) : '');
 
       html += `<div class="chapter-card" id="card-${l.id}">
         <div class="side-progress-bar"><div class="fill"></div></div>
