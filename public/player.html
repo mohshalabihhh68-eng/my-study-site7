@@ -171,9 +171,16 @@ a{text-decoration:none}
 ═══════════════════════════════════════════════════ */
 .main-wrap{
   max-width:1300px;margin:0 auto;
-  padding:20px 16px 60px;
+  padding:16px 14px 48px;
   position:relative;
+  width:100%;
+  overflow-x:hidden;
 }
+.inner{width:100%;min-width:0}
+.phead > div{min-width:0;flex:1}
+.bc{max-width:100%;overflow:hidden}
+.bc-plain,.bc-link{max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(min-width:640px){.bc-plain,.bc-link{max-width:none}}
 .glow{position:absolute;border-radius:50%;pointer-events:none;z-index:0}
 .glow-l{top:80px;left:-140px;width:400px;height:400px;background:radial-gradient(circle,rgba(91,140,255,.07) 0%,transparent 70%)}
 .glow-r{bottom:60px;right:-140px;width:400px;height:400px;background:radial-gradient(circle,rgba(167,139,250,.06) 0%,transparent 70%)}
@@ -201,9 +208,18 @@ a{text-decoration:none}
 .bc-sep{color:var(--muted);font-size:12px}
 
 .page-title{
-  font-size:clamp(20px,3.5vw,34px);font-weight:900;line-height:1.2;
-  background:linear-gradient(90deg,var(--accent) 0%,var(--accent2) 50%,var(--accent3) 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  font-size:clamp(18px,3vw,28px);font-weight:900;line-height:1.35;
+  color:var(--text);
+  word-break:break-word;
+  overflow-wrap:anywhere;
+  max-width:100%;
+}
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .page-title{
+    background:linear-gradient(90deg,var(--accent) 0%,var(--accent2) 50%,var(--accent3) 100%);
+    -webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;
+  }
 }
 
 .back-page{
@@ -268,16 +284,18 @@ a{text-decoration:none}
 /* ═══════════════════════════════════════════════════
    MAIN GRID
 ═══════════════════════════════════════════════════ */
-.layout{display:grid;grid-template-columns:1fr;gap:20px;align-items:start;width:100%}
-@media(min-width:1024px){.layout{grid-template-columns:minmax(0,1fr) 320px}}
-@media(min-width:1280px){.layout{grid-template-columns:minmax(0,1fr) 340px}}
-.player-col{min-width:0;width:100%}
-.sbar{min-width:0}
+.layout{display:grid;grid-template-columns:1fr;gap:16px;align-items:start;width:100%;min-width:0}
+@media(min-width:1100px){.layout{grid-template-columns:minmax(0,1fr) 340px;gap:20px}}
+.player-col{min-width:0;width:100%;display:flex;flex-direction:column;gap:12px}
+.sbar{min-width:0;width:100%}
+@media(max-width:1099px){
+  .sbar{position:relative!important;top:auto!important;max-height:none!important}
+  .vlist{max-height:420px}
+}
 
 /* ═══════════════════════════════════════════════════
    PLAYER CARD
 ═══════════════════════════════════════════════════ */
-.player-col{display:flex;flex-direction:column;gap:12px}
 .player-card{
   background:linear-gradient(180deg,#131d30,#0f1726);
   border:1px solid rgba(255,255,255,.1);
@@ -784,14 +802,12 @@ body.vpaused .eq i{animation-play-state:paused}
     <!-- PAGE HEADER -->
     <header class="phead">
       <div>
-        <nav class="bc">
-          <span><a href="#" class="bc-link">اللغة العربية</a></span>
+        <nav class="bc" id="bcNav">
+          <span class="bc-plain" id="bcSubject">المادة</span>
           <span class="bc-sep">‹</span>
-          <span><a href="#" class="bc-link">أ. المدرس</a></span>
+          <span class="bc-plain" id="bcTeacher">المدرس</span>
           <span class="bc-sep">‹</span>
-          <span><a href="#" class="bc-link">الفصل الدراسي</a></span>
-          <span class="bc-sep">‹</span>
-          <span class="bc-plain" id="crumb">المحاضرة</span>
+          <span class="bc-plain" id="bcLecture">المحاضرة</span>
         </nav>
         <h1 class="page-title" id="pageTitle">جاري تجهيز المشغل…</h1>
       </div>
@@ -1053,6 +1069,10 @@ const token = localStorage.getItem('student_token') || localStorage.getItem('cst
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
 const initialVideoId = qs.get('videoId');
+const qSubject = (qs.get('subjectName')||qs.get('subject')||'').trim();
+const qTeacher = (qs.get('teacherName')||qs.get('teacher')||'').trim();
+const qLectureName = (qs.get('lectureName')||qs.get('name')||'').trim();
+const qLectureNum = (qs.get('lectureNum')||qs.get('num')||'').trim();
 
 const playCache = new Map();
 const PLAY_CACHE_TTL = 45000;
@@ -1598,7 +1618,16 @@ async function playIndex(i,autoplay){
   renderList();renderDrawer();renderStats();
   const lst=$('videoList'),act=lst.querySelector('.item.active');
   if(act)lst.scrollTop=Math.max(0,act.getBoundingClientRect().top-lst.getBoundingClientRect().top+lst.scrollTop-lst.clientHeight/2+act.clientHeight/2);
-  history.replaceState(null,'',`?lectureId=${encodeURIComponent(lectureId)}&videoId=${encodeURIComponent(item.id)}`);
+  (function(){
+    const p=new URLSearchParams();
+    p.set('lectureId',lectureId);
+    p.set('videoId',item.id);
+    if(qSubject)p.set('subjectName',qSubject);
+    if(qTeacher)p.set('teacherName',qTeacher);
+    if(qLectureName)p.set('lectureName',qLectureName);
+    if(qLectureNum)p.set('lectureNum',qLectureNum);
+    history.replaceState(null,'','?'+p.toString());
+  })();
   updateMediaSession();
   try{
     let playData=null,playErr=null;
@@ -1775,6 +1804,132 @@ function setDlBtn(){}
 $('dlmX').onclick=closeDlm;
 $('dlmBg').onclick=closeDlm;
 
+
+function updateBreadcrumb(lectureName){
+  const subject = qSubject || 'المادة';
+  const teacher = qTeacher || 'المدرس';
+  let lec = lectureName || qLectureName || 'المحاضرة';
+  if(qLectureNum && !/محاضرة\s*\d/i.test(lec)){
+    // لو الاسم مش فيه رقم، نضيف رقم المحاضرة
+    const numLabel = 'المحاضرة ' + qLectureNum;
+    if(lec === 'المحاضرة' || !lec) lec = numLabel;
+    else lec = numLabel + (lec ? ' · ' + lec : '');
+  } else if(qLectureNum && lec === 'المحاضرة'){
+    lec = 'المحاضرة ' + qLectureNum;
+  }
+  const elS = $('bcSubject'), elT = $('bcTeacher'), elL = $('bcLecture');
+  if(elS) elS.textContent = subject;
+  if(elT) elT.textContent = teacher;
+  if(elL) elL.textContent = lec;
+  // تحديث عنوان الصفحة
+  try{
+    const parts = [subject, teacher, lec].filter(Boolean);
+    document.title = (lec || 'مشغل المحاضرة') + ' | ثانوية club';
+  }catch(e){}
+}
+
+/** جلب مدة فيديو من playlist m3u8 (مجموع EXTINF) */
+async function durationFromM3u8(url){
+  try{
+    const r = await fetch(url, {credentials:'include', cache:'no-store'});
+    if(!r.ok) return 0;
+    const text = await r.text();
+    let total = 0;
+    // لو master playlist، خد أول variant
+    if(text.includes('#EXT-X-STREAM-INF')){
+      const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+      let variant = '';
+      for(let i=0;i<lines.length;i++){
+        if(lines[i].startsWith('#EXT-X-STREAM-INF')){
+          for(let j=i+1;j<lines.length;j++){
+            if(lines[j] && lines[j][0] !== '#'){ variant = lines[j]; break; }
+          }
+          break;
+        }
+      }
+      if(!variant) return 0;
+      let vUrl = variant;
+      try{ vUrl = new URL(variant, url).href; }catch(e){}
+      return durationFromM3u8(vUrl);
+    }
+    const re = /#EXTINF:([\d.]+)/g;
+    let m;
+    while((m = re.exec(text))){ total += parseFloat(m[1])||0; }
+    return total > 1 ? total : 0;
+  }catch(e){ return 0; }
+}
+
+async function probeOneDuration(v, i){
+  if(!v || resolveItemDuration(v) > 1) return;
+  try{
+    let playData = await getPlayCached(v.id);
+    if(!playData){
+      try{
+        playData = await api('/api/play/'+encodeURIComponent(v.id), {method:'POST'});
+        playCache.set(String(v.id), {data:playData, ts:Date.now()});
+      }catch(e){ return; }
+    }
+    if(!playData) return;
+    // مدة مباشرة من الرد
+    const direct = Number(playData.duration || playData.duration_seconds || playData.length || 0);
+    if(direct > 1){
+      v.duration = Math.floor(direct);
+      cacheDuration(v.id, v.duration);
+      updateDurationUI(i);
+      return;
+    }
+    // يوتيوب: مش هنقدر بسهولة من غير تحميل المشغل
+    if(playData.type === 'youtube' || playData.youtube_url) return;
+    // mp4
+    const mp4 = playData.mp4_url || (playData.type==='mp4' ? (playData.url||playData.play_url) : null);
+    if(mp4){
+      await new Promise(resolve=>{
+        const el = document.createElement('video');
+        el.preload = 'metadata';
+        el.muted = true;
+        const done = ()=>{ try{el.removeAttribute('src'); el.load();}catch(e){} resolve(); };
+        el.onloadedmetadata = ()=>{
+          const d = Number(el.duration)||0;
+          if(d > 1 && Number.isFinite(d)){
+            v.duration = Math.floor(d);
+            cacheDuration(v.id, v.duration);
+            updateDurationUI(i);
+          }
+          done();
+        };
+        el.onerror = done;
+        setTimeout(done, 8000);
+        el.src = mp4;
+      });
+      return;
+    }
+    // HLS playlist
+    let playUrl = playData.play_url || playData.url;
+    if(playUrl){
+      if(playUrl.startsWith('/')) playUrl = location.origin + playUrl;
+      const d = await durationFromM3u8(playUrl);
+      if(d > 1){
+        v.duration = Math.floor(d);
+        cacheDuration(v.id, v.duration);
+        updateDurationUI(i);
+      }
+    }
+  }catch(e){}
+}
+
+async function probeAllDurations(){
+  // بالتتابع عشان ما نضغطش على السيرفر
+  for(let i=0;i<videos.length;i++){
+    if(resolveItemDuration(videos[i]) > 1) continue;
+    await probeOneDuration(videos[i], i);
+    // حدّث شريط الوقت الإجمالي كل شوية
+    if(i % 3 === 2) renderStats();
+  }
+  renderList();
+  renderDrawer();
+  renderStats();
+}
+
 /* ── INIT ── */
 async function init(){
   if(!lectureId){
@@ -1785,6 +1940,10 @@ async function init(){
 
   try{
     setLoading(true,'جاري تحميل بيانات المحاضرة…');
+    // اعرض المسار من الرابط فوراً قبل رد السيرفر
+    if(qLectureName) lectureTitle = qLectureName;
+    updateBreadcrumb(qLectureName || 'المحاضرة');
+    if(qLectureName){ try{$('pageTitle').textContent=qLectureName}catch(e){} }
 
     // نفس منطق البلاير القديم الشغّال: المسار الصحيح /content فقط
     const r=await api('/api/lectures/'+encodeURIComponent(lectureId)+'/content');
@@ -1811,11 +1970,11 @@ async function init(){
     }).filter(v=>v.id!==undefined&&v.id!==null&&String(v.id)!=='');
 
     const lectureName=(d.lecture&&(d.lecture.name||d.lecture.title))||d.lecture_name||d.name||d.title||'المحاضرة';
-    lectureTitle=lectureName;
+    lectureTitle=lectureName || qLectureName || 'المحاضرة';
 
     try{$('pageTitle').textContent=lectureTitle}catch(e){}
-    try{$('crumb').textContent=lectureTitle}catch(e){}
     try{$('lectureName').textContent=lectureTitle}catch(e){}
+    updateBreadcrumb(lectureTitle);
 
     if(!videos.length && initialVideoId){
       videos=[{id:initialVideoId,title:'فيديو المحاضرة',thumbnail:'',duration:0}];
@@ -1839,6 +1998,8 @@ async function init(){
     let idx=videos.findIndex(v=>String(v.id)===String(initialVideoId));
     if(idx<0) idx=videos.findIndex(v=>{const p=readProgress(v.id);return p&&!p.watched&&(+p.currentTime||0)>0});
     if(idx<0) idx=0;
+    // ابدأ قراءة المدد في الخلفية بدون ما نستنى
+    probeAllDurations();
     await playIndex(idx,false);
   }catch(err){
     setLoading(false);
@@ -1850,12 +2011,13 @@ async function init(){
     if(initialVideoId){
       try{
         videos=[{id:initialVideoId,title:'فيديو المحاضرة',thumbnail:'',duration:0}];
-        lectureTitle='المحاضرة';
+        lectureTitle=qLectureName||'المحاضرة';
         try{$('pageTitle').textContent=lectureTitle}catch(e){}
-        try{$('crumb').textContent=lectureTitle}catch(e){}
         try{$('lectureName').textContent=lectureTitle}catch(e){}
+        updateBreadcrumb(lectureTitle);
         renderStats();
         renderList();
+        probeAllDurations();
         await playIndex(0,false);
         return;
       }catch(e2){}
