@@ -105,8 +105,6 @@ button{cursor:pointer}
 .card:hover{transform:translateY(-8px);border-color:color-mix(in srgb,var(--c1) 45%,transparent);box-shadow:0 22px 44px color-mix(in srgb,var(--c1) 22%,transparent)}
 .card:hover .card-img img{transform:scale(1.07)}
 @keyframes rise{from{opacity:0;transform:translateY(22px) scale(.97)}to{opacity:1;transform:none}}
-.side-progress-bar{position:absolute;top:0;bottom:0;left:0;width:6px;background:rgba(128,128,160,.12);z-index:10}
-.side-progress-bar .fill{position:absolute;top:0;left:0;width:100%;height:0%;background:linear-gradient(180deg,#10b981,#34d399,#6ee7b7);box-shadow:0 0 15px #34d399;transition:height .5s ease-in-out}
 .card-img{position:relative;width:100%;aspect-ratio:16/10;overflow:hidden;background:linear-gradient(135deg,var(--c1),var(--c2));display:grid;place-items:center}
 .card-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 80%;transition:transform .5s ease}
 .card-img .ph{color:rgba(255,255,255,.9)}
@@ -158,6 +156,34 @@ button{cursor:pointer}
   *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
   .go .hl::before{transform:scaleX(1) rotate(-1.4deg)}
 }
+</style>
+<style id="v3">
+html[data-theme]{--blue:#6c63ff;--blue2:#00d4ff;--mark:linear-gradient(100deg,rgba(108,99,255,.20),rgba(0,212,255,.34))}
+html[data-theme="dark"]{--blue:#7c74ff;--blue2:#22d3ee;--mark:linear-gradient(100deg,rgba(124,116,255,.45),rgba(34,211,238,.38))}
+.app-nav{padding-top:env(safe-area-inset-top,0px)}
+.hl::after{content:"";position:absolute;left:-.05em;right:-.05em;bottom:.04em;height:.12em;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--blue2));transform-origin:right center;transform:scaleX(0)}
+.go .hl::after{animation:ul .6s cubic-bezier(.65,0,.3,1) 1.05s forwards}
+@keyframes ul{to{transform:scaleX(1)}}
+.stat.days,.stat.courses,.stat.subj{--accent:var(--blue)}
+.stat::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 35%,var(--blue2)))}
+.stat.subj .ico-box{background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 10px 24px color-mix(in srgb,var(--blue) 30%,transparent)}
+.card{cursor:pointer;-webkit-touch-callout:none}
+.card:active{transform:scale(.985)}
+.card.opening{transform:scale(.98);opacity:.92}
+body.leaving main{opacity:0;transform:translateY(-8px);transition:opacity .26s,transform .26s}
+.card-img,.card-img *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.card-img img{pointer-events:none;-webkit-user-drag:none}
+.card-img::before{content:"";position:absolute;inset:0;z-index:1;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);pointer-events:none}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;min-height:28px}
+.chip-mini{display:inline-flex;align-items:center;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:800;color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent)}
+.action-btn.is-loading{pointer-events:none}
+.action-btn.is-loading svg{display:none}
+.action-btn.is-loading::after{content:"";width:16px;height:16px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.foot{text-align:center;color:var(--muted);font-weight:700;font-size:13px;padding:0 16px calc(28px + env(safe-area-inset-bottom,0px))}
+.foot b{color:var(--blue)}
+.to-top{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 10px 24px color-mix(in srgb,var(--blue) 35%,transparent);opacity:0;visibility:hidden;transform:translateY(10px);transition:.25s;z-index:30}
+.to-top.show{opacity:1;visibility:visible;transform:none}
 </style>
 </head>
 <body>
@@ -237,6 +263,8 @@ button{cursor:pointer}
     <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line t"></div><div class="sk-line s"></div><div class="sk-line b"></div></div></div>
   </div>
 </main>
+<footer class="foot">ثانوية <b>club</b> · مستقبلك الدراسي في مكان واحد</footer>
+<button type="button" class="to-top" id="to-top" aria-label="للأعلى"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 14 6-6 6 6"/></svg></button>
 
 <script>
 (function(){
@@ -287,78 +315,91 @@ function setGreeting(name){
 function startMarker(){ document.body.classList.add('go'); }
 
 /* الأيام المتبقية: بنقرأها من بيانات البروفايل اللي راجعة من السيرفر */
+const H = 36e5, D = 864e5;
+const STD = [3, 7, 15, 30, 45, 60, 90, 120, 180, 365];
+
+/* الوقت المتبقي: السيرفر بيرجّع expiresAt (مللي ثانية) في /api/auth/me */
 function findDays(me){
   if (!me) return null;
   const srcs = [me, me.subscription, me.sub, me.student, me.user].filter(Boolean);
   const numKeys = ['days_left','daysLeft','remaining_days','remainingDays','days_remaining','daysRemaining'];
-  const dateKeys = ['subscription_end','subscriptionEnd','subscription_ends_at','subscription_expires_at','expires_at','expiresAt','expiry_date','expiry','end_date','endDate','expires'];
-  const startKeys = ['subscription_start','subscription_started_at','start_date','startDate','created_at'];
+  const dateKeys = ['expiresAt','expires_at','subscription_end','subscriptionEnd','subscription_ends_at','subscription_expires_at','expiry_date','expiry','end_date','endDate','expires'];
   for (const s of srcs){
-    for (const k of numKeys){ if (s[k] != null && s[k] !== '' && !isNaN(+s[k])) return { days: Math.max(0, Math.round(+s[k])) }; }
+    for (const k of numKeys){ if (s[k] != null && s[k] !== '' && !isNaN(+s[k])) return { ms: Math.max(0, +s[k]) * D }; }
     for (const k of dateKeys){
       if (!s[k]) continue;
-      const end = new Date(s[k]);
-      if (isNaN(end)) continue;
-      const days = Math.max(0, Math.ceil((end - Date.now()) / 864e5));
-      let total = null;
-      for (const sk of startKeys){ if (s[sk]) { const st = new Date(s[sk]); if (!isNaN(st) && end > st) { total = Math.ceil((end - st) / 864e5); break; } } }
-      return { days, total };
+      const v = /^\d{10,}$/.test(String(s[k])) ? +s[k] : s[k];
+      const end = new Date(v);
+      if (!isNaN(end)) return { ms: Math.max(0, end - Date.now()) };
     }
   }
   return null;
 }
 
 function renderDays(info){
-  const box = $('days-box'), num = $('days-num'), chip = $('days-chip'), fg = $('ring-fg'), unit = $('days-unit');
+  const box = $('days-box'), num = $('days-num'), chip = $('days-chip'), fg = $('ring-fg'), unit = $('days-unit'), lbl = box.querySelector('.lbl');
   box.classList.remove('warn','danger');
   if (!info){
     num.textContent = '∞'; unit.textContent = ''; chip.textContent = 'اشتراك مفتوح';
     fg.style.strokeDashoffset = 0; return;
   }
-  const d = info.days;
-  unit.textContent = d === 1 ? 'يوم' : (d >= 3 && d <= 10 ? 'أيام' : 'يوم');
-  countUp(num, d);
-  if (d <= 7){ box.classList.add('danger'); chip.textContent = d === 0 ? 'اشتراكك خلص — جدّده' : 'قرّب ينتهي — جدّد دلوقتي'; }
-  else if (d <= 30){ box.classList.add('warn'); chip.textContent = 'باقي أقل من شهر'; }
-  else { chip.textContent = 'اشتراكك شغال تمام'; }
-  const base = info.total || Math.max(90, d);
-  const ratio = Math.min(d / base, 1);
+  const ms = info.ms, inHours = ms < D;
+  const val = inHours ? (ms > 0 ? Math.max(1, Math.ceil(ms / H)) : 0) : Math.ceil(ms / D);
+  lbl.textContent = inHours ? 'الساعات المتبقية في اشتراكك' : 'الأيام المتبقية في اشتراكك';
+  const many = val >= 3 && val <= 10;
+  unit.textContent = inHours ? (many ? 'ساعات' : 'ساعة') : (many ? 'أيام' : 'يوم');
+  countUp(num, val);
+  const days = ms / D;
+  if (ms <= 0){ box.classList.add('danger'); chip.textContent = 'اشتراكك خلص — جدّده'; }
+  else if (days <= 7){ box.classList.add('danger'); chip.textContent = 'قرّب ينتهي — جدّد دلوقتي'; }
+  else if (days <= 30){ box.classList.add('warn'); chip.textContent = 'باقي أقل من شهر'; }
+  else chip.textContent = 'اشتراكك شغال تمام';
+  const base = inHours ? 24 : (STD.find(x => x >= val) || val || 1);
+  const ratio = Math.min(1, val / base);
   requestAnimationFrame(() => { fg.style.strokeDashoffset = 176 * (1 - ratio); });
-  try { localStorage.setItem('student_days', String(d)); } catch(e){}
+  try { localStorage.setItem('student_days', String(val)); } catch(e){}
 }
 
-const CHAPTER_GLOBAL = ['/api/chapters'];
-const CHAPTER_PER_SUBJECT = [id => '/api/chapters/' + id, id => '/api/subjects/' + id + '/chapters', id => '/api/chapters?subjectId=' + id];
-const toArr = d => Array.isArray(d) ? d : (d && Array.isArray(d.chapters) ? d.chapters : (d && Array.isArray(d.items) ? d.items : null));
-
-async function loadChaptersCount(list){
-  /* 1) لو المادة نفسها راجعة بعدد الفصول */
-  let sum = 0, any = false;
-  list.forEach(s => {
-    const v = s.chapters_count != null ? s.chapters_count : (s.chapter_count != null ? s.chapter_count : (s.chaptersCount != null ? s.chaptersCount : (Array.isArray(s.chapters) ? s.chapters.length : null)));
-    if (v != null && !isNaN(+v)) { sum += +v; any = true; }
-  });
-  if (any) return sum;
-  /* 2) ملف الفصول كله في طلب واحد */
-  for (const url of CHAPTER_GLOBAL){
-    try {
-      const arr = toArr(await api(url));
-      if (!arr) continue;
-      const ids = new Set(list.map(s => String(s.id)));
-      const hasSub = arr.some(c => c.subject_id != null || c.subjectId != null);
-      return hasSub ? arr.filter(c => ids.has(String(c.subject_id != null ? c.subject_id : c.subjectId))).length : arr.length;
-    } catch(e){}
-  }
-  /* 3) طلب لكل مادة (بنجرّب أول مادة عشان نعرف الرابط الصح) */
-  for (const mk of CHAPTER_PER_SUBJECT){
-    try {
-      const first = toArr(await api(mk(list[0].id)));
-      if (!first) continue;
-      const rest = await Promise.allSettled(list.slice(1).map(s => api(mk(s.id))));
-      return first.length + rest.reduce((n, r) => n + (r.status === 'fulfilled' && toArr(r.value) ? toArr(r.value).length : 0), 0);
-    } catch(e){}
+/* عدد الفصول: من /api/subjects/:id/teachers (بيرجّع عدد الفصول لكل مدرس في كل المصادر) */
+const subjMeta = new Map();
+const countOf = th => {
+  for (const k of ['chapter_count','chapters_count','count']){
+    if (th && th[k] != null && th[k] !== '' && !isNaN(+th[k])) return +th[k];
   }
   return null;
+};
+async function pool(items, n, fn){
+  const out = []; let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length){ const idx = i++; out[idx] = await fn(items[idx]).catch(() => null); }
+  }));
+  return out;
+}
+async function fetchTeachers(s){
+  const t = await api('/api/subjects/' + encodeURIComponent(s.id) + '/teachers');
+  return Array.isArray(t) ? t : ((t && Array.isArray(t.teachers)) ? t.teachers : []);
+}
+async function loadCounts(list){
+  const rows = await pool(list, 3, async s => {
+    if (+s.chapters_count > 0 && s.teachers_count != null) return { id: s.id, teachers: +s.teachers_count, chapters: +s.chapters_count };
+    const teachers = await fetchTeachers(s);
+    let chapters = 0; const unknown = [];
+    teachers.forEach(th => { const c = countOf(th); if (c == null) unknown.push(th); else chapters += c; });
+    if (unknown.length){
+      const extra = await pool(unknown, 3, th => api('/api/teachers/' + encodeURIComponent(th.id) + '/chapters'));
+      extra.forEach(a => { if (Array.isArray(a)) chapters += a.length; });
+    }
+    return { id: s.id, teachers: teachers.length, chapters };
+  });
+  return rows.filter(Boolean);
+}
+function metaHtml(id){
+  const m = subjMeta.get(String(id));
+  if (!m) return '<span class="chip-mini">مادة دراسية</span>';
+  return '<span class="chip-mini">' + m.teachers + ' مدرس</span><span class="chip-mini">' + m.chapters + ' فصل</span>';
+}
+function applyMeta(){
+  document.querySelectorAll('.card[data-id] .meta').forEach(el => { el.innerHTML = metaHtml(el.closest('.card').dataset.id); });
 }
 
 function renderCourses(list){
@@ -367,11 +408,14 @@ function renderCourses(list){
   const num = $('courses-num'), chip = $('courses-chip');
   num.parentElement.classList.add('loading'); chip.textContent = 'بنحسب الفصول...';
   if (!list.length){ num.textContent = '0'; num.parentElement.classList.remove('loading'); chip.textContent = '—'; return; }
-  loadChaptersCount(list).then(n => {
+  loadCounts(list).then(rows => {
     num.parentElement.classList.remove('loading');
-    if (n == null){ num.textContent = '—'; chip.textContent = 'تعذّر قراءة الفصول'; return; }
-    countUp(num, n);
-    chip.textContent = n === 1 ? 'فصل واحد' : 'موزّعة على ' + list.length + ' مادة';
+    if (!rows.length){ num.textContent = '—'; chip.textContent = 'تعذّر قراءة الفصول'; return; }
+    rows.forEach(r => subjMeta.set(String(r.id), r));
+    applyMeta();
+    const tot = rows.reduce((a, r) => a + r.chapters, 0), tt = rows.reduce((a, r) => a + r.teachers, 0);
+    countUp(num, tot);
+    chip.textContent = tot ? ('مع ' + tt + ' مدرس') : 'مفيش فصول لسه';
   });
 }
 
@@ -391,42 +435,52 @@ addEventListener('keydown', e => {
   if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName) && $('search-wrap').style.display !== 'none'){ e.preventDefault(); $('search').focus(); }
 });
 
-const PALETTE = [['#6c63ff','#00d4ff'],['#8b5cf6','#ec4899'],['#10b981','#06b6d4'],['#f59e0b','#ef4444'],['#3b82f6','#8b5cf6'],['#14b8a6','#84cc16']];
-
 function renderSubjects(list){
   const grid = $('subjects-grid');
-  if (!list.length){
-    grid.innerHTML = '<div class="state">مفيش مواد مطابقة. جرّب كلمة تانية.</div>'; return;
-  }
-  grid.innerHTML = list.map((s, i) => {
-    const [c1, c2] = PALETTE[i % PALETTE.length];
-    const prog = Math.max(0, Math.min(100, +s.progress || 0));
-    return `
-    <div class="card" id="card-${esc(s.id)}" style="--i:${i};--c1:${c1};--c2:${c2}">
-      <div class="side-progress-bar"><div class="fill" style="height:${prog}%"></div></div>
+  if (!list.length){ grid.innerHTML = '<div class="state">مفيش مواد مطابقة. جرّب كلمة تانية.</div>'; return; }
+  grid.innerHTML = list.map((s, i) => `
+    <div class="card" id="card-${esc(s.id)}" data-id="${esc(s.id)}" data-name="${esc(s.name)}" style="--i:${i}">
       <div class="card-img">
         <div class="ph"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-        ${s.image_url ? `<img src="${esc(s.image_url)}" alt="${esc(s.name)}" loading="lazy" onerror="this.remove()">` : ''}
+        ${s.image_url ? `<img src="${esc(s.image_url)}" alt="" draggable="false" loading="lazy" decoding="async" onerror="this.remove()">` : ''}
       </div>
       <div class="card-body">
         <h3>${esc(s.name)}</h3>
-        <div class="sub">مادة دراسية</div>
-        <button class="action-btn" data-id="${esc(s.id)}" data-name="${esc(s.name)}">عرض المدرسين<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        <div class="meta">${metaHtml(s.id)}</div>
+        <button class="action-btn" type="button"><span>عرض المدرسين</span><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
       </div>
-    </div>`;
-  }).join('');
+    </div>`).join('');
 }
 
+let navigating = false;
 $('subjects-grid').addEventListener('click', e => {
-  const btn = e.target.closest('.action-btn');
-  if (!btn) return;
-  const card = btn.closest('.card');
-  const fill = card.querySelector('.side-progress-bar .fill');
-  if (fill) fill.style.height = '100%';
-  try { localStorage.setItem('last_subject', JSON.stringify({ id: btn.dataset.id, name: btn.dataset.name })); } catch(e){}
-  const url = 'teachers.html?subjectId=' + encodeURIComponent(btn.dataset.id) + '&subjectName=' + encodeURIComponent(btn.dataset.name);
-  setTimeout(() => { location.href = url; }, 400);
+  const card = e.target.closest('.card[data-id]');
+  if (!card || navigating) return;
+  navigating = true;
+  const id = card.dataset.id, name = card.dataset.name;
+  try { localStorage.setItem('last_subject', JSON.stringify({ id, name })); } catch(_){}
+  card.classList.add('opening');
+  const b = card.querySelector('.action-btn');
+  b.classList.add('is-loading'); b.querySelector('span').textContent = 'جاري الفتح...';
+  document.body.classList.add('leaving');
+  setTimeout(() => { location.href = 'teachers.html?subjectId=' + encodeURIComponent(id) + '&subjectName=' + encodeURIComponent(name); }, 260);
 });
+/* لو رجع بزرار الرجوع (bfcache) نرجّع الكروت لحالتها الطبيعية */
+addEventListener('pageshow', () => {
+  navigating = false; document.body.classList.remove('leaving');
+  document.querySelectorAll('.card.opening').forEach(c => {
+    c.classList.remove('opening');
+    const b = c.querySelector('.action-btn');
+    if (b){ b.classList.remove('is-loading'); b.querySelector('span').textContent = 'عرض المدرسين'; }
+  });
+});
+/* صور المواد: منع قائمة الضغط المطوّل والسحب */
+document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.card-img')) e.preventDefault(); });
+document.addEventListener('dragstart', e => { if (e.target && e.target.tagName === 'IMG') e.preventDefault(); });
+
+const toTop = $('to-top');
+addEventListener('scroll', () => toTop.classList.toggle('show', scrollY > 500), { passive: true });
+toTop.addEventListener('click', () => scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' }));
 
 $('search').addEventListener('input', e => {
   const q = e.target.value.trim().toLowerCase();
@@ -477,6 +531,7 @@ async function init(){
     setGreeting('يا بطل');
     $('greeting').innerHTML = '<span class="hl">أهلاً بك يا بطل</span>';
   }
+  if (me && me.greeting) $('time-greet').textContent = me.greeting + (/صباح/.test(me.greeting) ? ' ☀️' : ' 🌙');
   renderDays(findDays(me));
 
   if (subjectsRes.status === 'rejected'){ showError(subjectsRes.reason.message); hideSplash(); return; }
