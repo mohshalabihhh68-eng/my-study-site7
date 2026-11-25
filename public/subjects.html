@@ -17,176 +17,407 @@
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.12);--line-soft:rgba(255,255,255,.05);--blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(7,11,20,.88);--bg-pattern:radial-gradient(circle at top right,rgba(59,130,246,.05),transparent 40%)}
-[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);--line-soft:rgba(108,99,255,.05);--blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;--green:#10b981;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(255,255,255,.88);--bg-pattern:radial-gradient(circle at top right,rgba(108,99,255,.05),transparent 40%)}
+:root, [data-theme="dark"]{--bg:#070b14;--card:#121a2b;--card-hover:#182338;--card-inner:#0d1424;--ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.14);--blue:#3b82f6;--blue2:#60a5fa;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(7,11,20,.85);--bg-pattern:radial-gradient(circle at top right,rgba(59,130,246,.10),transparent 45%),radial-gradient(circle at bottom left,rgba(139,92,246,.08),transparent 40%);--shadow:0 6px 22px rgba(0,0,0,.35);--mark:rgba(250,204,21,.38)}
+[data-theme="light"]{--bg:#f8fafc;--card:#ffffff;--card-hover:#f1f5f9;--card-inner:#eef2f8;--ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.12);--blue:#6c63ff;--blue2:#00d4ff;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--nav-bg:rgba(255,255,255,.88);--bg-pattern:radial-gradient(circle at top right,rgba(108,99,255,.09),transparent 45%),radial-gradient(circle at bottom left,rgba(0,212,255,.07),transparent 40%);--shadow:0 6px 22px rgba(108,99,255,.08);--mark:rgba(255,214,10,.6)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);background-image:var(--bg-pattern);color:var(--ink);font-family:Cairo,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
-button{font:inherit;cursor:pointer;outline:none;border:none}
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out}
-#scroll-progress-side{position:fixed;top:0;right:0;width:4px;background:linear-gradient(180deg,#6c63ff,#00d4ff);height:0%;z-index:9999;transition:height .1s ease-out;border-radius:0 0 0 4px}
-@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
-@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);border-bottom:1px solid var(--line);transition:background .35s}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);background-image:var(--bg-pattern);background-attachment:fixed;color:var(--ink);font-family:Cairo,system-ui,sans-serif;min-height:100vh;transition:background-color .35s,color .35s}
+button,input{font:inherit;outline:none;border:none}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--blue2);outline-offset:2px}
+
+/* ===== Splash ===== */
+#splash{position:fixed;inset:0;z-index:10000;background:var(--bg);display:grid;place-items:center;transition:opacity .55s ease,visibility .55s}
+#splash.hide{opacity:0;visibility:hidden}
+.splash-in{text-align:center}
+.splash-logo{width:84px;height:84px;margin:0 auto 18px;border-radius:26px;display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 14px 44px rgba(108,99,255,.45);animation:float 1.6s ease-in-out infinite}
+.splash-logo svg{width:46px;height:46px;fill:none;stroke:currentColor;stroke-width:1.7}
+.splash-name{font-size:24px;font-weight:900}
+.splash-name b{color:var(--blue)}
+.splash-bar{width:190px;height:5px;border-radius:9px;background:var(--card-inner);margin:18px auto 0;overflow:hidden}
+.splash-bar i{display:block;height:100%;width:40%;border-radius:9px;background:linear-gradient(90deg,#6c63ff,#00d4ff);animation:slide 1.1s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px)}}
+@keyframes slide{0%{transform:translateX(250%)}100%{transform:translateX(-250%)}}
+
+/* ===== Scroll progress ===== */
+#scroll-progress{position:fixed;top:0;right:0;height:3px;background:linear-gradient(270deg,#6c63ff,#00d4ff);width:0%;z-index:9999;transition:width .1s ease-out}
+
+/* ===== Nav ===== */
+.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
 .app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
-.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:white}
+.brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,#6c63ff,#00d4ff);box-shadow:0 8px 26px rgba(108,99,255,.35);color:#fff}
 .brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
-.profile-wrap{position:relative}
-.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 16px 6px 6px;cursor:pointer;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
+.profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 6px 6px 16px;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
+.profile-btn:hover{border-color:var(--blue)}
 .profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
-.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0}
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;padding:0}
 .theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
 .theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
 [data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
-.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 90px}
-.page-head{margin-bottom:20px}
-.page-head .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.10);color:var(--blue);border:1px solid rgba(108,99,255,.2);border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;margin-bottom:10px}
-.greeting{margin:0;font-size:24px;font-weight:900;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--ink)}
-.name-span{font-size: 26px;font-weight: 900;background: linear-gradient(to right, #00d4ff, #3b82f6, #1e3a8a);-webkit-background-clip: text;background-clip: text;-webkit-text-fill-color: transparent;color: transparent;display: inline-block;}
-[data-theme="dark"] .name-span {background: linear-gradient(to right, #00d4ff, #60a5fa, #3b82f6);-webkit-background-clip: text;background-clip: text;-webkit-text-fill-color: transparent;color: transparent;}
-.page-head p{margin:12px 0 0;color:var(--ink);font-size:18px;font-weight:800;display:flex;align-items:center;gap:10px}
-.page-head h1 .count{font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:4px 14px;border-radius:99px;font-weight:900}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:24px;margin-top:24px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease;animation:fadeUp .45s ease both;position:relative;display:flex;flex-direction:column;box-shadow:0 4px 15px rgba(108,99,255,.05)}
-.card:hover{transform:translateY(-8px);border-color:rgba(108,99,255,.35);box-shadow:0 20px 40px rgba(108,99,255,.15)}
-.side-progress-bar{position:absolute;top:0;bottom:0;left:0;width:6px;background:rgba(0,0,0,.05);z-index:10;border-radius:0 0 0 24px}
-.side-progress-bar .fill{position:absolute;top:0;left:0;width:100%;height:0%;background:linear-gradient(180deg,#10b981,#34d399,#6ee7b7);box-shadow:0 0 15px #34d399;transition:height 0.5s ease-in-out;border-radius:0 0 0 24px}
-.card-img{width:100%;aspect-ratio:16/10;background:var(--card-inner);display:flex;align-items:flex-end;justify-content:center;overflow:hidden;position:relative;pointer-events:none}
-.card-img img{width:100%;height:100%;object-fit:cover;object-position:center 80%;transition:transform .4s ease}
-.card-img .ph{position:absolute;inset:0;display:none;place-items:center;background:var(--card-inner);color:var(--blue)}
-.card-body{padding:20px;display:flex;flex-direction:column;flex:1;background:var(--card)}
-.card-body h3{margin:0;font-size:20px;font-weight:900;margin-bottom:4px;color:var(--ink)}
-.card-body .sub{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:20px}
-.action-btn{width:100%;padding:12px;border-radius:14px;font-weight:800;font-size:14px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:auto;box-shadow:0 4px 12px rgba(108,99,255,.2)}
-.action-btn svg{width:16px;height:16px;fill:currentColor}
+
+/* ===== Hero ===== */
+.wrap{max-width:1120px;margin:0 auto;padding:28px 16px 90px}
+.hello-sub{margin:0 0 6px;color:var(--muted);font-weight:700;font-size:14px}
+.greeting{margin:0;font-size:clamp(26px,5vw,40px);font-weight:900;line-height:1.7;min-height:1.7em}
+.hl{position:relative;display:inline-block;padding:0 .3em;z-index:0;white-space:nowrap}
+.hl::before{content:"";position:absolute;inset:.5em -.15em .05em -.15em;z-index:-1;background:var(--mark);border-radius:.25em .9em .35em 1em;transform-origin:right center;transform:scaleX(0) rotate(-1.4deg)}
+.pen{position:absolute;top:-.1em;right:0;font-size:.6em;line-height:1;opacity:0;pointer-events:none;transform:translateX(50%) rotate(-25deg)}
+.go .hl::before{animation:mark 1.15s cubic-bezier(.65,0,.3,1) .25s forwards}
+.go .pen{animation:pen 1.15s cubic-bezier(.65,0,.3,1) .25s forwards}
+@keyframes mark{to{transform:scaleX(1) rotate(-1.4deg)}}
+@keyframes pen{0%{right:0;opacity:1}88%{opacity:1}100%{right:100%;opacity:0}}
+.tagline{margin:6px 0 0;color:var(--muted);font-weight:600;font-size:15px}
+
+/* ===== Stats ===== */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:26px}
+.stat{position:relative;display:flex;align-items:center;gap:16px;padding:20px;border-radius:24px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
+.stat::after{content:"";position:absolute;width:150px;height:150px;left:-50px;top:-60px;border-radius:50%;background:var(--accent,var(--blue));opacity:.10;filter:blur(6px)}
+.stat.days{--accent:var(--green)}
+.stat.days.warn{--accent:var(--amber)}
+.stat.days.danger{--accent:var(--red)}
+.stat.courses{--accent:var(--blue)}
+.ring{position:relative;width:72px;height:72px;flex:none}
+.ring svg{width:100%;height:100%;transform:rotate(90deg) scaleX(-1)}
+.ring circle{fill:none;stroke-width:7;stroke-linecap:round}
+.ring .bg{stroke:var(--card-inner)}
+.ring .fg{stroke:var(--accent);stroke-dasharray:176;stroke-dashoffset:176;transition:stroke-dashoffset 1.4s cubic-bezier(.3,.8,.3,1) .3s}
+.ring .ico{position:absolute;inset:0;display:grid;place-items:center;color:var(--accent)}
+.ring .ico svg{width:28px;height:28px;transform:none;fill:none;stroke:currentColor;stroke-width:1.9}
+.stat .num{font-size:34px;font-weight:900;line-height:1.1;color:var(--ink)}
+.stat .num small{font-size:15px;font-weight:800;color:var(--muted);margin-right:6px}
+.stat .lbl{font-size:13px;font-weight:700;color:var(--muted);margin-top:2px}
+.chip{display:inline-block;margin-top:8px;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:800;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.stat .ico-box{width:72px;height:72px;flex:none;border-radius:22px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 10px 24px rgba(108,99,255,.3)}
+.stat .ico-box svg{width:34px;height:34px;fill:none;stroke:currentColor;stroke-width:1.8}
+
+/* ===== Section head + search ===== */
+.sec-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:34px}
+.sec-head h2{margin:0;font-size:20px;font-weight:900;display:flex;align-items:center;gap:10px}
+.count{font-size:13px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:3px 13px;border-radius:99px;font-weight:900}
+.search{position:relative;flex:1;max-width:340px;min-width:200px}
+.search input{width:100%;padding:12px 44px 12px 14px;border-radius:14px;background:var(--card);border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:14px;transition:border-color .2s,box-shadow .2s}
+.search input:focus{border-color:var(--blue);box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 15%,transparent)}
+.search svg{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2}
+
+/* ===== Cards ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:22px;margin-top:20px}
+.card{--c1:var(--blue);--c2:var(--blue2);position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden;box-shadow:var(--shadow);transition:transform .3s ease,border-color .3s,box-shadow .3s;animation:rise .5s ease both;animation-delay:calc(var(--i,0)*70ms)}
+.card:hover{transform:translateY(-8px);border-color:color-mix(in srgb,var(--c1) 45%,transparent);box-shadow:0 22px 44px color-mix(in srgb,var(--c1) 22%,transparent)}
+.card:hover .card-img img{transform:scale(1.07)}
+@keyframes rise{from{opacity:0;transform:translateY(22px) scale(.97)}to{opacity:1;transform:none}}
+.side-progress-bar{position:absolute;top:0;bottom:0;left:0;width:6px;background:rgba(128,128,160,.12);z-index:10}
+.side-progress-bar .fill{position:absolute;top:0;left:0;width:100%;height:0%;background:linear-gradient(180deg,#10b981,#34d399,#6ee7b7);box-shadow:0 0 15px #34d399;transition:height .5s ease-in-out}
+.card-img{position:relative;width:100%;aspect-ratio:16/10;overflow:hidden;background:linear-gradient(135deg,var(--c1),var(--c2));display:grid;place-items:center}
+.card-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 80%;transition:transform .5s ease}
+.card-img .ph{color:rgba(255,255,255,.9)}
+.card-img .ph svg{width:56px;height:56px;fill:none;stroke:currentColor;stroke-width:1.5}
+.card-img::after{content:"";position:absolute;inset:auto 0 0 0;height:45%;background:linear-gradient(to top,rgba(0,0,0,.28),transparent);pointer-events:none}
+.card-body{padding:18px 20px 20px;display:flex;flex-direction:column;flex:1}
+.card-body h3{margin:0 0 4px;font-size:20px;font-weight:900}
+.card-body .sub{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:18px}
+.action-btn{width:100%;margin-top:auto;padding:12px;border-radius:14px;font-weight:800;font-size:14px;color:#fff;background:linear-gradient(135deg,var(--c1),var(--c2));display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 16px color-mix(in srgb,var(--c1) 30%,transparent);transition:gap .2s,filter .2s}
+.action-btn:hover{gap:14px;filter:brightness(1.07)}
+.action-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;transform:scaleX(-1)}
+
+/* ===== Skeleton & states ===== */
 .sk-card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden}
-.sk-img{width:100%;aspect-ratio:16/10;background:linear-gradient(90deg,var(--card-inner),var(--card-hover),var(--card-inner));background-size:800px 100%;animation:shimmer 1.5s infinite linear}
+.sk-img,.sk-line{background:linear-gradient(90deg,var(--card-inner),var(--card-hover),var(--card-inner));background-size:800px 100%;animation:shimmer 1.4s infinite linear}
+.sk-img{width:100%;aspect-ratio:16/10}
 .sk-body{padding:20px}
-.sk-line{height:14px;border-radius:6px;margin-bottom:10px;background:linear-gradient(90deg,var(--card-inner),var(--card-hover),var(--card-inner));background-size:800px 100%;animation:shimmer 1.5s infinite linear}
-.sk-line.title{width:70%;height:18px;margin-bottom:8px}
-.sk-line.sub{width:40%}
-.sk-line.btn{width:100%;height:40px;margin-top:16px;border-radius:14px}
-@media(max-width:700px){.grid{display:flex;flex-direction:column;gap:16px}.card{border-radius:20px;width:100%}.card-img{aspect-ratio:16/9}.card-body{padding:16px;align-items:center;text-align:center}.action-btn{width:100%;padding:14px}.brand small{display:none}#scroll-progress-side{width:3px}}
+.sk-line{height:14px;border-radius:6px;margin-bottom:10px}
+.sk-line.t{width:70%;height:18px}.sk-line.s{width:40%}.sk-line.b{width:100%;height:42px;margin-top:16px;border-radius:14px}
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.state{grid-column:1/-1;text-align:center;padding:48px 16px;color:var(--muted);font-weight:700}
+.state.err{color:var(--red)}
+.state button{margin-top:14px;padding:10px 22px;border-radius:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2))}
+
+@media(max-width:700px){
+  .app-nav-in{padding:10px 12px}.brand small{display:none}
+  .profile-btn #nav-name{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stats{gap:10px}.stat{flex-direction:column;align-items:flex-start;gap:12px;padding:16px;border-radius:20px}
+  .ring,.stat .ico-box{width:60px;height:60px}.stat .ico-box{border-radius:18px}.stat .num{font-size:28px}
+  .grid{grid-template-columns:1fr;gap:16px}.card{border-radius:20px}.card-img{aspect-ratio:16/9}
+  .search{max-width:none;min-width:100%}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
+  .go .hl::before{transform:scaleX(1) rotate(-1.4deg)}
+  .pen{display:none}
+}
 </style>
 </head>
 <body>
-<div id="scroll-progress"></div><div id="scroll-progress-side"></div>
+
+<div id="splash" role="status" aria-label="جاري التحميل">
+  <div class="splash-in">
+    <div class="splash-logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></div>
+    <div class="splash-name">ثانوية <b>club</b></div>
+    <div class="splash-bar"><i></i></div>
+  </div>
+</div>
+
+<div id="scroll-progress"></div>
+
 <header class="app-nav"><div class="app-nav-in">
   <div class="brand" onclick="window.location.href='index.html'">
     <span class="logo"><svg viewBox="0 0 24 24"><path d="m2 8 10-5 10 5-10 5L2 8Z"/><path d="M6 10v5c3.5 3 8.5 3 12 0v-5M22 8v6"/></svg></span>
     <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <div class="nav-right">
-    <div class="profile-wrap"><button type="button" class="profile-btn" onclick="window.location.href='profile.html'"><span class="av" id="nav-av">?</span><span id="nav-name">—</span></button></div>
-    <button type="button" class="theme-toggle" data-theme-toggle><svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+    <button type="button" class="profile-btn" onclick="window.location.href='profile.html'" aria-label="الملف الشخصي"><span class="av" id="nav-av">؟</span><span id="nav-name">—</span></button>
+    <button type="button" class="theme-toggle" data-theme-toggle aria-label="تغيير الثيم"><svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
   </div>
 </div></header>
+
 <main class="wrap" id="main">
-  <div class="page-head">
-    <div class="badge">المواد الدراسية</div>
-    <h1 class="greeting" id="greeting">جاري التحميل...</h1>
-    <p>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></p>
+  <p class="hello-sub" id="time-greet">&nbsp;</p>
+  <h1 class="greeting" id="greeting"></h1>
+  <p class="tagline" id="tagline">اختار مادتك وكمّل من وين وقفت.</p>
+
+  <section class="stats" aria-label="ملخص حسابك">
+    <div class="stat days" id="days-box">
+      <div class="ring">
+        <svg viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="28"/><circle class="fg" id="ring-fg" cx="32" cy="32" r="28"/></svg>
+        <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></div>
+      </div>
+      <div>
+        <div class="num"><span id="days-num">—</span><small id="days-unit"></small></div>
+        <div class="lbl">الأيام المتبقية في اشتراكك</div>
+        <span class="chip" id="days-chip">جاري التحميل</span>
+      </div>
+    </div>
+    <div class="stat courses" id="courses-box">
+      <div class="ico-box"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+      <div>
+        <div class="num"><span id="courses-num">—</span></div>
+        <div class="lbl">عدد الكورسات المتاحة</div>
+        <span class="chip" id="courses-chip">جاري التحميل</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="sec-head">
+    <h2>موادك المتاحة <span class="count" id="subject-count" style="display:none">0</span></h2>
+    <label class="search" id="search-wrap" style="display:none">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" id="search" placeholder="ابحث عن مادة..." aria-label="ابحث عن مادة" autocomplete="off">
+    </label>
   </div>
+
   <div class="grid" id="subjects-grid">
-    <!-- سكيلتون -->
-    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
-    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line title"></div><div class="sk-line sub"></div><div class="sk-line btn"></div></div></div>
+    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line t"></div><div class="sk-line s"></div><div class="sk-line b"></div></div></div>
+    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line t"></div><div class="sk-line s"></div><div class="sk-line b"></div></div></div>
+    <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line t"></div><div class="sk-line s"></div><div class="sk-line b"></div></div></div>
   </div>
 </main>
+
 <script>
 (function(){
 'use strict';
 const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(TOKEN_KEY);
 const $ = id => document.getElementById(id);
-const qs = new URLSearchParams(location.search);
-const subjectId = qs.get('subjectId') || '4';
+const subjectId = new URLSearchParams(location.search).get('subjectId') || '4';
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let allSubjects = [];
 
-// شريط التقدم
-const progressBar = $('scroll-progress');
-const progressBarSide = $('scroll-progress-side');
-window.addEventListener('scroll', () => {
-  const scrollTop = window.scrollY;
-  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-  const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
-  if (progressBar) progressBar.style.width = progress + '%';
-  if (progressBarSide) progressBarSide.style.height = progress + '%';
+/* شريط التقدم أثناء السكرول */
+const bar = $('scroll-progress');
+addEventListener('scroll', () => {
+  const h = document.documentElement.scrollHeight - innerHeight;
+  bar.style.width = (h > 0 ? scrollY / h * 100 : 0) + '%';
 }, { passive: true });
 
-const api = async (path, opts = {}) => {
-  const headers = { Accept: 'application/json', ...opts.headers };
-  if (token) headers['Authorization'] = 'Bearer ' + token;
-  const res = await fetch(API_BASE + path, { method: opts.method || 'GET', headers, body: opts.body });
-  if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); window.location.replace('login.html'); return; }
+const api = async (path) => {
+  const headers = { Accept: 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, { headers });
+  if (res.status === 401) { localStorage.removeItem(TOKEN_KEY); location.replace('login.html'); return; }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'خطأ');
+  if (!res.ok || data.success === false) throw new Error(data.message || data.error || 'حصل خطأ');
   return data.data;
 };
-const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+/* عدّاد متحرك للأرقام */
+function countUp(el, to){
+  if (reduce || to <= 0) { el.textContent = to; return; }
+  const t0 = performance.now(), dur = 900;
+  (function f(t){
+    const p = Math.min((t - t0) / dur, 1);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(f);
+  })(t0);
+}
+
+/* التحية + قلم التحديد */
 function setGreeting(name){
-  const hour = new Date().getHours();
-  let greet = "صباح الخير"; 
-  if (hour >= 18 || hour < 4) { greet = "مساء الخير"; }
-  $('greeting').innerHTML = `${greet} يا <span class="name-span">${esc(name)}</span>`;
+  const h = new Date().getHours();
+  $('time-greet').textContent = h >= 18 || h < 4 ? 'مساء الخير 🌙' : (h < 12 ? 'صباح الخير ☀️' : 'نهارك سعيد 🌤️');
+  $('greeting').innerHTML = '<span class="hl">أهلاً بك يا ' + esc(name) + '<span class="pen">🖍️</span></span>';
 }
+function startMarker(){ document.body.classList.add('go'); }
 
-window.goToTeachers = function(url, cardEl) {
-  const barFill = cardEl.querySelector('.side-progress-bar .fill');
-  if(barFill) barFill.style.height = '100%';
-  setTimeout(() => { window.location.href = url; }, 400); // سرعنا وقت النقل
-};
-
-async function init() {
-  // 1. نعرض اسم الطالب من الكاش فوراً عشان نحس بالسرعة
-  const cachedName = localStorage.getItem('student_name');
-  if (cachedName) setGreeting(cachedName);
-
-  try {
-    // 2. نطلب الداتا والبروفايل في نفس الوقت (السرعة القصوى)
-    const [subjects, me] = await Promise.all([
-      api('/api/subjects/' + subjectId),
-      cachedName ? Promise.resolve({name: cachedName}) : api('/api/auth/me').catch(()=>null)
-    ]);
-
-    // تحديث البروفايل
-    if (me && me.name) {
-      $('nav-name').textContent = me.name;
-      $('nav-av').textContent = me.name.charAt(0);
-      localStorage.setItem('student_name', me.name);
-      if(!cachedName) setGreeting(me.name);
+/* الأيام المتبقية: بنقرأها من بيانات البروفايل اللي راجعة من السيرفر */
+function findDays(me){
+  if (!me) return null;
+  const srcs = [me, me.subscription, me.sub, me.student, me.user].filter(Boolean);
+  const numKeys = ['days_left','daysLeft','remaining_days','remainingDays','days_remaining','daysRemaining'];
+  const dateKeys = ['subscription_end','subscriptionEnd','subscription_ends_at','subscription_expires_at','expires_at','expiresAt','expiry_date','expiry','end_date','endDate','expires'];
+  const startKeys = ['subscription_start','subscription_started_at','start_date','startDate','created_at'];
+  for (const s of srcs){
+    for (const k of numKeys){ if (s[k] != null && s[k] !== '' && !isNaN(+s[k])) return { days: Math.max(0, Math.round(+s[k])) }; }
+    for (const k of dateKeys){
+      if (!s[k]) continue;
+      const end = new Date(s[k]);
+      if (isNaN(end)) continue;
+      const days = Math.max(0, Math.ceil((end - Date.now()) / 864e5));
+      let total = null;
+      for (const sk of startKeys){ if (s[sk]) { const st = new Date(s[sk]); if (!isNaN(st) && end > st) { total = Math.ceil((end - st) / 864e5); break; } } }
+      return { days, total };
     }
-
-    // عرض المواد
-    if (!subjects || !subjects.length) { 
-      $('subjects-grid').innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">لا يوجد مواد متاحة.</div>`; 
-      return; 
-    }
-    
-    const countEl = $('subject-count');
-    countEl.textContent = subjects.length;
-    countEl.style.display = 'inline-block';
-    
-    $('subjects-grid').innerHTML = subjects.map(s => `
-      <div class="card" id="card-${s.id}">
-        <div class="side-progress-bar"><div class="fill"></div></div>
-        <div class="card-img">
-          ${s.image_url ? `<img src="${esc(s.image_url)}" alt="${esc(s.name)}" loading="lazy" onerror="this.style.display='none'">` : ''}
-          <div class="ph" style="display:${s.image_url?'none':'grid'}"><svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-        </div>
-        <div class="card-body">
-          <h3>${esc(s.name)}</h3>
-          <div class="sub">مادة دراسية</div>
-          <button class="action-btn" onclick="goToTeachers('teachers.html?subjectId=${s.id}&subjectName=${encodeURIComponent(s.name)}', document.getElementById('card-${s.id}'))">عرض المدرسين<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
-        </div>
-      </div>
-    `).join('');
-  } catch (e) {
-    $('subjects-grid').innerHTML = `<div style="text-align:center;color:var(--red);padding:40px">خطأ: ${esc(e.message)}</div>`;
   }
+  return null;
 }
-init();
+
+function renderDays(info){
+  const box = $('days-box'), num = $('days-num'), chip = $('days-chip'), fg = $('ring-fg'), unit = $('days-unit');
+  box.classList.remove('warn','danger');
+  if (!info){
+    num.textContent = '∞'; unit.textContent = ''; chip.textContent = 'اشتراك مفتوح';
+    fg.style.strokeDashoffset = 0; return;
+  }
+  const d = info.days;
+  unit.textContent = d === 1 ? 'يوم' : (d >= 3 && d <= 10 ? 'أيام' : 'يوم');
+  countUp(num, d);
+  if (d <= 7){ box.classList.add('danger'); chip.textContent = d === 0 ? 'اشتراكك خلص — جدّده' : 'قرّب ينتهي — جدّد دلوقتي'; }
+  else if (d <= 30){ box.classList.add('warn'); chip.textContent = 'باقي أقل من شهر'; }
+  else { chip.textContent = 'اشتراكك شغال تمام'; }
+  const base = info.total || Math.max(90, d);
+  const ratio = Math.min(d / base, 1);
+  requestAnimationFrame(() => { fg.style.strokeDashoffset = 176 * (1 - ratio); });
+  try { localStorage.setItem('student_days', String(d)); } catch(e){}
+}
+
+function renderCourses(list){
+  let total = 0, hasCount = false;
+  list.forEach(s => {
+    const c = s.courses_count != null ? s.courses_count : (s.courses != null ? (Array.isArray(s.courses) ? s.courses.length : s.courses) : null);
+    if (c != null && !isNaN(+c)) { total += +c; hasCount = true; }
+  });
+  if (!hasCount) total = list.length;
+  countUp($('courses-num'), total);
+  $('courses-chip').textContent = 'في ' + list.length + (list.length === 1 ? ' مادة' : (list.length <= 10 ? ' مواد' : ' مادة'));
+}
+
+const PALETTE = [['#6c63ff','#00d4ff'],['#8b5cf6','#ec4899'],['#10b981','#06b6d4'],['#f59e0b','#ef4444'],['#3b82f6','#8b5cf6'],['#14b8a6','#84cc16']];
+
+function renderSubjects(list){
+  const grid = $('subjects-grid');
+  if (!list.length){
+    grid.innerHTML = '<div class="state">مفيش مواد مطابقة. جرّب كلمة تانية.</div>'; return;
+  }
+  grid.innerHTML = list.map((s, i) => {
+    const [c1, c2] = PALETTE[i % PALETTE.length];
+    const prog = Math.max(0, Math.min(100, +s.progress || 0));
+    return `
+    <div class="card" id="card-${esc(s.id)}" style="--i:${i};--c1:${c1};--c2:${c2}">
+      <div class="side-progress-bar"><div class="fill" style="height:${prog}%"></div></div>
+      <div class="card-img">
+        <div class="ph"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+        ${s.image_url ? `<img src="${esc(s.image_url)}" alt="${esc(s.name)}" loading="lazy" onerror="this.remove()">` : ''}
+      </div>
+      <div class="card-body">
+        <h3>${esc(s.name)}</h3>
+        <div class="sub">مادة دراسية</div>
+        <button class="action-btn" data-id="${esc(s.id)}" data-name="${esc(s.name)}">عرض المدرسين<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('subjects-grid').addEventListener('click', e => {
+  const btn = e.target.closest('.action-btn');
+  if (!btn) return;
+  const card = btn.closest('.card');
+  const fill = card.querySelector('.side-progress-bar .fill');
+  if (fill) fill.style.height = '100%';
+  const url = 'teachers.html?subjectId=' + encodeURIComponent(btn.dataset.id) + '&subjectName=' + encodeURIComponent(btn.dataset.name);
+  setTimeout(() => { location.href = url; }, 400);
+});
+
+$('search').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  renderSubjects(q ? allSubjects.filter(s => String(s.name).toLowerCase().includes(q)) : allSubjects);
+});
+
+function hideSplash(){
+  const sp = $('splash');
+  sp.classList.add('hide');
+  setTimeout(() => sp.remove(), 700);
+  startMarker();
+}
+
+function showError(msg){
+  $('subjects-grid').innerHTML = `<div class="state err">حصل خطأ: ${esc(msg)}<br><button type="button" onclick="location.reload()">حاول تاني</button></div>`;
+  $('days-chip').textContent = '—'; $('courses-chip').textContent = '—';
+}
+
+async function init(){
+  const started = performance.now();
+  const cachedName = localStorage.getItem('student_name');
+  if (cachedName){
+    setGreeting(cachedName);
+    $('nav-name').textContent = cachedName;
+    $('nav-av').textContent = cachedName.charAt(0);
+  }
+  const cachedDays = localStorage.getItem('student_days');
+  if (cachedDays != null && !isNaN(+cachedDays)) $('days-num').textContent = cachedDays;
+
+  /* الطلبين بيشتغلوا مع بعض */
+  const [subjectsRes, meRes] = await Promise.allSettled([
+    api('/api/subjects/' + subjectId),
+    api('/api/auth/me')
+  ]);
+
+  /* خلّي الشاشة الافتتاحية ظاهرة نص ثانية على الأقل عشان متبانش وميضة */
+  const wait = Math.max(0, 700 - (performance.now() - started));
+  await new Promise(r => setTimeout(r, wait));
+
+  const me = meRes.status === 'fulfilled' ? meRes.value : null;
+  if (me && me.name){
+    $('nav-name').textContent = me.name;
+    $('nav-av').textContent = me.name.charAt(0);
+    try { localStorage.setItem('student_name', me.name); } catch(e){}
+    if (!cachedName) setGreeting(me.name);
+  } else if (!cachedName){
+    setGreeting('يا بطل');
+    $('greeting').innerHTML = '<span class="hl">أهلاً بك يا بطل<span class="pen">🖍️</span></span>';
+  }
+  renderDays(findDays(me));
+
+  if (subjectsRes.status === 'rejected'){ showError(subjectsRes.reason.message); hideSplash(); return; }
+  const subjects = subjectsRes.value || [];
+  allSubjects = subjects;
+  renderCourses(subjects);
+
+  const countEl = $('subject-count');
+  countEl.textContent = subjects.length;
+  countEl.style.display = 'inline-block';
+  if (!subjects.length){
+    $('subjects-grid').innerHTML = '<div class="state">لسه مفيش مواد متاحة ليك. هتظهر هنا أول ما تتفعّل.</div>';
+  } else {
+    $('search-wrap').style.display = subjects.length > 4 ? 'block' : 'none';
+    renderSubjects(subjects);
+  }
+  hideSplash();
+}
+
+init().catch(e => { showError(e.message); hideSplash(); });
+/* لو حصل أي تعليق في الشبكة منسيبش الشاشة الافتتاحية للأبد */
+setTimeout(() => { if ($('splash')) hideSplash(); }, 8000);
 })();
 </script>
 <script src="theme.js"></script>
