@@ -129,8 +129,8 @@ a{text-decoration:none}
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
 }
 
-.hnav{display:none;gap:2px;margin-right:auto}
-@media(min-width:1024px){.hnav{display:flex}}
+.hnav{display:none!important}
+@media(min-width:1024px){.hnav{display:none!important}}
 .hnav a{
   padding:7px 14px;border-radius:999px;
   font-size:12.5px;font-weight:700;color:var(--sub);
@@ -226,7 +226,7 @@ a{text-decoration:none}
   box-shadow:var(--shadow);
 }
 .prog-row{display:flex;flex-direction:column;gap:14px}
-@media(min-width:1024px){.prog-row{flex-direction:row;align-items:center;justify-content:space-between}}
+@media(min-width:1024px){.prog-row{flex-direction:row;align-items:center}}
 
 .prog-left{display:flex;align-items:center;gap:14px;flex:1;min-width:0}
 .ring{position:relative;width:58px;height:58px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
@@ -252,7 +252,7 @@ a{text-decoration:none}
 [data-theme="light"] .ptag-cyan{background:rgba(14,165,233,.08);color:#0369a1;border-color:rgba(14,165,233,.25)}
 [data-theme="light"] .ptag-purple{background:rgba(124,58,237,.08);color:#5b21b6;border-color:rgba(124,58,237,.2)}
 
-.start-btn{
+.start-btn{display:none!important;
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:11px 16px;border-radius:var(--radius);
   background:linear-gradient(90deg,#4a7af8,#38bdf8 55%,#a78bfa);
@@ -268,9 +268,11 @@ a{text-decoration:none}
 /* ═══════════════════════════════════════════════════
    MAIN GRID
 ═══════════════════════════════════════════════════ */
-.layout{display:grid;grid-template-columns:1fr;gap:20px;align-items:start}
-@media(min-width:1024px){.layout{grid-template-columns:minmax(0,1fr) 360px}}
-@media(min-width:1280px){.layout{grid-template-columns:minmax(0,1fr) 390px}}
+.layout{display:grid;grid-template-columns:1fr;gap:20px;align-items:start;width:100%}
+@media(min-width:1024px){.layout{grid-template-columns:minmax(0,1fr) 320px}}
+@media(min-width:1280px){.layout{grid-template-columns:minmax(0,1fr) 340px}}
+.player-col{min-width:0;width:100%}
+.sbar{min-width:0}
 
 /* ═══════════════════════════════════════════════════
    PLAYER CARD
@@ -758,12 +760,6 @@ body.vpaused .eq i{animation-play-state:paused}
       </div>
     </a>
 
-    <nav class="hnav">
-      <a href="#">سنواتي</a>
-      <a href="#">أخطائي</a>
-      <a href="#">امتحاناتي</a>
-    </nav>
-
     <div class="hdr-right">
       <button class="theme-btn" data-theme-toggle aria-label="تبديل الثيم">
         <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
@@ -845,15 +841,6 @@ body.vpaused .eq i{animation-play-state:paused}
             </div>
           </div>
         </div>
-        <button class="start-btn" id="startBtn">
-          <div class="start-txt">
-            <p>ابدأ المحاضرة</p>
-            <p id="startBtnSub">جاري التحميل…</p>
-          </div>
-          <span class="start-ico">
-            <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          </span>
-        </button>
       </div>
     </section>
 
@@ -1307,7 +1294,7 @@ function stopYtPoll(){if(ytPollTimer){clearInterval(ytPollTimer);ytPollTimer=0;}
 function paintYtProgress(){const d=ytDuration||0,t=ytCurrentTime||0,p=d?Math.max(0,Math.min(100,t/d*100)):0;$('pplayed').style.width=p+'%';$('pknob').style.left=p+'%';$('ptime').textContent=fmt(t)+' / '+fmt(d);if(d>1&&current>=0&&videos[current]){videos[current].duration=Math.floor(d);cacheDuration(videos[current].id,d);updateDurationUI(current);}}
 function saveProgressYt(fromEnd){if(!isYtMode||current<0)return;const v=videos[current];if(!v)return;const dur=ytDuration||(ytPlayer&&ytPlayer.getDuration())||0;const t=fromEnd?dur:(ytCurrentTime||(ytPlayer&&ytPlayer.getCurrentTime())||0);const p=dur?Math.min(100,t/dur*100):0;try{localStorage.setItem(storeKey(v.id),JSON.stringify({videoId:String(v.id),title:v.title,currentTime:t,duration:dur,percent:Math.round(p),watched:p>=90,updatedAt:Date.now(),source:'youtube'}));localStorage.setItem('cstk_progress_updated',Date.now().toString());}catch(e){}updateCurrentItemUI();renderStats();}
 function updateMediaSessionYt(){if(!('mediaSession' in navigator)||current<0)return;try{const v=videos[current];navigator.mediaSession.metadata=new MediaMetadata({title:v.title,artist:lectureTitle,album:'ثانوية club',artwork:v.thumbnail?[{src:v.thumbnail}]:[]});}catch(e){}}
-function handleYtEnded(){if(prefs.autonext&&current<videos.length-1){showToast('خلصت الفيديو ✓ — التالي حالًا');const my=playToken;setTimeout(()=>{if(my===playToken)playIndex(current+1,true);},1500);}else{showToast('خلصت الفيديو 👏');showUI(true);}}
+function handleYtEnded(){if(prefs.autonext&&current<videos.length-1){showToast('التالي…');playIndex(current+1,true);}else{showToast('خلصت الفيديو 👏');showUI(true);}}
 function ytTogglePlay(){if(!ytPlayer||!window.YT)return;try{const st=ytPlayer.getPlayerState();if(st===window.YT.PlayerState.PLAYING)ytPlayer.pauseVideo();else ytPlayer.playVideo();}catch(e){}}
 function ytSeekBy(d){if(!ytPlayer||!window.YT)return false;try{const t=Math.max(0,Math.min(ytDuration||1e9,(ytPlayer.getCurrentTime()||0)+d));ytPlayer.seekTo(t,true);ytCurrentTime=t;paintYtProgress();return true;}catch(e){return false}}
 
@@ -1338,7 +1325,7 @@ function fmt(s){s=Math.max(0,Math.floor(Number(s)||0));const h=Math.floor(s/3600
 function durationKey(id){return 'thanawya_vdur_'+String(id||'');}
 function getCachedDuration(id){try{const n=Math.floor(Number(localStorage.getItem(durationKey(id))||0));return n>0?n:0;}catch(e){return 0;}}
 function cacheDuration(id,secs){const n=Math.floor(Number(secs)||0);if(!(n>1)||!id)return;try{localStorage.setItem(durationKey(id),String(n));}catch(e){}}
-function resolveItemDuration(v){if(!v)return 0;const a=Number(v.duration)||0;if(a>1)return a;return getCachedDuration(v.id)||0;}
+function resolveItemDuration(v){if(!v)return 0;const a=Number(v.duration)||0;if(a>1)return a;const c=getCachedDuration(v.id);if(c>1)return c;try{const p=readProgress(v.id);const pd=Number(p&&p.duration)||0;if(pd>1){cacheDuration(v.id,pd);v.duration=pd;return pd;}}catch(e){}return 0;}
 function updateDurationUI(i){if(i==null||i<0||!videos[i])return;const d=resolveItemDuration(videos[i]);if(!(d>0))return;const text=fmt(d);document.querySelectorAll('#videoList [data-i="'+i+'"] .duration, #pdrawList [data-i="'+i+'"] .duration').forEach(function(el){el.textContent=text;});}
 function syncKnownDuration(fromVideo){if(current<0||!videos[current])return;let d=0;if(isYtMode)d=Number(ytDuration)||0;else if(fromVideo!==false)d=Number(video&&video.duration)||0;if(!(d>1)||!Number.isFinite(d))return;const prev=Number(videos[current].duration)||0;videos[current].duration=Math.floor(d);cacheDuration(videos[current].id,d);if(Math.abs(prev-d)>0.5)updateDurationUI(current);}
 function showToast(t){const el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1900);}
@@ -1408,10 +1395,6 @@ function renderStats(){
   const countPill=$('countPill');if(countPill)countPill.textContent=done+'/'+total+' مكتمل';
   const lpi=$('lprogI');if(lpi)lpi.style.width=pct+'%';
 
-  // start btn sub
-  const sb=$('startBtnSub');
-  if(sb&&current>=0&&videos[current])sb.textContent=videos[current].title;
-  else if(sb&&videos.length)sb.textContent=videos[0].title;
 
   // badge
   const vb=$('vidBadge');
@@ -1424,7 +1407,7 @@ function itemHTML(v,i,p){
   const th=v.thumbnail?`<img src="${esc(v.thumbnail)}" alt="" loading="lazy" onerror="this.remove()">`:'';
   const art=active?'<span class="eq"><i></i><i></i><i></i></span>':'<span class="pl2"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></span>';
   return `<div class="item${active?' active':''}${s.done?' done':''}" data-i="${i}" tabindex="0" role="button" aria-label="${esc(v.title)}">
-    <div class="thumb">${th}${art}<span class="num">${s.done?'✓':i+1}</span><span class="duration">${fmt(resolveItemDuration(v))}</span><div class="mini"><i style="width:${s.done?100:s.pct}%"></i></div></div>
+    <div class="thumb">${th}${art}<span class="num">${s.done?'✓':i+1}</span><span class="duration">${(function(){const d=resolveItemDuration(v);return d>0?fmt(d):"—";})()}</span><div class="mini"><i style="width:${s.done?100:s.pct}%"></i></div></div>
     <div class="itemtxt">
       <div class="itemtitle">${esc(v.title)}</div>
       <div class="itemmeta">${active?'<span class="st now">يتم التشغيل</span>':''}<span class="st ${s.cls}">${s.label}</span></div>
@@ -1572,8 +1555,7 @@ function renderMenu(){
   const head=t=>`<button type="button" class="mhead" data-go="main"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg><span>${t}</span></button>`;
   let h='';
   if(menuView==='speed'){h=head('سرعة التشغيل')+'<div class="spdlist">'+RATES.map(x=>`<button type="button" class="mrow spdopt ${x===rate?'on':''}" data-sp="${x}"><span class="lbl">${x===1?'عادية':rateLabel(x)}</span><span class="val">${x===rate?'✓':rateName(x)}</span></button>`).join('')+'</div>';}
-  else if(menuView==='quality'&&!isYtMode){const opts=qualityMenuOptions();const autoOn=preferredQualityH<0&&qualityIdx<0;h=head('الجودة')+`<button type="button" class="mrow ${autoOn?'on':''}" data-qauto="1"><span class="lbl">تلقائي</span><span class="val">${autoOn?'✓':''}</span></button>`+opts.map(o=>{const on=preferredQualityH===o.target;return`<button type="button" class="mrow ${on?'on':''}" data-qh="${o.target}" style="${o.available?'':'opacity:.45'}"><span class="lbl">${o.label}</span><span class="val">${on?'✓':o.available?'':'—'}</span></button>`;}).join('');}
-  else{h=`<button type="button" class="mrow" data-go="speed"><span class="lbl">سرعة التشغيل</span><span class="val">${rate===1?'عادية':rateLabel(rate)}</span><span class="chev">‹</span></button>`+(!isYtMode?`<button type="button" class="mrow" data-go="quality"><span class="lbl">الجودة</span><span class="val">${qualityText()}</span><span class="chev">‹</span></button>`:``)+`<button type="button" class="mrow" data-tg="autonext"><span class="lbl">تشغيل الفيديو التالي تلقائي</span><span class="sw ${prefs.autonext?'on':''}"></span></button>`;}
+  else{h=`<button type="button" class="mrow" data-go="speed"><span class="lbl">سرعة التشغيل</span><span class="val">${rate===1?'عادية':rateLabel(rate)}</span><span class="chev">‹</span></button>`+`<button type="button" class="mrow" data-tg="autonext"><span class="lbl">تشغيل الفيديو التالي تلقائي</span><span class="sw ${prefs.autonext?'on':''}"></span></button>`;}
   m.innerHTML=h;
 }
 function openMenu(view){if(isOpen()&&menuView===view){closeMenu();return}menuView=view;renderMenu();$('pmenu').classList.add('open');showUI(true);}
@@ -1612,8 +1594,7 @@ async function playIndex(i,autoplay){
   $('prevBtn2')&&($('prevBtn2').disabled=i===0);$('nextBtn2')&&($('nextBtn2').disabled=i===videos.length-1);
   $('pnx').disabled=i===videos.length-1;
   const vb=$('vidBadge');if(vb)vb.textContent='فيديو '+(i+1)+' من '+videos.length;
-  const startSub=$('startBtnSub');if(startSub)startSub.textContent=item.title;
-  hideError();setLoading(true,'جاري تجهيز الفيديو…');
+  hideError();setLoading(true,'');
   renderList();renderDrawer();renderStats();
   const lst=$('videoList'),act=lst.querySelector('.item.active');
   if(act)lst.scrollTop=Math.max(0,act.getBoundingClientRect().top-lst.getBoundingClientRect().top+lst.scrollTop-lst.clientHeight/2+act.clientHeight/2);
@@ -1628,7 +1609,7 @@ async function playIndex(i,autoplay){
     if(playData&&(playData.type==='mp4'||playData.mp4_url)){const mp4=playData.mp4_url||playData.play_url||playData.url;setLoading(false);video.src=mp4;if(autoplay)video.play().catch(function(){});showUI(true);return;}
     if(playData&&playData.play_url){let playUrl=playData.play_url;if(playUrl.startsWith('/'))playUrl=location.origin+playUrl;await startHls(playUrl,my,autoplay,item);return;}
     if(playErr&&!(playErr.status===404||/غير موجود|not found/i.test(playErr.message||'')))throw playErr;
-    setLoading(true,'جاري فتح الجلسة…');
+    setLoading(true,'');
     const session=await api('/api/video/'+encodeURIComponent(item.id)+'/play',{method:'POST'});
     if(my!==playToken)return;
     const s=(session&&(session.token||session.video_id))?session:(session&&session.data)?session.data:(session||{});
@@ -1638,7 +1619,7 @@ async function playIndex(i,autoplay){
     const defaultKeyPath='videos/'+swVideoId+'/key';
     const defaultKeyUrl='/api/stream?path='+encodeURIComponent(defaultKeyPath)+'&t='+encodeURIComponent(streamToken);
     const keyPromise=fetch(defaultKeyUrl,{credentials:'include'}).then(function(r){return r.ok?r.arrayBuffer():null;}).catch(function(){return null;});
-    setLoading(true,'جلب قائمة التشغيل…');
+    setLoading(true,'');
     const masterUrl='/api/stream?path='+encodeURIComponent('videos/'+swVideoId+'/stream/master.m3u8')+'&t='+encodeURIComponent(streamToken);
     const masterRes=await fetch(masterUrl,{credentials:'include'});
     if(!masterRes.ok)throw new Error('master.m3u8 → HTTP '+masterRes.status);
@@ -1651,7 +1632,7 @@ async function playIndex(i,autoplay){
     else{variantBasePath='videos/'+swVideoId+'/stream/'+variantRel;variantUrl='/api/stream?path='+encodeURIComponent(variantBasePath)+'&t='+encodeURIComponent(streamToken);}
     const variantRes=await fetch(variantUrl,{credentials:'include'});if(!variantRes.ok)throw new Error('variant → HTTP '+variantRes.status);
     const variantText=await variantRes.text();if(my!==playToken)return;
-    setLoading(true,'فك المفتاح…');
+    setLoading(true,'');
     const keyLine=variantText.split('\n').find(l=>l.indexOf('EXT-X-KEY')!==-1);
     let keyPath=defaultKeyPath,ivHex=null;
     if(keyLine){const keyUriMatch=keyLine.match(/URI="([^"]+)"/);const ivMatch=keyLine.match(/IV=0x([0-9a-fA-F]+)/i);if(ivMatch)ivHex=ivMatch[1];if(keyUriMatch){const uri=keyUriMatch[1];if(uri.indexOf('/api/stream')===0||uri.indexOf(location.origin+'/api/stream')===0){try{const u=new URL(uri,location.origin);const pth=u.searchParams.get('path');if(pth)keyPath=pth;}catch(e){}}else if(uri.indexOf('http')!==0&&uri.indexOf('/api/cdn')!==0){keyPath=uri.replace(/^\//,'');}}}
@@ -1683,7 +1664,7 @@ async function playIndex(i,autoplay){
 let curManifest=null;
 async function startHls(url,my,autoplay,item){
   if(my!==playToken)return;
-  setLoading(true,'جاري تحميل بث الفيديو…');
+  setLoading(true,'');
   if(Hls.isSupported()){
     hls=new Hls({enableWorker:true,lowLatencyMode:false,backBufferLength:30,maxBufferLength:40,maxMaxBufferLength:120,xhrSetup:(xhr)=>{xhr.withCredentials=true;}});
     hls.loadSource(url);hls.attachMedia(video);curManifest=url;
@@ -1700,7 +1681,7 @@ video.addEventListener('play',syncPlayState);
 video.addEventListener('pause',()=>{syncPlayState();saveProgress();});
 video.addEventListener('ended',()=>{
   syncPlayState();saveProgress();syncKnownDuration();
-  if(prefs.autonext&&current<videos.length-1){showToast('خلصت الفيديو ✓ — التالي حالًا');const my=playToken;setTimeout(()=>{if(my===playToken)playIndex(current+1,true);},1500);}else{showToast('خلصت الفيديو 👏');showUI(true);}
+  if(prefs.autonext&&current<videos.length-1){showToast('التالي…');playIndex(current+1,true);}else{showToast('خلصت الفيديو 👏');showUI(true);}
 });
 video.addEventListener('waiting',()=>setLoading(true,'',true));
 video.addEventListener('canplay',()=>{setLoading(false);syncKnownDuration();});
@@ -1736,18 +1717,19 @@ let tapCount=0,tapTimer=0;
 $('ptap').addEventListener('pointerdown',e=>{
   if(isYtMode&&screenEl.classList.contains('yt-mode'))return;
   lastPtype=e.pointerType;
+  // ضغطة واحدة = إظهار/إخفاء الواجهة فقط — التشغيل والإيقاف من الزر في النص أو شريط التحكم
   if(e.pointerType==='mouse')return;
   const side=e.clientX<screenEl.getBoundingClientRect().left+screenEl.clientWidth/2?'right':'left';
   clearTimeout(tapTimer);tapCount++;
   if(tapCount>=2){clearTimeout(tapTimer);tapCount=0;const d=side==='right'?-10:10;if(seekBy(d))showToast(d>0?'+10 ثواني':'-10 ثواني');return;}
-  tapTimer=setTimeout(()=>{if(tapCount===1)togglePlay();tapCount=0;},250);
+  tapTimer=setTimeout(()=>{if(tapCount===1)toggleUI();tapCount=0;},250);
   if(!hold.timer&&!video.paused)hold.timer=setTimeout(()=>startHold(e.clientX,e.clientY),500);
 });
 $('ptap').addEventListener('pointerup',()=>{clearTimeout(hold.timer);hold.timer=0;endHold();});
 $('ptap').addEventListener('pointercancel',()=>{clearTimeout(hold.timer);hold.timer=0;endHold();});
 $('ptap').addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')showUI();});
 $('ptap').addEventListener('mousemove',()=>showUI());
-$('ptap').addEventListener('click',e=>{if(e.pointerType==='mouse'){togglePlay();showUI();}});
+$('ptap').addEventListener('click',e=>{if(e.pointerType==='mouse'){toggleUI();}});
 screenEl.addEventListener('mousemove',()=>showUI());
 document.addEventListener('keydown',e=>{
   const tag=(document.activeElement||{}).tagName||'';
@@ -1769,7 +1751,6 @@ $('nextBtn').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)};
 $('prevBtn2')&&($('prevBtn2').onclick=()=>{if(current>0)playIndex(current-1,true)});
 $('nextBtn2')&&($('nextBtn2').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)});
 $('pnx').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)};
-$('startBtn').onclick=()=>{if(videos.length>0)playIndex(current>=0?current:0,true)};
 $('backBtn').onclick=()=>history.back();
 $('retryBtn').onclick=()=>{hideError();if(errAction==='leave')history.back();else if(current>=0)playIndex(current,true)};
 $('skipBtn').onclick=()=>{hideError();if(current<videos.length-1)playIndex(current+1,true)};
@@ -1834,7 +1815,6 @@ async function init(){
 
     try{$('pageTitle').textContent=lectureTitle}catch(e){}
     try{$('crumb').textContent=lectureTitle}catch(e){}
-    try{$('startBtnSub').textContent=videos.length?videos[0].title:''}catch(e){}
     try{$('lectureName').textContent=lectureTitle}catch(e){}
 
     if(!videos.length && initialVideoId){
@@ -1848,6 +1828,11 @@ async function init(){
     }
 
     setLoading(false);
+    // حدّث المدد من التقدم المحفوظ
+    videos.forEach(v=>{
+      const d=resolveItemDuration(v);
+      if(d>1) v.duration=d;
+    });
     renderList();
     renderStats();
 
