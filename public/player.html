@@ -1354,8 +1354,14 @@ async function api(path,opts={}){
   try{r=await fetch(API+path,{method:opts.method||'GET',headers,body:opts.body,cache:'no-store',credentials:'include'})}
   catch(e){const er=new Error('مفيش اتصال بالسيرفر.');er.kind='network';throw er}
   let d={};try{d=await r.json()}catch(e){}
-  if(!r.ok){const er=new Error(d.message||`السيرفر رجّع خطأ (${r.status})`);er.status=r.status;if(r.status===401){er.kind='auth';er.message='جلسة الدخول انتهت.';}else if(r.status===403){er.kind='play';er.message='مفيش صلاحية.';}throw er;}
-  return(d&&d.data!==undefined)?d.data:d;
+  if(!r.ok){
+    const er=new Error(d.message||`السيرفر رجّع خطأ (${r.status})`);
+    er.status=r.status;
+    if(r.status===401){er.kind='auth';er.message=d.message||'جلسة الدخول انتهت. سجّل دخول تاني.';}
+    else if(r.status===403){er.kind='play';er.message=d.message||'مفيش صلاحية لمشاهدة الفيديو من المصدر أو الفيديو غير متاح.';}
+    throw er;
+  }
+  return (d && d.data !== undefined) ? d.data : d;
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
@@ -1799,49 +1805,45 @@ async function init(){
   try{
     setLoading(true,'جاري تحميل بيانات المحاضرة…');
 
-    // دعم مساري API الموجودين في نسختي البلاير.
-    let data=null, firstError=null;
-    try{
-      data=await api('/api/lectures/'+encodeURIComponent(lectureId));
-    }catch(e){
-      firstError=e;
-      if(e && e.status!==404) throw e;
+    // نفس منطق البلاير القديم الشغّال: المسار الصحيح /content فقط
+    const r=await api('/api/lectures/'+encodeURIComponent(lectureId)+'/content');
+    const d=(r&&(r.videos||r.lecture||r.items))?r:(r&&r.data)?r.data:(r||{});
+
+    let sourceVideos=d.videos||d.items||(d.lecture&&d.lecture.videos)||[];
+    if((!Array.isArray(sourceVideos)||!sourceVideos.length)&&Array.isArray(d.groups)){
+      sourceVideos=[];
+      d.groups.forEach(g=>{
+        const list=g.videos||g.items||g.parts||[];
+        if(Array.isArray(list)) sourceVideos.push(...list);
+      });
     }
 
-    // بعض إصدارات السيرفر تعرض محتوى المحاضرة من المسار /content.
-    if(!data || !(data.videos||data.items||data.lecture)){
-      try{
-        data=await api('/api/lectures/'+encodeURIComponent(lectureId)+'/content');
-      }catch(e){
-        if(!data) throw (e || firstError);
-      }
-    }
+    videos=(Array.isArray(sourceVideos)?sourceVideos:[]).map((v,i)=>{
+      const id=v.id||v.video_id||v.videoId;
+      const raw=+(v.duration||v.duration_seconds||v.length)||0;
+      return {
+        id:id,
+        title:v.title||v.name||('فيديو '+(i+1)),
+        thumbnail:v.thumbnail||v.thumb||v.thumb_url||v.thumbnail_url||v.image_url||v.poster||'',
+        duration:raw>1?raw:(getCachedDuration(id)||0)
+      };
+    }).filter(v=>v.id!==undefined&&v.id!==null&&String(v.id)!=='');
 
-    data=data||{};
-    const payload=(data.data && typeof data.data==='object')?data.data:data;
-    const lecture=(payload.lecture && typeof payload.lecture==='object')?payload.lecture:{};
-    lectureTitle=lecture.name||lecture.title||payload.lecture_name||payload.title||payload.name||'المحاضرة';
+    const lectureName=(d.lecture&&(d.lecture.name||d.lecture.title))||d.lecture_name||d.name||d.title||'المحاضرة';
+    lectureTitle=lectureName;
 
-    const sourceVideos=payload.videos||payload.items||lecture.videos||[];
-    videos=(Array.isArray(sourceVideos)?sourceVideos:[]).map((v,i)=>({
-      id:v.id||v.video_id||v.videoId,
-      title:v.title||v.name||('فيديو '+(i+1)),
-      thumbnail:v.thumbnail||v.thumb||v.thumb_url||v.thumbnail_url||v.image_url||v.poster||'',
-      duration:v.duration||v.duration_seconds||v.length||0
-    })).filter(v=>v.id!==undefined && v.id!==null && String(v.id)!=='');
+    try{$('pageTitle').textContent=lectureTitle}catch(e){}
+    try{$('crumb').textContent=lectureTitle}catch(e){}
+    try{$('startBtnSub').textContent=videos.length?videos[0].title:''}catch(e){}
+    try{$('lectureName').textContent=lectureTitle}catch(e){}
 
-    $('pageTitle').textContent=lectureTitle;
-    $('crumb').textContent=lectureTitle;
-    $('startBtnSub').textContent=videos.length?videos[0].title:'';
-
-    // لو رابط الصفحة يحتوي videoId، اسمح بفتح الفيديو مباشرة حتى لو تعذر جلب قائمة المحاضرة.
     if(!videos.length && initialVideoId){
       videos=[{id:initialVideoId,title:'فيديو المحاضرة',thumbnail:'',duration:0}];
     }
 
     if(!videos.length){
       setLoading(false);
-      showError('المحاضرة دي مفيهاش فيديوهات أو أن السيرفر لم يرجع قائمة الفيديوهات.','محتوى فاضي');
+      showError('المحاضرة دي مفيهاش فيديوهات مضافة.','محتوى فاضي');
       return;
     }
 
@@ -1849,25 +1851,32 @@ async function init(){
     renderList();
     renderStats();
 
-    let startIdx=0;
-    if(initialVideoId){
-      const fi=videos.findIndex(v=>String(v.id)===String(initialVideoId));
-      if(fi>=0) startIdx=fi;
-    }else{
-      const lastW=videos.findIndex((v,i)=>{
-        const p=readProgress(v.id)||{};
-        const prev=i>0?(readProgress(videos[i-1].id)||{}):null;
-        return !p.watched && (!i || (prev&&prev.watched));
-      });
-      if(lastW>0) startIdx=lastW;
-    }
-
-    await playIndex(startIdx,false);
+    let idx=videos.findIndex(v=>String(v.id)===String(initialVideoId));
+    if(idx<0) idx=videos.findIndex(v=>{const p=readProgress(v.id);return p&&!p.watched&&(+p.currentTime||0)>0});
+    if(idx<0) idx=0;
+    await playIndex(idx,false);
   }catch(err){
     setLoading(false);
+    if(err&&err.kind==='auth'){
+      showError(err.message||'جلسة الدخول انتهت.','غير مسجّل دخول','leave');
+      return;
+    }
+    // fallback زي البلاير القديم: لو فيه videoId في الرابط شغّله
+    if(initialVideoId){
+      try{
+        videos=[{id:initialVideoId,title:'فيديو المحاضرة',thumbnail:'',duration:0}];
+        lectureTitle='المحاضرة';
+        try{$('pageTitle').textContent=lectureTitle}catch(e){}
+        try{$('crumb').textContent=lectureTitle}catch(e){}
+        try{$('lectureName').textContent=lectureTitle}catch(e){}
+        renderStats();
+        renderList();
+        await playIndex(0,false);
+        return;
+      }catch(e2){}
+    }
     const msg=err&&err.message?err.message:'تعذّر تحميل بيانات المحاضرة.';
-    if(err&&err.kind==='auth') showError(msg,'غير مسجّل دخول','leave');
-    else showError(msg,'مش قادر أحمّل المحاضرة');
+    showError(msg,'مش قادر أحمّل المحاضرة');
   }
 }
 
