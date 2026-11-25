@@ -101,10 +101,13 @@ a{text-decoration:none}
 
 .hdr-in{
   max-width:1300px;margin:0 auto;
-  display:flex;align-items:center;gap:10px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
   padding:10px 18px;
+  width:100%;
 }
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;order:2}
+.hdr-right{order:1}
+
 .logo-box{
   width:40px;height:40px;border-radius:13px;flex-shrink:0;
   background:linear-gradient(135deg,#4a7af8,#38bdf8,#a78bfa);
@@ -138,8 +141,7 @@ a{text-decoration:none}
 }
 .hnav a:hover{background:rgba(91,140,255,.1);color:var(--accent)}
 
-.hdr-right{display:flex;align-items:center;gap:7px;margin-right:auto}
-@media(min-width:1024px){.hdr-right{margin-right:0}}
+.hdr-right{display:flex;align-items:center;gap:7px;margin:0;flex-shrink:0}
 
 /* theme toggle */
 .theme-btn{
@@ -963,16 +965,7 @@ body.vpaused .eq i{animation-play-state:paused}
               </div>
               <h2 class="vinfo-title" id="videoTitle">جاري تجهيز الفيديو…</h2>
             </div>
-            <div class="acts">
-              <button class="act-btn" id="prevBtn" disabled>
-                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-                السابق
-              </button>
-              <button class="act-btn" id="nextBtn">
-                التالي
-                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-            </div>
+
           </div>
           <div class="vinfo-foot">
             <div style="display:flex;align-items:center;gap:7px">
@@ -1069,10 +1062,18 @@ const token = localStorage.getItem('student_token') || localStorage.getItem('cst
 const qs = new URLSearchParams(location.search);
 const lectureId = qs.get('lectureId');
 const initialVideoId = qs.get('videoId');
-const qSubject = (qs.get('subjectName')||qs.get('subject')||'').trim();
-const qTeacher = (qs.get('teacherName')||qs.get('teacher')||'').trim();
-const qLectureName = (qs.get('lectureName')||qs.get('name')||'').trim();
-const qLectureNum = (qs.get('lectureNum')||qs.get('num')||'').trim();
+function _metaGet(k){try{return (sessionStorage.getItem('thanawya_meta_'+k)||'').trim()}catch(e){return ''}}
+function _metaSet(k,v){try{if(v)sessionStorage.setItem('thanawya_meta_'+k,String(v))}catch(e){}}
+let qSubject = (qs.get('subjectName')||qs.get('subject')||_metaGet('subject')||'').trim();
+let qTeacher = (qs.get('teacherName')||qs.get('teacher')||_metaGet('teacher')||'').trim();
+let qLectureName = (qs.get('lectureName')||qs.get('name')||_metaGet('lecture')||'').trim();
+let qLectureNum = (qs.get('lectureNum')||qs.get('num')||_metaGet('num')||'').trim();
+const qChapterName = (qs.get('chapterName')||_metaGet('chapter')||'').trim();
+if(qSubject)_metaSet('subject',qSubject);
+if(qTeacher)_metaSet('teacher',qTeacher);
+if(qLectureName)_metaSet('lecture',qLectureName);
+if(qLectureNum)_metaSet('num',qLectureNum);
+if(qChapterName)_metaSet('chapter',qChapterName);
 
 const playCache = new Map();
 const PLAY_CACHE_TTL = 45000;
@@ -1610,7 +1611,6 @@ async function playIndex(i,autoplay){
   $('ptitle').textContent=item.title;
   $('lectureName')&&($('lectureName').textContent=lectureTitle);
   $('pageTitle')&&($('pageTitle').textContent=lectureTitle);
-  $('prevBtn').disabled=i===0;$('nextBtn').disabled=i===videos.length-1;
   $('prevBtn2')&&($('prevBtn2').disabled=i===0);$('nextBtn2')&&($('nextBtn2').disabled=i===videos.length-1);
   $('pnx').disabled=i===videos.length-1;
   const vb=$('vidBadge');if(vb)vb.textContent='فيديو '+(i+1)+' من '+videos.length;
@@ -1626,6 +1626,7 @@ async function playIndex(i,autoplay){
     if(qTeacher)p.set('teacherName',qTeacher);
     if(qLectureName)p.set('lectureName',qLectureName);
     if(qLectureNum)p.set('lectureNum',qLectureNum);
+    if(qChapterName)p.set('chapterName',qChapterName);
     history.replaceState(null,'','?'+p.toString());
   })();
   updateMediaSession();
@@ -1775,8 +1776,6 @@ $('pf2').onclick=()=>{seekBy(10);showUI()};
 $('pback').onclick=e=>{e.stopPropagation();if(isFullscreen())exitFS();else history.back();};
 
 /* ── NAV BUTTONS ── */
-$('prevBtn').onclick=()=>{if(current>0)playIndex(current-1,true)};
-$('nextBtn').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)};
 $('prevBtn2')&&($('prevBtn2').onclick=()=>{if(current>0)playIndex(current-1,true)});
 $('nextBtn2')&&($('nextBtn2').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)});
 $('pnx').onclick=()=>{if(current<videos.length-1)playIndex(current+1,true)};
@@ -1806,26 +1805,35 @@ $('dlmBg').onclick=closeDlm;
 
 
 function updateBreadcrumb(lectureName){
-  const subject = qSubject || 'المادة';
-  const teacher = qTeacher || 'المدرس';
-  let lec = lectureName || qLectureName || 'المحاضرة';
-  if(qLectureNum && !/محاضرة\s*\d/i.test(lec)){
-    // لو الاسم مش فيه رقم، نضيف رقم المحاضرة
+  const subject = qSubject || qChapterName || '';
+  const teacher = qTeacher || '';
+  let lec = lectureName || qLectureName || '';
+  if(qLectureNum){
     const numLabel = 'المحاضرة ' + qLectureNum;
-    if(lec === 'المحاضرة' || !lec) lec = numLabel;
-    else lec = numLabel + (lec ? ' · ' + lec : '');
-  } else if(qLectureNum && lec === 'المحاضرة'){
-    lec = 'المحاضرة ' + qLectureNum;
+    if(!lec || lec === 'المحاضرة') lec = numLabel;
+    else if(!/محاضرة\s*\d/i.test(lec)) lec = numLabel + ' · ' + lec;
   }
+  if(!lec) lec = 'المحاضرة';
   const elS = $('bcSubject'), elT = $('bcTeacher'), elL = $('bcLecture');
-  if(elS) elS.textContent = subject;
-  if(elT) elT.textContent = teacher;
-  if(elL) elL.textContent = lec;
-  // تحديث عنوان الصفحة
+  if(elS){ elS.textContent = subject || 'المادة'; elS.style.display = subject ? '' : 'none'; }
+  if(elT){ elT.textContent = teacher || 'المدرس'; elT.style.display = teacher ? '' : 'none'; }
+  // إخفاء الفواصل لو عنصر مخفي
   try{
-    const parts = [subject, teacher, lec].filter(Boolean);
-    document.title = (lec || 'مشغل المحاضرة') + ' | ثانوية club';
+    const nav = $('bcNav');
+    if(nav){
+      const spans = [...nav.children];
+      spans.forEach((el,i)=>{
+        if(el.classList.contains('bc-sep')){
+          const prev = spans[i-1], next = spans[i+1];
+          const prevHide = prev && prev.style.display === 'none';
+          const nextHide = next && next.style.display === 'none';
+          el.style.display = (prevHide || nextHide) ? 'none' : '';
+        }
+      });
+    }
   }catch(e){}
+  if(elL) elL.textContent = lec;
+  try{ document.title = (lec || 'مشغل المحاضرة') + ' | ثانوية club'; }catch(e){}
 }
 
 /** جلب مدة فيديو من playlist m3u8 (مجموع EXTINF) */
@@ -1867,27 +1875,30 @@ async function probeOneDuration(v, i){
       try{
         playData = await api('/api/play/'+encodeURIComponent(v.id), {method:'POST'});
         playCache.set(String(v.id), {data:playData, ts:Date.now()});
-      }catch(e){ return; }
+      }catch(e1){
+        // جرّب مسار الجلسة البديل
+        try{
+          playData = await api('/api/video/'+encodeURIComponent(v.id)+'/play', {method:'POST'});
+        }catch(e2){ return; }
+      }
     }
     if(!playData) return;
-    // مدة مباشرة من الرد
-    const direct = Number(playData.duration || playData.duration_seconds || playData.length || 0);
+    const direct = Number(playData.duration || playData.duration_seconds || playData.length || playData.total_duration || 0);
     if(direct > 1){
-      v.duration = Math.floor(direct);
+      v.duration = Math.floor(direct > 100000 ? direct/1000 : direct);
       cacheDuration(v.id, v.duration);
       updateDurationUI(i);
       return;
     }
-    // يوتيوب: مش هنقدر بسهولة من غير تحميل المشغل
     if(playData.type === 'youtube' || playData.youtube_url) return;
-    // mp4
     const mp4 = playData.mp4_url || (playData.type==='mp4' ? (playData.url||playData.play_url) : null);
     if(mp4){
       await new Promise(resolve=>{
         const el = document.createElement('video');
         el.preload = 'metadata';
         el.muted = true;
-        const done = ()=>{ try{el.removeAttribute('src'); el.load();}catch(e){} resolve(); };
+        let settled = false;
+        const done = ()=>{ if(settled) return; settled=true; try{el.removeAttribute('src'); el.load();}catch(e){} resolve(); };
         el.onloadedmetadata = ()=>{
           const d = Number(el.duration)||0;
           if(d > 1 && Number.isFinite(d)){
@@ -1898,13 +1909,12 @@ async function probeOneDuration(v, i){
           done();
         };
         el.onerror = done;
-        setTimeout(done, 8000);
-        el.src = mp4;
+        setTimeout(done, 10000);
+        el.src = mp4.startsWith('/') ? (location.origin + mp4) : mp4;
       });
       return;
     }
-    // HLS playlist
-    let playUrl = playData.play_url || playData.url;
+    let playUrl = playData.play_url || playData.url || playData.stream_url || playData.hls_url;
     if(playUrl){
       if(playUrl.startsWith('/')) playUrl = location.origin + playUrl;
       const d = await durationFromM3u8(playUrl);
@@ -1918,13 +1928,18 @@ async function probeOneDuration(v, i){
 }
 
 async function probeAllDurations(){
-  // بالتتابع عشان ما نضغطش على السيرفر
-  for(let i=0;i<videos.length;i++){
-    if(resolveItemDuration(videos[i]) > 1) continue;
-    await probeOneDuration(videos[i], i);
-    // حدّث شريط الوقت الإجمالي كل شوية
-    if(i % 3 === 2) renderStats();
+  // دفعتين في نفس الوقت لتسريع قراءة المدد
+  const pending = videos.map((v,i)=>({v,i})).filter(x => resolveItemDuration(x.v) <= 1);
+  let cursor = 0;
+  async function worker(){
+    while(cursor < pending.length){
+      const my = cursor++;
+      const {v,i} = pending[my];
+      await probeOneDuration(v, i);
+      if(my % 2 === 0){ renderStats(); }
+    }
   }
+  await Promise.all([worker(), worker()]);
   renderList();
   renderDrawer();
   renderStats();
@@ -1960,17 +1975,32 @@ async function init(){
 
     videos=(Array.isArray(sourceVideos)?sourceVideos:[]).map((v,i)=>{
       const id=v.id||v.video_id||v.videoId;
-      const raw=+(v.duration||v.duration_seconds||v.length)||0;
+      let raw=+(v.duration||v.duration_seconds||v.length||v.video_duration||v.total_seconds||v.time||0)||0;
+      // أحيانا المدة بالمللي ثانية
+      if(raw > 100000) raw = Math.floor(raw/1000);
+      const cached = getCachedDuration(id)||0;
+      let dur = raw>1?raw:(cached||0);
+      if(!(dur>1)){
+        try{ const p=readProgress(id); const pd=+((p&&p.duration)||0); if(pd>1) dur=pd; }catch(e){}
+      }
       return {
         id:id,
         title:v.title||v.name||('فيديو '+(i+1)),
         thumbnail:v.thumbnail||v.thumb||v.thumb_url||v.thumbnail_url||v.image_url||v.poster||'',
-        duration:raw>1?raw:(getCachedDuration(id)||0)
+        duration:dur>1?Math.floor(dur):0
       };
     }).filter(v=>v.id!==undefined&&v.id!==null&&String(v.id)!=='');
 
     const lectureName=(d.lecture&&(d.lecture.name||d.lecture.title))||d.lecture_name||d.name||d.title||'المحاضرة';
     lectureTitle=lectureName || qLectureName || 'المحاضرة';
+
+    // لو السيرفر رجّع اسم مدرس/مادة نستخدمهم
+    try{
+      const tName = d.teacher_name || d.teacherName || (d.teacher && (d.teacher.name||d.teacher.title)) || d.instructor || '';
+      const sName = d.subject_name || d.subjectName || d.subject || d.course_name || d.courseName || (d.course && (d.course.name||d.course.title)) || '';
+      if(tName && !qTeacher){ qTeacher = String(tName).trim(); _metaSet('teacher', qTeacher); }
+      if(sName && !qSubject){ qSubject = String(sName).trim(); _metaSet('subject', qSubject); }
+    }catch(e){}
 
     try{$('pageTitle').textContent=lectureTitle}catch(e){}
     try{$('lectureName').textContent=lectureTitle}catch(e){}
