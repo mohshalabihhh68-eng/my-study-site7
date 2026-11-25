@@ -20,21 +20,22 @@
 :root,[data-theme="dark"]{
   --bg:#070b14;--card:#0f1826;--card-hover:#182338;--card-inner:#0d1424;
   --ink:#eef2ff;--muted:#8b9bb8;--line:rgba(148,163,184,.10);
-  --blue:#3b82f6;--blue2:#60a5fa;--blue3:#2563eb;
-  --green:#10b981;--red:#ef4444;
+  --blue:#7c74ff;--blue2:#22d3ee;--blue3:#7c74ff;
+  --red:#ef4444;
   --nav-bg:rgba(7,11,20,.92);
   --back-bg:#0f1826;--back-bg-hover:#182338;
   --ph-bg:linear-gradient(135deg,#1a2540,#0f172a);
   --overlay:linear-gradient(to bottom,transparent 28%,rgba(7,11,20,.28) 60%,rgba(7,11,20,.88) 100%);
-  --glow:rgba(59,130,246,.22);
+  --glow:rgba(124,116,255,.28);
   --card-shadow:0 4px 20px rgba(0,0,0,.35);
-  --pill-bg:rgba(59,130,246,.10);--pill-bd:rgba(59,130,246,.20);
+  --pill-bg:rgba(124,116,255,.12);--pill-bd:rgba(124,116,255,.24);
+  --mark:linear-gradient(100deg,rgba(124,116,255,.45),rgba(34,211,238,.38));
 }
 [data-theme="light"]{
   --bg:#f0f4fc;--card:#fff;--card-hover:#f1f5f9;--card-inner:#f1f5f9;
   --ink:#1e293b;--muted:#64748b;--line:rgba(108,99,255,.10);
-  --blue:#6c63ff;--blue2:#00d4ff;--blue3:#5a52d5;
-  --green:#059669;--red:#ef4444;
+  --blue:#6c63ff;--blue2:#00d4ff;--blue3:#6c63ff;
+  --red:#ef4444;
   --nav-bg:rgba(255,255,255,.92);
   --back-bg:#fff;--back-bg-hover:#f1f5f9;
   --ph-bg:linear-gradient(135deg,#dde4f0,#eef1f8);
@@ -42,6 +43,7 @@
   --glow:rgba(108,99,255,.18);
   --card-shadow:0 4px 20px rgba(108,99,255,.07);
   --pill-bg:rgba(108,99,255,.08);--pill-bd:rgba(108,99,255,.16);
+  --mark:linear-gradient(100deg,rgba(108,99,255,.20),rgba(0,212,255,.34));
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
@@ -54,13 +56,13 @@ body{
 body::before{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
   background:
-    radial-gradient(ellipse 55% 40% at 80% 10%,rgba(59,130,246,.07),transparent),
-    radial-gradient(ellipse 40% 50% at 10% 85%,rgba(16,185,129,.05),transparent);
+    radial-gradient(ellipse 55% 40% at 80% 10%,rgba(124,116,255,.10),transparent),
+    radial-gradient(ellipse 40% 50% at 10% 85%,rgba(34,211,238,.07),transparent);
 }
 [data-theme="light"] body::before{
   background:
     radial-gradient(ellipse 55% 40% at 80% 10%,rgba(108,99,255,.07),transparent),
-    radial-gradient(ellipse 40% 50% at 10% 85%,rgba(16,185,129,.04),transparent);
+    radial-gradient(ellipse 40% 50% at 10% 85%,rgba(0,212,255,.06),transparent);
 }
 button,input{font:inherit;outline:none;border:none}
 button{cursor:pointer}
@@ -71,34 +73,36 @@ button{cursor:pointer}
 @keyframes cardReveal{from{opacity:0;transform:translateY(28px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
 @keyframes pillIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
+@keyframes mark{to{transform:scaleX(1) rotate(-1.4deg)}}
+@keyframes ul{to{transform:scaleX(1)}}
 
 @media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
 }
 
 /* progress */
-#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--blue3),var(--blue2));width:0%;z-index:9999;transition:width .05s linear}
-#scroll-progress-side{position:fixed;top:0;right:0;width:3px;background:linear-gradient(180deg,var(--blue3),var(--blue2));height:0%;z-index:9999;border-radius:0 0 0 3px}
+#scroll-progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--blue),var(--blue2));width:0%;z-index:9999;transition:width .05s linear}
+#scroll-progress-side{position:fixed;top:0;right:0;width:3px;background:linear-gradient(180deg,var(--blue),var(--blue2));height:0%;z-index:9999;border-radius:0 0 0 3px}
 
 /* nav */
-.app-nav{position:sticky;top:0;z-index:40;background:var(--nav-bg);backdrop-filter:blur(20px);border-bottom:1px solid var(--line);animation:navIn .5s ease both}
+.app-nav{position:sticky;top:0;z-index:40;padding-top:env(safe-area-inset-top,0px);background:var(--nav-bg);backdrop-filter:blur(20px);border-bottom:1px solid var(--line);animation:navIn .5s ease both}
 .app-nav-in{max-width:1140px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:12px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
-.brand .logo{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,var(--blue3),var(--blue2));box-shadow:0 6px 20px var(--glow);color:#fff}
+.brand .logo{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,var(--blue),var(--blue2));box-shadow:0 6px 20px var(--glow);color:#fff}
 .brand .logo svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
 .nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 16px 5px 5px;font-weight:800;font-size:14px;color:var(--ink);transition:background .2s,border-color .2s}
-.profile-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.22)}
-.profile-btn .av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue3),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:15px}
+.profile-btn:hover{background:var(--card-hover);border-color:var(--blue)}
+.profile-btn .av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:15px}
 .theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;transition:background .2s,border-color .2s,transform .25s;padding:0}
-.theme-toggle:hover{background:var(--card-hover);border-color:rgba(108,99,255,.22);transform:rotate(18deg)}
+.theme-toggle:hover{background:var(--card-hover);border-color:var(--blue);transform:rotate(18deg)}
 .theme-toggle svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
 [data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
 
 /* wrap */
-.wrap{max-width:1140px;margin:0 auto;padding:28px 20px 100px;position:relative;z-index:1}
+.wrap{max-width:1140px;margin:0 auto;padding:28px 20px 70px;position:relative;z-index:1}
 
 /* top row: back + search */
 .top-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:26px}
@@ -108,12 +112,10 @@ button{cursor:pointer}
   border-radius:13px;padding:10px 20px;font-weight:700;font-size:14px;
   transition:background .2s,border-color .2s,transform .2s;
 }
-.back-btn:hover{background:var(--back-bg-hover);border-color:rgba(108,99,255,.25);transform:translateX(4px)}
+.back-btn:hover{background:var(--back-bg-hover);border-color:var(--blue);transform:translateX(4px)}
 .back-btn svg{width:17px;height:17px;stroke:currentColor;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
-.search-box{
-  position:relative;flex:1;min-width:200px;max-width:340px;margin-right:auto;
-}
+.search-box{position:relative;flex:1;min-width:200px;max-width:340px;margin-right:auto}
 .search-box svg{position:absolute;top:50%;right:14px;transform:translateY(-50%);width:17px;height:17px;stroke:var(--muted);fill:none;stroke-width:2.2;stroke-linecap:round;pointer-events:none}
 .search-box input{
   width:100%;background:var(--card);border:1px solid var(--line);color:var(--ink);
@@ -126,9 +128,16 @@ button{cursor:pointer}
 /* page head */
 .page-head{margin-bottom:28px;animation:cardReveal .5s ease both}
 .page-head .badge{display:inline-flex;align-items:center;gap:6px;background:var(--pill-bg);color:var(--blue);border:1px solid var(--pill-bd);border-radius:999px;padding:5px 14px;font-size:11px;font-weight:800;margin-bottom:12px;letter-spacing:.01em}
-.page-head h1{margin:0 0 6px;font-size:clamp(22px,3vw,30px);font-weight:900;color:var(--ink)}
+.page-head h1{margin:0 0 6px;font-size:clamp(22px,3vw,30px);font-weight:900;color:var(--ink);line-height:1.6}
 .page-head p{margin:0;color:var(--muted);font-size:14px;font-weight:700}
 .page-head p b{color:var(--ink)}
+
+/* highlighter on subject name */
+.hl{position:relative;display:inline-block;padding:0 .3em;z-index:0;white-space:nowrap}
+.hl::before{content:"";position:absolute;inset:.4em -.15em .05em -.15em;z-index:-1;background:var(--mark);border-radius:.25em .9em .35em 1em;transform-origin:right center;transform:scaleX(0) rotate(-1.4deg)}
+.hl::after{content:"";position:absolute;left:-.05em;right:-.05em;bottom:.04em;height:.1em;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--blue2));transform-origin:right center;transform:scaleX(0)}
+.go .hl::before{animation:mark 1s cubic-bezier(.65,0,.3,1) .3s forwards}
+.go .hl::after{animation:ul .6s cubic-bezier(.65,0,.3,1) 1.1s forwards}
 
 /* grid */
 .teachers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
@@ -137,35 +146,26 @@ button{cursor:pointer}
 .t-card{
   background:var(--card);border:1px solid var(--line);border-radius:22px;
   overflow:hidden;display:flex;flex-direction:column;position:relative;
-  opacity:0;cursor:pointer;
+  opacity:0;cursor:pointer;-webkit-touch-callout:none;
   box-shadow:var(--card-shadow);
-  transition:border-color .3s,box-shadow .4s,transform .35s cubic-bezier(.2,.8,.2,1);
+  transition:border-color .3s,box-shadow .4s,transform .35s cubic-bezier(.2,.8,.2,1),opacity .3s;
 }
-.t-card.in{animation:cardReveal .6s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--delay,0ms)}
+.t-card.in{opacity:1;animation:cardReveal .6s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:var(--delay,0ms)}
 .t-card:hover{
-  border-color:rgba(59,130,246,.38);
-  box-shadow:0 22px 48px var(--glow),0 0 0 1px rgba(59,130,246,.12);
+  border-color:color-mix(in srgb,var(--blue) 45%,transparent);
+  box-shadow:0 22px 48px var(--glow),0 0 0 1px color-mix(in srgb,var(--blue) 14%,transparent);
   transform:translateY(-6px);
 }
-[data-theme="light"] .t-card:hover{border-color:rgba(108,99,255,.38)}
 .t-card:active{transform:translateY(-2px) scale(.99)}
-.t-card.leaving{opacity:.7;transform:scale(.97)}
-
-.side-bar{position:absolute;top:0;bottom:0;left:0;width:4px;background:linear-gradient(180deg,var(--blue3),var(--blue2));z-index:5}
-.side-prog{position:absolute;top:0;bottom:0;left:0;width:4px;z-index:6}
-.side-prog .fill{
-  position:absolute;top:0;left:0;width:100%;height:0;
-  background:linear-gradient(180deg,var(--green),#34d399);
-  box-shadow:0 0 10px rgba(52,211,153,.7);
-  transition:height .35s cubic-bezier(.2,.8,.2,1);
-}
+.t-card.leaving{opacity:.75;transform:scale(.97)}
 
 /* image */
 .t-img{width:100%;aspect-ratio:3/3.8;background:var(--ph-bg);overflow:hidden;position:relative}
+.t-img,.t-img *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .t-img img{
   position:absolute;inset:0;width:100%;height:100%;
   object-fit:cover;object-position:center top;display:block;
-  opacity:0;
+  opacity:0;pointer-events:none;-webkit-user-drag:none;
   transition:transform .6s cubic-bezier(.2,.8,.2,1),filter .4s,opacity .45s;
   filter:saturate(.92) brightness(.97);
 }
@@ -201,21 +201,24 @@ button{cursor:pointer}
 }
 .meta-pill.loading *{display:none}
 
+/* نفس لون زر "عرض المدرسين" في صفحة المواد */
 .t-btn{
   width:100%;padding:11px 16px;border-radius:13px;
   font-weight:900;font-size:14px;color:#fff;
-  background:linear-gradient(130deg,var(--blue3) 0%,var(--blue) 50%,var(--blue2) 100%);
-  background-size:200% 200%;
+  background:linear-gradient(135deg,var(--blue),var(--blue2));
   display:flex;align-items:center;justify-content:center;gap:8px;
-  box-shadow:0 4px 16px var(--glow);
+  box-shadow:0 6px 16px var(--glow);
   transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s,filter .2s;
   position:relative;overflow:hidden;
 }
-.t-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-100%);transition:transform .45s}
+.t-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);transform:translateX(-100%);transition:transform .45s}
 .t-card:hover .t-btn::before{transform:translateX(100%)}
 .t-card:hover .t-btn{box-shadow:0 10px 26px var(--glow);filter:brightness(1.06)}
 .t-btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
 .t-card:hover .t-btn svg{transform:translateX(-5px)}
+.t-btn.is-loading{pointer-events:none}
+.t-btn.is-loading svg{display:none}
+.t-btn.is-loading::after{content:"";width:15px;height:15px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .7s linear infinite}
 
 .ph-wrap{width:100%;height:100%;display:grid;place-items:center;background:var(--ph-bg);color:var(--muted)}
 .ph-wrap svg{opacity:.35}
@@ -232,7 +235,13 @@ button{cursor:pointer}
 .state.err{color:var(--red)}
 .state svg{width:46px;height:46px;stroke:currentColor;fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;opacity:.5}
 .state-btn{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 22px;font-weight:800;font-size:14px;transition:background .2s,border-color .2s}
-.state-btn:hover{background:var(--card-hover);border-color:rgba(108,99,255,.25)}
+.state-btn:hover{background:var(--card-hover);border-color:var(--blue)}
+
+/* footer + to top */
+.foot{position:relative;z-index:1;text-align:center;color:var(--muted);font-weight:700;font-size:13px;padding:0 16px calc(28px + env(safe-area-inset-bottom,0px))}
+.foot b{color:var(--blue)}
+.to-top{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:46px;height:46px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 10px 24px var(--glow);opacity:0;visibility:hidden;transform:translateY(10px);transition:.25s;z-index:30}
+.to-top.show{opacity:1;visibility:visible;transform:none}
 
 /* responsive */
 @media(max-width:700px){
@@ -242,7 +251,7 @@ button{cursor:pointer}
   .t-btn{font-size:13px;padding:10px}
   .t-footer{padding:12px 12px 14px}
   .brand small{display:none}
-  .wrap{padding:20px 12px 80px}
+  .wrap{padding:20px 12px 60px}
   .search-box{max-width:none;flex-basis:100%;order:3;margin-right:0}
 }
 @media(max-width:420px){
@@ -278,7 +287,7 @@ button{cursor:pointer}
   </div>
   <div class="page-head">
     <div class="badge">المدرسين</div>
-    <h1>اختر مدرسك</h1>
+    <h1 id="head-title">اختر مدرسك</h1>
     <p id="head-sub">جاري التحميل…</p>
   </div>
   <div class="teachers-grid" id="grid">
@@ -288,6 +297,8 @@ button{cursor:pointer}
     <div class="sk-card"><div class="sk-img"></div><div class="sk-body"><div class="sk-line sm"></div><div class="sk-line btn"></div></div></div>
   </div>
 </main>
+<footer class="foot">ثانوية <b>club</b> · مستقبلك الدراسي في مكان واحد</footer>
+<button type="button" class="to-top" id="to-top" aria-label="للأعلى"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 14 6-6 6 6"/></svg></button>
 
 <script>
 (function(){
@@ -330,8 +341,8 @@ window.goBack=function(){
   else location.href='subjects.html';
 };
 
-/* ---------- scroll progress ---------- */
-const pBar=$('scroll-progress'), pBarS=$('scroll-progress-side');
+/* ---------- scroll progress + to-top ---------- */
+const pBar=$('scroll-progress'), pBarS=$('scroll-progress-side'), toTop=$('to-top');
 let tick=false;
 window.addEventListener('scroll',()=>{
   if(tick)return; tick=true;
@@ -340,14 +351,16 @@ window.addEventListener('scroll',()=>{
     const pct=p>0?(scrollY/p)*100:0;
     if(pBar)pBar.style.width=pct+'%';
     if(pBarS)pBarS.style.height=pct+'%';
+    toTop.classList.toggle('show',scrollY>500);
     tick=false;
   });
 },{passive:true});
+toTop.addEventListener('click',()=>scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}));
 
-/* ---------- chapter count (the real fix) ----------
-   السبب: قائمة المدرسين بتعد كل الكورسات، لكن endpoint الفصول بيشيل
-   كورسات زي "كتب المدرس" — فالعدد بيزيد عند بعض المدرسين بس.
-   الحل: نجيب عدد الفصول الفعلي من نفس endpoint اللي صفحة الفصول بتستخدمه. */
+/* ---------- chapter count ----------
+   قائمة المدرسين بتعد كل الكورسات، لكن endpoint الفصول بيشيل كورسات زي
+   "كتب المدرس" — فبنجيب العدد الفعلي من نفس endpoint صفحة الفصول.
+   العدد بيتخزّن (chc_) وصفحة المواد بتقراه عشان الأرقام تتطابق. */
 const CC_TTL=10*60*1000;
 const ccGet=id=>{
   try{
@@ -377,7 +390,17 @@ function chapLabel(n){
 }
 const BOOK_SVG='<svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
 
+let ALL=[];
+const counts=new Map();
+function refreshTotal(){
+  const el=$('head-total');
+  if(!el||!ALL.length||!ALL.every(t=>counts.has(String(t.id))))return;
+  el.textContent=' · '+chapLabel(ALL.reduce((a,t)=>a+counts.get(String(t.id)),0));
+}
+
 function paintCount(id,n){
+  counts.set(String(id),n);
+  setTimeout(refreshTotal,0);
   const el=document.querySelector('#card-'+CSS.escape(String(id))+' .meta-pill');
   if(!el)return;
   el.classList.remove('loading');
@@ -424,14 +447,12 @@ function openCard(card){
   if(!card||card.classList.contains('leaving'))return;
   const url=card.dataset.url;
   card.classList.add('leaving');
-  const fill=card.querySelector('.side-prog .fill');
-  if(fill)fill.style.height='100%';
-  setTimeout(()=>location.href=url,320);
+  const b=card.querySelector('.t-btn');
+  if(b){b.classList.add('is-loading');const sp=b.querySelector('span');if(sp)sp.textContent='جاري الفتح...';}
+  setTimeout(()=>location.href=url,300);
 }
 
 /* ---------- render ---------- */
-let ALL=[];
-
 function cardHTML(t,i){
   const delay=Math.min(i*70,420);
   const url='chapters.html?teacherId='+encodeURIComponent(t.id)
@@ -441,10 +462,8 @@ function cardHTML(t,i){
   return `
   <div class="t-card" id="card-${esc(t.id)}" data-url="${esc(url)}" role="link" tabindex="0"
        aria-label="${esc(t.name)} — عرض الفصول" style="--delay:${delay}ms">
-    <div class="side-bar"></div>
-    <div class="side-prog"><div class="fill"></div></div>
     <div class="t-img">
-      ${hasImg?`<img src="${esc(t.image_url)}" alt="${esc(t.name)}" loading="${i<4?'eager':'lazy'}" data-teacher-img>`:''}
+      ${hasImg?`<img src="${esc(t.image_url)}" alt="" draggable="false" loading="${i<4?'eager':'lazy'}" data-teacher-img>`:''}
       <div class="ph-wrap" style="display:${hasImg?'none':'grid'}">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
       </div>
@@ -454,7 +473,7 @@ function cardHTML(t,i){
     <div class="t-footer">
       <div class="t-meta"><span class="meta-pill loading"></span></div>
       <button class="t-btn" type="button" tabindex="-1">
-        عرض الفصول
+        <span>عرض الفصول</span>
         <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </button>
     </div>
@@ -498,9 +517,10 @@ function renderGrid(list,{animate=true}={}){
 
 function updateSub(shown){
   const name=subjectName?` لمادة <b>${esc(subjectName)}</b>`:'';
-  $('head-sub').innerHTML=shown===ALL.length
+  $('head-sub').innerHTML=(shown===ALL.length
     ? `${ALL.length} ${ALL.length===1?'مدرس متاح':'مدرسين متاحين'}${name}`
-    : `${shown} من ${ALL.length} مدرس${name}`;
+    : `${shown} من ${ALL.length} مدرس${name}`)+'<span id="head-total"></span>';
+  refreshTotal();
 }
 
 function addSearch(){
@@ -577,9 +597,13 @@ document.addEventListener('keydown',e=>{
 window.addEventListener('pageshow',e=>{
   if(e.persisted)document.querySelectorAll('.t-card.leaving').forEach(c=>{
     c.classList.remove('leaving');
-    const f=c.querySelector('.side-prog .fill'); if(f)f.style.height='0';
+    const b=c.querySelector('.t-btn');
+    if(b){b.classList.remove('is-loading');const sp=b.querySelector('span');if(sp)sp.textContent='عرض الفصول';}
   });
 });
+// صور المدرسين: منع قائمة الضغط المطوّل والسحب
+document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('.t-img'))e.preventDefault();});
+document.addEventListener('dragstart',e=>{if(e.target&&e.target.tagName==='IMG')e.preventDefault();});
 
 async function loadProfile(){
   try{
@@ -587,6 +611,10 @@ async function loadProfile(){
     if(me){$('nav-name').textContent=me.name||'طالب';$('nav-av').textContent=(me.name||'ط').charAt(0);}
   }catch(e){}
 }
+
+// عنوان الصفحة بقلم التحديد على اسم المادة
+if(subjectName)$('head-title').innerHTML='اختر مدرسك في <span class="hl">'+esc(subjectName)+'</span>';
+requestAnimationFrame(()=>requestAnimationFrame(()=>document.body.classList.add('go')));
 
 load(); loadProfile();
 })();
