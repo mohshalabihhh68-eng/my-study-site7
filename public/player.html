@@ -1341,6 +1341,28 @@ function updateCurrentItemUI(){
   });
 }
 function statusOf(p){const pct=Math.min(100,+p.percent||0),done=!!p.watched||pct>=90;return{pct,done,label:done?'تمت المشاهدة ✓':pct?'وقفت عند '+Math.round(pct)+'%':'جديد',cls:done?'g':pct?'o':''};}
+function parseDurationValue(x){
+  if(x==null||x==='')return 0;
+  if(typeof x==='number'&&Number.isFinite(x)){
+    let n=x; if(n>100000)n=Math.floor(n/1000); return n>1?Math.floor(n):0;
+  }
+  const s=String(x).trim();
+  if(!s)return 0;
+  // 1:44:25 أو 21:41
+  const clock=s.match(/^(\d{1,3}):([0-5]?\d)(?::([0-5]?\d))?$/);
+  if(clock){
+    if(clock[3]!=null){const sec=Number(clock[1])*3600+Number(clock[2])*60+Number(clock[3]);return sec>1?sec:0;}
+    const sec=Number(clock[1])*60+Number(clock[2]);return sec>1?sec:0;
+  }
+  // عربي بسيط
+  let sec=0;
+  if(/ساعتين/.test(s))sec+=7200; else if(/ساعة/.test(s)){const h=s.match(/(\d+)\s*ساعة/);sec+=(h?Number(h[1]):1)*3600;}
+  const dm=s.match(/(\d+)\s*دق/); if(dm)sec+=Number(dm[1])*60;
+  if(sec>1)return sec;
+  const n=Number(s.replace(/[^0-9.]/g,''));
+  if(Number.isFinite(n)&&n>1){return n>100000?Math.floor(n/1000):Math.floor(n);}
+  return 0;
+}
 function fmt(s){s=Math.max(0,Math.floor(Number(s)||0));const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;if(h>0)return h+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');return m+':'+String(sec).padStart(2,'0');}
 function durationKey(id){return 'thanawya_vdur_'+String(id||'');}
 function getCachedDuration(id){try{const n=Math.floor(Number(localStorage.getItem(durationKey(id))||0));return n>0?n:0;}catch(e){return 0;}}
@@ -1882,9 +1904,14 @@ async function probeOneDuration(v, i){
       }
     }
     if(!playData) return;
-    const direct = Number(playData.duration || playData.duration_seconds || playData.length || playData.total_duration || 0);
+    const direct = parseDurationValue(playData.duration)
+      || parseDurationValue(playData.duration_seconds)
+      || parseDurationValue(playData.length)
+      || parseDurationValue(playData.total_duration)
+      || parseDurationValue(playData.duration_text)
+      || 0;
     if(direct > 1){
-      v.duration = Math.floor(direct > 100000 ? direct/1000 : direct);
+      v.duration = Math.floor(direct);
       cacheDuration(v.id, v.duration);
       updateDurationUI(i);
       return;
@@ -1974,14 +2001,24 @@ async function init(){
 
     videos=(Array.isArray(sourceVideos)?sourceVideos:[]).map((v,i)=>{
       const id=v.id||v.video_id||v.videoId;
-      let raw=+(v.duration||v.duration_seconds||v.length||v.video_duration||v.total_seconds||v.time||0)||0;
-      // أحيانا المدة بالمللي ثانية
-      if(raw > 100000) raw = Math.floor(raw/1000);
-      const cached = getCachedDuration(id)||0;
-      let dur = raw>1?raw:(cached||0);
+      // اقرأ المدة من السيرفر بكل الأشكال (رقم / ساعة:دقيقة:ثانية / عربي)
+      let dur = parseDurationValue(v.duration)
+        || parseDurationValue(v.duration_seconds)
+        || parseDurationValue(v.length)
+        || parseDurationValue(v.video_duration)
+        || parseDurationValue(v.total_seconds)
+        || parseDurationValue(v.time)
+        || parseDurationValue(v.duration_text)
+        || parseDurationValue(v.durationText)
+        || 0;
       if(!(dur>1)){
-        try{ const p=readProgress(id); const pd=+((p&&p.duration)||0); if(pd>1) dur=pd; }catch(e){}
+        const cached = getCachedDuration(id)||0;
+        if(cached>1) dur = cached;
       }
+      if(!(dur>1)){
+        try{ const p=readProgress(id); const pd=parseDurationValue(p&&p.duration); if(pd>1) dur=pd; }catch(e){}
+      }
+      if(dur>1){ try{ cacheDuration(id, dur); }catch(e){} }
       return {
         id:id,
         title:v.title||v.name||('فيديو '+(i+1)),
