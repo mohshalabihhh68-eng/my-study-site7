@@ -551,19 +551,6 @@ a{text-decoration:none}
 
 /* video list */
 .vlist{flex:1;overflow:auto;padding:8px 10px 14px;display:flex;flex-direction:column;gap:7px;scrollbar-width:thin;scrollbar-color:rgba(91,140,255,.25) transparent}
-.files-sec{border-top:1px solid rgba(91,140,255,.12);padding:12px 12px 16px;background:rgba(8,12,24,.55)}
-.files-head{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px;color:var(--text,#e8eeff);margin-bottom:10px}
-.files-head svg{opacity:.85;color:#5b8cff}
-.files-count{margin-inline-start:auto;background:rgba(91,140,255,.15);color:#8eb6ff;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:800}
-.files-list{display:flex;flex-direction:column;gap:8px}
-.file-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(91,140,255,.12);text-decoration:none;color:inherit;transition:.15s}
-.file-item:hover{background:rgba(91,140,255,.1);border-color:rgba(91,140,255,.3)}
-.file-ic{width:36px;height:36px;border-radius:10px;background:rgba(239,68,68,.12);color:#f87171;display:grid;place-items:center;flex-shrink:0}
-.file-ic svg{width:18px;height:18px}
-.file-meta{flex:1;min-width:0}
-.file-meta b{display:block;font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.file-meta small{font-size:10.5px;opacity:.55;font-weight:700}
-.file-dl{font-size:11px;font-weight:800;color:#8eb6ff;padding:6px 10px;border-radius:8px;background:rgba(91,140,255,.12);white-space:nowrap}
 .vlist::-webkit-scrollbar{width:5px}
 .vlist::-webkit-scrollbar-thumb{background:rgba(91,140,255,.25);border-radius:99px}
 .empty{padding:28px 18px;text-align:center;color:var(--muted);font-size:13px}
@@ -1028,15 +1015,6 @@ body.vpaused .eq i{animation-play-state:paused}
         </div>
 
         <div class="vlist" id="videoList"><div class="skeleton">جاري تحميل قائمة الفيديوهات…</div></div>
-
-        <div class="files-sec" id="filesSec" style="display:none">
-          <div class="files-head">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>
-            <span>الملفات</span>
-            <span class="files-count" id="filesCount">0</span>
-          </div>
-          <div class="files-list" id="filesList"></div>
-        </div>
       </aside>
     </div>
   </div>
@@ -1262,7 +1240,7 @@ function readPref(){try{return JSON.parse(localStorage.getItem(PREF_KEY)||'{}')|
 let prefs=Object.assign({rate:1,autonext:true,volume:1,muted:false},readPref());
 function savePref(){try{localStorage.setItem(PREF_KEY,JSON.stringify(prefs))}catch(e){}}
 
-let videos=[],lectureFiles=[],current=-1,hls=null,lastSaved=0,toastTimer=0,ready=false;
+let videos=[],current=-1,hls=null,lastSaved=0,toastTimer=0,ready=false;
 let lectureTitle='المحاضرة',listFilter='all',listQuery='',pendingRestore=-1;
 
 /* ── YOUTUBE ── */
@@ -1541,12 +1519,13 @@ const seek=$('pseek');
 const isOpen=()=>$('pmenu').classList.contains('open');
 
 function showUI(pin){
-  // المكونات تفضل ظاهرة لحد ما المستخدم يضغط تاني (toggle) — مفيش اختفاء تلقائي
   if(!screenEl.classList.contains('show-ui')){screenEl.classList.add('show-ui');paintProgress();}
   clearTimeout(uiTimer);
+  if(pin||isPaused()||isOpen()||drawerOpen()||scrub||hold.active)return;
+  uiTimer=setTimeout(()=>{if(!isPaused()&&!isOpen()&&!drawerOpen()&&!scrub)hideUI();},4000);
 }
 function hideUI(){screenEl.classList.remove('show-ui');clearTimeout(uiTimer);}
-function toggleUI(){if(screenEl.classList.contains('show-ui'))hideUI();else showUI(true);}
+function toggleUI(){if(screenEl.classList.contains('show-ui'))hideUI();else showUI();}
 function isPaused(){
   if(isYtMode&&ytPlayer&&window.YT){try{return ytPlayer.getPlayerState()!==window.YT.PlayerState.PLAYING}catch(e){}}
   return video.paused;
@@ -1975,56 +1954,21 @@ async function probeOneDuration(v, i){
 }
 
 async function probeAllDurations(){
-  // اقرأ مدد كل الفيديوهات من السيرفر — بدون تخطي (حتى لو cache قديم)
-  const pending = videos.map((v,i)=>({v,i}));
+  // اقرأ كل المدد من السيرفر (حتى لو فيه cache قديم) — 3 عمال بالتوازي
+  const pending = videos.map((v,i)=>({v,i})).filter(x => resolveItemDuration(x.v) <= 1);
   let cursor = 0;
-  const workers = Math.min(8, Math.max(3, pending.length));
   async function worker(){
     while(cursor < pending.length){
       const my = cursor++;
       const {v,i} = pending[my];
-      try {
-        // لو المدة من السيرفر/الكاش موجودة وخلاص، سيبها
-        if (resolveItemDuration(v) > 1) { updateDurationUI(i); continue; }
-        await probeOneDuration(v, i);
-      } catch(e) {}
+      try { await probeOneDuration(v, i); } catch(e) {}
       if(my % 2 === 0){ try{ renderStats(); }catch(e){} }
     }
   }
-  await Promise.all(Array.from({length: workers}, () => worker()));
+  await Promise.all([worker(), worker(), worker()]);
   try{ renderList(); }catch(e){}
   try{ renderDrawer(); }catch(e){}
   try{ renderStats(); }catch(e){}
-}
-
-function proxyFileUrl(u){
-  if(!u) return '';
-  const s = String(u);
-  if(s.startsWith('/api/')) return s;
-  return '/api/file-proxy?url=' + encodeURIComponent(s);
-}
-
-function renderFiles(){
-  const sec = $('filesSec');
-  const list = $('filesList');
-  const cnt = $('filesCount');
-  if(!sec || !list) return;
-  if(!lectureFiles.length){
-    sec.style.display = 'none';
-    list.innerHTML = '';
-    if(cnt) cnt.textContent = '0';
-    return;
-  }
-  sec.style.display = '';
-  if(cnt) cnt.textContent = String(lectureFiles.length);
-  list.innerHTML = lectureFiles.map(function(f){
-    const name = esc(f.title || f.name || 'ملف');
-    const href = proxyFileUrl(f.download_url || f.url || f.file_url || '');
-    return '<a class="file-item" href="'+esc(href)+'" target="_blank" rel="noopener">'
-      + '<div class="file-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>'
-      + '<div class="file-meta"><b>'+name+'</b><small>PDF · اضغط للفتح / التحميل</small></div>'
-      + '<span class="file-dl">فتح</span></a>';
-  }).join('');
 }
 
 /* ── INIT ── */
@@ -2082,42 +2026,6 @@ async function init(){
         duration:dur>1?Math.floor(dur):0
       };
     }).filter(v=>v.id!==undefined&&v.id!==null&&String(v.id)!=='');
-
-    // ملفات المحاضرة من السيرفر
-    lectureFiles = [];
-    const rawFiles = d.files || d.pdfs || (d.lecture && (d.lecture.files || d.lecture.pdfs)) || [];
-    if (Array.isArray(rawFiles)) {
-      lectureFiles = rawFiles.map(function(f, i){
-        return {
-          id: f.id || f.file_id || ('file_' + i),
-          title: f.title || f.name || ('ملف ' + (i + 1)),
-          name: f.name || f.title || ('ملف ' + (i + 1)),
-          url: f.url || f.file_url || f.download_url || null,
-          download_url: f.download_url || f.url || f.file_url || null,
-          type: f.type || 'pdf'
-        };
-      }).filter(function(f){ return f.url || f.download_url; });
-    }
-    // من المجموعات لو الملفات جوّه groups
-    if (!lectureFiles.length && Array.isArray(d.groups)) {
-      d.groups.forEach(function(g){
-        const gName = String(g.name || g.title || '');
-        if (!/ملف/i.test(gName)) return;
-        (g.items || g.videos || g.parts || []).forEach(function(f, i){
-          const url = f.url || f.file_url || f.download_url;
-          if (!url) return;
-          lectureFiles.push({
-            id: f.id || ('file_g_' + i),
-            title: f.title || f.name || gName,
-            name: f.name || f.title || gName,
-            url: url,
-            download_url: f.download_url || url,
-            type: f.type || 'pdf'
-          });
-        });
-      });
-    }
-    try { renderFiles(); } catch(e) {}
 
     const lectureName=(d.lecture&&(d.lecture.name||d.lecture.title))||d.lecture_name||d.name||d.title||'المحاضرة';
     lectureTitle=lectureName || qLectureName || 'المحاضرة';
