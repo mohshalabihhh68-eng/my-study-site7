@@ -7993,7 +7993,9 @@ app.get("/api/img", rateLimit({ max: 240, windowMs: 60_000, scope: "img-proxy" }
     if (isThMedia) {
       try {
         const info = typeof getThanawicaSessionInfo === "function" ? getThanawicaSessionInfo() : null;
-        const ck = String(process.env.THANAWICA_COOKIES || "").trim();
+        const ckSession = info && info.cookies ? String(info.cookies).trim() : "";
+        const ckEnv = String(process.env.THANAWICA_COOKIES || "").trim();
+        const ck = ckSession || ckEnv;
         if (ck) headers.Cookie = ck;
       } catch {}
     }
