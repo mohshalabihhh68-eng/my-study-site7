@@ -526,6 +526,13 @@ export function subjectKind(name) {
   if (/إحصاء|احصاء|statistics/i.test(s)) return "statistics";
   if (/تاريخ|history/i.test(s)) return "history";
   if (/جغراف|geography/i.test(s)) return "geography";
+  // مواد شرعية (أزهر)
+  if (/فقه/i.test(s)) return "fiqh";
+  if (/توحيد|عقيدة/i.test(s)) return "tawhid";
+  if (/تفسير/i.test(s)) return "tafsir";
+  if (/حديث/i.test(s)) return "hadith";
+  if (/قرآن|تجويد|قراءات/i.test(s)) return "quran";
+  if (/سيرة|نحو\s*شرعي|بلاغة\s*شرعي|أدب\s*شرعي|شرعي/i.test(s)) return "sharia_other";
   if (NAME_CHEM.test(s)) return "chemistry";
   if (NAME_MATH.test(s)) return "math";
   if (NAME_PHYS.test(s)) return "physics";
