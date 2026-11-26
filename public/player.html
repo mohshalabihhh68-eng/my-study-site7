@@ -105,8 +105,7 @@ a{text-decoration:none}
   padding:10px 18px;
   width:100%;
 }
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none;order:2}
-.hdr-right{order:1}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
 
 .logo-box{
   width:40px;height:40px;border-radius:13px;flex-shrink:0;
@@ -787,7 +786,7 @@ body.vpaused .eq i{animation-play-state:paused}
       </button>
       <button class="back-hdr" id="backBtn">
         <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 0 14h-2"/></svg>
-        رجوع للمحتوى
+        الرجوع للمحاضرات
       </button>
     </div>
   </div>
@@ -1501,7 +1500,7 @@ function showUI(pin){
   if(!screenEl.classList.contains('show-ui')){screenEl.classList.add('show-ui');paintProgress();}
   clearTimeout(uiTimer);
   if(pin||isPaused()||isOpen()||drawerOpen()||scrub||hold.active)return;
-  uiTimer=setTimeout(()=>{if(!isPaused()&&!isOpen()&&!drawerOpen()&&!scrub)hideUI();},3000);
+  uiTimer=setTimeout(()=>{if(!isPaused()&&!isOpen()&&!drawerOpen()&&!scrub)hideUI();},4000);
 }
 function hideUI(){screenEl.classList.remove('show-ui');clearTimeout(uiTimer);}
 function toggleUI(){if(screenEl.classList.contains('show-ui'))hideUI();else showUI();}
@@ -1928,21 +1927,21 @@ async function probeOneDuration(v, i){
 }
 
 async function probeAllDurations(){
-  // دفعتين في نفس الوقت لتسريع قراءة المدد
+  // اقرأ كل المدد من السيرفر (حتى لو فيه cache قديم) — 3 عمال بالتوازي
   const pending = videos.map((v,i)=>({v,i})).filter(x => resolveItemDuration(x.v) <= 1);
   let cursor = 0;
   async function worker(){
     while(cursor < pending.length){
       const my = cursor++;
       const {v,i} = pending[my];
-      await probeOneDuration(v, i);
-      if(my % 2 === 0){ renderStats(); }
+      try { await probeOneDuration(v, i); } catch(e) {}
+      if(my % 2 === 0){ try{ renderStats(); }catch(e){} }
     }
   }
-  await Promise.all([worker(), worker()]);
-  renderList();
-  renderDrawer();
-  renderStats();
+  await Promise.all([worker(), worker(), worker()]);
+  try{ renderList(); }catch(e){}
+  try{ renderDrawer(); }catch(e){}
+  try{ renderStats(); }catch(e){}
 }
 
 /* ── INIT ── */
