@@ -2077,8 +2077,8 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 app.use(rateLimit({ max: 1500, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
 app.use("/api/stream/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
 // حد المقاطع: يمنع سحب المحاضرة كاملة بسرعة من سكربت/منصة تانية
-app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || 420), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات بث كثيرة — هدّي شوية" }));
-app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 30), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
+app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || 2000), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات بث كثيرة — هدّي شوية" }));
+app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 600), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -4456,6 +4456,19 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
           if (!v.videoId) v.videoId = v.id;
           if (!v.title) v.title = v.name || "فيديو";
           if (!v.type) v.type = "video";
+          // مرّر المدة بكل الأسماء عشان المشغّل يقرأها
+          const dur = Number(v.duration_seconds || v.duration || 0);
+          if (dur > 1) {
+            v.duration = Math.floor(dur);
+            v.duration_seconds = Math.floor(dur);
+          }
+        }
+      }
+      if (raw && raw.data && Array.isArray(raw.data.files)) {
+        for (const f of raw.data.files) {
+          if (!f.title) f.title = f.name || "ملف";
+          if (!f.name) f.name = f.title;
+          if (!f.type) f.type = "pdf";
         }
       }
       return res.json(maskTreeImages(raw));
