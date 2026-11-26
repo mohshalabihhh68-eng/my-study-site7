@@ -83,10 +83,14 @@ body.leaving .wrap{opacity:0;transform:translateY(-8px);transition:opacity .26s,
 .card-image img{width:100%;height:100%;object-fit:cover;border-radius:17px;display:block;background:var(--card-inner);-webkit-user-drag:none}
 .image-placeholder{width:100%;height:100%;border-radius:17px;background:var(--ph-bg);display:grid;place-items:center;color:var(--muted)}
 .image-placeholder svg{width:30px;height:30px;opacity:.6}
-.lectures-bar{display:flex;align-items:center;justify-content:space-between;background:var(--card-inner);border:1px solid var(--line);border-radius:14px;padding:11px 16px}
-.lectures-bar-label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
-.lectures-bar-label svg{width:18px;height:18px;color:var(--blue);fill:none;stroke:currentColor;stroke-width:2}
-.lectures-badge{min-width:34px;height:34px;padding:0 8px;border-radius:99px;display:grid;place-items:center;color:#fff;font-size:14px;font-weight:900;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 4px 12px var(--glow)}
+
+/* stats bar — videos only */
+.stats-bar{display:flex;align-items:center;gap:10px;background:var(--card-inner);border:1px solid var(--line);border-radius:14px;padding:11px 16px;flex-wrap:wrap}
+.stat-item{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:var(--muted)}
+.stat-item svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:var(--blue);flex:none}
+.stat-item b{color:var(--ink)}
+.stat-sep{width:1px;height:16px;background:var(--line);flex:none}
+
 .view-btn{width:100%;padding:13px;border-radius:14px;font-size:15px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2));display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 16px var(--glow);transition:gap .2s,filter .2s}
 .chapter-card:hover .view-btn{gap:14px;filter:brightness(1.07)}
 .view-btn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2.4;transform:scaleX(-1)}
@@ -95,7 +99,7 @@ body.leaving .wrap{opacity:0;transform:translateY(-8px);transition:opacity .26s,
 .view-btn.is-loading::after{content:"";width:16px;height:16px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .7s linear infinite}
 
 /* skeleton + states */
-.sk-card{height:268px;border-radius:24px;border:1px solid var(--line);background:linear-gradient(90deg,var(--card) 25%,var(--card-hover) 50%,var(--card) 75%);background-size:500px 100%;animation:shimmer 1.4s infinite linear}
+.sk-card{height:252px;border-radius:24px;border:1px solid var(--line);background:linear-gradient(90deg,var(--card) 25%,var(--card-hover) 50%,var(--card) 75%);background-size:500px 100%;animation:shimmer 1.4s infinite linear}
 .state{grid-column:1/-1;text-align:center;padding:56px 16px;color:var(--muted);font-weight:700;display:flex;flex-direction:column;align-items:center;gap:14px}
 .state.err{color:var(--red)}
 .state button{padding:10px 22px;border-radius:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2))}
@@ -113,14 +117,10 @@ body.leaving .wrap{opacity:0;transform:translateY(-8px);transition:opacity .26s,
   .chapter-title{font-size:18px}
   .card-image{width:88px;height:88px}
 }
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chips:empty{display:none}
-.chip-mini{padding:3px 11px;border-radius:99px;font-size:12px;font-weight:800;color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent)}
 .sort-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:14px;background:var(--card);border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:13px;margin-right:auto;transition:border-color .2s}
 .sort-btn:hover{border-color:var(--blue)}
 .sort-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .sort-btn+.search-box{margin-right:0}
-.lec-num{display:grid;place-items:center;min-width:34px;height:34px;padding:0 8px;border-radius:12px;font-size:15px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 4px 12px var(--glow);margin-bottom:8px;width:max-content}
 @media(max-width:768px){.sort-btn{margin-right:0}}
 </style>
 </head>
@@ -163,16 +163,17 @@ body.leaving .wrap{opacity:0;transform:translateY(-8px);transition:opacity .26s,
 const API_BASE = '', TOKEN_KEY = 'student_token', token = localStorage.getItem(TOKEN_KEY);
 const $ = id => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
-const chapterId = qs.get('chapterId');
-const teacherId = qs.get('teacherId') || '';
-const teacherName = qs.get('teacherName') || '';
-const subjectName = qs.get('subjectName') || '';
-const chapterName = qs.get('chapterName') || '';
+const chapterId    = qs.get('chapterId');
+const teacherId    = qs.get('teacherId')    || '';
+const teacherName  = qs.get('teacherName')  || '';
+const subjectName  = qs.get('subjectName')  || '';
+const chapterName  = qs.get('chapterName')  || '';
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let ALL = [], desc = false, query = '';
 
-const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const esc  = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const norm = s => String(s || '').replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/[^\p{L}\p{N}\s]/gu,'').replace(/\s+/g,'').toLowerCase().trim();
+
 const proxyImg = u => {
   if (!u) return '';
   u = String(u);
@@ -183,6 +184,7 @@ const proxyImg = u => {
   }
   return u;
 };
+
 const api = async path => {
   const headers = { Accept: 'application/json' };
   if (token) headers.Authorization = 'Bearer ' + token;
@@ -193,46 +195,69 @@ const api = async path => {
   return data.data;
 };
 
-/* حساب عدد الفيديوهات فقط */
-const isPlayableVideo = it => {
+/* ── helpers ─────────────────────────────────────────────── */
+
+/* true only for watchable video items — no files, no exams */
+const FILE_TYPE_RE  = /^(file|pdf|document|exam|quiz|test)$/i;
+const FILE_GROUP_RE = /ملف|امتحان|اختبار|pdf/i;
+const FILE_ID_RE    = /^mesari_(?:file|exam)_/i;
+
+const isVideo = it => {
   if (!it) return false;
-  const t = String(it.type || it.kind || '').toLowerCase();
-  if (t==='file'||t==='pdf'||t==='document'||t==='exam'||t==='quiz'||t==='test') return false;
-  if (it.is_file === true) return false;
-  if (/ملف|امتحان|اختبار/i.test(String(it.group || ''))) return false;
+  const t  = String(it.type || it.kind || '').toLowerCase();
+  if (FILE_TYPE_RE.test(t))             return false;
+  if (it.is_file === true)              return false;
+  if (FILE_GROUP_RE.test(String(it.group || ''))) return false;
   const id = String(it.video_id || it.videoId || it.mesariVideoId || it.id || '').trim();
-  if (!id) return false;
-  if (/^mesari_(?:file|exam)_/i.test(id)) return false;
+  if (!id)                              return false;
+  if (FILE_ID_RE.test(id))             return false;
   if (/^mesari_lesson_/i.test(id) && !it.mesariVideoId) return false;
   if (/^(mesari_|taleb_|bn_|hos_|th[pvmy]_)/i.test(id)) return true;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return true;
   if (/^\d{6,}$/.test(id)) return true;
   return false;
 };
-function partCount(l){
-  if (Array.isArray(l.parts)) return l.parts.filter(isPlayableVideo).length;
-  if (Array.isArray(l.sections)) return l.sections.reduce((s, g) => /ملف/i.test(String(g.title || g.name || '')) ? s : s + (g.items || []).filter(isPlayableVideo).length, 0);
-  return Number(l.video_count || 0) || Number(l.parts_count || l.count || 0);
-}
-function chipsOf(l){
-  const out = [];
-  if (Array.isArray(l.sections) && l.sections.length){
-    l.sections.forEach(g => { const n = (g.items || []).length; if (n) out.push((g.title || g.name || 'قسم') + ' ' + n); });
-  } else {
-    const v = Number(l.videos_count ?? l.video_count ?? 0), f = Number(l.files_count ?? l.pdf_count ?? 0), x = Number(l.exams_count ?? l.exam_count ?? 0);
-    if (v) out.push(v + ' فيديو'); if (f) out.push(f + ' ملف'); if (x) out.push(x + ' امتحان');
+
+/* count videos only, skip file/exam sections entirely */
+function videoCount(l) {
+  if (Array.isArray(l.parts))    return l.parts.filter(isVideo).length;
+  if (Array.isArray(l.sections)) {
+    return l.sections.reduce((s, g) => {
+      if (FILE_GROUP_RE.test(String(g.title || g.name || ''))) return s;
+      return s + (g.items || []).filter(isVideo).length;
+    }, 0);
   }
-  return out.slice(0, 4).map(t => '<span class="chip-mini">' + esc(t) + '</span>').join('');
+  /* fallback: use explicit video_count if present, else parts_count */
+  return Number(l.videos_count ?? l.video_count ?? l.parts_count ?? l.count ?? 0);
 }
 
-/* رجوع للفصول */
+/* build stat chips — videos only, never files or exams */
+function statsOf(l) {
+  const vids = videoCount(l);
+  /* if the lecture has explicit section info, show section breakdown (video-only) */
+  if (Array.isArray(l.sections) && l.sections.length) {
+    const rows = l.sections
+      .filter(g => !FILE_GROUP_RE.test(String(g.title || g.name || '')))
+      .map(g => ({ name: g.title || g.name || 'قسم', n: (g.items || []).filter(isVideo).length }))
+      .filter(r => r.n > 0);
+    if (rows.length) {
+      return rows.map(r =>
+        `<span class="stat-item"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><b>${r.n}</b> ${esc(r.name)}</span>`
+      ).join('<span class="stat-sep"></span>');
+    }
+  }
+  if (!vids) return '';
+  return `<span class="stat-item"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><b>${vids}</b> فيديو</span>`;
+}
+
+/* ── back ─────────────────────────────────────────────────── */
 window.goBack = function(){
   if (document.referrer && document.referrer.indexOf('chapters.html') !== -1 && history.length > 1) { history.back(); return; }
   if (teacherId) location.href = 'chapters.html?teacherId=' + encodeURIComponent(teacherId) + '&teacherName=' + encodeURIComponent(teacherName) + '&subjectName=' + encodeURIComponent(subjectName);
   else location.href = 'subjects.html';
 };
 
-/* progress + to-top */
+/* ── scroll ───────────────────────────────────────────────── */
 const bar = $('scroll-progress'), toTop = $('to-top');
 addEventListener('scroll', () => {
   const h = document.documentElement.scrollHeight - innerHeight;
@@ -241,59 +266,81 @@ addEventListener('scroll', () => {
 }, { passive: true });
 toTop.addEventListener('click', () => scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' }));
 
-/* render */
-const BOOK = '<svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
-function cardHTML(l, i){
-  const img = proxyImg(l.image_url || l.image || l.thumbnail || l.thumb || l.thumb_url || l.thumbnail_url || l.cover || l.poster || l.photo || '');
+/* ── card HTML ────────────────────────────────────────────── */
+const PLAY_ICON = '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+
+function cardHTML(l, i) {
+  const img  = proxyImg(l.image_url || l.image || l.thumbnail || l.thumb || l.thumb_url || l.thumbnail_url || l.cover || l.poster || l.photo || '');
   const name = l.name || l.title || ('المحاضرة ' + l._n);
-  const url = 'player.html?lectureId=' + encodeURIComponent(l.id)
-    + '&lectureName=' + encodeURIComponent(l.name || l.title || '')
-    + '&lectureNum=' + l._n
-    + '&teacherName=' + encodeURIComponent(teacherName)
-    + '&subjectName=' + encodeURIComponent(subjectName)
+  const cnt  = l._cnt;
+  const url  = 'player.html?lectureId=' + encodeURIComponent(l.id)
+    + '&lectureName='  + encodeURIComponent(l.name || l.title || '')
+    + '&lectureNum='   + l._n
+    + '&teacherName='  + encodeURIComponent(teacherName)
+    + '&subjectName='  + encodeURIComponent(subjectName)
     + (chapterName ? '&chapterName=' + encodeURIComponent(chapterName) : '');
+
+  const statsHTML = statsOf(l);
+  const statsBar  = statsHTML
+    ? `<div class="stats-bar">${statsHTML}</div>`
+    : cnt
+      ? `<div class="stats-bar"><span class="stat-item"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg><b>${cnt}</b> فيديو</span></div>`
+      : '';
+
   return `
   <div class="chapter-card" id="card-${esc(l.id)}" data-url="${esc(url)}" role="link" tabindex="0" aria-label="${esc(name)} — ادخل المحاضرة" style="--i:${Math.min(i, 8)}">
     <div class="card-top">
-      <div class="card-text"><span class="chapter-label">المحاضرة ${l._n}</span><h2 class="chapter-title">${esc(name)}</h2></div>
+      <div class="card-text">
+        <span class="chapter-label">المحاضرة ${l._n}</span>
+        <h2 class="chapter-title">${esc(name)}</h2>
+      </div>
       <div class="card-image">
         ${img ? `<img src="${esc(img)}" alt="" draggable="false" loading="${i < 4 ? 'eager' : 'lazy'}" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">` : ''}
-        <div class="image-placeholder" style="display:${img ? 'none' : 'grid'}">${BOOK}</div>
+        <div class="image-placeholder" style="display:${img ? 'none' : 'grid'}">${PLAY_ICON}</div>
       </div>
     </div>
-    <div class="lectures-bar">
-      <div class="lectures-bar-label">${BOOK}عدد الأجزاء</div>
-      <div class="lectures-badge">${l._cnt}</div>
-    </div>
-    <div class="chips">${chipsOf(l)}</div>
+    ${statsBar}
     <button class="view-btn" type="button" tabindex="-1"><span>ادخل المحاضرة</span><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
   </div>`;
 }
-function renderGrid(list){
+
+/* ── render ───────────────────────────────────────────────── */
+function renderGrid(list) {
   const grid = $('grid');
-  if (!list.length){ grid.innerHTML = '<div class="state">مفيش محاضرة بالاسم ده.</div>'; return; }
+  if (!list.length) { grid.innerHTML = '<div class="state">مفيش محاضرة بالاسم ده.</div>'; return; }
   grid.innerHTML = list.map(cardHTML).join('');
 }
-function updateSub(shown){
-  const parts = ALL.reduce((a, l) => a + l._cnt, 0);
-  const head = shown === ALL.length ? '<b>' + ALL.length + '</b> ' + (ALL.length === 1 ? 'محاضرة' : 'محاضرات') : shown + ' من ' + ALL.length + ' محاضرة';
-  $('sub').innerHTML = head + ' · <b>' + parts + '</b> جزء';
+
+function updateSub(shown) {
+  const total = ALL.reduce((a, l) => a + l._cnt, 0);
+  const head  = shown === ALL.length
+    ? '<b>' + ALL.length + '</b> ' + (ALL.length === 1 ? 'محاضرة' : 'محاضرات')
+    : shown + ' من ' + ALL.length + ' محاضرة';
+  $('sub').innerHTML = head + ' · <b>' + total + '</b> فيديو';
 }
-function view(){
+
+function view() {
   let list = query ? ALL.filter(l => norm(l.name || l.title).includes(query)) : ALL.slice();
   if (desc) list.reverse();
-  updateSub(list.length); renderGrid(list);
+  updateSub(list.length);
+  renderGrid(list);
 }
-function addTools(){
+
+/* ── tools (sort + search) ────────────────────────────────── */
+function addTools() {
   const row = document.querySelector('.top-row');
-  if (ALL.length >= 2){
+  if (ALL.length >= 2) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'sort-btn'; b.id = 'sort-btn';
     b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg><span>الأقدم أولًا</span>';
     row.appendChild(b);
-    b.addEventListener('click', () => { desc = !desc; b.querySelector('span').textContent = desc ? 'الأحدث أولًا' : 'الأقدم أولًا'; view(); });
+    b.addEventListener('click', () => {
+      desc = !desc;
+      b.querySelector('span').textContent = desc ? 'الأحدث أولًا' : 'الأقدم أولًا';
+      view();
+    });
   }
-  if (ALL.length >= 6){
+  if (ALL.length >= 6) {
     const box = document.createElement('div');
     box.className = 'search-box';
     box.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" id="l-search" autocomplete="off" placeholder="ابحث عن محاضرة…" aria-label="بحث عن محاضرة">';
@@ -303,9 +350,9 @@ function addTools(){
   }
 }
 
-/* open */
+/* ── open ─────────────────────────────────────────────────── */
 let navigating = false;
-function openCard(card){
+function openCard(card) {
   if (!card || navigating) return;
   navigating = true;
   card.classList.add('opening');
@@ -318,30 +365,32 @@ $('grid').addEventListener('click', e => openCard(e.target.closest('.chapter-car
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const c = e.target.closest && e.target.closest('.chapter-card');
-  if (c && e.target === c){ e.preventDefault(); openCard(c); }
+  if (c && e.target === c) { e.preventDefault(); openCard(c); }
 });
 addEventListener('pageshow', () => {
   navigating = false; document.body.classList.remove('leaving');
   document.querySelectorAll('.chapter-card.opening').forEach(c => {
     c.classList.remove('opening');
     const b = c.querySelector('.view-btn');
-    if (b){ b.classList.remove('is-loading'); b.querySelector('span').textContent = 'ادخل المحاضرة'; }
+    if (b) { b.classList.remove('is-loading'); b.querySelector('span').textContent = 'ادخل المحاضرة'; }
   });
 });
 document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.card-image')) e.preventDefault(); });
 document.addEventListener('dragstart', e => { if (e.target && e.target.tagName === 'IMG') e.preventDefault(); });
 
-function showError(msg){
+function showError(msg) {
   $('sub').textContent = '';
   $('grid').innerHTML = '<div class="state err"><div>تعذّر تحميل المحاضرات: ' + esc(msg) + '</div><button type="button" onclick="location.reload()">إعادة المحاولة</button></div>';
 }
 
-async function load(){
-  $('crumbs').innerHTML = [subjectName, teacherName].filter(Boolean).map(x => '<span class="crumb">' + esc(x) + '</span>').join('');
+/* ── load ─────────────────────────────────────────────────── */
+async function load() {
+  $('crumbs').innerHTML = [subjectName, teacherName].filter(Boolean)
+    .map(x => '<span class="crumb">' + esc(x) + '</span>').join('');
   const title = chapterName || subjectName || 'المحاضرات';
   $('title').textContent = title;
   document.title = title + ' — المحاضرات | ثانوية club';
-  if (!chapterId){
+  if (!chapterId) {
     $('sub').textContent = '';
     $('grid').innerHTML = `<div class="state">معرف الفصل غير موجود.<button type="button" onclick="location.href='subjects.html'">الرجوع للمواد</button></div>`;
     return;
@@ -355,21 +404,21 @@ async function load(){
       const bn = Number(b.lecture_num ?? b.lectureNum ?? b.order);
       return (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) ? an - bn : 0;
     });
-    ALL = lectures.map((l, i) => Object.assign({}, l, { _n: i + 1, _cnt: partCount(l) }));
-    if (!ALL.length){
+    ALL = lectures.map((l, i) => Object.assign({}, l, { _n: i + 1, _cnt: videoCount(l) }));
+    if (!ALL.length) {
       $('sub').textContent = '';
       $('grid').innerHTML = '<div class="state">لا يوجد محاضرات في هذا الفصل.</div>';
       return;
     }
     addTools(); view();
-  } catch(e){ showError(e.message); }
+  } catch(e) { showError(e.message); }
 }
 
-async function loadProfile(){
+async function loadProfile() {
   try {
     const me = await api('/api/auth/me');
-    if (me){ $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); }
-  } catch(e){}
+    if (me) { $('nav-name').textContent = me.name || 'طالب'; $('nav-av').textContent = (me.name || 'ط').charAt(0); }
+  } catch(e) {}
 }
 
 load(); loadProfile();
