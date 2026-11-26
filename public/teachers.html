@@ -215,7 +215,8 @@ button{cursor:pointer}
 .t-card:hover .t-btn::before{transform:translateX(100%)}
 .t-card:hover .t-btn{box-shadow:0 10px 26px var(--glow);filter:brightness(1.06)}
 .t-btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
-.t-card:hover .t-btn svg{transform:translateX(-5px)}
+.t-btn svg{transform:scaleX(-1)}
+.t-card:hover .t-btn svg{transform:scaleX(-1) translateX(5px)}
 .t-btn.is-loading{pointer-events:none}
 .t-btn.is-loading svg{display:none}
 .t-btn.is-loading::after{content:"";width:15px;height:15px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .7s linear infinite}
@@ -257,6 +258,11 @@ button{cursor:pointer}
 @media(max-width:420px){
   .teachers-grid{grid-template-columns:1fr}
 }
+.seg{display:inline-flex;gap:4px;padding:4px;border-radius:14px;background:var(--card);border:1px solid var(--line);margin-right:auto}
+.seg button{padding:7px 14px;border-radius:10px;font-weight:800;font-size:13px;color:var(--muted);background:transparent;transition:.2s}
+.seg button.on{color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue2));box-shadow:0 4px 12px var(--glow)}
+.seg+.search-box{margin-right:0}
+@media(max-width:700px){.seg{order:2;width:100%}.seg button{flex:1;padding:8px 6px}}
 </style>
 </head>
 <body>
@@ -424,6 +430,7 @@ async function loadCounts(teachers){
     }
   }
   await Promise.all([worker(),worker(),worker(),worker()]);
+  if(view.sort==='chapters')applyView();
 }
 
 /* ---------- reveal ---------- */
@@ -509,8 +516,9 @@ function renderGrid(list,{animate=true}={}){
   // الأعداد المحفوظة تظهر فورًا، والباقي بيتحمل
   const pending=[];
   list.forEach(t=>{
-    const c=ccGet(t.id);
-    if(c!=null)paintCount(t.id,c); else pending.push(t);
+    const k=String(t.id);
+    if(counts.has(k))paintCount(t.id,counts.get(k));
+    else{const c=ccGet(t.id);if(c!=null)paintCount(t.id,c);else pending.push(t);}
   });
   if(pending.length)loadCounts(pending);
 }
@@ -523,24 +531,45 @@ function updateSub(shown){
   refreshTotal();
 }
 
-function addSearch(){
+const SORTS=[['default','الافتراضي'],['name','أبجدي'],['chapters','الأكثر فصولًا']];
+const view={q:'',sort:(()=>{try{const v=localStorage.getItem('teachers_sort');return SORTS.some(x=>x[0]===v)?v:'default'}catch(e){return 'default'}})()};
+const cnt=t=>counts.has(String(t.id))?counts.get(String(t.id)):Number(t.chapter_count||0);
+function viewList(){
+  const list=view.q?ALL.filter(t=>norm(t.name).includes(view.q)):ALL.slice();
+  if(view.sort==='name')list.sort((a,b)=>String(a.name).localeCompare(String(b.name),'ar'));
+  else if(view.sort==='chapters')list.sort((a,b)=>cnt(b)-cnt(a));
+  return list;
+}
+function applyView(){const l=viewList();updateSub(l.length);renderGrid(l,{animate:false});}
+
+function addTools(){
   const row=document.querySelector('.top-row');
-  if(!row||ALL.length<5)return;
-  const box=document.createElement('div');
-  box.className='search-box';
-  box.innerHTML=`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input id="t-search" type="search" inputmode="search" autocomplete="off" placeholder="ابحث عن مدرس…" aria-label="بحث عن مدرس">`;
-  row.appendChild(box);
-  let timer=null;
-  $('t-search').addEventListener('input',e=>{
-    clearTimeout(timer);
-    timer=setTimeout(()=>{
-      const q=norm(e.target.value);
-      const list=q?ALL.filter(t=>norm(t.name).includes(q)):ALL;
-      updateSub(list.length);
-      renderGrid(list,{animate:false});
-    },120);
-  });
+  if(!row)return;
+  if(ALL.length>=3){
+    const seg=document.createElement('div');
+    seg.className='seg';seg.setAttribute('role','group');seg.setAttribute('aria-label','ترتيب المدرسين');
+    seg.innerHTML=SORTS.map(([k,l])=>`<button type="button" data-sort="${k}" class="${view.sort===k?'on':''}">${l}</button>`).join('');
+    row.appendChild(seg);
+    seg.addEventListener('click',e=>{
+      const b=e.target.closest('button[data-sort]');if(!b)return;
+      view.sort=b.dataset.sort;
+      try{localStorage.setItem('teachers_sort',view.sort)}catch(_){}
+      seg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+      applyView();
+    });
+  }
+  if(ALL.length>=5){
+    const box=document.createElement('div');
+    box.className='search-box';
+    box.innerHTML=`<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="t-search" type="search" inputmode="search" autocomplete="off" placeholder="ابحث عن مدرس…" aria-label="بحث عن مدرس">`;
+    row.appendChild(box);
+    let timer=null;
+    $('t-search').addEventListener('input',e=>{
+      clearTimeout(timer);
+      timer=setTimeout(()=>{view.q=norm(e.target.value);applyView();},120);
+    });
+  }
 }
 
 function showError(msg){
@@ -560,6 +589,7 @@ async function load(){
       <button class="state-btn" type="button" onclick="location.href='subjects.html'">الرجوع للمواد</button></div>`;
     return;
   }
+  if(subjectName)document.title=subjectName+' — المدرسين | ثانوية club';
   try{
     const data=await api('/api/subjects/'+encodeURIComponent(subjectId)+'/teachers');
     if(data===null)return;
@@ -576,8 +606,8 @@ async function load(){
       return;
     }
     updateSub(ALL.length);
-    addSearch();
-    renderGrid(ALL);
+    addTools();
+    renderGrid(viewList());
   }catch(e){
     showError(e.message);
   }
