@@ -313,23 +313,44 @@ function isSaneId(id) {
 /** خريطة اسم → صورة من alt + src media */
 function parseImageByName(flight) {
   const map = new Map();
+  const norm = (u) => {
+    if (!u) return null;
+    if (u.startsWith("/")) return "https://thanawica.com" + u;
+    return u;
+  };
   const re1 =
-    /alt":"([^"]{2,120})"[\s\S]{0,500}?src":"(https:\/\/thanawica\.com\/api\/media\/[^"]+)"/g;
+    /alt":"([^"]{2,120})"[\s\S]{0,500}?src":"((?:https:\/\/(?:www\.)?thanawica\.com)?\/api\/media\/[^"]+)"/g;
   const re2 =
-    /src":"(https:\/\/thanawica\.com\/api\/media\/[^"]+)"[\s\S]{0,500}?alt":"([^"]{2,120})"/g;
+    /src":"((?:https:\/\/(?:www\.)?thanawica\.com)?\/api\/media\/[^"]+)"[\s\S]{0,500}?alt":"([^"]{2,120})"/g;
   for (const m of flight.matchAll(re1)) {
-    map.set(m[1].trim(), m[2]);
+    map.set(m[1].trim(), norm(m[2]));
   }
   for (const m of flight.matchAll(re2)) {
     const name = m[2].trim();
-    if (!map.has(name)) map.set(name, m[1]);
+    if (!map.has(name)) map.set(name, norm(m[1]));
   }
   return map;
 }
 
 /** "ساعة و35 دقيقة" / "45 دقيقة" / "ساعتين" → ثواني */
+function parseClockDuration(str) {
+  const s = String(str || "").trim();
+  // 1:44:25 أو 21:41 أو 1:19
+  const m = s.match(/^(\d{1,3}):([0-5]?\d)(?::([0-5]?\d))?$/);
+  if (!m) return null;
+  if (m[3] != null) {
+    const sec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+    return sec > 0 ? sec : null;
+  }
+  const sec = Number(m[1]) * 60 + Number(m[2]);
+  return sec > 0 ? sec : null;
+}
+
 function parseArabicDuration(str) {
   const s = String(str || "");
+  // جرّب صيغة الساعة أولاً (اللي ثناويكا بتستخدمها دلوقتي)
+  const clock = parseClockDuration(s);
+  if (clock) return clock;
   let sec = 0;
   if (/ساعتين/.test(s)) sec += 2 * 3600;
   else if (/ساعات/.test(s)) {
@@ -341,6 +362,9 @@ function parseArabicDuration(str) {
   }
   const m = s.match(/(\d+)\s*دق/);
   if (m) sec += Number(m[1]) * 60;
+  // ثواني منفصلة
+  const secM = s.match(/(\d+)\s*ث/);
+  if (secM) sec += Number(secM[1]);
   return sec > 0 ? sec : null;
 }
 
@@ -348,6 +372,31 @@ function parseArabicDuration(str) {
  * استخراج قائمة من صفحة RSC: article + alt + href + صورة + عدد
  * countHints: مثل ["فصول"] أو ["محاضرات"]
  */
+function extractMediaUrl(block) {
+  if (!block) return null;
+  // absolute thanawica media
+  let m = block.match(/src":"(https:\/\/(?:www\.)?thanawica\.com\/api\/media\/[^"]+)"/);
+  if (m) return m[1];
+  // relative /api/media/...
+  m = block.match(/src":"(\/api\/media\/[^"]+)"/);
+  if (m) return "https://thanawica.com" + m[1];
+  // next/image?url= encoded
+  m = block.match(/src":"(\/_next\/image\?[^"]+)"/);
+  if (m) {
+    try {
+      const q = new URL(m[1], "https://thanawica.com");
+      const u = q.searchParams.get("url");
+      if (u) return u.startsWith("http") ? u : ("https://thanawica.com" + (u.startsWith("/") ? u : "/" + u));
+    } catch {}
+  }
+  // أي media hash شائع
+  m = block.match(/(https:\/\/(?:www\.)?thanawica\.com\/api\/media\/[a-f0-9]{8,}[^"\s]*)/i);
+  if (m) return m[1];
+  m = block.match(/(\/api\/media\/[a-f0-9]{8,}[^"\s]*)/i);
+  if (m) return "https://thanawica.com" + m[1];
+  return null;
+}
+
 function parseArticleList(flight, pathPrefix, countHints = []) {
   const out = [];
   const seen = new Set();
@@ -356,50 +405,74 @@ function parseArticleList(flight, pathPrefix, countHints = []) {
   const countById = new Map();
   const imgByName = parseImageByName(flight);
 
-  // فك كل article لوحده (أدق للصور والعدد)
+  const pathEsc = pathPrefix.replace(/\//g, "\\/");
+  // فك كل article: المفتاح في RSC مش بالضرورة = id المسار
+  // نربط الصورة/الاسم بـ id من href داخل نفس البلوك
   const parts = String(flight).split(/\["\$","article","(\d+)"/);
   for (let i = 1; i < parts.length; i += 2) {
-    const id = Number(parts[i]);
-    if (!isSaneId(id)) continue;
+    const articleKey = Number(parts[i]);
     const block = parts[i + 1] || "";
+    // id الحقيقي من الرابط داخل الكرت
+    let realId = null;
+    const hrefIn = block.match(new RegExp(String.raw`href":"` + pathEsc + String.raw`(\d+)"`));
+    if (hrefIn) realId = Number(hrefIn[1]);
+    else {
+      const looseIn = block.match(new RegExp(pathEsc + String.raw`(\d+)`));
+      if (looseIn) realId = Number(looseIn[1]);
+    }
+    // لو مفيش href بالمسار المطلوب، جرّب articleKey لو sane
+    const id = isSaneId(realId) ? realId : (isSaneId(articleKey) ? articleKey : null);
+    if (id == null) continue;
+
     const alt = block.match(/alt":"([^"]{2,120})"/);
     if (alt) nameById.set(id, alt[1].trim());
-    const img = block.match(/src":"(https:\/\/thanawica\.com\/api\/media\/[^"]+)"/);
-    if (img) imgById.set(id, img[1]);
+    // عنوان نصي بديل
+    if (!nameById.has(id)) {
+      const titleM = block.match(/"children":"([^"]{3,120})"/);
+      if (titleM && /[\u0600-\u06FF]/.test(titleM[1]) && !/فيديو|ملف|امتحان|رجوع|مشاهدة/.test(titleM[1])) {
+        nameById.set(id, titleM[1].trim());
+      }
+    }
+    const img = extractMediaUrl(block);
+    if (img) imgById.set(id, img);
+
     for (const hint of countHints) {
-      // children":[10," فصول"]
       const m1 = block.match(new RegExp(String.raw`children":\[(\d+),"[^"]*` + hint));
-      if (m1) {
-        countById.set(id, Number(m1[1]));
-        break;
-      }
-      // "children":"عدد المحاضرات" ... "children":8
+      if (m1) { countById.set(id, Number(m1[1])); break; }
       const m2 = block.match(
-        new RegExp(
-          String.raw`children":"[^"]*` +
-            hint +
-            String.raw`"[\s\S]{0,300}?"children":(\d+)`
-        )
+        new RegExp(String.raw`children":"[^"]*` + hint + String.raw`"[\s\S]{0,300}?"children":(\d+)`)
       );
-      if (m2) {
-        countById.set(id, Number(m2[1]));
-        break;
-      }
-      // نص: ...محاضرات... children":8
-      const m3 = block.match(
-        new RegExp(hint + String.raw`[\s\S]{0,300}?"children":(\d+)`)
-      );
-      if (m3) {
-        countById.set(id, Number(m3[1]));
-        break;
-      }
+      if (m2) { countById.set(id, Number(m2[1])); break; }
+      const m3 = block.match(new RegExp(hint + String.raw`[\s\S]{0,300}?"children":(\d+)`));
+      if (m3) { countById.set(id, Number(m3[1])); break; }
     }
   }
 
-  const hrefRe = new RegExp(
-    String.raw`href":"` + pathPrefix.replace(/\//g, "\\/") + String.raw`(\d+)"`,
+  // اقتران إضافي: href قريب من صورة (حتى لو برا article)
+  const pairRe = new RegExp(
+    pathEsc + String.raw`(\d+)[\s\S]{0,1200}?src":"((?:https:\/\/(?:www\.)?thanawica\.com)?\/api\/media\/[^"]+)"`,
     "g"
   );
+  for (const m of flight.matchAll(pairRe)) {
+    const id = Number(m[1]);
+    if (!isSaneId(id) || imgById.has(id)) continue;
+    let u = m[2];
+    if (u.startsWith("/")) u = "https://thanawica.com" + u;
+    imgById.set(id, u);
+  }
+  const pairRe2 = new RegExp(
+    String.raw`src":"((?:https:\/\/(?:www\.)?thanawica\.com)?\/api\/media\/[^"]+)"[\s\S]{0,1200}?` + pathEsc + String.raw`(\d+)`,
+    "g"
+  );
+  for (const m of flight.matchAll(pairRe2)) {
+    const id = Number(m[2]);
+    if (!isSaneId(id) || imgById.has(id)) continue;
+    let u = m[1];
+    if (u.startsWith("/")) u = "https://thanawica.com" + u;
+    imgById.set(id, u);
+  }
+
+  const hrefRe = new RegExp(String.raw`href":"` + pathEsc + String.raw`(\d+)"`, "g");
   for (const m of flight.matchAll(hrefRe)) {
     const id = Number(m[1]);
     if (!isSaneId(id) || seen.has(id)) continue;
@@ -408,7 +481,7 @@ function parseArticleList(flight, pathPrefix, countHints = []) {
   }
 
   if (!out.length) {
-    const loose = new RegExp(pathPrefix.replace(/\//g, "\\/") + String.raw`(\d+)`, "g");
+    const loose = new RegExp(pathEsc + String.raw`(\d+)`, "g");
     for (const m of flight.matchAll(loose)) {
       const id = Number(m[1]);
       if (!isSaneId(id) || seen.has(id)) continue;
@@ -417,7 +490,6 @@ function parseArticleList(flight, pathPrefix, countHints = []) {
     }
   }
 
-  // article keys اللي ليها اسم/عدد حتى لو href اتكرر
   for (const id of nameById.keys()) {
     if (seen.has(id)) continue;
     if (countById.has(id) || imgById.has(id)) {
@@ -454,6 +526,13 @@ export function subjectKind(name) {
   if (/إحصاء|احصاء|statistics/i.test(s)) return "statistics";
   if (/تاريخ|history/i.test(s)) return "history";
   if (/جغراف|geography/i.test(s)) return "geography";
+  // مواد شرعية (أزهر)
+  if (/فقه/i.test(s)) return "fiqh";
+  if (/توحيد|عقيدة/i.test(s)) return "tawhid";
+  if (/تفسير/i.test(s)) return "tafsir";
+  if (/حديث/i.test(s)) return "hadith";
+  if (/قرآن|تجويد|قراءات/i.test(s)) return "quran";
+  if (/سيرة|نحو\s*شرعي|بلاغة\s*شرعي|أدب\s*شرعي|شرعي/i.test(s)) return "sharia_other";
   if (NAME_CHEM.test(s)) return "chemistry";
   if (NAME_MATH.test(s)) return "math";
   if (NAME_PHYS.test(s)) return "physics";
@@ -670,16 +749,30 @@ export async function thLectures(chapterId) {
   const flight = extractFlight(html) + "\n" + html;
   const rows = parseArticleList(flight, "/lectures/", ["الفيديوهات", "فيديوهات", "فيديو", "ملفات"]);
 
-  // بطاقة المحاضرة: 2 فيديو / 3 ملفات / 1 امتحان — غالبًا بدون صورة
+  // بطاقة المحاضرة: اربط الصورة والعدادات بـ id المحاضرة من href مش بمفتاح article
   const metaById = new Map();
   const parts = String(flight).split(/\["\$","article","(\d+)"/);
   for (let i = 1; i < parts.length; i += 2) {
-    const id = Number(parts[i]);
-    if (!isSaneId(id)) continue;
+    const articleKey = Number(parts[i]);
     const block = parts[i + 1] || "";
-    const meta = { videos_count: null, files_count: null, exams_count: null, image_url: null };
-    const img = block.match(/src":"(https:\/\/thanawica\.com\/api\/media\/[^"]+)"/);
-    if (img) meta.image_url = img[1];
+    let realId = null;
+    const hrefIn = block.match(/href":"\/lectures\/(\d+)"/);
+    if (hrefIn) realId = Number(hrefIn[1]);
+    else {
+      const looseIn = block.match(/\/lectures\/(\d+)/);
+      if (looseIn) realId = Number(looseIn[1]);
+    }
+    const id = isSaneId(realId) ? realId : (isSaneId(articleKey) ? articleKey : null);
+    if (id == null) continue;
+    const meta = metaById.get(id) || { videos_count: null, files_count: null, exams_count: null, image_url: null };
+    const img = (typeof extractMediaUrl === "function" ? extractMediaUrl(block) : null)
+      || (() => {
+          const m = block.match(/src":"(https:\/\/(?:www\.)?thanawica\.com\/api\/media\/[^"]+)"/);
+          if (m) return m[1];
+          const m2 = block.match(/src":"(\/api\/media\/[^"]+)"/);
+          return m2 ? ("https://thanawica.com" + m2[1]) : null;
+        })();
+    if (img && !meta.image_url) meta.image_url = img;
     const v = block.match(/children":(\d+)[\s\S]{0,120}?children":"فيديو"/);
     if (v) meta.videos_count = Number(v[1]);
     const f = block.match(/children":(\d+)[\s\S]{0,120}?children":"ملفات"/);
@@ -830,22 +923,56 @@ export async function thLectureContent(lectureId) {
     if (title && !/مشاهدة|رجوع|تنزيل|فتح/.test(title)) videoTitleById.set(vid, title);
   }
 
-  // المدد: "ساعة و35 دقيقة" قبل رابط الفيديو
+  // المدد من واجهة ثناويكا الحالية: h3wica_videoDuration = "1:44:25" / "21:41"
+  // وكذلك النص العربي القديم "ساعة و35 دقيقة"
   const videoDurById = new Map();
+
+  // 1) اقتران مباشر: رابط الفيديو + مدة قريبة في نفس البلوك (الأدق)
+  for (const m of flight.matchAll(
+    /\/lectures\/\d+\/videos\/(\d+)[\s\S]{0,900}?h3wica_videoDuration","children":"([^"]{1,20})"/g
+  )) {
+    const sec = parseArabicDuration(m[2]);
+    if (sec) videoDurById.set(m[1], sec);
+  }
+  // نفس النمط بالعكس (المدة قبل الرابط)
+  for (const m of flight.matchAll(
+    /h3wica_videoDuration","children":"([^"]{1,20})"([\s\S]{0,900}?)\/lectures\/\d+\/videos\/(\d+)/g
+  )) {
+    if (videoDurById.has(m[3])) continue;
+    const sec = parseArabicDuration(m[1]);
+    if (sec) videoDurById.set(m[3], sec);
+  }
+  // 2) نمط RSC عام: "children":"1:44:25" جنب video id
+  for (const m of flight.matchAll(
+    /\/lectures\/\d+\/videos\/(\d+)[\s\S]{0,1200}?"children":"(\d{1,3}:[0-5]?\d(?::[0-5]?\d)?)"/g
+  )) {
+    if (videoDurById.has(m[1])) continue;
+    const sec = parseClockDuration(m[2]);
+    if (sec) videoDurById.set(m[1], sec);
+  }
+  // 3) النص العربي القديم
   for (const m of flight.matchAll(
     /((?:ساعتين|ساعة(?:\s*و\s*\d+)?|\d+\s*ساعات?)(?:\s*و?\s*\d+\s*)?دقيقة|\d+\s*دقائق?)[\s\S]{0,1200}?\/lectures\/\d+\/videos\/(\d+)/g
   )) {
+    if (videoDurById.has(m[2])) continue;
     const sec = parseArabicDuration(m[1]);
     if (sec) videoDurById.set(m[2], sec);
   }
-  // fallback أوسع
+  // 4) fallback حول كل رابط فيديو
   for (const m of flight.matchAll(/\/lectures\/\d+\/videos\/(\d+)/g)) {
     const vid = m[1];
     if (videoDurById.has(vid)) continue;
     const idx = m.index ?? flight.indexOf(m[0]);
-    const before = flight.slice(Math.max(0, idx - 1500), idx);
-    const dm = before.match(
-      /((?:ساعتين|ساعة(?:\s*و\s*\d+)?|\d+\s*ساعات?)[^\n"]{0,20}دقيقة|\d+\s*دقائق?)\s*"?\s*\]/
+    const window = flight.slice(Math.max(0, idx - 1800), Math.min(flight.length, idx + 1800));
+    // ساعة رقمية
+    const cm = window.match(/"children":"(\d{1,3}:[0-5]?\d(?::[0-5]?\d)?)"/);
+    if (cm) {
+      const sec = parseClockDuration(cm[1]);
+      if (sec) { videoDurById.set(vid, sec); continue; }
+    }
+    // عربي
+    const dm = window.match(
+      /((?:ساعتين|ساعة(?:\s*و\s*\d+)?|\d+\s*ساعات?)[^\n"]{0,20}دقيقة|\d+\s*دقائق?)/
     );
     if (dm) {
       const sec = parseArabicDuration(dm[1]);
@@ -1350,5 +1477,10 @@ export async function thMintBatch(videoHash, segNames) {
 }
 
 export function getThanawicaSessionInfo() {
-  return { code: session.code, hasCookie: !!session.cookies, exp: session.exp };
+  return {
+    code: session.code,
+    hasCookie: !!session.cookies,
+    exp: session.exp,
+    cookies: session.cookies || ""
+  };
 }
