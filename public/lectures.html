@@ -194,7 +194,8 @@ async function load() {
       if(Number.isFinite(an)&&Number.isFinite(bn)&&an!==bn) return an-bn;
       return 0;
     });
-    const cover = lectures[0]?.image_url || '';
+    const coverSrc = lectures.find(x => x && (x.image_url || x.image || x.thumbnail || x.thumb || x.cover || x.poster || x.photo)) || lectures[0] || {};
+    const cover = coverSrc.image_url || coverSrc.image || coverSrc.thumbnail || coverSrc.thumb || coverSrc.cover || coverSrc.poster || coverSrc.photo || '';
     const title = chapterName || subjectName || 'المحاضرات';
 
     let html = `
@@ -203,8 +204,10 @@ async function load() {
     <div class="grid">`;
 
     lectures.forEach((l, index) => {
-      const imgUrl = proxyImg(l.image_url || cover);
-      const imgHtml = imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(l.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">` : '';
+      // جرب كل الحقول الممكنة للصورة + fallback لصورة الفصل/أول محاضرة
+      const rawImg = l.image_url || l.image || l.thumbnail || l.thumb || l.thumb_url || l.thumbnail_url || l.cover || l.poster || l.photo || cover || '';
+      const imgUrl = proxyImg(rawImg);
+      const imgHtml = imgUrl ? `<img src="${esc(imgUrl)}" alt="${esc(l.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">` : '';
       const phHtml = `<div class="image-placeholder" style="display:${imgUrl?'none':'grid'};"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`;
       
       let cnt = 0;
