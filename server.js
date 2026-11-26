@@ -49,6 +49,7 @@ let thResolvePlaylistHash = async () => null;
 let thResolveVideo = async () => null;
 let isChemOrMathName = () => false;
 let chemMathKind = () => null;
+let subjectKind = () => "other";
 let isThId = () => false;
 let encodeThId = (x) => x;
 let decodeThId = (x) => x;
@@ -68,6 +69,7 @@ try {
   thResolveVideo = th.thResolveVideo;
   isChemOrMathName = th.isChemOrMathName;
   chemMathKind = th.chemMathKind;
+  if (typeof th.subjectKind === "function") subjectKind = th.subjectKind;
   isThId = th.isThId;
   encodeThId = th.encodeThId;
   decodeThId = th.decodeThId;
@@ -3580,6 +3582,13 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
           if (/إحصاء|احصاء|statistics/i.test(n)) return "statistics";
           if (/تاريخ|history/i.test(n)) return "history";
           if (/جغراف|geography/i.test(n)) return "geography";
+          // مواد شرعية (أزهر)
+          if (/فقه/i.test(n)) return "fiqh";
+          if (/توحيد|عقيدة/i.test(n)) return "tawhid";
+          if (/تفسير/i.test(n)) return "tafsir";
+          if (/حديث/i.test(n)) return "hadith";
+          if (/قرآن|تجويد|قراءات/i.test(n)) return "quran";
+          if (/سيرة|نحو\s*شرعي|بلاغة\s*شرعي|أدب\s*شرعي|شرعي/i.test(n)) return "sharia_other";
           if (/عربي|عربية|arabic/i.test(n)) return "arabic";
           if (/english|إنجل|انجليز/i.test(n)) return "english";
           if (/كيمياء|chemistry/i.test(n)) return "chemistry";
@@ -3591,16 +3600,20 @@ app.get("/api/subjects/:id", requireStudent, async (req, res) => {
           return "other";
         }
 
-        // علمي علوم: عربي إنجليزي فيزياء كيمياء أحياء
-        // علمي رياضة: عربي إنجليزي فيزياء كيمياء رياضة
-        // أدبي: عربي إنجليزي تاريخ جغرافيا إحصاء
-        // أزهر: التسعة كلهم
+        // علمي علوم / رياضة / أدبي زي ما هما
+        // أزهر: عربي ثم شرعي جنب بعض، مع تاريخ وإحصاء
         const SECTION_KINDS = {
           scientific_sciences: ["arabic", "english", "physics", "chemistry", "biology"],
           scientific_math: ["arabic", "english", "physics", "chemistry", "math"],
           literary: ["arabic", "english", "history", "geography", "statistics"],
           languages: ["arabic", "english", "french", "german"],
-          azhari: ["arabic", "english", "physics", "chemistry", "biology", "math", "history", "geography", "statistics"]
+          azhari: [
+            "arabic",
+            "fiqh", "tawhid", "tafsir", "hadith", "quran", "sharia_other",
+            "english",
+            "physics", "chemistry", "biology", "math",
+            "history", "geography", "statistics"
+          ]
         };
         const wanted = SECTION_KINDS[sec] || SECTION_KINDS.scientific_sciences;
         const orderIndex = Object.fromEntries(wanted.map((k, i) => [k, i]));
@@ -3751,7 +3764,41 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=60");
   try {
     if (useThanawicaAsPrimary() && CONFIG.THANAWICA_ENABLED) {
-      const data = maskTreeImages(await thTeachers(req.params.id));
+      let data = maskTreeImages(await thTeachers(req.params.id));
+
+      // أزهر + عربي → سعيد الفقي فقط
+      try {
+        const secInfo = await resolveSection(req.student && req.student.section);
+        const sec = (secInfo && secInfo.id) || normalizeSection(req.student && req.student.section) || "";
+        if (sec === "azhari") {
+          let isArabic = false;
+          try {
+            const yearId = resolveYearId(req.query.year || CONFIG.DEFAULT_YEAR_ID);
+            const thList = await thSubjectsForYear(yearId);
+            const raw = typeof decodeThId === "function" ? decodeThId(req.params.id) : null;
+            const rid = raw && typeof raw === "object" ? raw.id : raw;
+            const match = (thList || []).find((s) =>
+              String(s.id) === String(req.params.id) ||
+              String(s._thId) === String(rid) ||
+              Number(s._thId) === Number(rid)
+            );
+            const k = match
+              ? (match._kind || (typeof subjectKind === "function" ? subjectKind(match.name) : ""))
+              : "";
+            isArabic = k === "arabic" || /عربي|عربية|arabic/i.test(String((match && match.name) || ""));
+          } catch (e) {
+            console.warn("[teachers] azhari arabic check:", e && e.message);
+          }
+          if (isArabic) {
+            data = (Array.isArray(data) ? data : []).filter((t) =>
+              /سعيد\s*الفقي|سعيد\s*الفقى/i.test(String(t.name || ""))
+            );
+          }
+        }
+      } catch (e) {
+        console.warn("[teachers] azhari filter:", e && e.message);
+      }
+
       return res.json({ success: true, message: "Success", data, source: "thanawica" });
     }
     if (useMesariAsPrimary() || useTalebAsPrimary()) {
