@@ -2078,7 +2078,8 @@ app.use(rateLimit({ max: 1500, windowMs: 60_000, scope: "global", skip: (req) =>
 app.use("/api/stream/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
 // حد المقاطع: يمنع سحب المحاضرة كاملة بسرعة من سكربت/منصة تانية
 app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || 420), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات بث كثيرة — هدّي شوية" }));
-app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 30), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
+// ليميت تشغيل الفيديوهات مُعطّل (كان 30/دقيقة)
+app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 999999), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -6098,52 +6099,18 @@ async function getStreamSession(id, touch = true) {
   return s;
 }
 
-// ليميت الفيديوهات: كل توكن طالب = 4 فيديوهات في الدقيقة
-const playLimiter = rateLimit({
-  max: 4,
-  windowMs: 60_000,
-  scope: "video-play",
-  keyFn: (req) => "tok:" + (req.sessionToken || getBearer(req) || clientIp(req)),
-  message: "وصلت للحد الأقصى: 4 فيديوهات في الدقيقة — استنى شوية وجرّب تاني"
-});
+// ليميت الفيديوهات مُعطّل (كان 4 فيديوهات/دقيقة)
+const playLimiter = (req, res, next) => next();
 
-// حماية من السحب الجماعي: أكتر من N فيديو مختلف في 10 دقايق → إيقاف مؤقت
-// (من غير تبطئة سرعة المشاهدة العادية)
+// حماية السحب الجماعي مُعطّلة (كان: أكثر من 8 فيديوهات مختلفة خلال 10 دقائق → حظر 15 دقيقة)
 const PLAY_BURST_WINDOW_MS = Number(process.env.PLAY_BURST_WINDOW_MS || 10 * 60_000);
-const PLAY_BURST_MAX = Number(process.env.PLAY_BURST_MAX || 8);
+const PLAY_BURST_MAX = Number(process.env.PLAY_BURST_MAX || 999999);
 const PLAY_BURST_BAN_MS = Number(process.env.PLAY_BURST_BAN_MS || 15 * 60_000);
 const playBurst = new Map(); // code -> { ids: Map<videoId,ts>, bannedUntil }
 
 function checkPlayBurst(code, videoId) {
-  const c = String(code || "unknown");
-  const vid = String(videoId || "");
-  const t = Date.now();
-  let row = playBurst.get(c);
-  if (!row) {
-    row = { ids: new Map(), bannedUntil: 0 };
-    playBurst.set(c, row);
-  }
-  if (row.bannedUntil > t) {
-    const sec = Math.ceil((row.bannedUntil - t) / 1000);
-    const e = new Error(`تم إيقاف التشغيل مؤقتًا بسبب طلبات كثيرة — حاول بعد ${sec} ثانية`);
-    e.status = 429;
-    throw e;
-  }
-  for (const [id, ts] of [...row.ids.entries()]) {
-    if (t - ts > PLAY_BURST_WINDOW_MS) row.ids.delete(id);
-  }
-  if (!row.ids.has(vid)) {
-    if (row.ids.size >= PLAY_BURST_MAX) {
-      row.bannedUntil = t + PLAY_BURST_BAN_MS;
-      console.warn("[play-burst] ban", c, "videos", row.ids.size, "windowMs", PLAY_BURST_WINDOW_MS);
-      const e = new Error("طلبت فيديوهات كتير في وقت قصير. التشغيل متوقف ربع ساعة لحماية المحتوى.");
-      e.status = 429;
-      throw e;
-    }
-    row.ids.set(vid, t);
-  } else {
-    row.ids.set(vid, t);
-  }
+  // no-op: ليميت الفيديوهات مُلغى
+  return;
 }
 
 async function logPlayEvent(req, videoId) {
