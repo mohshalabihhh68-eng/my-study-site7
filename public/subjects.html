@@ -326,13 +326,15 @@ const SECTION_KINDS = {
   azhari: ["arabic", "english", "physics", "chemistry", "biology", "math", "history", "geography", "statistics", "fiqh", "tawhid", "tafsir", "hadith", "quran", "sharia_other"]
 };
 function normalizeSectionClient(raw){
-  const s = String(raw || "").trim().toLowerCase().replace(/\s+/g, "_");
+  let s = String(raw || "").trim().toLowerCase();
+  s = s.replace(/\s+/g, "_").replace(/-+/g, "_");
   if (!s) return "scientific_sciences";
   if (["scientific_sciences","scientific_math","literary","azhari","languages"].includes(s)) return s;
+  // أزهر بكل الصيغ
+  if (/ازهر|أزهر|azhar|azhari/.test(s)) return "azhari";
   if (/علوم/.test(s) && !/رياض/.test(s)) return "scientific_sciences";
   if (/رياض/.test(s)) return "scientific_math";
-  if (/أدب|ادب|literary/.test(s)) return "literary";
-  if (/أزهر|ازهر|azhar/.test(s)) return "azhari";
+  if (/ادب|أدب|literary/.test(s)) return "literary";
   if (/لغات|language/.test(s)) return "languages";
   return s;
 }
@@ -462,9 +464,9 @@ function renderDays(info){
    • زر التحديث بدون سباق / تخبيط
    ====================================================== */
 
-const NOTIF_KNOWN_KEY = 'notif_known_v7';
-const NOTIF_ITEMS_KEY = 'notif_items_v7';
-const NOTIF_READ_KEY  = 'notif_read_v7';
+const NOTIF_KNOWN_KEY = 'notif_known_v8';
+const NOTIF_ITEMS_KEY = 'notif_items_v8';
+const NOTIF_READ_KEY  = 'notif_read_v8';
 const POLL_INTERVAL_MS = 90_000;
 const NOTIF_CONCURRENCY = 4;
 
@@ -704,28 +706,43 @@ async function fetchSubjectsOnce(){
 }
 
 /** فلترة المدرسين حسب الشعبة — نفس منطق صفحة المدرسين / السيرفر */
+function isSaeedTeacher(name){
+  const n = norm(String(name || ""));
+  // أي صيغة: سعيد الفقي / الفقى / الفي / فقي …
+  if (!n.includes("سعيد")) return false;
+  return /فقي|فقى|الفي/.test(n) || n.includes("سعيدالفي") || n.includes("سعيدفقي");
+}
+function isMohamedOrRedaTeacher(name){
+  const n = norm(String(name || ""));
+  return n.includes("رضافاروق") || n.includes("رضاالفاروق") || (n.includes("محمد") && n.includes("صلاح"));
+}
 function filterTeachersForSection(teachers, section, subjectName){
   const sec = normalizeSectionClient(section);
   const kind = subjectKindClient(subjectName);
-  let list = (teachers || []).filter(t => t && t.id != null && !isHidden(t.name));
+  const raw = (teachers || []).filter(t => t && t.id != null && !isHidden(t.name));
   const nameOf = t => String(t.name || "");
-  const isSaeed = t => /سعيد\s*الفقي|سعيد\s*الفقى|سعيد\s*الفي/i.test(nameOf(t));
-  const isMohamedOrReda = t => /رضا\s*الفاروق|محمد\s*صلاح/i.test(nameOf(t));
 
   if (kind === "arabic") {
     if (sec === "azhari") {
-      // أزهر عربي → سعيد الفقي فقط (من غير محمد صلاح ورضا الفاروق)
-      list = list.filter(isSaeed);
-    } else {
-      // علمي علوم / رياضة / أدبي → محمد صلاح ورضا يظهروا، سعيد الفقي (أزهر) يختفي
-      list = list.filter(t => !isSaeed(t));
+      // أزهر عربي → سعيد الفقي فقط
+      let list = raw.filter(t => isSaeedTeacher(nameOf(t)));
+      // لو المطابقة ضاقت أو السيرفر رجّع اسم بصيغة تانية
+      if (!list.length) {
+        list = raw.filter(t => /سعيد/i.test(nameOf(t)) && !isMohamedOrRedaTeacher(nameOf(t)));
+      }
+      // لو لسه فاضي والسيرفر فلتر لمدرس واحد — خده
+      if (!list.length && raw.length === 1 && /سعيد/i.test(nameOf(raw[0]))) list = raw.slice();
+      return list;
     }
-  } else if (sec === "azhari") {
-    // مواد أزهر غير العربي: استبعد محمد صلاح ورضا لو ظهروا بالغلط
-    list = list.filter(t => !isMohamedOrReda(t));
+    // علمي / أدبي: محمد صلاح ورضا يظهروا — سعيد الفقي لأزهر فقط فيختفي هنا
+    return raw.filter(t => !isSaeedTeacher(nameOf(t)));
   }
-  // غير الأزهر: محمد صلاح ورضا يفضلوا ظاهرين في أي مادة
-  return list;
+
+  if (sec === "azhari") {
+    // مواد أزهر غير العربي: من غير محمد صلاح ورضا
+    return raw.filter(t => !isMohamedOrRedaTeacher(nameOf(t)));
+  }
+  return raw;
 }
 
 async function fetchTeachersFor(subjectId, useCache, subjectName){
