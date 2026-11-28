@@ -57,8 +57,8 @@ button{cursor:pointer}
 .nav-right{display:flex;align-items:center;gap:8px;margin-right:auto;flex-direction:row}
 /* في RTL: أول عنصر في الـ DOM يظهر يمين المجموعة — البروفايل آخر عنصر = أقصى الشمال */
 .nav-right .profile-btn{order:3}
-.nav-right .notif-wrap{order:2}
-.nav-right .theme-toggle{order:1}
+.nav-right .theme-toggle{order:2}
+.nav-right .notif-wrap{order:1}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 6px 6px 16px;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
 .profile-btn:hover{border-color:var(--blue)}
 .profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
@@ -462,9 +462,9 @@ function renderDays(info){
    • زر التحديث بدون سباق / تخبيط
    ====================================================== */
 
-const NOTIF_KNOWN_KEY = 'notif_known_v5';
-const NOTIF_ITEMS_KEY = 'notif_items_v5';
-const NOTIF_READ_KEY  = 'notif_read_v5';
+const NOTIF_KNOWN_KEY = 'notif_known_v6';
+const NOTIF_ITEMS_KEY = 'notif_items_v6';
+const NOTIF_READ_KEY  = 'notif_read_v6';
 const POLL_INTERVAL_MS = 90_000;
 const NOTIF_CONCURRENCY = 4;
 
@@ -518,30 +518,49 @@ function updateBadge(){
   badge.classList.toggle('show', n > 0);
 }
 
+function parseLectureDate(lec){
+  if (!lec || typeof lec !== 'object') return 0;
+  const keys = ['published_at','created_at','updated_at','released_at','date','createdAt','publishedAt','uploaded_at','time'];
+  for (const k of keys) {
+    const v = lec[k];
+    if (v == null || v === '') continue;
+    if (typeof v === 'number' && v > 1e11) return v;          // ms
+    if (typeof v === 'number' && v > 1e9) return v * 1000;   // sec
+    const t = Date.parse(String(v));
+    if (!Number.isNaN(t) && t > 0) return t;
+  }
+  return 0;
+}
 function relativeTime(ts){
-  const diff = Date.now() - ts;
+  const t = Number(ts) || 0;
+  // تجاهل تواريخ باطلة أو قديمة جدًا (قبل 2018) عشان متظهرش ١ يناير ١٩٧٠
+  if (t < 1514764800000) return '';
+  const diff = Date.now() - t;
+  if (diff < 0) return 'الآن';
   if (diff < 60e3) return 'الآن';
   if (diff < 3600e3) return Math.floor(diff / 60e3) + ' دقيقة';
   if (diff < 86400e3) return Math.floor(diff / 3600e3) + ' ساعة';
   if (diff < 7 * 86400e3) return Math.floor(diff / 86400e3) + ' يوم';
-  return new Date(ts).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short' });
+  if (diff < 30 * 86400e3) return Math.floor(diff / 86400e3) + ' يوم';
+  return new Date(t).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** ترتيب الأحدث → الأقدم (معرّف المحاضرة كمقياس تقريبي للحداثة) */
 function lectureRecency(n){
+  if (n && n.recency) return Number(n.recency) || 0;
   const raw = String((n && (n.lectureId || n.id)) || '');
   const digits = raw.replace(/\D/g, '');
-  if (digits.length) {
-    // خذ آخر 10 أرقام عشان المعرّفات الطويلة
-    return Number(digits.slice(-10)) || 0;
-  }
-  return Number(n && n.at) || 0;
+  if (digits.length) return Number(digits.slice(-10)) || 0;
+  return 0;
 }
 function sortNotifNewestFirst(list){
   return (list || []).slice().sort((a, b) => {
+    // تاريخ حقيقي أولاً لو موجود
+    const ta = Number(a && a.at) || 0, tb = Number(b && b.at) || 0;
+    if (ta >= 1514764800000 && tb >= 1514764800000 && ta !== tb) return tb - ta;
     const rb = lectureRecency(b) - lectureRecency(a);
     if (rb) return rb;
-    return (b.at || 0) - (a.at || 0);
+    return tb - ta;
   });
 }
 
@@ -572,10 +591,10 @@ function renderNotifList(){
       <div class="notif-body">
         <div class="notif-title">${esc(n.lectureTitle)}</div>
         <div class="notif-sub">${esc(n.subjectName)} · ${esc(n.teacherName)}${n.chapterName ? ' · ' + esc(n.chapterName) : ''}</div>
-        <div class="notif-time">
+        ${relativeTime(n.at) ? `<div class="notif-time">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           ${relativeTime(n.at)}
-        </div>
+        </div>` : ''}
       </div>
       <div class="notif-dot"></div>
     </div>`).join('');
@@ -684,14 +703,39 @@ async function fetchSubjectsOnce(){
   return subjectList;
 }
 
-async function fetchTeachersFor(subjectId, useCache){
-  if (useCache && teacherMap[subjectId]) return teacherMap[subjectId];
+/** فلترة المدرسين حسب الشعبة — نفس منطق صفحة المدرسين / السيرفر */
+function filterTeachersForSection(teachers, section, subjectName){
+  const sec = normalizeSectionClient(section);
+  const kind = subjectKindClient(subjectName);
+  let list = (teachers || []).filter(t => t && t.id != null && !isHidden(t.name));
+  const nameOf = t => String(t.name || "");
+  const isSaeed = t => /سعيد\s*الفقي|سعيد\s*الفقى|سعيد\s*الفي/i.test(nameOf(t));
+  const isAzharArabicExtra = t => /رضا\s*الفاروق|محمد\s*صلاح/i.test(nameOf(t));
+
+  if (kind === "arabic") {
+    if (sec === "azhari") {
+      // أزهر عربي → سعيد الفقي فقط (زي السيرفر)
+      list = list.filter(isSaeed);
+    } else {
+      // علمي / أدبي عربي → من غير سعيد الفقي ومدرسين أزهر الشائعين
+      list = list.filter(t => !isSaeed(t) && !isAzharArabicExtra(t));
+    }
+  } else if (sec === "azhari") {
+    // باقي مواد الأزهر: استبعد أسماء عربي أزهر لو ظهرت بالغلط
+    list = list.filter(t => !isAzharArabicExtra(t) || isSaeed(t));
+  }
+  return list;
+}
+
+async function fetchTeachersFor(subjectId, useCache, subjectName){
+  const cacheKey = String(subjectId) + '::' + normalizeSectionClient(studentSection);
+  if (useCache && teacherMap[cacheKey]) return teacherMap[cacheKey];
   const data = await api('/api/subjects/' + encodeURIComponent(subjectId) + '/teachers').catch(() => null);
   let teachers = [];
   if (Array.isArray(data)) teachers = data;
   else if (data && Array.isArray(data.teachers)) teachers = data.teachers;
-  teachers = teachers.filter(t => t && t.id != null && !(typeof isHidden === 'function' && isHidden(t.name)));
-  teacherMap[subjectId] = teachers;
+  teachers = filterTeachersForSection(teachers, studentSection, subjectName || '');
+  teacherMap[cacheKey] = teachers;
   return teachers;
 }
 
@@ -754,7 +798,7 @@ async function pollNotifications(force = false){
     // كل المواد × كل المدرسين × كل الفصول
     await mapPool(subjects, NOTIF_CONCURRENCY, async (subj) => {
       if (myGen !== pollGen) return;
-      const teachers = await fetchTeachersFor(subj.id, !force).catch(() => []);
+      const teachers = await fetchTeachersFor(subj.id, !force, subj.name).catch(() => []);
       if (myGen !== pollGen) return;
       await mapPool(teachers, NOTIF_CONCURRENCY, async (teacher) => {
         if (myGen !== pollGen) return;
@@ -767,6 +811,7 @@ async function pollNotifications(force = false){
             const lecId = String(lec.id || lec.video_id || lec.videoId || '');
             if (!lecId) continue;
             const notifId = String(subj.id) + '_' + lecId;
+            const realAt = parseLectureDate(lec);
             discovered.push({
               id: notifId,
               lectureId: lecId,
@@ -778,7 +823,8 @@ async function pollNotifications(force = false){
               subjectId: String(subj.id || ''),
               subjectName: subj.name || '',
               imageUrl: lec.image_url || teacher.image_url || subj.image_url || null,
-              at: stamp,
+              at: realAt || 0,
+              recency: lectureRecency({ lectureId: lecId }) || 0,
               unread: true
             });
           }
@@ -808,15 +854,16 @@ async function pollNotifications(force = false){
         prev.unread = !readIds.has(id);
         continue;
       }
-      // محاضرة جديدة في القائمة
-      n.at = lectureRecency(n) || Date.now();
-      // أول تعبئة: كل المحاضرات القديمة تظهر في القائمة (مقروءة عشان البادج ما يتفشخش)
-      // بعد كده: أي محاضرة جديدة = غير مقروءة
+      // محاضرة جديدة في القائمة — at = تاريخ حقيقي فقط (مش ID)
+      if (!(Number(n.at) >= 1514764800000)) n.at = 0;
+      if (!n.recency) n.recency = lectureRecency(n);
       if (firstFill) {
         n.unread = false;
         readIds.add(id);
       } else {
         n.unread = true;
+        // لو مفيش تاريخ من السيرفر، وقت الاكتشاف = الآن
+        if (!(Number(n.at) >= 1514764800000)) n.at = Date.now();
         addedNew++;
       }
       byId.set(id, n);
