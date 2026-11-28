@@ -462,9 +462,9 @@ function renderDays(info){
    • زر التحديث بدون سباق / تخبيط
    ====================================================== */
 
-const NOTIF_KNOWN_KEY = 'notif_known_v6';
-const NOTIF_ITEMS_KEY = 'notif_items_v6';
-const NOTIF_READ_KEY  = 'notif_read_v6';
+const NOTIF_KNOWN_KEY = 'notif_known_v7';
+const NOTIF_ITEMS_KEY = 'notif_items_v7';
+const NOTIF_READ_KEY  = 'notif_read_v7';
 const POLL_INTERVAL_MS = 90_000;
 const NOTIF_CONCURRENCY = 4;
 
@@ -710,20 +710,21 @@ function filterTeachersForSection(teachers, section, subjectName){
   let list = (teachers || []).filter(t => t && t.id != null && !isHidden(t.name));
   const nameOf = t => String(t.name || "");
   const isSaeed = t => /سعيد\s*الفقي|سعيد\s*الفقى|سعيد\s*الفي/i.test(nameOf(t));
-  const isAzharArabicExtra = t => /رضا\s*الفاروق|محمد\s*صلاح/i.test(nameOf(t));
+  const isMohamedOrReda = t => /رضا\s*الفاروق|محمد\s*صلاح/i.test(nameOf(t));
 
   if (kind === "arabic") {
     if (sec === "azhari") {
-      // أزهر عربي → سعيد الفقي فقط (زي السيرفر)
+      // أزهر عربي → سعيد الفقي فقط (من غير محمد صلاح ورضا الفاروق)
       list = list.filter(isSaeed);
     } else {
-      // علمي / أدبي عربي → من غير سعيد الفقي ومدرسين أزهر الشائعين
-      list = list.filter(t => !isSaeed(t) && !isAzharArabicExtra(t));
+      // علمي علوم / رياضة / أدبي → محمد صلاح ورضا يظهروا، سعيد الفقي (أزهر) يختفي
+      list = list.filter(t => !isSaeed(t));
     }
   } else if (sec === "azhari") {
-    // باقي مواد الأزهر: استبعد أسماء عربي أزهر لو ظهرت بالغلط
-    list = list.filter(t => !isAzharArabicExtra(t) || isSaeed(t));
+    // مواد أزهر غير العربي: استبعد محمد صلاح ورضا لو ظهروا بالغلط
+    list = list.filter(t => !isMohamedOrReda(t));
   }
+  // غير الأزهر: محمد صلاح ورضا يفضلوا ظاهرين في أي مادة
   return list;
 }
 
