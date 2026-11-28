@@ -403,9 +403,9 @@ function renderDays(info){
    • زر التحديث بدون سباق / تخبيط
    ====================================================== */
 
-const NOTIF_KNOWN_KEY = 'notif_known_v3';
-const NOTIF_ITEMS_KEY = 'notif_items_v3';
-const NOTIF_READ_KEY  = 'notif_read_v3';
+const NOTIF_KNOWN_KEY = 'notif_known_v4';
+const NOTIF_ITEMS_KEY = 'notif_items_v4';
+const NOTIF_READ_KEY  = 'notif_read_v4';
 const POLL_INTERVAL_MS = 90_000;
 const NOTIF_CONCURRENCY = 4;
 
@@ -434,8 +434,8 @@ function loadNotifState(){
   try {
     const items = JSON.parse(localStorage.getItem(NOTIF_ITEMS_KEY) || '[]');
     notifItems = Array.isArray(items) ? items : [];
-    notifItems.sort((a, b) => (b.at || 0) - (a.at || 0));
     notifItems.forEach(n => { n.unread = !readIds.has(String(n.id)); });
+    // الترتيب يتظبط بعد تعريف sortNotifNewestFirst عند أول render/poll
   } catch(e){ notifItems = []; }
 }
 
@@ -443,8 +443,8 @@ function saveNotifState(){
   try {
     localStorage.setItem(NOTIF_KNOWN_KEY, JSON.stringify([...knownIds].slice(-2000)));
     localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds].slice(-1000)));
-    notifItems.sort((a, b) => (b.at || 0) - (a.at || 0));
-    localStorage.setItem(NOTIF_ITEMS_KEY, JSON.stringify(notifItems.slice(0, 80)));
+    notifItems = sortNotifNewestFirst(notifItems);
+    localStorage.setItem(NOTIF_ITEMS_KEY, JSON.stringify(notifItems.slice(0, 200)));
   } catch(e){}
 }
 
@@ -466,10 +466,28 @@ function relativeTime(ts){
   return new Date(ts).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short' });
 }
 
+/** ترتيب الأحدث → الأقدم (معرّف المحاضرة كمقياس تقريبي للحداثة) */
+function lectureRecency(n){
+  const raw = String((n && (n.lectureId || n.id)) || '');
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length) {
+    // خذ آخر 10 أرقام عشان المعرّفات الطويلة
+    return Number(digits.slice(-10)) || 0;
+  }
+  return Number(n && n.at) || 0;
+}
+function sortNotifNewestFirst(list){
+  return (list || []).slice().sort((a, b) => {
+    const rb = lectureRecency(b) - lectureRecency(a);
+    if (rb) return rb;
+    return (b.at || 0) - (a.at || 0);
+  });
+}
+
 function renderNotifList(){
   const list = $('notif-list');
   if (!list) return;
-  notifItems.sort((a, b) => (b.at || 0) - (a.at || 0));
+  notifItems = sortNotifNewestFirst(notifItems);
   if (!notifItems.length){
     list.innerHTML = `<div class="notif-empty">
       <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -609,7 +627,7 @@ async function fetchTeachersFor(subjectId, useCache){
   let teachers = [];
   if (Array.isArray(data)) teachers = data;
   else if (data && Array.isArray(data.teachers)) teachers = data.teachers;
-  teachers = teachers.filter(t => t && !(typeof isHidden === 'function' && isHidden(t.name)));
+  teachers = teachers.filter(t => t && t.id != null && !(typeof isHidden === 'function' && isHidden(t.name)));
   teacherMap[subjectId] = teachers;
   return teachers;
 }
@@ -707,36 +725,49 @@ async function pollNotifications(force = false){
 
     if (myGen !== pollGen) return;
 
-    // أول مسح ناجح = baseline فقط
-    if (!seeded) {
-      discovered.forEach(n => knownIds.add(n.id));
-      seeded = true;
-      saveNotifState();
-      if (panelOpen) renderNotifList();
-      return;
-    }
+    // ابنِ قائمة الإشعارات من كل المحاضرات المكتشفة (كل المدرسين/الفصول تحت مواد الشعبة)
+    const byId = new Map(notifItems.map(n => [String(n.id), n]));
+    const firstFill = !seeded;
+    let addedNew = 0;
 
-    const fresh = [];
     for (const n of discovered) {
-      if (knownIds.has(n.id)) continue;
-      knownIds.add(n.id);
-      n.unread = !readIds.has(n.id);
-      n.at = Date.now();
-      fresh.push(n);
+      const id = String(n.id);
+      knownIds.add(id);
+      const prev = byId.get(id);
+      if (prev) {
+        // حدّث البيانات مع الحفاظ على حالة القراءة
+        prev.lectureTitle = n.lectureTitle || prev.lectureTitle;
+        prev.teacherName = n.teacherName || prev.teacherName;
+        prev.chapterName = n.chapterName || prev.chapterName;
+        prev.subjectName = n.subjectName || prev.subjectName;
+        prev.imageUrl = n.imageUrl || prev.imageUrl;
+        prev.chapterId = n.chapterId || prev.chapterId;
+        prev.unread = !readIds.has(id);
+        continue;
+      }
+      // محاضرة جديدة في القائمة
+      n.at = lectureRecency(n) || Date.now();
+      // أول تعبئة: كل المحاضرات القديمة تظهر في القائمة (مقروءة عشان البادج ما يتفشخش)
+      // بعد كده: أي محاضرة جديدة = غير مقروءة
+      if (firstFill) {
+        n.unread = false;
+        readIds.add(id);
+      } else {
+        n.unread = true;
+        addedNew++;
+      }
+      byId.set(id, n);
     }
 
-    if (fresh.length) {
-      const existing = new Set(notifItems.map(n => n.id));
-      const toAdd = fresh.filter(n => !existing.has(n.id));
-      notifItems = [...toAdd, ...notifItems]
-        .sort((a, b) => (b.at || 0) - (a.at || 0))
-        .slice(0, 80);
-      saveNotifState();
-      updateBadge();
-    } else {
-      saveNotifState();
-    }
+    seeded = true;
+    notifItems = sortNotifNewestFirst([...byId.values()]).slice(0, 200);
+    saveNotifState();
+    updateBadge();
     if (panelOpen) renderNotifList();
+    if (force && !addedNew && panelOpen) {
+      // التحديث يدوي لسه يعرض القائمة كاملة مرتبة
+      renderNotifList();
+    }
   } catch (e) {
     console.warn('[notif poll]', e && e.message);
   } finally {
