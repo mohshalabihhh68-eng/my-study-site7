@@ -397,53 +397,54 @@ function renderDays(info){
 
 /* ======================================================
    NOTIFICATION SYSTEM
-   ======================================================
-   Strategy:
-   • Poll /api/subjects/:yearId → for each subject fetch /api/subjects/:id/teachers
-   • For each teacher fetch /api/teachers/:tid/chapters (cached)
-   • For each chapter fetch /api/chapters/:cid/lectures
-   • Compare lecture IDs against seen set stored in localStorage
-   • New ones → show in dropdown with subject/teacher/chapter context
-   • Clicking a notification item → player.html (المحاضرة نفسها) with lectureId
-   • Poll every 90 seconds in background
+   • مسح كل المواد × كل المدرسين × كل الفصول
+   • أول مسح = baseline بدون إشعارات
+   • أي محاضرة جديدة تظهر فوراً — الأحدث فوق
+   • زر التحديث بدون سباق / تخبيط
    ====================================================== */
 
-const NOTIF_SEEN_KEY   = 'notif_seen_v2';
-const NOTIF_ITEMS_KEY  = 'notif_items_v2';
-const NOTIF_META_KEY   = 'notif_meta_v2';   // {subjectList, teacherMap, chapterMap}
+const NOTIF_KNOWN_KEY = 'notif_known_v3';
+const NOTIF_ITEMS_KEY = 'notif_items_v3';
+const NOTIF_READ_KEY  = 'notif_read_v3';
 const POLL_INTERVAL_MS = 90_000;
+const NOTIF_CONCURRENCY = 4;
 
-let notifItems   = [];   // [{id, lectureId, lectureTitle, teacherName, chapterId, chapterName, subjectId, subjectName, imageUrl, at, unread}]
-let seenIds      = new Set();
-let subjectList  = [];   // cached from last load
-let teacherMap   = {};   // subjectId -> [{id,name,image_url,...}]
-let chapterMap   = {};   // teacherId -> [{id,name,...}]
-let pollTimer    = null;
-let panelOpen    = false;
+let notifItems  = [];
+let knownIds    = new Set();
+let readIds     = new Set();
+let subjectList = [];
+let teacherMap  = {};
+let chapterMap  = {};
+let pollTimer   = null;
+let panelOpen   = false;
+let polling     = false;
+let pollGen     = 0;
+let seeded      = false;
 
 function loadNotifState(){
   try {
-    const s = JSON.parse(localStorage.getItem(NOTIF_SEEN_KEY) || '[]');
-    seenIds = new Set(Array.isArray(s) ? s : []);
-  } catch(e){ seenIds = new Set(); }
+    const k = JSON.parse(localStorage.getItem(NOTIF_KNOWN_KEY) || '[]');
+    knownIds = new Set(Array.isArray(k) ? k.map(String) : []);
+    seeded = knownIds.size > 0;
+  } catch(e){ knownIds = new Set(); seeded = false; }
+  try {
+    const r = JSON.parse(localStorage.getItem(NOTIF_READ_KEY) || '[]');
+    readIds = new Set(Array.isArray(r) ? r.map(String) : []);
+  } catch(e){ readIds = new Set(); }
   try {
     const items = JSON.parse(localStorage.getItem(NOTIF_ITEMS_KEY) || '[]');
     notifItems = Array.isArray(items) ? items : [];
+    notifItems.sort((a, b) => (b.at || 0) - (a.at || 0));
+    notifItems.forEach(n => { n.unread = !readIds.has(String(n.id)); });
   } catch(e){ notifItems = []; }
-  try {
-    const meta = JSON.parse(localStorage.getItem(NOTIF_META_KEY) || '{}');
-    teacherMap = meta.teacherMap || {};
-    chapterMap = meta.chapterMap || {};
-  } catch(e){}
 }
 
 function saveNotifState(){
   try {
-    // keep only last 200 seen ids
-    const arr = [...seenIds].slice(-200);
-    localStorage.setItem(NOTIF_SEEN_KEY, JSON.stringify(arr));
-    localStorage.setItem(NOTIF_ITEMS_KEY, JSON.stringify(notifItems.slice(0, 50)));
-    localStorage.setItem(NOTIF_META_KEY, JSON.stringify({ teacherMap, chapterMap }));
+    localStorage.setItem(NOTIF_KNOWN_KEY, JSON.stringify([...knownIds].slice(-2000)));
+    localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds].slice(-1000)));
+    notifItems.sort((a, b) => (b.at || 0) - (a.at || 0));
+    localStorage.setItem(NOTIF_ITEMS_KEY, JSON.stringify(notifItems.slice(0, 80)));
   } catch(e){}
 }
 
@@ -451,6 +452,7 @@ function unreadCount(){ return notifItems.filter(n => n.unread).length; }
 
 function updateBadge(){
   const badge = $('notif-badge'), n = unreadCount();
+  if (!badge) return;
   badge.textContent = n > 9 ? '9+' : String(n);
   badge.classList.toggle('show', n > 0);
 }
@@ -467,6 +469,7 @@ function relativeTime(ts){
 function renderNotifList(){
   const list = $('notif-list');
   if (!list) return;
+  notifItems.sort((a, b) => (b.at || 0) - (a.at || 0));
   if (!notifItems.length){
     list.innerHTML = `<div class="notif-empty">
       <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
@@ -474,14 +477,14 @@ function renderNotifList(){
     </div>`;
     return;
   }
-  list.innerHTML = notifItems.slice(0, 30).map((n, i) => `
+  list.innerHTML = notifItems.slice(0, 50).map((n, i) => `
     <div class="notif-item ${n.unread ? 'unread' : ''}"
          data-id="${esc(n.id)}"
          data-subject="${esc(n.subjectId)}"
          data-subject-name="${esc(n.subjectName)}"
          data-lecture="${esc(n.lectureId)}"
          data-chapter="${esc(n.chapterId || '')}"
-         style="animation-delay:${i * 40}ms"
+         style="animation-delay:${Math.min(i, 12) * 30}ms"
          role="button" tabindex="0" aria-label="${esc(n.lectureTitle)} — ${esc(n.teacherName)}">
       <div class="notif-thumb">
         ${n.imageUrl ? `<img src="${esc(n.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<svg viewBox=&quot;0 0 24 24&quot;><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/></svg>'">` :
@@ -489,7 +492,7 @@ function renderNotifList(){
       </div>
       <div class="notif-body">
         <div class="notif-title">${esc(n.lectureTitle)}</div>
-        <div class="notif-sub">${esc(n.subjectName)} · ${esc(n.teacherName)}</div>
+        <div class="notif-sub">${esc(n.subjectName)} · ${esc(n.teacherName)}${n.chapterName ? ' · ' + esc(n.chapterName) : ''}</div>
         <div class="notif-time">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           ${relativeTime(n.at)}
@@ -502,16 +505,14 @@ function renderNotifList(){
 function openNotifItem(el){
   if (!el) return;
   const id = el.dataset.id;
-  // mark as read
   const item = notifItems.find(n => n.id === id);
   if (item) item.unread = false;
-  seenIds.add(id);
+  readIds.add(String(id));
   saveNotifState();
   updateBadge();
   renderNotifList();
   closePanel();
 
-  // روح على المحاضرة نفسها (المشغّل) مش صفحة المدرسين
   const lectureId   = (item && item.lectureId) || el.dataset.lecture || '';
   const lectureName = (item && item.lectureTitle) || '';
   const teacherName = (item && item.teacherName) || '';
@@ -529,7 +530,6 @@ function openNotifItem(el){
     location.href = url;
     return;
   }
-  // fallback: قائمة محاضرات الفصل
   if (chapterId) {
     location.href = 'lectures.html?chapterId=' + encodeURIComponent(chapterId)
       + '&chapterName=' + encodeURIComponent(chapterName)
@@ -537,7 +537,6 @@ function openNotifItem(el){
       + '&subjectName=' + encodeURIComponent(subjectName);
     return;
   }
-  // آخر حل: صفحة المدرسين
   const subjectId = (item && item.subjectId) || el.dataset.subject || '';
   if (subjectId) {
     location.href = 'teachers.html?subjectId=' + encodeURIComponent(subjectId)
@@ -545,51 +544,58 @@ function openNotifItem(el){
   }
 }
 
-$('notif-list').addEventListener('click', e => {
-  const item = e.target.closest('.notif-item[data-id]');
-  if (item) openNotifItem(item);
-});
-$('notif-list').addEventListener('keydown', e => {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  const item = e.target.closest('.notif-item[data-id]');
-  if (item){ e.preventDefault(); openNotifItem(item); }
-});
-
-$('notif-read-all').addEventListener('click', () => {
-  notifItems.forEach(n => { n.unread = false; seenIds.add(n.id); });
-  saveNotifState(); updateBadge(); renderNotifList();
-});
-
-$('notif-refresh').addEventListener('click', () => { pollNotifications(true); });
-
 function openPanel(){
   panelOpen = true;
-  $('notif-panel').classList.add('open');
-  $('notif-btn').classList.add('active');
-  $('notif-btn').setAttribute('aria-expanded', 'true');
+  const btn = $('notif-btn'), panel = $('notif-panel');
+  if (btn) { btn.classList.add('active'); btn.setAttribute('aria-expanded', 'true'); }
+  if (panel) panel.classList.add('open');
   renderNotifList();
 }
-
 function closePanel(){
   panelOpen = false;
-  $('notif-panel').classList.remove('open');
-  $('notif-btn').classList.remove('active');
-  $('notif-btn').setAttribute('aria-expanded', 'false');
+  const btn = $('notif-btn'), panel = $('notif-panel');
+  if (btn) { btn.classList.remove('active'); btn.setAttribute('aria-expanded', 'false'); }
+  if (panel) panel.classList.remove('open');
 }
+function togglePanel(){ if (panelOpen) closePanel(); else openPanel(); }
 
-$('notif-btn').addEventListener('click', e => {
-  e.stopPropagation();
-  panelOpen ? closePanel() : openPanel();
-});
+(function bindNotifUI(){
+  const list = $('notif-list');
+  if (list) {
+    list.addEventListener('click', e => {
+      const item = e.target.closest('.notif-item[data-id]');
+      if (item) openNotifItem(item);
+    });
+    list.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const item = e.target.closest('.notif-item[data-id]');
+      if (item) { e.preventDefault(); openNotifItem(item); }
+    });
+  }
+  const btn = $('notif-btn');
+  if (btn) btn.addEventListener('click', e => { e.stopPropagation(); togglePanel(); });
+  const readAll = $('notif-read-all');
+  if (readAll) readAll.addEventListener('click', e => {
+    e.stopPropagation();
+    notifItems.forEach(n => { n.unread = false; readIds.add(String(n.id)); });
+    saveNotifState();
+    updateBadge();
+    renderNotifList();
+  });
+  const refresh = $('notif-refresh');
+  if (refresh) refresh.addEventListener('click', e => {
+    e.stopPropagation();
+    pollNotifications(true);
+  });
+  document.addEventListener('click', e => {
+    const wrap = $('notif-wrap');
+    if (panelOpen && wrap && !wrap.contains(e.target)) closePanel();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && panelOpen) closePanel();
+  });
+})();
 
-document.addEventListener('click', e => {
-  if (panelOpen && !$('notif-wrap').contains(e.target)) closePanel();
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && panelOpen) closePanel();
-});
-
-/* ---- polling logic ---- */
 async function fetchSubjectsOnce(){
   if (subjectList.length) return subjectList;
   const data = await api('/api/subjects/' + yearId);
@@ -597,56 +603,90 @@ async function fetchSubjectsOnce(){
   return subjectList;
 }
 
-async function fetchTeachersFor(subjectId){
-  if (teacherMap[subjectId]) return teacherMap[subjectId];
+async function fetchTeachersFor(subjectId, useCache){
+  if (useCache && teacherMap[subjectId]) return teacherMap[subjectId];
   const data = await api('/api/subjects/' + encodeURIComponent(subjectId) + '/teachers').catch(() => null);
   let teachers = [];
   if (Array.isArray(data)) teachers = data;
   else if (data && Array.isArray(data.teachers)) teachers = data.teachers;
-  teachers = teachers.filter(t => t && !isHidden(t.name));
+  teachers = teachers.filter(t => t && !(typeof isHidden === 'function' && isHidden(t.name)));
   teacherMap[subjectId] = teachers;
   return teachers;
 }
 
-async function fetchChaptersFor(teacherId){
-  if (chapterMap[teacherId]) return chapterMap[teacherId];
+async function fetchChaptersFor(teacherId, useCache){
+  if (useCache && chapterMap[teacherId]) return chapterMap[teacherId];
   const data = await api('/api/teachers/' + encodeURIComponent(teacherId) + '/chapters').catch(() => null);
-  const chapters = Array.isArray(data) ? data : [];
+  let chapters = [];
+  if (Array.isArray(data)) chapters = data;
+  else if (data && Array.isArray(data.data)) chapters = data.data;
   chapterMap[teacherId] = chapters;
   return chapters;
 }
 
 async function fetchLecturesFor(chapterId){
   const data = await api('/api/chapters/' + encodeURIComponent(chapterId) + '/lectures').catch(() => null);
-  return Array.isArray(data) ? data : [];
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.data)) return data.data;
+  return [];
 }
 
-let polling = false;
+async function mapPool(items, limit, fn){
+  const results = new Array(items.length);
+  let i = 0;
+  async function worker(){
+    while (i < items.length){
+      const idx = i++;
+      try { results[idx] = await fn(items[idx], idx); }
+      catch (e) { results[idx] = null; }
+    }
+  }
+  const n = Math.min(limit, Math.max(1, items.length || 1));
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return results;
+}
+
+function setRefreshBusy(on){
+  const btn = $('notif-refresh');
+  if (!btn) return;
+  btn.disabled = !!on;
+  btn.textContent = on ? 'جاري التحديث…' : 'تحديث الآن';
+}
+
 async function pollNotifications(force = false){
-  if (polling) return;
+  if (polling && !force) return;
+  const myGen = ++pollGen;
   polling = true;
+  if (force) {
+    teacherMap = {};
+    chapterMap = {};
+    setRefreshBusy(true);
+  }
   try {
     const subjects = await fetchSubjectsOnce();
-    if (!subjects.length){ polling = false; return; }
+    if (myGen !== pollGen) return;
+    if (!subjects.length) return;
 
-    // فحص كل المواد المتاحة (محاضرات جديدة)
-    const toCheck = subjects.slice(0, 12);
-    let newFound = [];
+    const discovered = [];
+    const stamp = Date.now();
 
-    for (const subj of toCheck){
-      const teachers = await fetchTeachersFor(subj.id).catch(() => []);
-      for (const teacher of teachers.slice(0, 6)){
-        const chapters = await fetchChaptersFor(teacher.id).catch(() => []);
-        const recentChapters = chapters.slice(0, 4);
-        for (const ch of recentChapters){
+    // كل المواد × كل المدرسين × كل الفصول
+    await mapPool(subjects, NOTIF_CONCURRENCY, async (subj) => {
+      if (myGen !== pollGen) return;
+      const teachers = await fetchTeachersFor(subj.id, !force).catch(() => []);
+      if (myGen !== pollGen) return;
+      await mapPool(teachers, NOTIF_CONCURRENCY, async (teacher) => {
+        if (myGen !== pollGen) return;
+        const chapters = await fetchChaptersFor(teacher.id, !force).catch(() => []);
+        if (myGen !== pollGen) return;
+        for (const ch of chapters) {
+          if (myGen !== pollGen) return;
           const lectures = await fetchLecturesFor(ch.id).catch(() => []);
-          for (const lec of lectures){
-            const lecId = String(lec.id || lec.video_id || '');
+          for (const lec of lectures) {
+            const lecId = String(lec.id || lec.video_id || lec.videoId || '');
             if (!lecId) continue;
-            const notifId = subj.id + '_' + lecId;
-            if (seenIds.has(notifId)) continue;
-            // brand new lecture
-            newFound.push({
+            const notifId = String(subj.id) + '_' + lecId;
+            discovered.push({
               id: notifId,
               lectureId: lecId,
               lectureTitle: lec.name || lec.title || 'محاضرة جديدة',
@@ -657,53 +697,59 @@ async function pollNotifications(force = false){
               subjectId: String(subj.id || ''),
               subjectName: subj.name || '',
               imageUrl: lec.image_url || teacher.image_url || subj.image_url || null,
-              at: Date.now(),
+              at: stamp,
               unread: true
             });
           }
         }
-      }
+      });
+    });
+
+    if (myGen !== pollGen) return;
+
+    // أول مسح ناجح = baseline فقط
+    if (!seeded) {
+      discovered.forEach(n => knownIds.add(n.id));
+      seeded = true;
+      saveNotifState();
+      if (panelOpen) renderNotifList();
+      return;
     }
 
-    if (newFound.length){
-      // prepend new items, avoid duplicates
-      const existingIds = new Set(notifItems.map(n => n.id));
-      const fresh = newFound.filter(n => !existingIds.has(n.id));
-      if (fresh.length){
-        notifItems = [...fresh, ...notifItems].slice(0, 50);
-        saveNotifState();
-        updateBadge();
-        if (panelOpen) renderNotifList();
-        // mark all fetched ids as seen for future polls (even ones we just showed)
-        // so we don't re-add them next poll
-        fresh.forEach(n => { /* leave unread=true; seenIds updated when user clicks */ });
-      }
+    const fresh = [];
+    for (const n of discovered) {
+      if (knownIds.has(n.id)) continue;
+      knownIds.add(n.id);
+      n.unread = !readIds.has(n.id);
+      n.at = Date.now();
+      fresh.push(n);
     }
-    // always mark fetched lectures as "known" so next poll only catches truly new ones
-    // We track "announced" separately: add all found (new or old) to a "known" set
-    // but keep unread status only for genuinely new ones
-    // Simple approach: after first poll mark all as seen-for-fetch, keep unread for display
-    const announcedKey = 'notif_announced_v2';
-    let announced;
-    try { announced = new Set(JSON.parse(localStorage.getItem(announcedKey) || '[]')); } catch(e){ announced = new Set(); }
-    newFound.forEach(n => { if (!announced.has(n.id)) announced.add(n.id); });
-    // On first run (force=false and announced is small) seed seenIds with all fetched
-    // so only future lectures are "new"
-    if (!force && announced.size < 5){
-      newFound.forEach(n => { seenIds.add(n.id); notifItems.forEach(i => { if (i.id === n.id) i.unread = false; }); });
-      saveNotifState(); updateBadge();
-    }
-    try { localStorage.setItem(announcedKey, JSON.stringify([...announced].slice(-500))); } catch(e){}
 
-  } catch(e){
-    console.warn('[notif poll]', e.message);
+    if (fresh.length) {
+      const existing = new Set(notifItems.map(n => n.id));
+      const toAdd = fresh.filter(n => !existing.has(n.id));
+      notifItems = [...toAdd, ...notifItems]
+        .sort((a, b) => (b.at || 0) - (a.at || 0))
+        .slice(0, 80);
+      saveNotifState();
+      updateBadge();
+    } else {
+      saveNotifState();
+    }
+    if (panelOpen) renderNotifList();
+  } catch (e) {
+    console.warn('[notif poll]', e && e.message);
+  } finally {
+    if (myGen === pollGen) {
+      polling = false;
+      setRefreshBusy(false);
+    }
   }
-  polling = false;
-  if (panelOpen) renderNotifList();
 }
 
 function startPolling(){
   pollNotifications(false);
+  if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => pollNotifications(false), POLL_INTERVAL_MS);
 }
 /* ===================================================== */
