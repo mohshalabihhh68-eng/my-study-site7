@@ -3792,9 +3792,15 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
         }
         if (isArabic) {
           const arr = Array.isArray(data) ? data : [];
-          const isSaeed = (t) => /سعيد\s*الفقي|سعيد\s*الفقى|سعيد\s*الفي/i.test(String(t.name || ""));
+          const isSaeed = (t) => {
+            const n = String(t.name || "");
+            if (!/سعيد/i.test(n)) return false;
+            return /فقي|فقى|الفي/i.test(n);
+          };
           if (sec === "azhari") {
-            data = arr.filter(isSaeed);
+            let filtered = arr.filter(isSaeed);
+            if (!filtered.length) filtered = arr.filter((t) => /سعيد/i.test(String(t.name || "")));
+            data = filtered.length ? filtered : data;
           } else {
             // غير الأزهر: سيّب محمد صلاح ورضا، شيّل سعيد الفقي فقط
             data = arr.filter((t) => !isSaeed(t));
