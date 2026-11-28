@@ -314,7 +314,66 @@ const H = 36e5, D = 864e5, STD = [3, 7, 15, 30, 45, 60, 90, 120, 180, 365];
 
 const norm = s => String(s || '').replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/[^\p{L}\p{N}\s]/gu,'').replace(/\s+/g,'').toLowerCase().trim();
 const HIDDEN = ['عبدالله الحبشي'].map(norm);
+
 const isHidden = n => HIDDEN.includes(norm(n));
+
+/* ---- فلترة المواد حسب شعبة الطالب (نفس السيرفر) ---- */
+const SECTION_KINDS = {
+  scientific_sciences: ["arabic", "english", "physics", "chemistry", "biology"],
+  scientific_math: ["arabic", "english", "physics", "chemistry", "math"],
+  literary: ["arabic", "english", "history", "geography", "statistics"],
+  languages: ["arabic", "english", "french", "german"],
+  azhari: ["arabic", "english", "physics", "chemistry", "biology", "math", "history", "geography", "statistics", "fiqh", "tawhid", "tafsir", "hadith", "quran", "sharia_other"]
+};
+function normalizeSectionClient(raw){
+  const s = String(raw || "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (!s) return "scientific_sciences";
+  if (["scientific_sciences","scientific_math","literary","azhari","languages"].includes(s)) return s;
+  if (/علوم/.test(s) && !/رياض/.test(s)) return "scientific_sciences";
+  if (/رياض/.test(s)) return "scientific_math";
+  if (/أدب|ادب|literary/.test(s)) return "literary";
+  if (/أزهر|ازهر|azhar/.test(s)) return "azhari";
+  if (/لغات|language/.test(s)) return "languages";
+  return s;
+}
+function subjectKindClient(name){
+  const n = String(name || "");
+  if (/إحصاء|احصاء|statistics/i.test(n)) return "statistics";
+  if (/تاريخ|history/i.test(n)) return "history";
+  if (/جغراف|geography/i.test(n)) return "geography";
+  if (/فقه/i.test(n)) return "fiqh";
+  if (/توحيد|عقيدة/i.test(n)) return "tawhid";
+  if (/تفسير/i.test(n)) return "tafsir";
+  if (/حديث/i.test(n)) return "hadith";
+  if (/قرآن|تجويد|قراءات/i.test(n)) return "quran";
+  if (/عربي|عربية|arabic/i.test(n)) return "arabic";
+  if (/english|إنجل|انجليز/i.test(n)) return "english";
+  if (/كيمياء|chemistry/i.test(n)) return "chemistry";
+  if (/فيزياء|physics/i.test(n)) return "physics";
+  if (/أحياء|احياء|biology/i.test(n)) return "biology";
+  if (/رياض|math|جبر|تفاضل|استاتيكا|ديناميكا/i.test(n)) return "math";
+  if (/فرنس|french/i.test(n)) return "french";
+  if (/ألمان|المان|german/i.test(n)) return "german";
+  return "other";
+}
+function filterSubjectsBySection(list, section){
+  const sec = normalizeSectionClient(section);
+  const wanted = SECTION_KINDS[sec] || SECTION_KINDS.scientific_sciences;
+  const byKind = new Map();
+  for (const s of list || []) {
+    const kind = s._kind || subjectKindClient(s.name);
+    if (!wanted.includes(kind)) continue;
+    if (!byKind.has(kind)) byKind.set(kind, s);
+  }
+  // لو الفلتر صفّر بالغلط (أسماء غريبة) — رجّع اللي الاسم واضح إنه ضمن الشعبة فقط مش الكل
+  let out = wanted.map(k => byKind.get(k)).filter(Boolean);
+  if (!out.length && (list || []).length) {
+    out = (list || []).filter(s => wanted.includes(subjectKindClient(s.name)));
+  }
+  return out;
+}
+let studentSection = "scientific_sciences";
+
 
 const QUOTES = ['الخطوة الصغيرة كل يوم أحسن من حماس يوم واحد.','اللي بيذاكر النهارده بيرتاح بكرة.','ركّز في حصة واحدة وخلّصها، والباقي هيمشي.','مفيش حد بيوصل من غير ما يبدأ.','اشرب مياه، خد استراحة، وارجع أقوى.','كل فصل بتخلصه بيقرّبك من حلمك.','التعب مؤقت، والنتيجة بتفضل.','ابدأ بأصعب حاجة وهتلاقي الباقي أسهل.','تنظيم وقتك نص النجاح.','أنت أقدر مما تتخيل.'];
 const dayQuote = () => { const d = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,0)) / D); return QUOTES[d % QUOTES.length]; };
@@ -403,9 +462,9 @@ function renderDays(info){
    • زر التحديث بدون سباق / تخبيط
    ====================================================== */
 
-const NOTIF_KNOWN_KEY = 'notif_known_v4';
-const NOTIF_ITEMS_KEY = 'notif_items_v4';
-const NOTIF_READ_KEY  = 'notif_read_v4';
+const NOTIF_KNOWN_KEY = 'notif_known_v5';
+const NOTIF_ITEMS_KEY = 'notif_items_v5';
+const NOTIF_READ_KEY  = 'notif_read_v5';
 const POLL_INTERVAL_MS = 90_000;
 const NOTIF_CONCURRENCY = 4;
 
@@ -421,30 +480,32 @@ let polling     = false;
 let pollGen     = 0;
 let seeded      = false;
 
+function notifKey(base){
+  return base + '_' + normalizeSectionClient(studentSection);
+}
 function loadNotifState(){
   try {
-    const k = JSON.parse(localStorage.getItem(NOTIF_KNOWN_KEY) || '[]');
+    const k = JSON.parse(localStorage.getItem(notifKey(NOTIF_KNOWN_KEY)) || '[]');
     knownIds = new Set(Array.isArray(k) ? k.map(String) : []);
     seeded = knownIds.size > 0;
   } catch(e){ knownIds = new Set(); seeded = false; }
   try {
-    const r = JSON.parse(localStorage.getItem(NOTIF_READ_KEY) || '[]');
+    const r = JSON.parse(localStorage.getItem(notifKey(NOTIF_READ_KEY)) || '[]');
     readIds = new Set(Array.isArray(r) ? r.map(String) : []);
   } catch(e){ readIds = new Set(); }
   try {
-    const items = JSON.parse(localStorage.getItem(NOTIF_ITEMS_KEY) || '[]');
+    const items = JSON.parse(localStorage.getItem(notifKey(NOTIF_ITEMS_KEY)) || '[]');
     notifItems = Array.isArray(items) ? items : [];
     notifItems.forEach(n => { n.unread = !readIds.has(String(n.id)); });
-    // الترتيب يتظبط بعد تعريف sortNotifNewestFirst عند أول render/poll
   } catch(e){ notifItems = []; }
 }
 
 function saveNotifState(){
   try {
-    localStorage.setItem(NOTIF_KNOWN_KEY, JSON.stringify([...knownIds].slice(-2000)));
-    localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds].slice(-1000)));
+    localStorage.setItem(notifKey(NOTIF_KNOWN_KEY), JSON.stringify([...knownIds].slice(-2000)));
+    localStorage.setItem(notifKey(NOTIF_READ_KEY), JSON.stringify([...readIds].slice(-1000)));
     notifItems = sortNotifNewestFirst(notifItems);
-    localStorage.setItem(NOTIF_ITEMS_KEY, JSON.stringify(notifItems.slice(0, 200)));
+    localStorage.setItem(notifKey(NOTIF_ITEMS_KEY), JSON.stringify(notifItems.slice(0, 200)));
   } catch(e){}
 }
 
@@ -617,7 +678,9 @@ function togglePanel(){ if (panelOpen) closePanel(); else openPanel(); }
 async function fetchSubjectsOnce(){
   if (subjectList.length) return subjectList;
   const data = await api('/api/subjects/' + yearId);
-  subjectList = Array.isArray(data) ? data : [];
+  const raw = Array.isArray(data) ? data : [];
+  // مواد الشعبة فقط — نفس اللي ظاهر في صفحة المواد
+  subjectList = filterSubjectsBySection(raw, studentSection);
   return subjectList;
 }
 
@@ -941,8 +1004,22 @@ async function init(){
   renderDays(findDays(me));
 
   if (subjectsRes.status === 'rejected'){ showError(subjectsRes.reason.message); hideSplash(); return; }
-  const subjects = subjectsRes.value || [];
-  subjectList = subjects;    // share with notif system
+
+  // شعبة الطالب من الحساب
+  try {
+    const secRaw = (me && (me.section || me.student_section || (me.student && me.student.section))) || localStorage.getItem('student_section') || '';
+    studentSection = normalizeSectionClient(secRaw);
+    if (secRaw) try { localStorage.setItem('student_section', studentSection); } catch(e){}
+  } catch(e){}
+
+  // أعد تحميل الإشعارات الخاصة بالشعبة دي فقط
+  loadNotifState();
+  updateBadge();
+  renderNotifList();
+
+  const subjectsRaw = subjectsRes.value || [];
+  const subjects = filterSubjectsBySection(subjectsRaw, studentSection);
+  subjectList = subjects;    // إشعارات + شبكة المواد = نفس القائمة
   const countEl = $('subject-count');
   countEl.textContent = subjects.length;
   countEl.style.display = 'inline-block';
