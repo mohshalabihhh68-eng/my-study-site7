@@ -41,24 +41,68 @@ button{cursor:pointer}
 @keyframes rise{from{opacity:0;transform:translateY(22px) scale(.97)}to{opacity:1;transform:none}}
 @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes notif-in{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes badge-pop{0%{transform:scale(0)}60%{transform:scale(1.3)}100%{transform:scale(1)}}
+@keyframes notif-item{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
 
 #scroll-progress{position:fixed;top:0;right:0;height:3px;background:linear-gradient(270deg,var(--blue),var(--blue2));width:0%;z-index:9999;transition:width .1s ease-out}
 
 /* nav */
 .app-nav{position:sticky;top:0;z-index:40;padding-top:env(safe-area-inset-top,0px);background:var(--nav-bg);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
-.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.app-nav-in{max-width:1120px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:10px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:16px;cursor:pointer;color:var(--ink)}
 .brand .logo{display:grid;place-items:center;width:43px;height:43px;border-radius:14px;background:linear-gradient(145deg,var(--blue),var(--blue2));box-shadow:0 8px 26px color-mix(in srgb,var(--blue) 35%,transparent);color:#fff}
 .brand .logo svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8}
 .brand small{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:-3px}
-.nav-right{display:flex;align-items:center;gap:10px;margin-right:auto}
+.nav-right{display:flex;align-items:center;gap:8px;margin-right:auto}
 .profile-btn{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 6px 6px 16px;font-weight:800;font-size:14px;color:var(--ink);transition:.2s}
 .profile-btn:hover{border-color:var(--blue)}
 .profile-btn .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;display:grid;place-items:center;font-weight:900;font-size:16px}
-.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;padding:0}
+.theme-toggle{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;padding:0;flex:none}
 .theme-toggle svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
 .theme-toggle .icon-sun{display:none}.theme-toggle .icon-moon{display:block}
 [data-theme="dark"] .theme-toggle .icon-sun{display:block}[data-theme="dark"] .theme-toggle .icon-moon{display:none}
+
+/* ============ NOTIFICATION BELL ============ */
+.notif-wrap{position:relative;flex:none}
+.notif-btn{position:relative;width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;padding:0;transition:border-color .2s,background .2s}
+.notif-btn:hover{border-color:var(--blue);background:var(--card-hover)}
+.notif-btn.active{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 10%,var(--card))}
+.notif-btn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.notif-badge{position:absolute;top:-5px;left:-5px;min-width:20px;height:20px;border-radius:999px;background:var(--red);color:#fff;font-size:11px;font-weight:900;display:grid;place-items:center;padding:0 5px;border:2px solid var(--bg);display:none;animation:badge-pop .35s cubic-bezier(.34,1.56,.64,1) forwards}
+.notif-badge.show{display:grid}
+
+/* dropdown */
+.notif-panel{position:absolute;top:calc(100% + 10px);left:0;width:340px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.35);z-index:200;overflow:hidden;animation:notif-in .22s ease;display:none}
+.notif-panel.open{display:block}
+.notif-panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 14px;border-bottom:1px solid var(--line)}
+.notif-panel-head h3{margin:0;font-size:15px;font-weight:900}
+.notif-read-all{font-size:12px;font-weight:800;color:var(--blue);background:none;border:none;cursor:pointer;padding:4px 10px;border-radius:8px;transition:.15s}
+.notif-read-all:hover{background:color-mix(in srgb,var(--blue) 12%,transparent)}
+.notif-list{max-height:360px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+.notif-list::-webkit-scrollbar{width:4px}.notif-list::-webkit-scrollbar-track{background:transparent}.notif-list::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.notif-item{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;cursor:pointer;transition:background .15s;border-bottom:1px solid var(--line);animation:notif-item .25s ease backwards}
+.notif-item:last-child{border-bottom:0}
+.notif-item:hover{background:var(--card-hover)}
+.notif-item.unread{background:color-mix(in srgb,var(--blue) 6%,var(--card))}
+.notif-item.unread:hover{background:color-mix(in srgb,var(--blue) 10%,var(--card))}
+.notif-thumb{width:46px;height:46px;border-radius:12px;flex:none;object-fit:cover;background:linear-gradient(135deg,var(--blue),var(--blue2));display:grid;place-items:center;overflow:hidden}
+.notif-thumb svg{width:22px;height:22px;stroke:#fff;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.notif-thumb img{width:100%;height:100%;object-fit:cover}
+.notif-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex:none;margin-top:7px;transition:opacity .2s}
+.notif-item:not(.unread) .notif-dot{opacity:0}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-size:13px;font-weight:800;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.notif-sub{font-size:11px;font-weight:700;color:var(--muted);margin-top:3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.notif-time{font-size:10px;font-weight:700;color:var(--muted);margin-top:5px;display:flex;align-items:center;gap:4px}
+.notif-time svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+.notif-empty{padding:36px 18px;text-align:center;color:var(--muted);font-weight:700;font-size:14px}
+.notif-empty svg{width:40px;height:40px;stroke:var(--muted);fill:none;stroke-width:1.5;margin-bottom:10px;display:block;margin-left:auto;margin-right:auto}
+.notif-footer{padding:12px 18px;border-top:1px solid var(--line);text-align:center}
+.notif-footer button{font-size:13px;font-weight:800;color:var(--blue);background:none;border:none;cursor:pointer}
+.notif-loading{padding:28px;text-align:center;color:var(--muted);font-size:13px;font-weight:700}
+.notif-loading::after{content:"";display:inline-block;width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px}
+/* ============================================ */
 
 /* hero */
 .wrap{max-width:1120px;margin:0 auto;padding:28px 16px 70px}
@@ -73,7 +117,7 @@ button{cursor:pointer}
 @keyframes ul{to{transform:scaleX(1)}}
 .quote{margin:8px 0 0;color:var(--muted);font-weight:600;font-size:15px}
 
-/* summary: days + courses + teachers */
+/* summary */
 .summary{--accent:var(--blue);position:relative;display:grid;grid-template-columns:1.2fr 1fr;margin-top:26px;border-radius:26px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden}
 .summary.warn{--accent:var(--amber)}
 .summary.danger{--accent:var(--red)}
@@ -101,7 +145,7 @@ button{cursor:pointer}
 .mini-num.loading{opacity:.4}
 .mini-lbl{font-size:12px;font-weight:700;color:var(--muted)}
 
-/* section + cards */
+/* cards */
 .sec-head{display:flex;align-items:center;margin-top:34px}
 .sec-head h2{margin:0;font-size:20px;font-weight:900;display:flex;align-items:center;gap:10px}
 .count{font-size:13px;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;padding:3px 13px;border-radius:99px;font-weight:900}
@@ -130,7 +174,7 @@ button{cursor:pointer}
 .action-btn.is-loading::after{content:"";width:16px;height:16px;border-radius:50%;border:2.5px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .7s linear infinite}
 body.leaving main{opacity:0;transform:translateY(-8px);transition:opacity .26s,transform .26s}
 
-/* skeleton + states */
+/* skeleton */
 .sk-card{background:var(--card);border:1px solid var(--line);border-radius:24px;overflow:hidden}
 .sk-img,.sk-line{background:linear-gradient(90deg,var(--card-inner),var(--card-hover),var(--card-inner));background-size:800px 100%;animation:shimmer 1.4s infinite linear}
 .sk-img{width:100%;aspect-ratio:16/10}
@@ -147,8 +191,8 @@ body.leaving main{opacity:0;transform:translateY(-8px);transition:opacity .26s,t
 .to-top.show{opacity:1;visibility:visible;transform:none}
 
 @media(max-width:700px){
-  .app-nav-in{padding:10px 12px}.brand small{display:none}
-  .profile-btn #nav-name{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .app-nav-in{padding:10px 12px;gap:6px}.brand small{display:none}
+  .profile-btn #nav-name{max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .summary{grid-template-columns:1fr;border-radius:22px}
   .sum-days{padding:20px}
   .sum-stats{border-right:0;border-top:1px solid var(--line)}
@@ -156,6 +200,7 @@ body.leaving main{opacity:0;transform:translateY(-8px);transition:opacity .26s,t
   .num{font-size:32px}
   .grid{grid-template-columns:1fr;gap:16px}
   .card{border-radius:20px}.card-img{aspect-ratio:16/9}
+  .notif-panel{width:300px;left:auto;right:0}
 }
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
@@ -180,6 +225,28 @@ body.leaving main{opacity:0;transform:translateY(-8px);transition:opacity .26s,t
     <span>ثانوية <span style="color:var(--blue)">club</span><small>مستقبلك الدراسي في مكان واحد</small></span>
   </div>
   <div class="nav-right">
+
+    <!-- ============ NOTIFICATION BELL ============ -->
+    <div class="notif-wrap" id="notif-wrap">
+      <button type="button" class="notif-btn" id="notif-btn" aria-label="الإشعارات" aria-expanded="false" aria-haspopup="true">
+        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge" id="notif-badge" aria-live="polite"></span>
+      </button>
+      <div class="notif-panel" id="notif-panel" role="dialog" aria-modal="true" aria-label="الإشعارات">
+        <div class="notif-panel-head">
+          <h3>الإشعارات</h3>
+          <button class="notif-read-all" id="notif-read-all" type="button">قراءة الكل</button>
+        </div>
+        <div class="notif-list" id="notif-list">
+          <div class="notif-loading">جاري التحميل</div>
+        </div>
+        <div class="notif-footer">
+          <button type="button" id="notif-refresh">تحديث الآن</button>
+        </div>
+      </div>
+    </div>
+    <!-- ============================================ -->
+
     <button type="button" class="profile-btn" onclick="window.location.href='profile.html'" aria-label="الملف الشخصي"><span class="av" id="nav-av">؟</span><span id="nav-name">—</span></button>
     <button type="button" class="theme-toggle" data-theme-toggle aria-label="تغيير الثيم"><svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg><svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
   </div>
@@ -240,7 +307,6 @@ const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const H = 36e5, D = 864e5, STD = [3, 7, 15, 30, 45, 60, 90, 120, 180, 365];
 
-/* نفس قائمة الإخفاء بتاعة صفحة المدرسين عشان الأرقام تتطابق */
 const norm = s => String(s || '').replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/[^\p{L}\p{N}\s]/gu,'').replace(/\s+/g,'').toLowerCase().trim();
 const HIDDEN = ['عبدالله الحبشي'].map(norm);
 const isHidden = n => HIDDEN.includes(norm(n));
@@ -276,14 +342,12 @@ function countUp(el, to){
   })(t0);
 }
 
-/* التحية + قلم التحديد */
 function setGreeting(name){
   const h = new Date().getHours();
   $('time-greet').textContent = h >= 18 || h < 4 ? 'مساء الخير 🌙' : (h < 12 ? 'صباح الخير ☀️' : 'نهارك سعيد 🌤️');
   $('greeting').innerHTML = '<span class="hl">أهلاً بك يا ' + esc(name) + '</span>';
 }
 
-/* الوقت المتبقي: السيرفر بيرجّع expiresAt (مللي ثانية) في /api/auth/me */
 function findDays(me){
   if (!me) return null;
   const srcs = [me, me.subscription, me.sub, me.student, me.user].filter(Boolean);
@@ -326,8 +390,293 @@ function renderDays(info){
   try { localStorage.setItem('student_days', String(val)); } catch(e){}
 }
 
-/* عدد الكورسات (الفصول) والمدرسين: من /api/subjects/:id/teachers
-   وبنستخدم العدد المظبوط المتخزّن من صفحة المدرسين (chc_) لو موجود */
+/* ======================================================
+   NOTIFICATION SYSTEM
+   ======================================================
+   Strategy:
+   • Poll /api/subjects/:yearId → for each subject fetch /api/subjects/:id/teachers
+   • For each teacher fetch /api/teachers/:tid/chapters (cached)
+   • For each chapter fetch /api/chapters/:cid/lectures
+   • Compare lecture IDs against seen set stored in localStorage
+   • New ones → show in dropdown with subject/teacher/chapter context
+   • Clicking a notification item → navigate to teachers.html with correct params
+   • Poll every 90 seconds in background
+   ====================================================== */
+
+const NOTIF_SEEN_KEY   = 'notif_seen_v2';
+const NOTIF_ITEMS_KEY  = 'notif_items_v2';
+const NOTIF_META_KEY   = 'notif_meta_v2';   // {subjectList, teacherMap, chapterMap}
+const POLL_INTERVAL_MS = 90_000;
+
+let notifItems   = [];   // [{id, lectureId, lectureTitle, teacherName, chapterId, chapterName, subjectId, subjectName, imageUrl, at, unread}]
+let seenIds      = new Set();
+let subjectList  = [];   // cached from last load
+let teacherMap   = {};   // subjectId -> [{id,name,image_url,...}]
+let chapterMap   = {};   // teacherId -> [{id,name,...}]
+let pollTimer    = null;
+let panelOpen    = false;
+
+function loadNotifState(){
+  try {
+    const s = JSON.parse(localStorage.getItem(NOTIF_SEEN_KEY) || '[]');
+    seenIds = new Set(Array.isArray(s) ? s : []);
+  } catch(e){ seenIds = new Set(); }
+  try {
+    const items = JSON.parse(localStorage.getItem(NOTIF_ITEMS_KEY) || '[]');
+    notifItems = Array.isArray(items) ? items : [];
+  } catch(e){ notifItems = []; }
+  try {
+    const meta = JSON.parse(localStorage.getItem(NOTIF_META_KEY) || '{}');
+    teacherMap = meta.teacherMap || {};
+    chapterMap = meta.chapterMap || {};
+  } catch(e){}
+}
+
+function saveNotifState(){
+  try {
+    // keep only last 200 seen ids
+    const arr = [...seenIds].slice(-200);
+    localStorage.setItem(NOTIF_SEEN_KEY, JSON.stringify(arr));
+    localStorage.setItem(NOTIF_ITEMS_KEY, JSON.stringify(notifItems.slice(0, 50)));
+    localStorage.setItem(NOTIF_META_KEY, JSON.stringify({ teacherMap, chapterMap }));
+  } catch(e){}
+}
+
+function unreadCount(){ return notifItems.filter(n => n.unread).length; }
+
+function updateBadge(){
+  const badge = $('notif-badge'), n = unreadCount();
+  badge.textContent = n > 9 ? '9+' : String(n);
+  badge.classList.toggle('show', n > 0);
+}
+
+function relativeTime(ts){
+  const diff = Date.now() - ts;
+  if (diff < 60e3) return 'الآن';
+  if (diff < 3600e3) return Math.floor(diff / 60e3) + ' دقيقة';
+  if (diff < 86400e3) return Math.floor(diff / 3600e3) + ' ساعة';
+  if (diff < 7 * 86400e3) return Math.floor(diff / 86400e3) + ' يوم';
+  return new Date(ts).toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short' });
+}
+
+function renderNotifList(){
+  const list = $('notif-list');
+  if (!list) return;
+  if (!notifItems.length){
+    list.innerHTML = `<div class="notif-empty">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+      مفيش إشعارات جديدة دلوقتي
+    </div>`;
+    return;
+  }
+  list.innerHTML = notifItems.slice(0, 30).map((n, i) => `
+    <div class="notif-item ${n.unread ? 'unread' : ''}"
+         data-id="${esc(n.id)}"
+         data-subject="${esc(n.subjectId)}"
+         data-subject-name="${esc(n.subjectName)}"
+         data-lecture="${esc(n.lectureId)}"
+         style="animation-delay:${i * 40}ms"
+         role="button" tabindex="0" aria-label="${esc(n.lectureTitle)} — ${esc(n.teacherName)}">
+      <div class="notif-thumb">
+        ${n.imageUrl ? `<img src="${esc(n.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<svg viewBox=&quot;0 0 24 24&quot;><path d=&quot;M4 19.5A2.5 2.5 0 0 1 6.5 17H20&quot;/><path d=&quot;M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z&quot;/></svg>'">` :
+          `<svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`}
+      </div>
+      <div class="notif-body">
+        <div class="notif-title">${esc(n.lectureTitle)}</div>
+        <div class="notif-sub">${esc(n.subjectName)} · ${esc(n.teacherName)}</div>
+        <div class="notif-time">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          ${relativeTime(n.at)}
+        </div>
+      </div>
+      <div class="notif-dot"></div>
+    </div>`).join('');
+}
+
+function openNotifItem(el){
+  if (!el) return;
+  const id       = el.dataset.id;
+  const subjectId   = el.dataset.subject;
+  const subjectName = el.dataset.subjectName;
+  // mark as read
+  const item = notifItems.find(n => n.id === id);
+  if (item) item.unread = false;
+  seenIds.add(id);
+  saveNotifState();
+  updateBadge();
+  renderNotifList();
+  closePanel();
+  // navigate to teachers page for the subject
+  if (subjectId && subjectName){
+    location.href = 'teachers.html?subjectId=' + encodeURIComponent(subjectId) + '&subjectName=' + encodeURIComponent(subjectName);
+  }
+}
+
+$('notif-list').addEventListener('click', e => {
+  const item = e.target.closest('.notif-item[data-id]');
+  if (item) openNotifItem(item);
+});
+$('notif-list').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const item = e.target.closest('.notif-item[data-id]');
+  if (item){ e.preventDefault(); openNotifItem(item); }
+});
+
+$('notif-read-all').addEventListener('click', () => {
+  notifItems.forEach(n => { n.unread = false; seenIds.add(n.id); });
+  saveNotifState(); updateBadge(); renderNotifList();
+});
+
+$('notif-refresh').addEventListener('click', () => { pollNotifications(true); });
+
+function openPanel(){
+  panelOpen = true;
+  $('notif-panel').classList.add('open');
+  $('notif-btn').classList.add('active');
+  $('notif-btn').setAttribute('aria-expanded', 'true');
+  renderNotifList();
+}
+
+function closePanel(){
+  panelOpen = false;
+  $('notif-panel').classList.remove('open');
+  $('notif-btn').classList.remove('active');
+  $('notif-btn').setAttribute('aria-expanded', 'false');
+}
+
+$('notif-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  panelOpen ? closePanel() : openPanel();
+});
+
+document.addEventListener('click', e => {
+  if (panelOpen && !$('notif-wrap').contains(e.target)) closePanel();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && panelOpen) closePanel();
+});
+
+/* ---- polling logic ---- */
+async function fetchSubjectsOnce(){
+  if (subjectList.length) return subjectList;
+  const data = await api('/api/subjects/' + yearId);
+  subjectList = Array.isArray(data) ? data : [];
+  return subjectList;
+}
+
+async function fetchTeachersFor(subjectId){
+  if (teacherMap[subjectId]) return teacherMap[subjectId];
+  const data = await api('/api/subjects/' + encodeURIComponent(subjectId) + '/teachers').catch(() => null);
+  let teachers = [];
+  if (Array.isArray(data)) teachers = data;
+  else if (data && Array.isArray(data.teachers)) teachers = data.teachers;
+  teachers = teachers.filter(t => t && !isHidden(t.name));
+  teacherMap[subjectId] = teachers;
+  return teachers;
+}
+
+async function fetchChaptersFor(teacherId){
+  if (chapterMap[teacherId]) return chapterMap[teacherId];
+  const data = await api('/api/teachers/' + encodeURIComponent(teacherId) + '/chapters').catch(() => null);
+  const chapters = Array.isArray(data) ? data : [];
+  chapterMap[teacherId] = chapters;
+  return chapters;
+}
+
+async function fetchLecturesFor(chapterId){
+  const data = await api('/api/chapters/' + encodeURIComponent(chapterId) + '/lectures').catch(() => null);
+  return Array.isArray(data) ? data : [];
+}
+
+let polling = false;
+async function pollNotifications(force = false){
+  if (polling) return;
+  polling = true;
+  try {
+    const subjects = await fetchSubjectsOnce();
+    if (!subjects.length){ polling = false; return; }
+
+    // limit: pick first 5 subjects to keep API calls reasonable
+    const toCheck = subjects.slice(0, 5);
+    let newFound = [];
+
+    for (const subj of toCheck){
+      const teachers = await fetchTeachersFor(subj.id).catch(() => []);
+      for (const teacher of teachers.slice(0, 3)){   // top 3 teachers per subject
+        const chapters = await fetchChaptersFor(teacher.id).catch(() => []);
+        // only check the most recent chapter (first in list)
+        const recentChapters = chapters.slice(0, 2);
+        for (const ch of recentChapters){
+          const lectures = await fetchLecturesFor(ch.id).catch(() => []);
+          for (const lec of lectures){
+            const lecId = String(lec.id || lec.video_id || '');
+            if (!lecId) continue;
+            const notifId = subj.id + '_' + lecId;
+            if (seenIds.has(notifId)) continue;
+            // brand new lecture
+            newFound.push({
+              id: notifId,
+              lectureId: lecId,
+              lectureTitle: lec.name || lec.title || 'محاضرة جديدة',
+              teacherName: teacher.name || '',
+              teacherId: String(teacher.id || ''),
+              chapterId: String(ch.id || ''),
+              chapterName: ch.name || ch.title || '',
+              subjectId: String(subj.id || ''),
+              subjectName: subj.name || '',
+              imageUrl: lec.image_url || teacher.image_url || subj.image_url || null,
+              at: Date.now(),
+              unread: true
+            });
+          }
+        }
+      }
+    }
+
+    if (newFound.length){
+      // prepend new items, avoid duplicates
+      const existingIds = new Set(notifItems.map(n => n.id));
+      const fresh = newFound.filter(n => !existingIds.has(n.id));
+      if (fresh.length){
+        notifItems = [...fresh, ...notifItems].slice(0, 50);
+        saveNotifState();
+        updateBadge();
+        if (panelOpen) renderNotifList();
+        // mark all fetched ids as seen for future polls (even ones we just showed)
+        // so we don't re-add them next poll
+        fresh.forEach(n => { /* leave unread=true; seenIds updated when user clicks */ });
+      }
+    }
+    // always mark fetched lectures as "known" so next poll only catches truly new ones
+    // We track "announced" separately: add all found (new or old) to a "known" set
+    // but keep unread status only for genuinely new ones
+    // Simple approach: after first poll mark all as seen-for-fetch, keep unread for display
+    const announcedKey = 'notif_announced_v2';
+    let announced;
+    try { announced = new Set(JSON.parse(localStorage.getItem(announcedKey) || '[]')); } catch(e){ announced = new Set(); }
+    newFound.forEach(n => { if (!announced.has(n.id)) announced.add(n.id); });
+    // On first run (force=false and announced is small) seed seenIds with all fetched
+    // so only future lectures are "new"
+    if (!force && announced.size < 5){
+      newFound.forEach(n => { seenIds.add(n.id); notifItems.forEach(i => { if (i.id === n.id) i.unread = false; }); });
+      saveNotifState(); updateBadge();
+    }
+    try { localStorage.setItem(announcedKey, JSON.stringify([...announced].slice(-500))); } catch(e){}
+
+  } catch(e){
+    console.warn('[notif poll]', e.message);
+  }
+  polling = false;
+  if (panelOpen) renderNotifList();
+}
+
+function startPolling(){
+  pollNotifications(false);
+  pollTimer = setInterval(() => pollNotifications(false), POLL_INTERVAL_MS);
+}
+/* ===================================================== */
+
+/* subjects, counts, meta */
 const subjMeta = new Map();
 const countOf = th => {
   for (const k of ['chapter_count','chapters_count','count']){
@@ -346,13 +695,13 @@ async function pool(items, n, fn){
   }));
   return out;
 }
-async function fetchTeachers(s){
+async function fetchTeachersSubj(s){
   const t = await api('/api/subjects/' + encodeURIComponent(s.id) + '/teachers');
   return Array.isArray(t) ? t : ((t && Array.isArray(t.teachers)) ? t.teachers : []);
 }
 async function loadCounts(list){
   const rows = await pool(list, 3, async s => {
-    const teachers = (await fetchTeachers(s)).filter(th => th && !isHidden(th.name));
+    const teachers = (await fetchTeachersSubj(s)).filter(th => th && !isHidden(th.name));
     let chapters = 0; const unknown = [];
     teachers.forEach(th => { const c = ccGet(th.id); const v = c != null ? c : countOf(th); if (v == null) unknown.push(th); else chapters += v; });
     if (unknown.length){
@@ -419,7 +768,6 @@ document.addEventListener('keydown', e => {
   const c = e.target.closest && e.target.closest('.card[data-id]');
   if (c && e.target === c){ e.preventDefault(); openCard(c); }
 });
-/* رجوع بزرار الرجوع (bfcache): نرجّع الكروت لحالتها */
 addEventListener('pageshow', () => {
   navigating = false; document.body.classList.remove('leaving');
   document.querySelectorAll('.card.opening').forEach(c => {
@@ -428,7 +776,6 @@ addEventListener('pageshow', () => {
     if (b){ b.classList.remove('is-loading'); b.querySelector('span').textContent = 'عرض المدرسين'; }
   });
 });
-/* صور المواد: منع قائمة الضغط المطوّل والسحب */
 document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.card-img')) e.preventDefault(); });
 document.addEventListener('dragstart', e => { if (e.target && e.target.tagName === 'IMG') e.preventDefault(); });
 
@@ -449,6 +796,13 @@ function showError(msg){
 async function init(){
   const started = performance.now();
   $('tagline').textContent = dayQuote();
+
+  // load notification state from storage first
+  loadNotifState();
+  updateBadge();
+  // show cached items immediately if panel is opened before poll finishes
+  renderNotifList();
+
   const cachedName = localStorage.getItem('student_name');
   if (cachedName){
     setGreeting(cachedName);
@@ -479,6 +833,7 @@ async function init(){
 
   if (subjectsRes.status === 'rejected'){ showError(subjectsRes.reason.message); hideSplash(); return; }
   const subjects = subjectsRes.value || [];
+  subjectList = subjects;    // share with notif system
   const countEl = $('subject-count');
   countEl.textContent = subjects.length;
   countEl.style.display = 'inline-block';
@@ -489,6 +844,9 @@ async function init(){
   }
   renderCounts(subjects);
   hideSplash();
+
+  // start notification polling after page is ready
+  startPolling();
 }
 
 init().catch(e => { showError(e.message); hideSplash(); });
