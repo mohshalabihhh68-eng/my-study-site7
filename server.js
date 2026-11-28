@@ -522,7 +522,6 @@ function rateLimit(options = {}) {
   const banMs = options.banMs || 5 * 60_000;
   const skip = options.skip;
   const keyFn = options.keyFn;
-  const onLimit = options.onLimit;
   const limitMessage = options.message || "طلبات كثيرة — حاول بعد قليل";
   return (req, res, next) => {
     if (skip && skip(req)) return next();
@@ -550,9 +549,6 @@ function rateLimit(options = {}) {
       if (banAfter > 0 && b.hits429 >= banAfter) banBuckets.set(banKey, Date.now() + banMs);
       const sec = Math.ceil((b.resetAt - t) / 1000);
       res.setHeader("Retry-After", String(Math.max(1, sec)));
-      if (typeof onLimit === "function") {
-        try { onLimit(req, { scope, count: b.count, max, hits429: b.hits429, key: ip }); } catch (e) { console.warn("[rateLimit onLimit]", e && e.message); }
-      }
       return res.status(429).json({ success: false, message: limitMessage });
     }
     next();
@@ -564,221 +560,6 @@ setInterval(() => {
   for (const [k, b] of rateBuckets) if (t > b.resetAt) rateBuckets.delete(k);
   for (const [k, until] of banBuckets) if (t > until) banBuckets.delete(k);
 }, 30_000).unref();
-
-// ==================== تنبيهات أمنية قوية: سحب / تحميل / سلوك مشبوه ====================
-const securityAlertCooldown = new Map(); // key -> untilMs
-// افتراضي أقصر عشان تنبيهات أكتر (دقيقة واحدة)
-const SECURITY_ALERT_COOLDOWN_MS = Number(process.env.SECURITY_ALERT_COOLDOWN_MS || 60_000);
-
-function extractSessionCodeHint(req) {
-  try {
-    if (req.session && req.session.code) return String(req.session.code);
-    if (req.student && req.student.code) return String(req.student.code);
-  } catch {}
-  return null;
-}
-
-function severityEmoji(sev) {
-  if (sev === "critical") return "🚨";
-  if (sev === "high") return "🔴";
-  if (sev === "medium") return "🟠";
-  return "🟡";
-}
-
-/** يرسل تنبيه للأدمن: Firebase + Telegram + لوج — cooldown أقصر للتنبيهات العالية */
-async function sendSecurityAlert({ type, code, ip, deviceId, videoId, detail, severity = "medium", extra = null }) {
-  const t = Date.now();
-  const c = String(code || "unknown");
-  const sev = String(severity || "medium");
-  // critical/high: cooldown أقصر
-  const coolMs =
-    sev === "critical" ? Math.min(SECURITY_ALERT_COOLDOWN_MS, 30_000) :
-    sev === "high" ? Math.min(SECURITY_ALERT_COOLDOWN_MS, 45_000) :
-    SECURITY_ALERT_COOLDOWN_MS;
-  const coolKey = `${type}:${c}:${String(ip || "")}`;
-  if ((securityAlertCooldown.get(coolKey) || 0) > t) return false;
-  securityAlertCooldown.set(coolKey, t + coolMs);
-
-  const id = "al_" + t.toString(36) + "_" + crypto.randomBytes(4).toString("hex");
-  const row = {
-    id,
-    type: String(type || "unknown"),
-    severity: sev,
-    code: c,
-    ip: ip ? String(ip) : null,
-    deviceId: deviceId ? String(deviceId) : null,
-    videoId: videoId ? String(videoId).slice(0, 80) : null,
-    detail: detail ? String(detail).slice(0, 500) : null,
-    extra: extra && typeof extra === "object" ? extra : null,
-    at: t,
-    read: false
-  };
-
-  console.warn("[SECURITY-ALERT]", severityEmoji(sev), row.type, "code=" + row.code, "ip=" + (row.ip || "-"), row.detail || "");
-
-  try {
-    if (getFirebaseUrl()) {
-      await fbSet(`security_alerts/${id}`, row);
-      await fbSet("security_alerts_latest", { id, type: row.type, code: row.code, severity: sev, at: t, detail: row.detail });
-    }
-  } catch (e) {
-    console.warn("[SECURITY-ALERT] firebase:", e && e.message);
-  }
-
-  try {
-    const bot = String(process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || "").trim();
-    const chat = String(process.env.TELEGRAM_CHAT_ID || process.env.TG_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT || "").trim();
-    if (bot && chat) {
-      const lines = [
-        severityEmoji(sev) + " تنبيه أمني — ثانوية World",
-        "النوع: " + row.type,
-        "الخطورة: " + sev,
-        "كود الطالب: " + row.code,
-        row.ip ? ("IP: " + row.ip) : null,
-        row.deviceId ? ("Device: " + String(row.deviceId).slice(0, 40)) : null,
-        row.videoId ? ("Video: " + row.videoId) : null,
-        row.detail ? ("التفاصيل: " + row.detail) : null,
-        "الوقت: " + new Date(t).toLocaleString("ar-EG", { timeZone: "Africa/Cairo" })
-      ].filter(Boolean);
-      await fetchT(
-        `https://api.telegram.org/bot${bot}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ chat_id: chat, text: lines.join("\n"), disable_web_page_preview: true })
-        },
-        { timeout: 10_000, retries: 0 }
-      ).catch(() => {});
-    }
-  } catch (e) {
-    console.warn("[SECURITY-ALERT] telegram:", e && e.message);
-  }
-
-  return true;
-}
-
-setInterval(() => {
-  const t = Date.now();
-  for (const [k, until] of securityAlertCooldown) if (t > until) securityAlertCooldown.delete(k);
-}, 60_000).unref();
-
-// —— تتبّع سرعة المقاطع + قفزات غير طبيعية (سحب بالترتيب السريع) ——
-const segBurstMap = new Map(); // code:pid -> { n, resetAt, lastIdx, jumps }
-function noteSegmentBurst(req, session, segIdx) {
-  try {
-    const code = (session && session.ownerCode) || extractSessionCodeHint(req) || "unknown";
-    const pid = (session && session.id) || "x";
-    const key = code + ":" + pid;
-    const t = Date.now();
-    let row = segBurstMap.get(key);
-    if (!row || t > row.resetAt) {
-      row = { n: 0, resetAt: t + 60_000, lastIdx: -1, jumps: 0 };
-      segBurstMap.set(key, row);
-    }
-    row.n += 1;
-    const idx = Number(segIdx);
-    if (Number.isFinite(idx) && row.lastIdx >= 0) {
-      const delta = Math.abs(idx - row.lastIdx);
-      // مشاهدة عادية: المقطع التالي ±1 أو ±2. سكربت سحب غالبًا بيقفز أو يسحب بالتسلسل بسرعة رهيبة
-      if (delta > 3) row.jumps += 1;
-    }
-    if (Number.isFinite(idx)) row.lastIdx = idx;
-
-    const limit = Number(process.env.SEG_BURST_ALERT || 55);
-    const jumpLimit = Number(process.env.SEG_JUMP_ALERT || 15);
-
-    if (row.n === limit || row.n === limit + 25 || row.n === limit + 50) {
-      sendSecurityAlert({
-        type: "segment_flood",
-        code,
-        ip: clientIp(req),
-        deviceId: session && session.ownerDeviceId,
-        videoId: session && session.videoId,
-        detail: `طلبات مقاطع سريعة: ${row.n} مقطع/دقيقة — احتمال تحميل أو سحب`,
-        severity: row.n >= limit + 50 ? "critical" : row.n >= limit + 25 ? "high" : "medium",
-        extra: { segments: row.n, sessionId: pid, jumps: row.jumps }
-      }).catch(() => {});
-    }
-    if (row.jumps === jumpLimit || row.jumps === jumpLimit + 10) {
-      sendSecurityAlert({
-        type: "segment_jump",
-        code,
-        ip: clientIp(req),
-        deviceId: session && session.ownerDeviceId,
-        videoId: session && session.videoId,
-        detail: `قفز غير طبيعي بين المقاطع (${row.jumps} مرة) — مش سلوك مشغّل عادي`,
-        severity: "high",
-        extra: { jumps: row.jumps, lastIdx: row.lastIdx, sessionId: pid }
-      }).catch(() => {});
-    }
-  } catch {}
-}
-
-// —— تتبّع فتح فيديوهات متكرر (حتى نفس الفيديو) ——
-const playRateMap = new Map(); // code -> { n, resetAt }
-function notePlayRate(req, videoId) {
-  try {
-    const code = extractSessionCodeHint(req) || (req.session && req.session.code) || "unknown";
-    const t = Date.now();
-    let row = playRateMap.get(code);
-    if (!row || t > row.resetAt) {
-      row = { n: 0, resetAt: t + 60_000, videos: new Set() };
-      playRateMap.set(code, row);
-    }
-    row.n += 1;
-    if (videoId) row.videos.add(String(videoId));
-    const alertAt = Number(process.env.PLAY_RATE_ALERT || 6);
-    if (row.n === alertAt || row.n === alertAt + 4 || row.n === alertAt + 8) {
-      sendSecurityAlert({
-        type: "play_rate",
-        code: String(code),
-        ip: clientIp(req),
-        deviceId: req.session && req.session.deviceId,
-        videoId: videoId || null,
-        detail: `تشغيل متكرر: ${row.n} طلب play خلال دقيقة (${row.videos.size} فيديو مختلف)`,
-        severity: row.n >= alertAt + 8 ? "high" : "medium",
-        extra: { plays: row.n, distinct: row.videos.size }
-      }).catch(() => {});
-    }
-  } catch {}
-}
-
-// —— كشف أدوات/سكربتات من الـ User-Agent والهيدر ——
-function noteSuspiciousClient(req, context) {
-  try {
-    const ua = String(req.headers["user-agent"] || "");
-    const reasons = [];
-    if (!ua || ua.length < 12) reasons.push("UA فاضي/قصير");
-    if (/curl|wget|python-requests|python-urllib|httpclient|okhttp\/[123]\.|scrapy|axios\/|node-fetch|Go-http|libwww|Postman|Insomnia|aria2|ffmpeg|yt-dlp|youtube-dl|IDM|Internet Download/i.test(ua)) {
-      reasons.push("أداة تحميل/سكربت: " + ua.slice(0, 60));
-    }
-    const secFetch = String(req.headers["sec-fetch-mode"] || "");
-    const accept = String(req.headers["accept"] || "");
-    // طلب مقاطع من سكربت غالبًا من غير sec-fetch
-    if (context === "segment" && !secFetch && !/Mozilla/i.test(ua)) reasons.push("مقطع بدون متصفح");
-    if (context === "play" && !accept.includes("json") && !accept.includes("*/*") && accept && !/html/i.test(accept)) {
-      /* ignore */
-    }
-    if (!reasons.length) return;
-    sendSecurityAlert({
-      type: "suspicious_client",
-      code: extractSessionCodeHint(req) || "unknown",
-      ip: clientIp(req),
-      deviceId: req.session && req.session.deviceId,
-      detail: `عميل مشبوه أثناء ${context || "طلب"}: ${reasons.join(" | ")}`,
-      severity: /download|yt-dlp|ffmpeg|aria2|IDM/i.test(reasons.join(" ")) ? "critical" : "high",
-      extra: { ua: ua.slice(0, 120), reasons, context }
-    }).catch(() => {});
-  } catch {}
-}
-
-setInterval(() => {
-  const t = Date.now();
-  for (const [k, row] of segBurstMap) if (!row || t > (row.resetAt || 0) + 30_000) segBurstMap.delete(k);
-  for (const [k, row] of playRateMap) if (!row || t > (row.resetAt || 0) + 30_000) playRateMap.delete(k);
-}, 60_000).unref();
-
-
 
 const LOGIN_MAX_FAILS = 5;
 const LOGIN_LOCK_MS = 15 * 60_000;
@@ -2296,28 +2077,8 @@ async function streamFetch(session, url, extra = {}, clientHeaders = null) {
 app.use(rateLimit({ max: 1500, windowMs: 60_000, scope: "global", skip: (req) => req.path.startsWith("/api/stream/") || req.path.startsWith("/api/hls/") || req.path === "/health" }));
 app.use("/api/stream/", rateLimit({ max: 1500, windowMs: 60_000, scope: "stream", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)) }));
 // حد المقاطع: يمنع سحب المحاضرة كاملة بسرعة من سكربت/منصة تانية
-app.use("/api/hls/", rateLimit({
-  max: Number(process.env.HLS_RATE_MAX || 220),
-  windowMs: 60_000,
-  scope: "hls-seg",
-  keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)),
-  message: "طلبات بث كثيرة — هدّي شوية",
-  banAfter: Number(process.env.HLS_BAN_AFTER || 2),
-  banMs: Number(process.env.HLS_BAN_MS || 15 * 60_000),
-  onLimit: (req, info) => {
-    noteSuspiciousClient(req, "hls-limit");
-    sendSecurityAlert({
-      type: "hls_rate_limit",
-      code: extractSessionCodeHint(req) || "unknown",
-      ip: clientIp(req),
-      detail: `تخطي حد المقاطع (${info.count}/${info.max}) ×${info.hits429} — محاولة سحب/تحميل`,
-      severity: info.hits429 >= 2 ? "critical" : "high",
-      extra: { scope: info.scope, hits429: info.hits429, count: info.count, max: info.max }
-    }).catch(() => {});
-  }
-}));
-// ليميت تشغيل الفيديوهات مُعطّل (كان 30/دقيقة)
-app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 999999), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
+app.use("/api/hls/", rateLimit({ max: Number(process.env.HLS_RATE_MAX || 2000), windowMs: 60_000, scope: "hls-seg", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات بث كثيرة — هدّي شوية" }));
+app.use("/api/play/", rateLimit({ max: Number(process.env.PLAY_RATE_MAX || 600), windowMs: 60_000, scope: "play-api", keyFn: (req) => "t:" + (getBearer(req) || clientIp(req)), message: "طلبات تشغيل كثيرة" }));
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -4005,9 +3766,9 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
     if (useThanawicaAsPrimary() && CONFIG.THANAWICA_ENABLED) {
       let data = maskTreeImages(await thTeachers(req.params.id));
 
-      // فلترة مدرسي العربي حسب الشعبة:
+      // فلترة مدرسي العربي حسب الشعبة
       // أزهر → سعيد الفقي فقط
-      // باقي الشعب (علمي علوم/رياضة/أدبي/بكالوريا/…) → محمد صلاح + رضا الفاروق فقط (بدون سعيد الفقي)
+      // علمي علوم / رياضة / أدبي → محمد صلاح ورضا الفاروق يظهروا، سعيد الفقي يختفي
       try {
         const secInfo = await resolveSection(req.student && req.student.section);
         const sec = (secInfo && secInfo.id) || normalizeSection(req.student && req.student.section) || "";
@@ -4030,21 +3791,17 @@ app.get("/api/subjects/:id/teachers", requireStudent, async (req, res) => {
           console.warn("[teachers] arabic check:", e && e.message);
         }
         if (isArabic) {
-          const list = Array.isArray(data) ? data : [];
+          const arr = Array.isArray(data) ? data : [];
+          const isSaeed = (t) => /سعيد\s*الفقي|سعيد\s*الفقى|سعيد\s*الفي/i.test(String(t.name || ""));
           if (sec === "azhari") {
-            data = list.filter((t) =>
-              /سعيد\s*الفقي|سعيد\s*الفقى/i.test(String(t.name || ""))
-            );
+            data = arr.filter(isSaeed);
           } else {
-            // أي شعبة غير الأزهر
-            data = list.filter((t) => {
-              const n = String(t.name || "");
-              return /محمد\s*صلاح/i.test(n) || /رضا\s*الفاروق/i.test(n);
-            });
+            // غير الأزهر: سيّب محمد صلاح ورضا، شيّل سعيد الفقي فقط
+            data = arr.filter((t) => !isSaeed(t));
           }
         }
       } catch (e) {
-        console.warn("[teachers] arabic section filter:", e && e.message);
+        console.warn("[teachers] section arabic filter:", e && e.message);
       }
 
       return res.json({ success: true, message: "Success", data, source: "thanawica" });
@@ -4704,6 +4461,19 @@ app.get("/api/lectures/:id/content", requireStudent, async (req, res) => {
           if (!v.videoId) v.videoId = v.id;
           if (!v.title) v.title = v.name || "فيديو";
           if (!v.type) v.type = "video";
+          // مرّر المدة بكل الأسماء عشان المشغّل يقرأها
+          const dur = Number(v.duration_seconds || v.duration || 0);
+          if (dur > 1) {
+            v.duration = Math.floor(dur);
+            v.duration_seconds = Math.floor(dur);
+          }
+        }
+      }
+      if (raw && raw.data && Array.isArray(raw.data.files)) {
+        for (const f of raw.data.files) {
+          if (!f.title) f.title = f.name || "ملف";
+          if (!f.name) f.name = f.title;
+          if (!f.type) f.type = "pdf";
         }
       }
       return res.json(maskTreeImages(raw));
@@ -6211,14 +5981,6 @@ function assertPlayerOrigin(req) {
       if (allowed.has(h) || isDeployHost(h)) return true;
     } catch {}
   }
-  sendSecurityAlert({
-    type: "bad_origin",
-    code: extractSessionCodeHint(req) || "unknown",
-    ip: clientIp(req),
-    detail: `محاولة تشغيل من Origin/Referer غير مسموح: ${origin || referer || "empty"}`,
-    severity: "medium",
-    extra: { origin: origin || null, referer: (referer || "").slice(0, 120) }
-  }).catch(() => {});
   const e = new Error("غير مصرح — التشغيل من هذا الموقع غير مسموح");
   e.status = 403;
   throw e;
@@ -6229,16 +5991,6 @@ function assertStreamOwner(session, req) {
   const sk = req.query.sk || req.headers["x-stream-key"];
   if (session.streamKey) {
     if (!sk || sk !== session.streamKey) {
-      sendSecurityAlert({
-        type: "bad_stream_key",
-        code: (req.session && req.session.code) || extractSessionCodeHint(req) || "unknown",
-        ip: clientIp(req),
-        deviceId: req.session && req.session.deviceId,
-        videoId: session.videoId,
-        detail: "محاولة فتح مقطع بمفتاح تشغيل غلط أو مسروق",
-        severity: "high",
-        extra: { sessionId: session.id, hasSk: Boolean(sk) }
-      }).catch(() => {});
       const e = new Error("غير مصرح — مفتاح التشغيل غير صالح");
       e.status = 403;
       throw e;
@@ -6253,16 +6005,6 @@ function assertStreamOwner(session, req) {
     throw e;
   }
   if (session.ownerCode && session.ownerCode !== code) {
-    sendSecurityAlert({
-      type: "stream_share_attempt",
-      code: code || "unknown",
-      ip: clientIp(req),
-      deviceId: req.session && req.session.deviceId,
-      videoId: session.videoId,
-      detail: `محاولة استخدام رابط بث لطالب آخر (صاحب الجلسة: ${session.ownerCode})`,
-      severity: "high",
-      extra: { ownerCode: session.ownerCode, sessionId: session.id }
-    }).catch(() => {});
     const e = new Error("غير مصرح — الرابط ده مش لحسابك");
     e.status = 403;
     throw e;
@@ -6365,15 +6107,20 @@ async function getStreamSession(id, touch = true) {
   return s;
 }
 
-// ليميت الفيديوهات مُعطّل (كان 4 فيديوهات/دقيقة)
-const playLimiter = (req, res, next) => next();
+// ليميت الفيديوهات: كل توكن طالب = 4 فيديوهات في الدقيقة
+const playLimiter = rateLimit({
+  max: 4,
+  windowMs: 60_000,
+  scope: "video-play",
+  keyFn: (req) => "tok:" + (req.sessionToken || getBearer(req) || clientIp(req)),
+  message: "وصلت للحد الأقصى: 4 فيديوهات في الدقيقة — استنى شوية وجرّب تاني"
+});
 
-// حماية السحب الجماعي + تنبيه: فيديوهات مختلفة كتير في وقت قصير
-// PLAY_BURST_ALERT = يبدأ التنبيه | PLAY_BURST_MAX = يبدأ الحظر المؤقت
+// حماية من السحب الجماعي: أكتر من N فيديو مختلف في 10 دقايق → إيقاف مؤقت
+// (من غير تبطئة سرعة المشاهدة العادية)
 const PLAY_BURST_WINDOW_MS = Number(process.env.PLAY_BURST_WINDOW_MS || 10 * 60_000);
-const PLAY_BURST_ALERT = Number(process.env.PLAY_BURST_ALERT || 6);
-const PLAY_BURST_MAX = Number(process.env.PLAY_BURST_MAX || 15);
-const PLAY_BURST_BAN_MS = Number(process.env.PLAY_BURST_BAN_MS || 20 * 60_000);
+const PLAY_BURST_MAX = Number(process.env.PLAY_BURST_MAX || 8);
+const PLAY_BURST_BAN_MS = Number(process.env.PLAY_BURST_BAN_MS || 15 * 60_000);
 const playBurst = new Map(); // code -> { ids: Map<videoId,ts>, bannedUntil }
 
 function checkPlayBurst(code, videoId) {
@@ -6395,33 +6142,14 @@ function checkPlayBurst(code, videoId) {
     if (t - ts > PLAY_BURST_WINDOW_MS) row.ids.delete(id);
   }
   if (!row.ids.has(vid)) {
-    row.ids.set(vid, t);
-    const n = row.ids.size;
-    if (n === PLAY_BURST_ALERT || (n > PLAY_BURST_ALERT && n % 2 === 0)) {
-      sendSecurityAlert({
-        type: "play_burst",
-        code: c,
-        videoId: vid,
-        detail: `فتح ${n} فيديو مختلف خلال ${Math.round(PLAY_BURST_WINDOW_MS / 60000)} دقايق — احتمال سحب جماعي`,
-        severity: n >= PLAY_BURST_MAX ? "high" : "medium",
-        extra: { distinctVideos: n }
-      }).catch(() => {});
-    }
-    if (n >= PLAY_BURST_MAX) {
+    if (row.ids.size >= PLAY_BURST_MAX) {
       row.bannedUntil = t + PLAY_BURST_BAN_MS;
-      console.warn("[play-burst] ban", c, "videos", n);
-      sendSecurityAlert({
-        type: "play_burst_ban",
-        code: c,
-        videoId: vid,
-        detail: `تم حظر التشغيل مؤقتًا بعد ${n} فيديو مختلف خلال وقت قصير`,
-        severity: "high",
-        extra: { distinctVideos: n, banMs: PLAY_BURST_BAN_MS }
-      }).catch(() => {});
-      const e = new Error("طلبت فيديوهات كتير في وقت قصير. التشغيل متوقف مؤقتًا لحماية المحتوى.");
+      console.warn("[play-burst] ban", c, "videos", row.ids.size, "windowMs", PLAY_BURST_WINDOW_MS);
+      const e = new Error("طلبت فيديوهات كتير في وقت قصير. التشغيل متوقف ربع ساعة لحماية المحتوى.");
       e.status = 429;
       throw e;
     }
+    row.ids.set(vid, t);
   } else {
     row.ids.set(vid, t);
   }
@@ -6439,8 +6167,6 @@ async function logPlayEvent(req, videoId) {
       at: Date.now()
     };
     console.log("[play-log]", entry.code, entry.videoId, entry.ip);
-    notePlayRate(req, videoId);
-    noteSuspiciousClient(req, "play");
     if (getFirebaseUrl()) {
       const safeVid = String(videoId || "x").replace(/[^\w-]/g, "").slice(0, 48) || "x";
       await fbSet(`play_logs/${entry.code}/${entry.at}_${safeVid}`, entry);
@@ -7029,7 +6755,7 @@ function prefetchAhead(session, meta, headers) {
 
 app.get("/api/hls/:pid/seg/:idx", requireStudent, async (req, res) => {
   let session;
-  try { assertPlayerOrigin(req); session = await getStreamSession(req.params.pid); assertStreamOwner(session, req); noteSegmentBurst(req, session, req.params.idx); noteSuspiciousClient(req, "segment"); } catch (e) { if (e && e.status === 403) sendSecurityAlert({ type: "stream_denied", code: extractSessionCodeHint(req) || "unknown", ip: clientIp(req), detail: e.message || "رفض وصول للمقطع", severity: "medium" }).catch(() => {}); return jsonError(res, e.status || 403, e.message || "غير مصرح"); }
+  try { assertPlayerOrigin(req); session = await getStreamSession(req.params.pid); assertStreamOwner(session, req); } catch (e) { return jsonError(res, e.status || 403, e.message || "غير مصرح"); }
   if (!session.src?.plainKey && session.src?.mode !== "thanawica") return jsonError(res, 404, "غير متاح");
   const idx = Number(req.params.idx);
   if (!Number.isFinite(idx) || idx < 0) return jsonError(res, 400, "طلب غير صالح");
@@ -8034,42 +7760,6 @@ app.post("/api/video/:id/play", async function (req, res) {
 });
 
 // ==================== catalog / stream-auth endpoints ====================
-
-
-// ==================== تنبيهات أمنية للأدمن ====================
-app.get("/api/admin/security-alerts", requireAdmin("students_view"), async (req, res) => {
-  try {
-    const all = (await fbGet("security_alerts")) || {};
-    const list = Object.values(all)
-      .filter((a) => a && a.id)
-      .sort((a, b) => (b.at || 0) - (a.at || 0))
-      .slice(0, Math.min(200, Number(req.query.limit) || 100));
-    res.json({ success: true, data: list });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
-});
-
-app.post("/api/admin/security-alerts/:id/read", requireAdmin("students_view"), async (req, res) => {
-  try {
-    const id = String(req.params.id || "").trim();
-    if (!id) return jsonError(res, 400, "id مطلوب");
-    await fbPatch(`security_alerts/${id}`, { read: true, readAt: Date.now(), readBy: (req.admin && req.admin.username) || "admin" });
-    res.json({ success: true });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
-});
-
-app.delete("/api/admin/security-alerts", requireAdmin("admins_manage"), async (_req, res) => {
-  try {
-    await fbSet("security_alerts", null);
-    await fbSet("security_alerts_latest", null);
-    res.json({ success: true, message: "تم مسح التنبيهات" });
-  } catch (e) {
-    jsonError(res, 500, e.message);
-  }
-});
 
 /** كتالوج المدرسين — مسار عام جديد + alias قديم للتوافق */
 async function handleCatalogTeachers(req, res) {
