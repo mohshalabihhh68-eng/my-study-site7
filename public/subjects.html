@@ -464,9 +464,9 @@ function renderDays(info){
    • زر التحديث بدون سباق / تخبيط
    ====================================================== */
 
-const NOTIF_KNOWN_KEY = 'notif_known_v8';
-const NOTIF_ITEMS_KEY = 'notif_items_v8';
-const NOTIF_READ_KEY  = 'notif_read_v8';
+const NOTIF_KNOWN_KEY = 'notif_known_v9';
+const NOTIF_ITEMS_KEY = 'notif_items_v9';
+const NOTIF_READ_KEY  = 'notif_read_v9';
 const POLL_INTERVAL_MS = 90_000;
 const NOTIF_CONCURRENCY = 4;
 
@@ -549,20 +549,19 @@ function relativeTime(ts){
 
 /** ترتيب الأحدث → الأقدم (معرّف المحاضرة كمقياس تقريبي للحداثة) */
 function lectureRecency(n){
-  if (n && n.recency) return Number(n.recency) || 0;
+  if (n && n.recency != null && n.recency !== '') return Number(n.recency) || 0;
   const raw = String((n && (n.lectureId || n.id)) || '');
   const digits = raw.replace(/\D/g, '');
-  if (digits.length) return Number(digits.slice(-10)) || 0;
+  if (digits.length) return Number(digits.slice(-12)) || 0;
   return 0;
 }
+/** الأحدث → الأقدم حسب معرّف المحاضرة */
 function sortNotifNewestFirst(list){
   return (list || []).slice().sort((a, b) => {
-    // تاريخ حقيقي أولاً لو موجود
-    const ta = Number(a && a.at) || 0, tb = Number(b && b.at) || 0;
-    if (ta >= 1514764800000 && tb >= 1514764800000 && ta !== tb) return tb - ta;
     const rb = lectureRecency(b) - lectureRecency(a);
     if (rb) return rb;
-    return tb - ta;
+    // ترتيب ثابت بالاسم لو المعرفات متساوية
+    return String(b.lectureTitle || '').localeCompare(String(a.lectureTitle || ''), 'ar');
   });
 }
 
@@ -592,11 +591,7 @@ function renderNotifList(){
       </div>
       <div class="notif-body">
         <div class="notif-title">${esc(n.lectureTitle)}</div>
-        <div class="notif-sub">${esc(n.subjectName)} · ${esc(n.teacherName)}${n.chapterName ? ' · ' + esc(n.chapterName) : ''}</div>
-        ${relativeTime(n.at) ? `<div class="notif-time">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          ${relativeTime(n.at)}
-        </div>` : ''}
+        <div class="notif-sub">${esc(n.teacherName)}${n.subjectName ? ' · ' + esc(n.subjectName) : ''}${n.chapterName ? ' · ' + esc(n.chapterName) : ''}</div>
       </div>
       <div class="notif-dot"></div>
     </div>`).join('');
@@ -797,23 +792,28 @@ function setRefreshBusy(on){
 }
 
 async function pollNotifications(force = false){
+  // منع التداخل: force يلغي المسح القديم؛ العادي يستنى
   if (polling && !force) return;
   const myGen = ++pollGen;
   polling = true;
+  setRefreshBusy(true);
+
   if (force) {
     teacherMap = {};
     chapterMap = {};
-    setRefreshBusy(true);
+    subjectList = []; // إعادة فلترة مواد الشعبة
   }
+
   try {
     const subjects = await fetchSubjectsOnce();
     if (myGen !== pollGen) return;
-    if (!subjects.length) return;
+    if (!subjects.length) {
+      if (panelOpen) renderNotifList();
+      return;
+    }
 
     const discovered = [];
-    const stamp = Date.now();
-
-    // كل المواد × كل المدرسين × كل الفصول
+    // مواد الشعبة فقط × مدرسين الشعبة (فلتر سعيد/صلاح/رضا) × كل الفصول
     await mapPool(subjects, NOTIF_CONCURRENCY, async (subj) => {
       if (myGen !== pollGen) return;
       const teachers = await fetchTeachersFor(subj.id, !force, subj.name).catch(() => []);
@@ -825,11 +825,13 @@ async function pollNotifications(force = false){
         for (const ch of chapters) {
           if (myGen !== pollGen) return;
           const lectures = await fetchLecturesFor(ch.id).catch(() => []);
-          for (const lec of lectures) {
+          // غالبًا آخر عنصر = الأحدث؛ ندي وزن للترتيب داخل الفصل
+          const nL = lectures.length;
+          lectures.forEach((lec, idx) => {
             const lecId = String(lec.id || lec.video_id || lec.videoId || '');
-            if (!lecId) continue;
+            if (!lecId) return;
             const notifId = String(subj.id) + '_' + lecId;
-            const realAt = parseLectureDate(lec);
+            const rec = lectureRecency({ lectureId: lecId });
             discovered.push({
               id: notifId,
               lectureId: lecId,
@@ -841,67 +843,69 @@ async function pollNotifications(force = false){
               subjectId: String(subj.id || ''),
               subjectName: subj.name || '',
               imageUrl: lec.image_url || teacher.image_url || subj.image_url || null,
-              at: realAt || 0,
-              recency: lectureRecency({ lectureId: lecId }) || 0,
+              recency: rec || (idx + 1), // لو مفيش id رقمي: ترتيب داخل القائمة
+              chapterOrder: idx,
               unread: true
             });
-          }
+          });
         }
       });
     });
 
     if (myGen !== pollGen) return;
 
-    // ابنِ قائمة الإشعارات من كل المحاضرات المكتشفة (كل المدرسين/الفصول تحت مواد الشعبة)
-    const byId = new Map(notifItems.map(n => [String(n.id), n]));
     const firstFill = !seeded;
-    let addedNew = 0;
+    const byId = new Map();
 
-    for (const n of discovered) {
-      const id = String(n.id);
-      knownIds.add(id);
-      const prev = byId.get(id);
-      if (prev) {
-        // حدّث البيانات مع الحفاظ على حالة القراءة
-        prev.lectureTitle = n.lectureTitle || prev.lectureTitle;
-        prev.teacherName = n.teacherName || prev.teacherName;
-        prev.chapterName = n.chapterName || prev.chapterName;
-        prev.subjectName = n.subjectName || prev.subjectName;
-        prev.imageUrl = n.imageUrl || prev.imageUrl;
-        prev.chapterId = n.chapterId || prev.chapterId;
-        prev.unread = !readIds.has(id);
-        continue;
+    if (force || firstFill) {
+      // قائمة كاملة من المسح — الأحدث فوق — مع الحفاظ على المقروء
+      for (const n of discovered) {
+        const id = String(n.id);
+        knownIds.add(id);
+        n.unread = !readIds.has(id);
+        // أول تعبئة: اعتبر الكل مقروء عشان البادج ما يتفشخش
+        if (firstFill) {
+          n.unread = false;
+          readIds.add(id);
+        }
+        byId.set(id, n);
       }
-      // محاضرة جديدة في القائمة — at = تاريخ حقيقي فقط (مش ID)
-      if (!(Number(n.at) >= 1514764800000)) n.at = 0;
-      if (!n.recency) n.recency = lectureRecency(n);
-      if (firstFill) {
-        n.unread = false;
-        readIds.add(id);
-      } else {
+      notifItems = sortNotifNewestFirst([...byId.values()]).slice(0, 200);
+      seeded = true;
+    } else {
+      // مسح دوري: ضيف الجديد فقط
+      for (const n of notifItems) byId.set(String(n.id), n);
+      for (const n of discovered) {
+        const id = String(n.id);
+        knownIds.add(id);
+        if (byId.has(id)) {
+          const prev = byId.get(id);
+          prev.lectureTitle = n.lectureTitle || prev.lectureTitle;
+          prev.teacherName = n.teacherName || prev.teacherName;
+          prev.chapterName = n.chapterName || prev.chapterName;
+          prev.subjectName = n.subjectName || prev.subjectName;
+          prev.imageUrl = n.imageUrl || prev.imageUrl;
+          prev.recency = n.recency || prev.recency;
+          prev.unread = !readIds.has(id);
+          continue;
+        }
         n.unread = true;
-        // لو مفيش تاريخ من السيرفر، وقت الاكتشاف = الآن
-        if (!(Number(n.at) >= 1514764800000)) n.at = Date.now();
-        addedNew++;
+        byId.set(id, n);
       }
-      byId.set(id, n);
+      notifItems = sortNotifNewestFirst([...byId.values()]).slice(0, 200);
     }
 
-    seeded = true;
-    notifItems = sortNotifNewestFirst([...byId.values()]).slice(0, 200);
     saveNotifState();
     updateBadge();
     if (panelOpen) renderNotifList();
-    if (force && !addedNew && panelOpen) {
-      // التحديث يدوي لسه يعرض القائمة كاملة مرتبة
-      renderNotifList();
-    }
   } catch (e) {
     console.warn('[notif poll]', e && e.message);
   } finally {
+    // بس المسح الحالي يقدر يطفي الـ busy
     if (myGen === pollGen) {
       polling = false;
       setRefreshBusy(false);
+      if (panelOpen) renderNotifList();
     }
   }
 }
